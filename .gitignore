@@ -35,6 +35,9 @@ Thumbs.db
 # Bun
 .bun/
 
+# Documentation
+site/
+
 # Test coverage
 coverage/
 .nyc_output

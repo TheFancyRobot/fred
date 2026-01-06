@@ -1,0 +1,89 @@
+site_name: Fred Documentation
+site_description: A flexible framework for building AI agents with intent-based routing
+site_author: Fred Framework
+site_url: https://yourusername.github.io/fred
+
+repo_name: fred
+repo_url: https://github.com/yourusername/fred
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/installation.md
+    - getting-started/quick-start.md
+    - getting-started/configuration.md
+  - Guides:
+    - guides/agents.md
+    - guides/intents.md
+    - guides/tools.md
+    - guides/providers.md
+    - guides/default-agent.md
+    - guides/context-management.md
+    - guides/chat-api.md
+    - guides/dev-chat.md
+  - API Reference:
+    - api-reference/fred-class.md
+    - api-reference/agents.md
+    - api-reference/intents.md
+    - api-reference/tools.md
+    - api-reference/providers.md
+    - api-reference/context.md
+  - Examples:
+    - examples/basic-usage.md
+    - examples/default-agent.md
+    - examples/chat-tool-integration.md
+    - examples/server-mode.md
+  - Advanced:
+    - advanced/custom-providers.md
+    - advanced/custom-tools.md
+    - advanced/deployment.md
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+

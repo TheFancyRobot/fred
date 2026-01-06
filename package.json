@@ -8,7 +8,10 @@
     "dev": "bun run src/dev-chat.ts",
     "server": "bun run src/server.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
-    "test": "bun test"
+    "test": "bun test",
+    "docs:dev": "mkdocs serve",
+    "docs:build": "mkdocs build",
+    "docs:deploy": "mkdocs gh-deploy"
   },
   "keywords": [
     "ai",

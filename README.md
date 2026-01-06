@@ -2,6 +2,8 @@
 
 Fred is a flexible framework for building AI agents with intent-based routing, configurable agents with system messages and tool assignments, and support for multiple AI platforms (OpenAI, Groq, etc.) using Vercel AI SDK and Bun runtime.
 
+📚 **[Full Documentation](https://yourusername.github.io/fred)** - Complete guides, API reference, and examples
+
 ## Features
 
 - **Intent-Based Routing**: Match user messages to intents using exact, regex, or semantic matching
