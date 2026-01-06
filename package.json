@@ -1,0 +1,53 @@
+{
+  "name": "fred",
+  "version": "0.1.0",
+  "description": "Fred - A flexible framework for building AI agents with intent-based routing",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run src/dev-chat.ts",
+    "server": "bun run src/server.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "test": "bun test"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "framework",
+    "intent",
+    "vercel-ai-sdk"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ai": "^4.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/groq": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "@ai-sdk/mistral": "^1.0.0",
+    "@ai-sdk/cohere": "^1.0.0",
+    "@ai-sdk/vercel": "^1.0.0",
+    "@ai-sdk/azure-openai": "^1.0.0",
+    "@ai-sdk/azure-anthropic": "^1.0.0",
+    "@ai-sdk/fireworks": "^1.0.0",
+    "@ai-sdk/xai": "^1.0.0",
+    "@ai-sdk/ollama": "^1.0.0",
+    "@ai-sdk/ai21": "^1.0.0",
+    "@ai-sdk/nvidia": "^1.0.0",
+    "@ai-sdk/amazon-bedrock": "^1.0.0",
+    "@ai-sdk/cloudflare": "^1.0.0",
+    "@ai-sdk/elevenlabs": "^1.0.0",
+    "@ai-sdk/lepton": "^1.0.0",
+    "@ai-sdk/perplexity": "^1.0.0",
+    "@ai-sdk/replicate": "^1.0.0",
+    "@ai-sdk/together": "^1.0.0",
+    "@ai-sdk/upstash": "^1.0.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/bun": "latest"
+  }
+}
+

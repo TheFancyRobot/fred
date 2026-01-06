@@ -1,0 +1,75 @@
+{
+  "intents": [
+    {
+      "id": "greeting",
+      "utterances": [
+        "hello",
+        "hi",
+        "hey",
+        "greetings"
+      ],
+      "action": {
+        "type": "agent",
+        "target": "greeting-agent"
+      }
+    },
+    {
+      "id": "math",
+      "utterances": [
+        "calculate",
+        "compute",
+        "what is",
+        "solve"
+      ],
+      "action": {
+        "type": "agent",
+        "target": "math-agent"
+      }
+    }
+  ],
+  "agents": [
+    {
+      "id": "greeting-agent",
+      "systemMessage": "You are a friendly greeting assistant. Respond warmly to greetings.",
+      "platform": "openai",
+      "model": "gpt-3.5-turbo",
+      "temperature": 0.7
+    },
+    {
+      "id": "math-agent",
+      "systemMessage": "You are a helpful math assistant. Use the calculator tool when needed.",
+      "platform": "openai",
+      "model": "gpt-4",
+      "tools": ["calculator"],
+      "temperature": 0.3
+    }
+  ],
+  "tools": [
+    {
+      "id": "calculator",
+      "name": "calculator",
+      "description": "Perform basic arithmetic operations",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "The operation to perform (add, subtract, multiply, divide)",
+            "enum": ["add", "subtract", "multiply", "divide"]
+          },
+          "a": {
+            "type": "number",
+            "description": "First number"
+          },
+          "b": {
+            "type": "number",
+            "description": "Second number"
+          }
+        },
+        "required": ["operation", "a", "b"]
+      }
+    }
+  ]
+}
+
+

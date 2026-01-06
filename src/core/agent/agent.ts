@@ -1,0 +1,76 @@
+import { Action } from '../intent/intent';
+
+/**
+ * Supported AI platforms
+ * This is a union type of all supported platforms, but the actual
+ * list is dynamically determined by available @ai-sdk packages
+ */
+export type AIPlatform = 
+  | 'openai' 
+  | 'groq' 
+  | 'anthropic' 
+  | 'google' 
+  | 'mistral' 
+  | 'cohere' 
+  | 'vercel' 
+  | 'azure-openai' 
+  | 'azure-anthropic' 
+  | 'azure'
+  | 'fireworks' 
+  | 'xai' 
+  | 'ollama' 
+  | 'ai21' 
+  | 'nvidia' 
+  | 'bedrock' 
+  | 'amazon-bedrock' 
+  | 'cloudflare' 
+  | 'elevenlabs' 
+  | 'lepton' 
+  | 'perplexity' 
+  | 'replicate' 
+  | 'together' 
+  | 'upstash'
+  | string; // Allow any string for extensibility
+
+/**
+ * Agent configuration
+ */
+export interface AgentConfig {
+  id: string;
+  systemMessage: string;
+  platform: AIPlatform;
+  model: string; // Model identifier (e.g., 'gpt-4', 'llama-3-70b-8192')
+  tools?: string[]; // Array of tool IDs to assign to this agent
+  temperature?: number; // Optional temperature setting
+  maxTokens?: number; // Optional max tokens setting
+}
+
+/**
+ * Agent instance (created from config)
+ */
+export interface AgentInstance {
+  id: string;
+  config: AgentConfig;
+  processMessage: (message: string, messages?: AgentMessage[]) => Promise<AgentResponse>;
+}
+
+/**
+ * Message to send to an agent
+ */
+export interface AgentMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
+ * Agent response
+ */
+export interface AgentResponse {
+  content: string;
+  toolCalls?: Array<{
+    toolId: string;
+    args: Record<string, any>;
+    result?: any;
+  }>;
+}
+
