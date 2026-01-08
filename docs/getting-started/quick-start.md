@@ -148,9 +148,30 @@ const response2 = await fred.processMessage('What is my name?', { conversationId
 // Agent remembers: "Your name is Alice"
 ```
 
+## Using the Embedded CLI
+
+Projects created with `create-fred` include a built-in CLI for managing your project:
+
+```bash
+# Add a new provider
+fred provider add groq
+
+# Create a new agent
+fred agent create
+
+# Create a new tool
+fred tool create
+
+# List installed providers
+fred provider list
+```
+
+See the [CLI Guide](../guides/cli.md) for complete documentation.
+
 ## Next Steps
 
-- Learn about [Agents](guides/agents.md)
-- Explore [Intents](guides/intents.md)
+- Learn about [Agents](../guides/agents.md)
+- Explore [Intents](../guides/intents.md)
+- Use the [Embedded CLI](../guides/cli.md) to manage your project
 - Check out [Examples](../examples/basic-usage.md)
 

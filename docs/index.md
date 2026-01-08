@@ -65,6 +65,10 @@ Maintain conversation history across all agents for seamless multi-agent convers
 
 Standard `/v1/chat/completions` endpoint works with AI chat tools like Misty and Chatbox.
 
+### ⚡ Embedded CLI
+
+Built-in CLI commands for managing providers, agents, and tools - no additional packages required.
+
 ## Documentation Structure
 
 - **[Getting Started](getting-started/installation.md)** - Installation and setup
@@ -74,6 +78,18 @@ Standard `/v1/chat/completions` endpoint works with AI chat tools like Misty and
 - **[Advanced](advanced/custom-providers.md)** - Advanced topics and customization
 
 ## Installation
+
+### Quick Start with create-fred
+
+The easiest way to get started:
+
+```bash
+bunx create-fred my-project
+```
+
+This creates a complete project with all dependencies installed and the embedded CLI ready to use.
+
+### Manual Installation
 
 ```bash
 bun add fred
@@ -89,5 +105,6 @@ npm install fred
 
 - Read the [Installation Guide](getting-started/installation.md)
 - Try the [Quick Start](getting-started/quick-start.md)
+- Learn about the [Embedded CLI](guides/cli.md)
 - Explore the [Examples](examples/basic-usage.md)
 

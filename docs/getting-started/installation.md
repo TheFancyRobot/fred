@@ -10,19 +10,39 @@ Fred is built for the Bun runtime and uses the Vercel AI SDK. Follow these steps
 
 ## Install Fred
 
-### Using Bun (Recommended)
+### Using create-fred (Recommended)
+
+The easiest way to get started is using `create-fred`, which sets up a complete project with all dependencies:
+
+```bash
+bunx create-fred my-project
+```
+
+This will:
+- Create a new Fred project
+- Automatically install all dependencies
+- Set up the embedded `fred` CLI
+- Include example code and configuration
+
+See the [Quick Start Guide](quick-start.md) for next steps.
+
+### Manual Installation
+
+If you prefer to install Fred in an existing project:
+
+#### Using Bun
 
 ```bash
 bun add fred
 ```
 
-### Using npm
+#### Using npm
 
 ```bash
 npm install fred
 ```
 
-### Using yarn
+#### Using yarn
 
 ```bash
 yarn add fred
@@ -31,6 +51,20 @@ yarn add fred
 ## Install Provider Packages
 
 Fred supports all @ai-sdk providers. Install the ones you need:
+
+### Using the Embedded CLI (Recommended)
+
+If you created your project with `create-fred`, use the embedded CLI:
+
+```bash
+fred provider add openai
+fred provider add groq
+fred provider add anthropic
+```
+
+This automatically installs the package and updates your configuration.
+
+### Manual Installation
 
 ```bash
 # OpenAI
@@ -88,4 +122,5 @@ ANTHROPIC_API_KEY=your_anthropic_key
 
 - Read the [Quick Start Guide](quick-start.md)
 - Learn about [Configuration](configuration.md)
+- Use the [Embedded CLI](../guides/cli.md) to manage your project
 

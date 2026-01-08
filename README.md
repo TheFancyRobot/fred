@@ -15,6 +15,21 @@ Fred is a flexible framework for building AI agents with intent-based routing, c
 
 ## Installation
 
+### Using create-fred (Recommended)
+
+The easiest way to get started is using `create-fred`:
+
+```bash
+bunx create-fred my-project
+```
+
+This will:
+- Create a new Fred project with all necessary files
+- Automatically install all dependencies
+- Set up the embedded `fred` CLI for managing your project
+
+### Manual Installation
+
 ```bash
 # Install dependencies
 bun install
@@ -222,6 +237,38 @@ API Endpoints:
 - `GET /intents` - List all intents
 - `GET /tools` - List all tools
 - `GET /health` - Health check
+
+### Embedded CLI Commands
+
+Projects created with `create-fred` include a built-in CLI for managing your project:
+
+```bash
+# Add a new AI provider
+fred provider add groq
+
+# Remove a provider
+fred provider remove openai
+
+# List installed providers
+fred provider list
+
+# Create a new agent (interactive)
+fred agent create
+
+# Create a new tool (interactive)
+fred tool create
+
+# Show help
+fred help
+```
+
+The CLI automatically:
+- Installs/removes provider packages
+- Updates `package.json` and `.env.example`
+- Scaffolds agent and tool files
+- Updates `src/index.ts` with imports and registrations
+
+See the [CLI Guide](https://sincspecv.github.io/fred/guides/cli/) for complete documentation.
 
 ## Architecture
 
