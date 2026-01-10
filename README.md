@@ -17,6 +17,8 @@ Fred is a flexible framework for building AI agents with intent-based routing, c
 - **Multi-Platform Support**: Supports all @ai-sdk providers (OpenAI, Groq, Anthropic, Google, Mistral, Cohere, Vercel, Azure, Fireworks, XAI, Ollama, and 10+ more)
 - **Flexible Configuration**: Use programmatic API or JSON/YAML config files
 - **Library + Server Mode**: Use as a library or run as a standalone HTTP server
+- **Observability & Tracing**: Lightweight tracing system with optional OpenTelemetry integration for full observability
+- **Evaluation Harness**: Golden trace-based evaluation system for deterministic testing and regression detection
 
 ## Installation
 
@@ -264,6 +266,15 @@ fred agent create
 # Create a new tool (interactive)
 fred tool create
 
+# Run golden trace tests
+fred test
+
+# Record a new golden trace
+fred test --record "Hello, world!"
+
+# Update existing traces
+fred test --update
+
 # Show help
 fred help
 ```
@@ -277,6 +288,48 @@ The CLI automatically:
 **Security Note:** The CLI should write placeholder values (e.g., `OPENAI_API_KEY=your_openai_api_key_here`) to `.env.example`, not actual API keys. Real API keys belong only in `.env` (which is gitignored).
 
 See the [CLI Guide](https://sincspecv.github.io/fred/guides/cli/) for complete documentation.
+
+### Observability & Tracing
+
+Fred includes comprehensive observability through a lightweight tracing system:
+
+```typescript
+import { Fred } from 'fred';
+
+const fred = new Fred();
+
+// Enable tracing (opt-in, zero overhead when disabled)
+fred.enableTracing();
+
+// Process messages - spans are automatically created
+const response = await fred.processMessage('Hello!');
+```
+
+Tracing instruments:
+- Message routing and agent selection
+- AI model calls with token usage
+- Tool execution with timing
+- Agent handoffs
+- Pipeline hooks
+
+Optional OpenTelemetry integration available. See [Observability Guide](https://sincspecv.github.io/fred/advanced/observability/) for details.
+
+### Evaluation Harness
+
+Test your agents with golden traces - deterministic snapshots of agent runs:
+
+```bash
+# Record a golden trace
+fred test --record "Hello, world!"
+
+# Run tests
+fred test
+
+# Update traces when behavior changes
+fred test --update
+```
+
+Golden traces capture complete execution including spans, tool calls, handoffs, and routing decisions. Perfect for regression testing and CI/CD. See [Evaluation Guide](https://sincspecv.github.io/fred/guides/evaluation/) for details.
 
 ## Architecture
 

@@ -26,6 +26,9 @@
     "docs:build": "mkdocs build",
     "docs:deploy": "mkdocs gh-deploy"
   },
+  "bin": {
+    "fred": "./src/cli/index.ts"
+  },
   "keywords": [
     "ai",
     "agents",

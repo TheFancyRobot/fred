@@ -1,4 +1,7 @@
 import { Tool } from './tool';
+import { Tracer } from '../tracing';
+import { SpanKind } from '../tracing/types';
+import { getActiveSpan } from '../tracing/context';
 
 /**
  * Handoff result indicating a message should be transferred to another agent
@@ -14,10 +17,12 @@ export interface HandoffResult {
  * Create a handoff tool that allows agents to transfer conversations to other agents
  * @param agentManager - Function to get an agent by ID
  * @param availableAgents - Function to get list of available agent IDs
+ * @param tracer - Optional tracer for tracing handoff operations
  */
 export function createHandoffTool(
   getAgent: (id: string) => any,
-  getAvailableAgents: () => string[]
+  getAvailableAgents: () => string[],
+  tracer?: Tracer
 ): Tool {
   return {
     id: 'handoff_to_agent',
@@ -44,24 +49,61 @@ export function createHandoffTool(
     execute: async (args: { agentId: string; message?: string; context?: Record<string, any> }) => {
       const { agentId, message, context } = args;
 
-      // Validate agent exists
-      const agent = getAgent(agentId);
-      if (!agent) {
-        const availableAgents = getAvailableAgents();
-        throw new Error(
-          `Agent "${agentId}" not found. Available agents: ${availableAgents.join(', ') || 'none'}`
-        );
+      // Create span for handoff tool execution
+      const handoffSpan = tracer?.startSpan('tool.handoff', {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          'tool.id': 'handoff_to_agent',
+          'handoff.targetAgent': agentId,
+          'handoff.hasMessage': message !== undefined && message !== '',
+          'handoff.hasContext': context !== undefined,
+        },
+      });
+
+      const previousActiveSpan = tracer?.getActiveSpan();
+      if (handoffSpan) {
+        tracer?.setActiveSpan(handoffSpan);
       }
 
-      // Return handoff result (will be processed by the message pipeline)
-      const handoffResult: HandoffResult = {
-        type: 'handoff',
-        agentId,
-        message: message || '', // Will be replaced with original message if not provided
-        context,
-      };
+      try {
+        // Validate agent exists
+        const agent = getAgent(agentId);
+        if (!agent) {
+          const availableAgents = getAvailableAgents();
+          const error = new Error(
+            `Agent "${agentId}" not found. Available agents: ${availableAgents.join(', ') || 'none'}`
+          );
+          if (handoffSpan) {
+            handoffSpan.recordException(error);
+            handoffSpan.setStatus('error', error.message);
+          }
+          throw error;
+        }
 
-      return handoffResult;
+        // Return handoff result (will be processed by the message pipeline)
+        const handoffResult: HandoffResult = {
+          type: 'handoff',
+          agentId,
+          message: message || '', // Will be replaced with original message if not provided
+          context,
+        };
+
+        if (handoffSpan) {
+          handoffSpan.setStatus('ok');
+        }
+
+        return handoffResult;
+      } finally {
+        if (handoffSpan) {
+          handoffSpan.end();
+          // Restore previous active span
+          if (previousActiveSpan) {
+            tracer?.setActiveSpan(previousActiveSpan);
+          } else {
+            tracer?.setActiveSpan(undefined);
+          }
+        }
+      }
     },
   };
 }

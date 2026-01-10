@@ -1,10 +1,21 @@
 import { HookType, HookEvent, HookResult, HookHandler } from './types';
+import { Tracer } from '../tracing';
+import { SpanKind } from '../tracing/types';
+import { getActiveSpan, setActiveSpan } from '../tracing/context';
 
 /**
  * Hook manager for registering and executing hooks
  */
 export class HookManager {
   private hooks: Map<HookType, HookHandler[]> = new Map();
+  private tracer?: Tracer;
+
+  /**
+   * Set the tracer for hook execution tracing
+   */
+  setTracer(tracer?: Tracer): void {
+    this.tracer = tracer;
+  }
 
   /**
    * Register a hook handler
@@ -41,16 +52,76 @@ export class HookManager {
       return [];
     }
 
+    // Create span for hook execution if tracing is enabled
+    const hookSpan = this.tracer?.startSpan('hook.execute', {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'hook.type': type,
+        'hook.handlerCount': handlers.length,
+      },
+    });
+
+    const previousActiveSpan = this.tracer?.getActiveSpan();
+    if (hookSpan) {
+      this.tracer?.setActiveSpan(hookSpan);
+    }
+
     const results: HookResult[] = [];
-    for (const handler of handlers) {
-      try {
-        const result = await handler(event);
-        if (result) {
-          results.push(result);
+    try {
+      for (let i = 0; i < handlers.length; i++) {
+        const handler = handlers[i];
+        const handlerSpan = this.tracer?.startSpan(`hook.handler.${i}`, {
+          kind: SpanKind.INTERNAL,
+          attributes: {
+            'hook.type': type,
+            'hook.handlerIndex': i,
+          },
+        });
+
+        try {
+          const result = await handler(event);
+          if (result) {
+            results.push(result);
+            if (handlerSpan) {
+              handlerSpan.setAttribute('hook.result.hasData', result.data !== undefined);
+              handlerSpan.setAttribute('hook.result.hasContext', result.context !== undefined);
+              handlerSpan.setAttribute('hook.result.skip', result.skip ?? false);
+              handlerSpan.setStatus('ok');
+            }
+          } else if (handlerSpan) {
+            handlerSpan.setStatus('ok');
+          }
+        } catch (error) {
+          console.error(`Error executing hook ${type}:`, error);
+          if (handlerSpan && error instanceof Error) {
+            handlerSpan.recordException(error);
+            handlerSpan.setStatus('error', error.message);
+          }
+          // Continue executing other hooks even if one fails
+        } finally {
+          handlerSpan?.end();
         }
-      } catch (error) {
-        console.error(`Error executing hook ${type}:`, error);
-        // Continue executing other hooks even if one fails
+      }
+
+      if (hookSpan) {
+        hookSpan.setAttribute('hook.resultsCount', results.length);
+        hookSpan.setStatus('ok');
+      }
+    } catch (error) {
+      if (hookSpan && error instanceof Error) {
+        hookSpan.recordException(error);
+        hookSpan.setStatus('error', error.message);
+      }
+      throw error;
+    } finally {
+      if (hookSpan) {
+        hookSpan.end();
+        // Restore previous active span
+        if (previousActiveSpan) {
+          this.tracer?.setActiveSpan(previousActiveSpan);
+        } else {
+          this.tracer?.setActiveSpan(undefined);
+        }
       }
     }
 
