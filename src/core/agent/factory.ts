@@ -5,6 +5,9 @@ import { ToolRegistry } from '../tool/registry';
 import { createHandoffTool, HandoffResult } from '../tool/handoff';
 import { loadPromptFile } from '../../utils/prompt-loader';
 import { MCPClientImpl, createAISDKToolsFromMCP, convertMCPToolsToFredTools } from '../mcp';
+import { Tracer } from '../tracing';
+import { SpanKind } from '../tracing/types';
+import { setActiveSpan } from '../tracing/context';
 
 /**
  * Agent factory using Vercel AI SDK
@@ -16,9 +19,18 @@ export class AgentFactory {
     getAvailableAgents: () => string[];
   };
   private mcpClients: Map<string, MCPClientImpl> = new Map(); // Track MCP clients per agent
+  private tracer?: Tracer;
 
-  constructor(toolRegistry: ToolRegistry) {
+  constructor(toolRegistry: ToolRegistry, tracer?: Tracer) {
     this.toolRegistry = toolRegistry;
+    this.tracer = tracer;
+  }
+
+  /**
+   * Set the tracer for agent creation
+   */
+  setTracer(tracer?: Tracer): void {
+    this.tracer = tracer;
   }
 
   /**
@@ -46,7 +58,8 @@ export class AgentFactory {
     if (this.handoffHandler) {
       const handoffTool = createHandoffTool(
         this.handoffHandler.getAgent,
-        this.handoffHandler.getAvailableAgents
+        this.handoffHandler.getAvailableAgents,
+        this.tracer
       );
       tools.push(handoffTool);
     }
@@ -95,13 +108,65 @@ export class AgentFactory {
       }
     }
     
-    // Convert regular tools to AI SDK format
+    // Convert regular tools to AI SDK format with tracing
     const sdkTools: Record<string, any> = {};
     for (const toolDef of tools) {
+      // Wrap tool execution with tracing
+      const originalExecute = toolDef.execute;
+      const tracedExecute = async (args: any) => {
+        const toolSpan = this.tracer?.startSpan('tool.execute', {
+          kind: SpanKind.CLIENT,
+          attributes: {
+            'tool.id': toolDef.id,
+            'tool.name': toolDef.name,
+            'tool.args': JSON.stringify(args),
+          },
+        });
+
+        const previousActiveSpan = this.tracer?.getActiveSpan();
+        if (toolSpan) {
+          this.tracer?.setActiveSpan(toolSpan);
+        }
+
+        try {
+          const result = await originalExecute(args);
+          
+          if (toolSpan) {
+            toolSpan.setAttributes({
+              'tool.result.type': typeof result,
+              'tool.result.hasValue': result !== undefined && result !== null,
+            });
+            // Don't log full result if it's too large (could be sensitive data)
+            if (typeof result === 'string' && result.length < 1000) {
+              toolSpan.setAttribute('tool.result.preview', result.substring(0, 100));
+            }
+            toolSpan.setStatus('ok');
+          }
+          
+          return result;
+        } catch (error) {
+          if (toolSpan && error instanceof Error) {
+            toolSpan.recordException(error);
+            toolSpan.setStatus('error', error.message);
+          }
+          throw error;
+        } finally {
+          if (toolSpan) {
+            toolSpan.end();
+            // Restore previous active span
+            if (previousActiveSpan) {
+              this.tracer?.setActiveSpan(previousActiveSpan);
+            } else {
+              this.tracer?.setActiveSpan(undefined);
+            }
+          }
+        }
+      };
+
       sdkTools[toolDef.id] = tool({
         description: toolDef.description,
         parameters: jsonSchema(toolDef.parameters),
-        execute: toolDef.execute,
+        execute: tracedExecute,
       });
     }
     
@@ -123,20 +188,71 @@ export class AgentFactory {
       // Note: When loaded from config, paths are already resolved in extractAgents
       const systemMessage = loadPromptFile(config.systemMessage);
 
-      // Generate response using AI SDK
+      // Generate response using AI SDK with tracing
       const allMessages: CoreMessage[] = [
         ...messages,
         { role: 'user', content: message },
       ];
       
-      const result = await generateText({
-        model,
-        system: systemMessage,
-        messages: allMessages,
-        tools: Object.keys(sdkTools).length > 0 ? sdkTools : undefined,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
+      // Create span for model call if tracing is enabled
+      const modelSpan = this.tracer?.startSpan('model.call', {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          'agent.id': config.id,
+          'model.name': config.model,
+          'model.platform': config.platform,
+          'model.temperature': config.temperature ?? 0.7,
+          'model.maxTokens': config.maxTokens ?? 0,
+          'message.length': message.length,
+          'history.length': previousMessages.length,
+        },
       });
+
+      const previousActiveSpan = this.tracer?.getActiveSpan();
+      if (modelSpan) {
+        this.tracer?.setActiveSpan(modelSpan);
+      }
+
+      let result;
+      try {
+        result = await generateText({
+          model,
+          system: systemMessage,
+          messages: allMessages,
+          tools: Object.keys(sdkTools).length > 0 ? sdkTools : undefined,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+        });
+
+        // Record model response attributes
+        if (modelSpan) {
+          modelSpan.setAttributes({
+            'response.length': result.text.length,
+            'response.finishReason': result.finishReason || 'unknown',
+            'usage.promptTokens': result.usage?.promptTokens ?? 0,
+            'usage.completionTokens': result.usage?.completionTokens ?? 0,
+            'usage.totalTokens': result.usage?.totalTokens ?? 0,
+            'toolCalls.count': result.toolCalls?.length ?? 0,
+          });
+          modelSpan.setStatus('ok');
+        }
+      } catch (error) {
+        if (modelSpan && error instanceof Error) {
+          modelSpan.recordException(error);
+          modelSpan.setStatus('error', error.message);
+        }
+        throw error;
+      } finally {
+        if (modelSpan) {
+          modelSpan.end();
+          // Restore previous active span
+          if (previousActiveSpan) {
+            this.tracer?.setActiveSpan(previousActiveSpan);
+          } else {
+            this.tracer?.setActiveSpan(undefined);
+          }
+        }
+      }
 
       // Extract tool calls if any
       const toolCalls = result.toolCalls?.map(tc => ({

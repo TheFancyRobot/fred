@@ -15,6 +15,10 @@ import { semanticMatch } from './utils/semantic';
 import { ContextManager } from './core/context/manager';
 import { CoreMessage, convertToCoreMessages } from 'ai';
 import { HookManager, HookType, HookHandler } from './core/hooks';
+import { Tracer, Span } from './core/tracing';
+import { NoOpTracer } from './core/tracing/noop-tracer';
+import { SpanKind } from './core/tracing/types';
+import { setActiveSpan, getActiveSpan } from './core/tracing/context';
 
 /**
  * Fred - Main class for building AI agents
@@ -27,14 +31,31 @@ export class Fred {
   private defaultAgentId?: string;
   private contextManager: ContextManager;
   private hookManager: HookManager;
+  private tracer?: Tracer;
 
-  constructor() {
+  constructor(tracer?: Tracer) {
     this.toolRegistry = new ToolRegistry();
-    this.agentManager = new AgentManager(this.toolRegistry);
+    this.tracer = tracer;
+    this.agentManager = new AgentManager(this.toolRegistry, tracer);
     this.intentMatcher = new IntentMatcher();
     this.intentRouter = new IntentRouter(this.agentManager);
     this.contextManager = new ContextManager();
     this.hookManager = new HookManager();
+    
+    // Set tracer on hook manager if provided
+    if (this.tracer) {
+      this.hookManager.setTracer(this.tracer);
+    }
+  }
+
+  /**
+   * Enable tracing with a tracer instance
+   * If no tracer is provided, uses a NoOpTracer (zero overhead)
+   */
+  enableTracing(tracer?: Tracer): void {
+    this.tracer = tracer || new NoOpTracer();
+    this.agentManager.setTracer(this.tracer);
+    this.hookManager.setTracer(this.tracer);
   }
 
   /**
@@ -242,112 +263,299 @@ export class Fred {
       conversationId?: string;
     }
   ): Promise<AgentResponse | null> {
-    const conversationId = options?.conversationId || this.contextManager.generateConversationId();
-    const useSemantic = options?.useSemanticMatching ?? true;
-    const threshold = options?.semanticThreshold ?? 0.6;
+    // Create root span for message processing
+    const rootSpan = this.tracer?.startSpan('processMessage', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'message.length': message.length,
+        'options.useSemanticMatching': options?.useSemanticMatching ?? true,
+        'options.semanticThreshold': options?.semanticThreshold ?? 0.6,
+      },
+    });
 
-    // Get conversation history
-    const history = await this.contextManager.getHistory(conversationId);
-    
-    // Convert history to AgentMessage format for agents
-    const previousMessages = history
-      .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-      .map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-      }));
+    const previousActiveSpan = this.tracer?.getActiveSpan();
+    if (rootSpan) {
+      this.tracer?.setActiveSpan(rootSpan);
+    }
 
-    // Add user message to context
-    const userMessage: CoreMessage = {
-      role: 'user',
-      content: message,
-    };
-    await this.contextManager.addMessage(conversationId, userMessage);
+    try {
+      const conversationId = options?.conversationId || this.contextManager.generateConversationId();
+      const useSemantic = options?.useSemanticMatching ?? true;
+      const threshold = options?.semanticThreshold ?? 0.6;
 
-    // Create semantic matcher if enabled
-    const semanticMatcher = useSemantic
-      ? async (msg: string, utterances: string[]) => {
-          return semanticMatch(msg, utterances, threshold);
-        }
-      : undefined;
+      if (rootSpan) {
+        rootSpan.setAttribute('conversation.id', conversationId);
+      }
 
-    let response: AgentResponse;
+      // Get conversation history
+      const history = await this.contextManager.getHistory(conversationId);
+      
+      // Convert history to AgentMessage format for agents
+      const previousMessages = history
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+        .map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+        }));
 
-    // Routing priority: 1. Agent utterances, 2. Intent matching, 3. Default agent
-    // Check agent utterances first (direct routing)
-    const agentMatch = await this.agentManager.matchAgentByUtterance(message, semanticMatcher);
-    
-    if (agentMatch) {
-      // Route directly to matched agent
-      const agent = this.agentManager.getAgent(agentMatch.agentId);
-      if (agent) {
-        response = await agent.processMessage(message, previousMessages);
-      } else {
-        // Agent not found, fall through to intent matching
-        const match = await this.intentMatcher.matchIntent(message, semanticMatcher);
-        if (match) {
-          response = await this.intentRouter.routeIntent(match, message) as AgentResponse;
-        } else if (this.defaultAgentId) {
-          response = await this.intentRouter.routeToDefaultAgent(message, previousMessages) as AgentResponse;
+      // Add user message to context
+      const userMessage: CoreMessage = {
+        role: 'user',
+        content: message,
+      };
+      await this.contextManager.addMessage(conversationId, userMessage);
+
+      // Create semantic matcher if enabled
+      const semanticMatcher = useSemantic
+        ? async (msg: string, utterances: string[]) => {
+            return semanticMatch(msg, utterances, threshold);
+          }
+        : undefined;
+
+      let response: AgentResponse;
+
+      // Routing priority: 1. Agent utterances, 2. Intent matching, 3. Default agent
+      // Create span for routing
+      const routingSpan = this.tracer?.startSpan('routing', {
+        kind: SpanKind.INTERNAL,
+      });
+
+      if (routingSpan) {
+        this.tracer?.setActiveSpan(routingSpan);
+      }
+
+      try {
+        // Check agent utterances first (direct routing)
+        const agentMatch = await this.agentManager.matchAgentByUtterance(message, semanticMatcher);
+        
+        if (agentMatch) {
+          if (routingSpan) {
+            routingSpan.setAttributes({
+              'routing.method': 'agent.utterance',
+              'routing.agentId': agentMatch.agentId,
+              'routing.confidence': agentMatch.confidence,
+              'routing.matchType': agentMatch.matchType,
+            });
+          }
+
+          // Route directly to matched agent
+          const agent = this.agentManager.getAgent(agentMatch.agentId);
+          if (agent) {
+            // Create span for agent selection
+            const agentSpan = this.tracer?.startSpan('agent.process', {
+              kind: SpanKind.INTERNAL,
+              attributes: {
+                'agent.id': agentMatch.agentId,
+                'agent.matchType': agentMatch.matchType,
+                'agent.confidence': agentMatch.confidence,
+              },
+            });
+
+            const previousAgentSpan = this.tracer?.getActiveSpan();
+            if (agentSpan) {
+              this.tracer?.setActiveSpan(agentSpan);
+            }
+
+            try {
+              response = await agent.processMessage(message, previousMessages);
+              if (agentSpan) {
+                agentSpan.setAttribute('response.length', response.content.length);
+                agentSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
+                agentSpan.setAttribute('response.hasHandoff', response.handoff !== undefined);
+                agentSpan.setStatus('ok');
+              }
+            } catch (error) {
+              if (agentSpan && error instanceof Error) {
+                agentSpan.recordException(error);
+                agentSpan.setStatus('error', error.message);
+              }
+              throw error;
+            } finally {
+              agentSpan?.end();
+              if (previousAgentSpan) {
+                this.tracer?.setActiveSpan(previousAgentSpan);
+              }
+            }
+          } else {
+            // Agent not found, fall through to intent matching
+            if (routingSpan) {
+              routingSpan.addEvent('agent.notFound', { 'agent.id': agentMatch.agentId });
+            }
+            const match = await this.intentMatcher.matchIntent(message, semanticMatcher);
+            if (match) {
+              if (routingSpan) {
+                routingSpan.setAttribute('routing.fallback', 'intent.matching');
+                routingSpan.setAttribute('routing.intentId', match.intent.id);
+              }
+              response = await this.intentRouter.routeIntent(match, message) as AgentResponse;
+            } else if (this.defaultAgentId) {
+              if (routingSpan) {
+                routingSpan.setAttribute('routing.fallback', 'default.agent');
+                routingSpan.setAttribute('routing.defaultAgentId', this.defaultAgentId);
+              }
+              response = await this.intentRouter.routeToDefaultAgent(message, previousMessages) as AgentResponse;
+            } else {
+              if (routingSpan) {
+                routingSpan.setStatus('error', 'No routing target found');
+              }
+              return null;
+            }
+          }
         } else {
-          return null;
+          // No agent utterance match, try intent matching
+          const match = await this.intentMatcher.matchIntent(message, semanticMatcher);
+          
+          if (match) {
+            if (routingSpan) {
+              routingSpan.setAttributes({
+                'routing.method': 'intent.matching',
+                'routing.intentId': match.intent.id,
+                'routing.confidence': match.confidence,
+                'routing.matchType': match.matchType,
+              });
+            }
+            // Route to matched intent's action
+            response = await this.intentRouter.routeIntent(match, message) as AgentResponse;
+          } else if (this.defaultAgentId) {
+            if (routingSpan) {
+              routingSpan.setAttributes({
+                'routing.method': 'default.agent',
+                'routing.defaultAgentId': this.defaultAgentId,
+              });
+            }
+            // No intent matched - route to default agent
+            response = await this.intentRouter.routeToDefaultAgent(message, previousMessages) as AgentResponse;
+          } else {
+            if (routingSpan) {
+              routingSpan.setStatus('error', 'No routing target found');
+            }
+            // No match and no default agent
+            return null;
+          }
+        }
+
+        if (routingSpan) {
+          routingSpan.setStatus('ok');
+        }
+      } catch (error) {
+        if (routingSpan && error instanceof Error) {
+          routingSpan.recordException(error);
+          routingSpan.setStatus('error', error.message);
+        }
+        throw error;
+      } finally {
+        routingSpan?.end();
+        if (rootSpan) {
+          this.tracer?.setActiveSpan(rootSpan);
         }
       }
-    } else {
-      // No agent utterance match, try intent matching
-      const match = await this.intentMatcher.matchIntent(message, semanticMatcher);
+
+      // Process handoffs recursively (with max depth to prevent infinite loops)
+      const maxHandoffDepth = 10;
+      let handoffDepth = 0;
+      let currentResponse = response;
       
-      if (match) {
-        // Route to matched intent's action
-        response = await this.intentRouter.routeIntent(match, message) as AgentResponse;
-      } else if (this.defaultAgentId) {
-        // No intent matched - route to default agent
-        response = await this.intentRouter.routeToDefaultAgent(message, previousMessages) as AgentResponse;
-      } else {
-        // No match and no default agent
-        return null;
+      while (currentResponse.handoff && handoffDepth < maxHandoffDepth) {
+        handoffDepth++;
+        const handoff = currentResponse.handoff;
+        
+        // Create span for handoff
+        const handoffSpan = this.tracer?.startSpan('agent.handoff', {
+          kind: SpanKind.INTERNAL,
+          attributes: {
+            'handoff.depth': handoffDepth,
+            'handoff.fromAgent': currentResponse.handoff?.agentId || 'unknown',
+            'handoff.toAgent': handoff.agentId,
+            'handoff.hasContext': handoff.context !== undefined,
+          },
+        });
+
+        const previousHandoffSpan = this.tracer?.getActiveSpan();
+        if (handoffSpan) {
+          this.tracer?.setActiveSpan(handoffSpan);
+        }
+
+        try {
+          // Get target agent
+          const targetAgent = this.agentManager.getAgent(handoff.agentId);
+          if (!targetAgent) {
+            // Target agent not found, return current response
+            if (handoffSpan) {
+              handoffSpan.addEvent('agent.notFound', { 'agent.id': handoff.agentId });
+              handoffSpan.setStatus('error', 'Target agent not found');
+            }
+            break;
+          }
+
+          // Prepare handoff message (use provided message or original message)
+          const handoffMessage = handoff.message || message;
+          
+          // Add context from handoff if provided
+          const handoffContext = handoff.context ? `\n\nContext: ${JSON.stringify(handoff.context)}` : '';
+          const messageWithContext = handoffMessage + handoffContext;
+
+          // Process message with target agent
+          currentResponse = await targetAgent.processMessage(messageWithContext, previousMessages);
+          
+          if (handoffSpan) {
+            handoffSpan.setAttribute('handoff.response.length', currentResponse.content.length);
+            handoffSpan.setStatus('ok');
+          }
+        } catch (error) {
+          if (handoffSpan && error instanceof Error) {
+            handoffSpan.recordException(error);
+            handoffSpan.setStatus('error', error.message);
+          }
+          throw error;
+        } finally {
+          handoffSpan?.end();
+          if (previousHandoffSpan) {
+            this.tracer?.setActiveSpan(previousHandoffSpan);
+          }
+        }
+      }
+
+      if (handoffDepth >= maxHandoffDepth) {
+        console.warn('Maximum handoff depth reached. Stopping handoff chain.');
+        if (rootSpan) {
+          rootSpan.addEvent('handoff.maxDepthReached', { 'maxDepth': maxHandoffDepth });
+        }
+      }
+
+      if (rootSpan) {
+        rootSpan.setAttributes({
+          'response.length': currentResponse.content.length,
+          'response.hasToolCalls': (currentResponse.toolCalls?.length ?? 0) > 0,
+          'handoff.depth': handoffDepth,
+        });
+        rootSpan.setStatus('ok');
+      }
+
+      // Add assistant response to context
+      const assistantMessage: CoreMessage = {
+        role: 'assistant',
+        content: currentResponse.content,
+      };
+      await this.contextManager.addMessage(conversationId, assistantMessage);
+
+      return currentResponse;
+    } catch (error) {
+      if (rootSpan && error instanceof Error) {
+        rootSpan.recordException(error);
+        rootSpan.setStatus('error', error.message);
+      }
+      throw error;
+    } finally {
+      if (rootSpan) {
+        rootSpan.end();
+        // Restore previous active span
+        if (previousActiveSpan) {
+          this.tracer?.setActiveSpan(previousActiveSpan);
+        } else {
+          this.tracer?.setActiveSpan(undefined);
+        }
       }
     }
-
-    // Process handoffs recursively (with max depth to prevent infinite loops)
-    const maxHandoffDepth = 10;
-    let handoffDepth = 0;
-    let currentResponse = response;
-    
-    while (currentResponse.handoff && handoffDepth < maxHandoffDepth) {
-      handoffDepth++;
-      const handoff = currentResponse.handoff;
-      
-      // Get target agent
-      const targetAgent = this.agentManager.getAgent(handoff.agentId);
-      if (!targetAgent) {
-        // Target agent not found, return current response
-        break;
-      }
-
-      // Prepare handoff message (use provided message or original message)
-      const handoffMessage = handoff.message || message;
-      
-      // Add context from handoff if provided
-      const handoffContext = handoff.context ? `\n\nContext: ${JSON.stringify(handoff.context)}` : '';
-      const messageWithContext = handoffMessage + handoffContext;
-
-      // Process message with target agent
-      currentResponse = await targetAgent.processMessage(messageWithContext, previousMessages);
-    }
-
-    if (handoffDepth >= maxHandoffDepth) {
-      console.warn('Maximum handoff depth reached. Stopping handoff chain.');
-    }
-
-    // Add assistant response to context
-    const assistantMessage: CoreMessage = {
-      role: 'assistant',
-      content: currentResponse.content,
-    };
-    await this.contextManager.addMessage(conversationId, assistantMessage);
-
-    return currentResponse;
   }
 
   /**
@@ -525,4 +733,11 @@ export { ContextManager } from './core/context/manager';
 export * from './core/context/context';
 export { HookManager } from './core/hooks/manager';
 export * from './core/hooks/types';
+export * from './core/tracing';
+export { NoOpTracer } from './core/tracing/noop-tracer';
+export { createOpenTelemetryTracer, isOpenTelemetryAvailable } from './core/tracing/otel-exporter';
+export * from './core/eval/golden-trace';
+export { GoldenTraceRecorder } from './core/eval/recorder';
+export * from './core/eval/assertions';
+export * from './core/eval/assertion-runner';
 

@@ -3,6 +3,7 @@ import { AgentFactory } from './factory';
 import { AIProvider } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
 import { semanticMatch } from '../../utils/semantic';
+import { Tracer } from '../tracing';
 
 /**
  * Agent manager for lifecycle management
@@ -11,14 +12,25 @@ export class AgentManager {
   private agents: Map<string, AgentInstance> = new Map();
   private factory: AgentFactory;
   private providers: Map<string, AIProvider> = new Map();
+  private tracer?: Tracer;
 
-  constructor(toolRegistry: ToolRegistry) {
-    this.factory = new AgentFactory(toolRegistry);
+  constructor(toolRegistry: ToolRegistry, tracer?: Tracer) {
+    this.tracer = tracer;
+    this.factory = new AgentFactory(toolRegistry, tracer);
     // Set up handoff handler for agent-to-agent transfers
     this.factory.setHandoffHandler({
       getAgent: (id: string) => this.getAgent(id),
       getAvailableAgents: () => this.getAllAgents().map(a => a.id),
     });
+  }
+
+  /**
+   * Set the tracer for agent creation
+   * Note: This only affects newly created agents
+   */
+  setTracer(tracer?: Tracer): void {
+    this.tracer = tracer;
+    this.factory.setTracer(tracer);
   }
 
   /**
