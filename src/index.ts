@@ -306,14 +306,45 @@ export class Fred {
       }
     }
 
+    // Process handoffs recursively (with max depth to prevent infinite loops)
+    const maxHandoffDepth = 10;
+    let handoffDepth = 0;
+    let currentResponse = response;
+    
+    while (currentResponse.handoff && handoffDepth < maxHandoffDepth) {
+      handoffDepth++;
+      const handoff = currentResponse.handoff;
+      
+      // Get target agent
+      const targetAgent = this.agentManager.getAgent(handoff.agentId);
+      if (!targetAgent) {
+        // Target agent not found, return current response
+        break;
+      }
+
+      // Prepare handoff message (use provided message or original message)
+      const handoffMessage = handoff.message || message;
+      
+      // Add context from handoff if provided
+      const handoffContext = handoff.context ? `\n\nContext: ${JSON.stringify(handoff.context)}` : '';
+      const messageWithContext = handoffMessage + handoffContext;
+
+      // Process message with target agent
+      currentResponse = await targetAgent.processMessage(messageWithContext, previousMessages);
+    }
+
+    if (handoffDepth >= maxHandoffDepth) {
+      console.warn('Maximum handoff depth reached. Stopping handoff chain.');
+    }
+
     // Add assistant response to context
     const assistantMessage: CoreMessage = {
       role: 'assistant',
-      content: response.content,
+      content: currentResponse.content,
     };
     await this.contextManager.addMessage(conversationId, assistantMessage);
 
-    return response;
+    return currentResponse;
   }
 
   /**

@@ -2,6 +2,7 @@ import { generateText, tool, CoreMessage, jsonSchema } from 'ai';
 import { AgentConfig, AgentMessage, AgentResponse } from './agent';
 import { AIProvider } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
+import { createHandoffTool, HandoffResult } from '../tool/handoff';
 import { loadPromptFile } from '../../utils/prompt-loader';
 
 /**
@@ -9,9 +10,20 @@ import { loadPromptFile } from '../../utils/prompt-loader';
  */
 export class AgentFactory {
   private toolRegistry: ToolRegistry;
+  private handoffHandler?: {
+    getAgent: (id: string) => any;
+    getAvailableAgents: () => string[];
+  };
 
   constructor(toolRegistry: ToolRegistry) {
     this.toolRegistry = toolRegistry;
+  }
+
+  /**
+   * Set handoff handler for agent-to-agent handoffs
+   */
+  setHandoffHandler(handler: { getAgent: (id: string) => any; getAvailableAgents: () => string[] }): void {
+    this.handoffHandler = handler;
   }
 
   /**
@@ -27,6 +39,15 @@ export class AgentFactory {
     
     // Get tools for this agent
     const tools = config.tools ? this.toolRegistry.getTools(config.tools) : [];
+    
+    // Auto-register handoff tool if handler is available
+    if (this.handoffHandler) {
+      const handoffTool = createHandoffTool(
+        this.handoffHandler.getAgent,
+        this.handoffHandler.getAvailableAgents
+      );
+      tools.push(handoffTool);
+    }
     
     // Convert tools to AI SDK format
     const sdkTools: Record<string, any> = {};
@@ -74,6 +95,17 @@ export class AgentFactory {
         args: tc.args as Record<string, any>,
         result: tc.result,
       }));
+
+      // Check for handoff tool calls
+      const handoffCall = toolCalls?.find(tc => tc.toolId === 'handoff_to_agent');
+      if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result && handoffCall.result.type === 'handoff') {
+        // Return handoff result - will be processed by message pipeline
+        return {
+          content: result.text,
+          toolCalls,
+          handoff: handoffCall.result as HandoffResult,
+        } as AgentResponse & { handoff?: HandoffResult };
+      }
 
       return {
         content: result.text,

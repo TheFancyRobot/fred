@@ -14,6 +14,11 @@ export class AgentManager {
 
   constructor(toolRegistry: ToolRegistry) {
     this.factory = new AgentFactory(toolRegistry);
+    // Set up handoff handler for agent-to-agent transfers
+    this.factory.setHandoffHandler({
+      getAgent: (id: string) => this.getAgent(id),
+      getAvailableAgents: () => this.getAllAgents().map(a => a.id),
+    });
   }
 
   /**
