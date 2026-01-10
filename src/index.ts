@@ -395,8 +395,8 @@ export class Fred {
       this.registerIntents(intents);
     }
 
-    // Create agents
-    const agents = extractAgents(config);
+    // Create agents (resolve prompt files relative to config path)
+    const agents = extractAgents(config, configPath);
     for (const agentConfig of agents) {
       await this.createAgent(agentConfig);
     }

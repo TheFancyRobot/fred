@@ -2,6 +2,7 @@ import { generateText, tool, CoreMessage, jsonSchema } from 'ai';
 import { AgentConfig, AgentMessage, AgentResponse } from './agent';
 import { AIProvider } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
+import { loadPromptFile } from '../../utils/prompt-loader';
 
 /**
  * Agent factory using Vercel AI SDK
@@ -48,8 +49,9 @@ export class AgentFactory {
         content: msg.content,
       }));
 
-      // Add system message if provided
-      const systemMessage = config.systemMessage;
+      // Load system message (handle file paths for programmatic usage)
+      // Note: When loaded from config, paths are already resolved in extractAgents
+      const systemMessage = loadPromptFile(config.systemMessage);
 
       // Generate response using AI SDK
       const allMessages: CoreMessage[] = [
