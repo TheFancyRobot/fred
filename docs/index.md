@@ -8,6 +8,10 @@ Fred is a powerful framework that allows you to:
 
 - **Build AI Agents**: Create intelligent agents with custom system messages and behaviors
 - **Intent-Based Routing**: Route messages to specific agents based on user intents
+- **Agent-Level Utterances**: Define utterances directly on agents for direct routing (bypasses intent matching)
+- **Markdown System Prompts**: Store system prompts in markdown files for better organization
+- **Dynamic Agent Handoff**: Agents can seamlessly transfer conversations to other agents
+- **Pipeline Hooks**: Intercept and modify the message pipeline at 12 strategic points
 - **Multi-Platform Support**: Use any AI provider supported by the Vercel AI SDK (OpenAI, Anthropic, Google, Groq, and 20+ more)
 - **Tool Integration**: Assign reusable tools to agents for extended capabilities
 - **Global Context**: Maintain conversation context across multiple agents seamlessly
