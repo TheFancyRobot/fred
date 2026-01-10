@@ -1,4 +1,4 @@
-import { generateText, tool, CoreMessage } from 'ai';
+import { generateText, tool, CoreMessage, jsonSchema } from 'ai';
 import { AgentConfig, AgentMessage, AgentResponse } from './agent';
 import { AIProvider } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
@@ -32,7 +32,7 @@ export class AgentFactory {
     for (const toolDef of tools) {
       sdkTools[toolDef.id] = tool({
         description: toolDef.description,
-        parameters: toolDef.parameters,
+        parameters: jsonSchema(toolDef.parameters),
         execute: toolDef.execute,
       });
     }

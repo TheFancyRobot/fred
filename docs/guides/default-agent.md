@@ -128,7 +128,7 @@ await fred.createAgent({
 await fred.createAgent({
   id: 'default-agent',
   platform: 'groq',  // Fast and cheap
-  model: 'llama-3-70b-8192',
+  model: 'llama-3.1-70b-versatile',  // or 'llama-3.1-8b-instant' for faster responses
 });
 ```
 

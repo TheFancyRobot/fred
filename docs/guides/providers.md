@@ -60,7 +60,7 @@ await fred.useProvider('anthropic', { apiKey: 'anthropic-key' });
 await fred.createAgent({
   id: 'fast-agent',
   platform: 'groq',  // Fast responses
-  model: 'llama-3-70b-8192',
+  model: 'llama-3.1-70b-versatile',  // or 'llama-3.1-8b-instant' for faster responses
 });
 
 await fred.createAgent({
@@ -162,7 +162,7 @@ await fred.useProvider('groq', {
 
 await fred.createAgent({
   platform: 'groq',
-  model: 'llama-3-70b-8192',  // Fast inference
+  model: 'llama-3.1-70b-versatile',  // Fast inference (or 'llama-3.1-8b-instant' for faster)
 });
 ```
 

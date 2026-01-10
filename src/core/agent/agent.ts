@@ -39,7 +39,7 @@ export interface AgentConfig {
   id: string;
   systemMessage: string;
   platform: AIPlatform;
-  model: string; // Model identifier (e.g., 'gpt-4', 'llama-3-70b-8192')
+  model: string; // Model identifier (e.g., 'gpt-4', 'llama-3.1-70b-versatile', 'claude-3-opus')
   tools?: string[]; // Array of tool IDs to assign to this agent
   temperature?: number; // Optional temperature setting
   maxTokens?: number; // Optional max tokens setting

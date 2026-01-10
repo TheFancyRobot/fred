@@ -264,9 +264,11 @@ fred help
 
 The CLI automatically:
 - Installs/removes provider packages
-- Updates `package.json` and `.env.example`
+- Updates `package.json` and `.env.example` (with placeholder values only)
 - Scaffolds agent and tool files
 - Updates `src/index.ts` with imports and registrations
+
+**Security Note:** The CLI should write placeholder values (e.g., `OPENAI_API_KEY=your_openai_api_key_here`) to `.env.example`, not actual API keys. Real API keys belong only in `.env` (which is gitignored).
 
 See the [CLI Guide](https://sincspecv.github.io/fred/guides/cli/) for complete documentation.
 
