@@ -15,10 +15,10 @@ await fred.useProvider('openai', {
   apiKey: process.env.OPENAI_API_KEY 
 });
 
-// Create an agent
+// Create an agent (systemMessage can be a string or file path)
 await fred.createAgent({
   id: 'assistant',
-  systemMessage: 'You are a helpful assistant.',
+  systemMessage: 'You are a helpful assistant.', // or './prompts/assistant.md'
   platform: 'openai',
   model: 'gpt-3.5-turbo',
 });
@@ -42,7 +42,8 @@ await fred.useProvider('openai', { apiKey: process.env.OPENAI_API_KEY });
 // Create multiple agents
 await fred.createAgent({
   id: 'math-agent',
-  systemMessage: 'You are a math expert.',
+  systemMessage: 'You are a math expert.', // or './prompts/math-agent.md'
+  utterances: ['calculate', 'math', 'compute'], // Optional: direct routing
   platform: 'openai',
   model: 'gpt-4',
 });
