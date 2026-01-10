@@ -14,6 +14,7 @@ import { loadConfig, validateConfig, extractIntents, extractAgents } from './con
 import { semanticMatch } from './utils/semantic';
 import { ContextManager } from './core/context/manager';
 import { CoreMessage, convertToCoreMessages } from 'ai';
+import { HookManager, HookType, HookHandler } from './core/hooks';
 
 /**
  * Fred - Main class for building AI agents
@@ -25,6 +26,7 @@ export class Fred {
   private intentRouter: IntentRouter;
   private defaultAgentId?: string;
   private contextManager: ContextManager;
+  private hookManager: HookManager;
 
   constructor() {
     this.toolRegistry = new ToolRegistry();
@@ -32,6 +34,7 @@ export class Fred {
     this.intentMatcher = new IntentMatcher();
     this.intentRouter = new IntentRouter(this.agentManager);
     this.contextManager = new ContextManager();
+    this.hookManager = new HookManager();
   }
 
   /**
@@ -353,6 +356,34 @@ export class Fred {
   }
 
   /**
+   * Register a hook handler
+   * @param type - The hook type to register
+   * @param handler - The handler function to execute
+   * @example
+   * fred.registerHook('beforeToolCalled', async (event) => {
+   *   console.log('Tool about to be called:', event.data);
+   *   return { context: { timestamp: Date.now() } };
+   * });
+   */
+  registerHook(type: HookType, handler: HookHandler): void {
+    this.hookManager.registerHook(type, handler);
+  }
+
+  /**
+   * Unregister a hook handler
+   */
+  unregisterHook(type: HookType, handler: HookHandler): boolean {
+    return this.hookManager.unregisterHook(type, handler);
+  }
+
+  /**
+   * Get the hook manager instance
+   */
+  getHookManager(): HookManager {
+    return this.hookManager;
+  }
+
+  /**
    * Initialize from a config file
    */
   async initializeFromConfig(
@@ -438,4 +469,6 @@ export { IntentMatcher } from './core/intent/matcher';
 export { IntentRouter } from './core/intent/router';
 export { ContextManager } from './core/context/manager';
 export * from './core/context/context';
+export { HookManager } from './core/hooks/manager';
+export * from './core/hooks/types';
 
