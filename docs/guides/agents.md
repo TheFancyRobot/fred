@@ -86,7 +86,7 @@ await fred.useProvider('groq', { apiKey: 'your-key' });
 
 await fred.createAgent({
   platform: 'groq',
-  model: 'llama-3-70b-8192',  // or other Groq models
+  model: 'llama-3.1-70b-versatile',  // or 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'
 });
 ```
 

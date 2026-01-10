@@ -29,8 +29,10 @@ fred provider add anthropic
 
 This will:
 - Install the `@ai-sdk/<provider>` package
-- Update `.env.example` with the API key variable
+- Update `.env.example` with a placeholder API key variable (e.g., `OPENAI_API_KEY=your_openai_api_key_here`)
 - Provide instructions for using the provider in your code
+
+**Note:** The CLI writes placeholder values to `.env.example`, not actual API keys. Real API keys should only be in `.env` (which is gitignored).
 
 **Supported Providers:**
 - `openai` - OpenAI
