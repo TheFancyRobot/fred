@@ -72,5 +72,11 @@ export interface AgentResponse {
     args: Record<string, any>;
     result?: any;
   }>;
+  handoff?: {
+    type: 'handoff';
+    agentId: string;
+    message: string;
+    context?: Record<string, any>;
+  };
 }
 
