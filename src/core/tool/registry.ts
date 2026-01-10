@@ -1,3 +1,4 @@
+import { tool, jsonSchema } from 'ai';
 import { Tool } from './tool';
 
 /**
@@ -82,18 +83,19 @@ export class ToolRegistry {
   }
 
   /**
-   * Convert tools to Vercel AI SDK format
+   * Convert tools to Vercel AI SDK format using tool() and jsonSchema()
+   * This leverages the AI SDK's tool() and jsonSchema() functions for consistency
    */
-  toAISDKTools(ids: string[]): Record<string, any> {
+  toAISDKTools(ids: string[]): Record<string, ReturnType<typeof tool>> {
     const tools = this.getTools(ids);
-    const sdkTools: Record<string, any> = {};
+    const sdkTools: Record<string, ReturnType<typeof tool>> = {};
 
-    for (const tool of tools) {
-      sdkTools[tool.id] = {
-        description: tool.description,
-        parameters: tool.parameters,
-        execute: tool.execute,
-      };
+    for (const toolDef of tools) {
+      sdkTools[toolDef.id] = tool({
+        description: toolDef.description,
+        parameters: jsonSchema(toolDef.parameters),
+        execute: toolDef.execute,
+      });
     }
 
     return sdkTools;
