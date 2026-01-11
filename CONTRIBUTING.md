@@ -14,10 +14,15 @@ Thank you for your interest in contributing to Fred! This document provides guid
 ### Prerequisites
 
 - [Bun](https://bun.sh/) runtime (recommended) or Node.js
+- [Flox](https://flox.dev/) (optional, but recommended for consistent environments)
 - Git
 - A code editor (VS Code, Cursor, etc.)
 
 ### Development Setup
+
+#### Option 1: Using Flox (Recommended)
+
+Flox provides a consistent, reproducible development environment:
 
 1. **Fork and clone the repository**
    ```bash
@@ -25,17 +30,57 @@ Thank you for your interest in contributing to Fred! This document provides guid
    cd fred
    ```
 
-2. **Install dependencies**
+2. **Activate Flox environment**
+   ```bash
+   flox activate
+   ```
+   
+   This automatically provides:
+   - Bun (latest version)
+   - Essential development tools
+   - Consistent environment across all machines
+
+3. **Install dependencies**
    ```bash
    bun install
    ```
 
-3. **Build the project**
+4. **Build the project**
    ```bash
    bun run build
    ```
 
-4. **Run tests** (if available)
+5. **Run tests** (if available)
+   ```bash
+   bun test
+   ```
+
+#### Option 2: Manual Setup
+
+If you prefer not to use Flox:
+
+1. **Fork and clone the repository**
+   ```bash
+   git clone https://github.com/your-username/fred.git
+   cd fred
+   ```
+
+2. **Install Bun** (if not already installed)
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+3. **Install dependencies**
+   ```bash
+   bun install
+   ```
+
+4. **Build the project**
+   ```bash
+   bun run build
+   ```
+
+5. **Run tests** (if available)
    ```bash
    bun test
    ```
