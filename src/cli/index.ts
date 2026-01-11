@@ -8,6 +8,16 @@
 import { handleTestCommand } from './test';
 
 /**
+ * Options that require a value
+ */
+const OPTIONS_REQUIRING_VALUE = new Set([
+  'record',
+  'config',
+  'traces-dir',
+  'tracesDir',
+]);
+
+/**
  * Parse command line arguments
  */
 function parseArgs(args: string[]): { command: string; args: string[]; options: Record<string, any> } {
@@ -21,13 +31,26 @@ function parseArgs(args: string[]): { command: string; args: string[]; options: 
     if (arg.startsWith('--')) {
       const key = arg.substring(2);
       const nextArg = args[i + 1];
+      const requiresValue = OPTIONS_REQUIRING_VALUE.has(key);
       
-      // Handle boolean flags
-      if (nextArg === undefined || nextArg.startsWith('--')) {
-        options[key] = true;
-      } else {
+      // Check if option requires a value
+      if (requiresValue) {
+        // Validate that a value is provided
+        if (nextArg === undefined || nextArg.startsWith('--')) {
+          throw new Error(`Option --${key} requires a value. Example: --${key} <value>`);
+        }
         options[key] = nextArg;
         i++; // Skip next arg as it's the value
+      } else {
+        // Handle boolean flags (options that don't require values)
+        if (nextArg === undefined || nextArg.startsWith('--')) {
+          options[key] = true;
+        } else {
+          // If a value is provided for a boolean flag, treat it as the value
+          // (some flags might accept optional values)
+          options[key] = nextArg;
+          i++; // Skip next arg as it's the value
+        }
       }
     } else {
       remainingArgs.push(arg);
