@@ -186,7 +186,8 @@ export class AgentFactory {
 
       // Load system message (handle file paths for programmatic usage)
       // Note: When loaded from config, paths are already resolved in extractAgents
-      const systemMessage = loadPromptFile(config.systemMessage);
+      // For programmatic usage, sandbox to current working directory and disallow absolute paths
+      const systemMessage = loadPromptFile(config.systemMessage, undefined, false);
 
       // Generate response using AI SDK with tracing
       const allMessages: CoreMessage[] = [
