@@ -20,9 +20,20 @@ if ! command -v flox &> /dev/null; then
     return 1
 fi
 
+# Determine repo root (prefer git if available)
+REPO_ROOT=""
+if command -v git &> /dev/null; then
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [ -z "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+
+cd "$REPO_ROOT" || return 1
+
 # Check if flox.nix exists
 if [ ! -f "flox.nix" ]; then
-    echo "❌ flox.nix not found. Are you in the Fred repository root?"
+    echo "❌ flox.nix not found in repo root: $REPO_ROOT"
     return 1
 fi
 
