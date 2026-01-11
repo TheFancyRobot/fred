@@ -128,10 +128,11 @@ export function extractAgents(config: FrameworkConfig, basePath?: string): Agent
   const agents = config.agents || [];
   
   // If basePath is provided, resolve prompt file paths
+  // Paths are sandboxed to the config file's directory to prevent path traversal attacks
   if (basePath && agents.length > 0) {
     return agents.map(agent => ({
       ...agent,
-      systemMessage: loadPromptFile(agent.systemMessage, basePath),
+      systemMessage: loadPromptFile(agent.systemMessage, basePath, false),
     }));
   }
   
@@ -154,6 +155,7 @@ export function extractPipelines(config: FrameworkConfig, basePath?: string): Pi
   const pipelines = config.pipelines || [];
   
   // If basePath is provided, resolve prompt file paths in inline agent configs
+  // Paths are sandboxed to the config file's directory to prevent path traversal attacks
   if (basePath && pipelines.length > 0) {
     return pipelines.map(pipeline => ({
       ...pipeline,
@@ -163,9 +165,10 @@ export function extractPipelines(config: FrameworkConfig, basePath?: string): Pi
           return agentRef;
         } else {
           // Inline agent config - resolve systemMessage path if it's a file path
+          // Pass allowAbsolutePaths=false to prevent absolute path attacks
           return {
             ...agentRef,
-            systemMessage: loadPromptFile(agentRef.systemMessage, basePath),
+            systemMessage: loadPromptFile(agentRef.systemMessage, basePath, false),
           };
         }
       }),
