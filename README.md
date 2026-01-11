@@ -567,6 +567,29 @@ See the `examples/` directory for more examples:
 
 ## Development
 
+### Development Environment with Flox (Recommended)
+
+For a consistent, reproducible development environment, Fred includes Flox configuration:
+
+```bash
+# Activate the Flox development environment
+flox activate
+
+# Or use the helper script
+source scripts/flox-activate.sh
+```
+
+This provides:
+- Consistent Bun version across all developers
+- Isolated development environment
+- Easy onboarding for new contributors
+
+**Note**: Flox is optional. You can still use Bun directly if preferred.
+
+### Manual Development Setup
+
+If you prefer not to use Flox:
+
 ```bash
 # Run tests
 bun test

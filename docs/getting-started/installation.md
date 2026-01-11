@@ -6,7 +6,30 @@ Fred is built for the Bun runtime and uses the Vercel AI SDK. Follow these steps
 
 - **Bun**: Version 1.0 or higher ([Install Bun](https://bun.sh))
 - **Node.js**: Optional, if using npm instead of Bun
+- **Flox**: Optional, for consistent development environments ([Install Flox](https://flox.dev))
 - **API Keys**: At least one AI provider API key (OpenAI, Groq, etc.)
+
+## Development Environment Setup
+
+### Using Flox (Recommended for Contributors)
+
+Flox provides a consistent, reproducible development environment. If you're contributing to Fred or want a standardized setup:
+
+```bash
+# Activate the Flox development environment
+flox activate
+```
+
+This automatically provides:
+- Bun (latest version)
+- Essential development tools
+- Consistent environment across all machines
+
+See the [Flox Integration Guide](../advanced/flox-integration.md) for more details.
+
+### Manual Setup
+
+If you prefer not to use Flox, install Bun directly from [bun.sh](https://bun.sh).
 
 ## Install Fred
 

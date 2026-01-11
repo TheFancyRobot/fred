@@ -80,3 +80,6 @@ Desktop.ini
 config.local.json
 fred.config.local.json
 .env.example.local
+
+# Flox local state
+.flox/
