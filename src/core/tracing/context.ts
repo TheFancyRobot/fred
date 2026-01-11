@@ -1,71 +1,54 @@
 import { Span } from './tracer';
+import { AsyncLocalStorage } from 'async_hooks';
 
 /**
- * Span context propagation using async-local storage
- * This allows spans to be accessed across async boundaries
+ * Global AsyncLocalStorage for spans
+ * This ensures correct trace propagation across asynchronous operations
  */
-class SpanContextStore {
-  private store: Map<number, Span | undefined> = new Map();
-
-  /**
-   * Get the current async context ID
-   * In Bun/Node.js, we use a simple counter-based approach
-   * For production, consider using AsyncLocalStorage
-   */
-  private getContextId(): number {
-    // Use a simple approach: store by async context
-    // In a real implementation, you'd use AsyncLocalStorage
-    return 0; // Single context for now
-  }
-
-  /**
-   * Get the active span for the current context
-   */
-  getActiveSpan(): Span | undefined {
-    const contextId = this.getContextId();
-    return this.store.get(contextId);
-  }
-
-  /**
-   * Set the active span for the current context
-   */
-  setActiveSpan(span: Span | undefined): void {
-    const contextId = this.getContextId();
-    if (span) {
-      this.store.set(contextId, span);
-    } else {
-      this.store.delete(contextId);
-    }
-  }
-
-  /**
-   * Clear all contexts (useful for testing)
-   */
-  clear(): void {
-    this.store.clear();
-  }
-}
-
-// Global context store instance
-const contextStore = new SpanContextStore();
+const spanStore = new AsyncLocalStorage<Span>();
 
 /**
- * Get the active span from context
+ * Get the active span from the current async context
  */
 export function getActiveSpan(): Span | undefined {
-  return contextStore.getActiveSpan();
+  return spanStore.getStore();
 }
 
 /**
- * Set the active span in context
+ * Set the active span in the current async context
+ * Uses enterWith to set the span in the current execution context
  */
 export function setActiveSpan(span: Span | undefined): void {
-  contextStore.setActiveSpan(span);
+  if (span) {
+    spanStore.enterWith(span);
+  }
+  // Note: To clear a span, use runWithSpan with a new context or let the async operation complete
 }
 
 /**
- * Clear all span contexts (for testing)
+ * Run a function with a span as the active span
+ * This is the recommended way to set active spans for async operations
+ */
+export function runWithSpan<T>(span: Span, fn: () => T): T {
+  return spanStore.run(span, fn);
+}
+
+/**
+ * Run an async function with a span as the active span
+ * This is the recommended way to set active spans for async operations
+ */
+export async function runWithSpanAsync<T>(span: Span, fn: () => Promise<T>): Promise<T> {
+  return spanStore.run(span, fn);
+}
+
+/**
+ * Clear span context (for testing)
+ * Note: AsyncLocalStorage doesn't have a direct clear method,
+ * but we can exit the current context if we're in one
  */
 export function clearSpanContext(): void {
-  contextStore.clear();
+  // AsyncLocalStorage doesn't have a global clear method
+  // This is mainly for testing - in practice, contexts are cleared
+  // automatically when async operations complete
+  // For testing, you can use runWithSpan(undefined, ...) or just let contexts expire
 }
