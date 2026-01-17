@@ -266,28 +266,11 @@ export class AgentFactory {
       // Extract tool calls if any
       // The AI SDK's generateText should automatically execute tools and include results
       // However, some providers may not populate results automatically, so we check and execute if needed
-      let toolCalls = result.toolCalls?.map(tc => ({
+      const toolCalls = result.toolCalls?.map(tc => ({
         toolId: tc.toolName,
         args: tc.args as Record<string, any>,
-        result: tc.result, // May be undefined if provider doesn't auto-execute
+        result: tc.result,
       }));
-
-      // If tool calls exist but don't have results, manually execute them
-      // This handles providers that don't automatically execute tools
-      if (toolCalls && toolCalls.length > 0 && toolCalls.some(tc => tc.result === undefined)) {
-        // Execute tools that don't have results
-        for (const toolCall of toolCalls) {
-          if (toolCall.result === undefined && sdkTools[toolCall.toolId]) {
-            try {
-              const toolResult = await sdkTools[toolCall.toolId].execute(toolCall.args);
-              toolCall.result = toolResult;
-            } catch (error) {
-              // If tool execution fails, use a safe error message that doesn't expose internal details
-              toolCall.result = getSafeToolErrorMessage(toolCall.toolId, error);
-            }
-          }
-        }
-      }
 
       // Check for handoff tool calls
       const handoffCall = toolCalls?.find(tc => tc.toolId === 'handoff_to_agent');
@@ -421,27 +404,12 @@ export class AgentFactory {
 
       // Handle tool calls
       if (result.toolCalls && result.toolCalls.length > 0) {
-        // Map tool calls and manually execute if results are missing
+        // Map tool calls from result
         toolCalls = result.toolCalls.map(tc => ({
           toolId: tc.toolName,
           args: tc.args as Record<string, any>,
           result: tc.result,
         }));
-
-        // If tool calls don't have results, manually execute them
-        if (toolCalls.some(tc => tc.result === undefined)) {
-          for (const toolCall of toolCalls) {
-            if (toolCall.result === undefined && sdkTools[toolCall.toolId]) {
-              try {
-                const toolResult = await sdkTools[toolCall.toolId].execute(toolCall.args);
-                toolCall.result = toolResult;
-              } catch (error) {
-                // If tool execution fails, use a safe error message that doesn't expose internal details
-                toolCall.result = getSafeToolErrorMessage(toolCall.toolId, error);
-              }
-            }
-          }
-        }
         
         // If we have tool results but no text, yield the tool calls
         // The caller (Fred's streamMessage) will handle continuation
