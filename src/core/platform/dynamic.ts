@@ -20,23 +20,24 @@ export async function createDynamicProvider(
     'groq': '@ai-sdk/groq',
     'cohere': '@ai-sdk/cohere',
     'vercel': '@ai-sdk/vercel',
-    'azure-openai': '@ai-sdk/azure-openai',
-    'azure-anthropic': '@ai-sdk/azure-anthropic',
-    'azure': '@ai-sdk/azure-openai', // Alias
+    'azure-openai': '@ai-sdk/azure',
+    'azure-anthropic': '@ai-sdk/azure',
+    'azure': '@ai-sdk/azure', // Alias
     'fireworks': '@ai-sdk/fireworks',
     'xai': '@ai-sdk/xai',
-    'ollama': '@ai-sdk/ollama',
-    'ai21': '@ai-sdk/ai21',
-    'nvidia': '@ai-sdk/nvidia',
+    'ollama': 'ai-sdk-ollama', // Community package
+    // Note: ai21, nvidia, cloudflare, lepton, upstash are not available as @ai-sdk packages
+    // They may be available as community packages or require different setup
     'bedrock': '@ai-sdk/amazon-bedrock',
     'amazon-bedrock': '@ai-sdk/amazon-bedrock',
-    'cloudflare': '@ai-sdk/cloudflare',
     'elevenlabs': '@ai-sdk/elevenlabs',
-    'lepton': '@ai-sdk/lepton',
     'perplexity': '@ai-sdk/perplexity',
     'replicate': '@ai-sdk/replicate',
-    'together': '@ai-sdk/together',
-    'upstash': '@ai-sdk/upstash',
+    'together': '@ai-sdk/togetherai',
+    'deepseek': '@ai-sdk/deepseek',
+    'cerebras': '@ai-sdk/cerebras',
+    'deepinfra': '@ai-sdk/deepinfra',
+    'baseten': '@ai-sdk/baseten',
   };
 
   const packageName = packageMap[platformLower];
@@ -96,10 +97,23 @@ export async function createDynamicProvider(
 
     return new BaseProvider(providerFactory, platformLower, config);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Cannot find module')) {
-      throw new Error(
-        `Provider package ${packageName} is not installed. Install it with: bun add ${packageName}`
-      );
+    if (error instanceof Error) {
+      // Check for module resolution errors
+      if (error.message.includes('Cannot find module')) {
+        // Check if it's a zod/v4 resolution issue (common with Bun's cache)
+        if (error.message.includes('zod/v4')) {
+          // This is a known Bun issue where cached packages can't resolve peer dependencies
+          // The solution is to install the provider package locally
+          throw new Error(
+            `Provider package ${packageName} cannot resolve 'zod/v4' (Bun cache issue).\n` +
+            `Install the package locally: bun add ${packageName}\n` +
+            `This will ensure zod is properly resolved.`
+          );
+        }
+        throw new Error(
+          `Provider package ${packageName} is not installed. Install it with: bun add ${packageName}`
+        );
+      }
     }
     throw error;
   }
@@ -119,14 +133,15 @@ function getEnvVarName(platform: string): string | null {
     'fireworks': 'FIREWORKS_API_KEY',
     'xai': 'XAI_API_KEY',
     'ollama': 'OLLAMA_API_KEY',
-    'ai21': 'AI21_API_KEY',
-    'nvidia': 'NVIDIA_API_KEY',
     'bedrock': 'AWS_ACCESS_KEY_ID', // AWS uses different auth
     'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
     'perplexity': 'PERPLEXITY_API_KEY',
     'replicate': 'REPLICATE_API_KEY',
     'together': 'TOGETHER_API_KEY',
-    'upstash': 'UPSTASH_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+    'cerebras': 'CEREBRAS_API_KEY',
+    'deepinfra': 'DEEPINFRA_API_KEY',
+    'baseten': 'BASETEN_API_KEY',
   };
   
   return envVarMap[platform] || null;

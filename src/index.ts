@@ -8,8 +8,8 @@ import { PipelineManager } from './core/pipeline/manager';
 import { Tool } from './core/tool/tool';
 import { ToolRegistry } from './core/tool/registry';
 import { AIProvider, ProviderConfig } from './core/platform/provider';
-import { OpenAIProvider } from './core/platform/openai';
-import { GroqProvider } from './core/platform/groq';
+// OpenAIProvider and GroqProvider are no longer imported here
+// They use dynamic imports to avoid requiring packages at build time
 import { createDynamicProvider } from './core/platform/dynamic';
 import { FrameworkConfig } from './config/types';
 import { loadConfig, validateConfig, extractIntents, extractAgents, extractPipelines } from './config/loader';
@@ -108,21 +108,9 @@ export class Fred {
   async useProvider(platform: string, config?: ProviderConfig): Promise<AIProvider> {
     const platformLower = platform.toLowerCase();
     
-    // Try built-in providers first for better performance
-    let provider: AIProvider;
-    
-    switch (platformLower) {
-      case 'openai':
-        provider = new OpenAIProvider(config);
-        break;
-      case 'groq':
-        provider = new GroqProvider(config);
-        break;
-      default:
-        // Use dynamic provider loading for other platforms
-        provider = await createDynamicProvider(platformLower, config);
-        break;
-    }
+    // Use dynamic provider loading for all platforms
+    // This ensures no static imports are required at build time
+    const provider = await createDynamicProvider(platformLower, config);
     
     // Register the provider
     this.registerProvider(platformLower, provider);
@@ -156,40 +144,65 @@ export class Fred {
    * Register default providers (OpenAI and Groq)
    * For other providers, use the .useProvider() method
    */
-  registerDefaultProviders(config?: {
+  async registerDefaultProviders(config?: {
     openai?: ProviderConfig;
     groq?: ProviderConfig;
     [key: string]: ProviderConfig | undefined;
-  }): void {
+  }): Promise<void> {
     // @ts-ignore - Bun global
     const openaiKey = typeof process !== 'undefined' ? process.env.OPENAI_API_KEY : undefined;
     // @ts-ignore - Bun global
     const groqKey = typeof process !== 'undefined' ? process.env.GROQ_API_KEY : undefined;
     
-    if (config?.openai || !openaiKey) {
-      this.registerProvider('openai', new OpenAIProvider(config?.openai));
-    } else {
-      this.registerProvider('openai', new OpenAIProvider());
+    // Use dynamic provider loading for all providers
+    // This ensures no static imports are required at build time
+    const providerPromises: Promise<void>[] = [];
+
+    if (openaiKey || config?.openai) {
+      providerPromises.push(
+        createDynamicProvider('openai', config?.openai)
+          .then(provider => {
+            this.registerProvider('openai', provider);
+          })
+          .catch(() => {
+            // Silently fail if @ai-sdk/openai is not installed
+            // Users can install it with: bun add @ai-sdk/openai
+          })
+      );
     }
 
-    if (config?.groq || !groqKey) {
-      this.registerProvider('groq', new GroqProvider(config?.groq));
-    } else {
-      this.registerProvider('groq', new GroqProvider());
+    if (groqKey || config?.groq) {
+      providerPromises.push(
+        createDynamicProvider('groq', config?.groq)
+          .then(provider => {
+            this.registerProvider('groq', provider);
+          })
+          .catch(() => {
+            // Silently fail if @ai-sdk/groq is not installed
+            // Users can install it with: bun add @ai-sdk/groq
+          })
+      );
     }
     
     // Register any additional providers from config
     for (const [platform, platformConfig] of Object.entries(config || {})) {
       if (platform !== 'openai' && platform !== 'groq' && platformConfig) {
         // Use dynamic provider for other platforms
-        createDynamicProvider(platform, platformConfig).then(provider => {
-          this.registerProvider(platform, provider);
-        }).catch(() => {
-          // Silently fail for optional providers
-          // Users can use .useProvider() method for explicit provider registration
-        });
+        providerPromises.push(
+          createDynamicProvider(platform, platformConfig)
+            .then(provider => {
+              this.registerProvider(platform, provider);
+            })
+            .catch(() => {
+              // Silently fail for optional providers
+              // Users can use .useProvider() method for explicit provider registration
+            })
+        );
       }
     }
+
+    // Wait for all providers to be registered
+    await Promise.allSettled(providerPromises);
   }
 
   /**
@@ -1106,7 +1119,7 @@ export class Fred {
     validateConfig(config);
 
     // Register providers
-    this.registerDefaultProviders(options?.providers);
+    await this.registerDefaultProviders(options?.providers);
 
     // Register tools (need execute functions)
     if (config.tools) {

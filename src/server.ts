@@ -32,7 +32,7 @@ async function main() {
     }
   } else {
     // Register default providers
-    fred.registerDefaultProviders();
+    await fred.registerDefaultProviders();
     console.log('No config file provided. Using default providers.');
     console.log('Register agents, intents, and tools programmatically or provide a config file.');
   }
