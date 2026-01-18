@@ -194,6 +194,7 @@ When adding new features, update:
 3. **docs/api-reference/** - Update API documentation
 4. **docs/examples/** - Add examples if applicable
 5. **mkdocs.yml** - Add to navigation if new doc file
+6. **`.env.example`** - **CRITICAL**: When introducing new environment variables, always update `.env.example` with the new variable(s) and a brief comment explaining their purpose. This ensures users know what environment variables are available and how to configure them.
 
 #### Documentation Pattern
 
@@ -430,6 +431,7 @@ Before completing any task:
 - [ ] Used AI SDK functions where applicable
 - [ ] Handled errors gracefully
 - [ ] Updated documentation if needed
+- [ ] **Updated `.env.example` if new environment variables were introduced**
 - [ ] **Ran all tests: `bun test:all` (all tests must pass)**
 - [ ] Added tests for new functionality (if applicable)
 - [ ] Tested basic functionality
