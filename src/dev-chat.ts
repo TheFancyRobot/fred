@@ -631,8 +631,12 @@ async function readLine(): Promise<string> {
     }
     
     // Set raw mode for better control (if available)
-    if (stdin.isTTY && stdin.setRawMode) {
-      stdin.setRawMode(true);
+    if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
+      try {
+        stdin.setRawMode(true);
+      } catch {
+        // ignore in non-TTY or restricted environments
+      }
     }
     
     stdin.resume();
@@ -643,8 +647,12 @@ async function readLine(): Promise<string> {
     const cleanup = () => {
       isWaitingForInput = false;
       stdin.pause();
-      if (stdin.isTTY && stdin.setRawMode) {
-        stdin.setRawMode(false);
+      if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
+        try {
+          stdin.setRawMode(false);
+        } catch {
+          // ignore
+        }
       }
       stdin.removeListener('data', onData);
     };
