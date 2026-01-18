@@ -198,7 +198,6 @@ async function installPackage(packageName: string): Promise<void> {
       cwd: process.cwd(),
       env: process.env,
       stdio: 'inherit',
-      shell: '/bin/bash',
     });
     
     // Verify it was added to devDependencies or dependencies
@@ -229,7 +228,6 @@ async function installPackage(packageName: string): Promise<void> {
         cwd: process.cwd(),
         env: process.env,
         stdio: 'inherit',
-        shell: '/bin/bash',
       });
     }
     
@@ -268,8 +266,12 @@ async function verifyPackageInstalled(packageName: string): Promise<boolean> {
       const errorMessage = error.message;
       
       // "Cannot find module" means the package is not installed at all
-      if (errorMessage.includes('Cannot find module') || 
-          errorMessage.includes('Could not resolve')) {
+      // Also treat zod/v4 resolution issues as not installed (common Bun cache/peer dep issue)
+      if (
+        errorMessage.includes('Cannot find module') ||
+        errorMessage.includes('Could not resolve') ||
+        errorMessage.includes('zod/v4')
+      ) {
         return false;
       }
       
