@@ -1,4 +1,4 @@
-import { ToolLoopAgent, stepCountIs, tool, ModelMessage, jsonSchema } from 'ai';
+import { ToolLoopAgent, stepCountIs, tool, jsonSchema } from 'ai';
 import { AgentConfig, AgentMessage, AgentResponse } from './agent';
 import { AIProvider } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
@@ -138,10 +138,17 @@ export class AgentFactory {
    * Get MCP client connection metrics
    */
   getMCPMetrics(): MCPClientMetrics {
+    // Convert Map to a plain object for JSON-serializable telemetry/export
+    const connectionsByAgentObj = Object.fromEntries(this.metrics.connectionsByAgent.entries());
     return {
-      ...this.metrics,
+      totalConnections: this.metrics.totalConnections,
       activeConnections: this.mcpClients.size,
-      connectionsByAgent: new Map(this.metrics.connectionsByAgent), // Return a copy
+      failedConnections: this.metrics.failedConnections,
+      closedConnections: this.metrics.closedConnections,
+      // Cast to maintain existing return type while providing a JSON-serializable structure at runtime
+      connectionsByAgent: connectionsByAgentObj as unknown as Map<string, number>,
+      lastConnectionTime: this.metrics.lastConnectionTime,
+      lastDisconnectionTime: this.metrics.lastDisconnectionTime,
     };
   }
 
@@ -288,16 +295,70 @@ export class AgentFactory {
 
         try {
           // Execute tool with timeout
-          const result = await Promise.race([
-            originalExecute(args),
-            new Promise<never>((_, reject) => {
-              setTimeout(() => {
-                const timeoutError = new Error(`Tool "${toolDef.id}" execution timed out after ${toolTimeout}ms`);
-                timeoutError.name = 'ToolTimeoutError';
-                reject(timeoutError);
-              }, toolTimeout);
-            }),
-          ]);
+          // Execute tool with timeout and ensure timer cleanup to avoid event loop handle leaks
+          let rejectTimeout: (reason?: any) => void;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            rejectTimeout = reject;
+          });
+          const timeoutId = setTimeout(() => {
+            const timeoutError = new Error(`Tool "${toolDef.id}" execution timed out after ${toolTimeout}ms`);
+            timeoutError.name = 'ToolTimeoutError';
+            rejectTimeout(timeoutError);
+          }, toolTimeout);
+
+          try {
+            const result = await Promise.race([
+              (async () => {
+                try {
+                  return await originalExecute(args);
+                } finally {
+                  clearTimeout(timeoutId);
+                }
+              })(),
+              timeoutPromise,
+            ]);
+            const executionTime = Date.now() - startTime;
+            
+            if (toolSpan) {
+              toolSpan.setAttributes({
+                'tool.result.type': typeof result,
+                'tool.result.hasValue': result !== undefined && result !== null,
+                'tool.executionTime': executionTime,
+              });
+              // Don't log full result if it's too large (could be sensitive data)
+              if (typeof result === 'string' && result.length < 1000) {
+                toolSpan.setAttribute('tool.result.preview', result);
+              }
+            }
+            
+            return result;
+          } catch (error) {
+            const executionTime = Date.now() - startTime;
+            
+            if (toolSpan) {
+              toolSpan.setAttribute('tool.executionTime', executionTime);
+              if (error instanceof Error) {
+                toolSpan.recordException(error);
+                const isTimeout = error.name === 'ToolTimeoutError';
+                toolSpan.setAttribute('tool.timedOut', isTimeout);
+                toolSpan.setStatus('error', error.message);
+              } else {
+                toolSpan.setStatus('error', 'Unknown error');
+              }
+            }
+            
+            // Return safe error message for timeouts to prevent leaking internal details
+            if (error instanceof Error && error.name === 'ToolTimeoutError') {
+              // Log the actual error for debugging
+              console.error(`Tool execution timed out for "${toolDef.id}" after ${toolTimeout}ms`);
+              // Return a safe error message
+              throw new Error(`Tool "${toolDef.id}" execution timed out. Please try again or use a different approach.`);
+            }
+            
+            throw error;
+          } finally {
+            clearTimeout(timeoutId);
+          }
           
           const executionTime = Date.now() - startTime;
           
