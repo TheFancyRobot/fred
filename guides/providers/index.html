@@ -18,7 +18,7 @@
         <link rel="prev" href="../tools/">
       
       
-        <link rel="next" href="../default-agent/">
+        <link rel="next" href="../models/">
       
       
         
@@ -775,6 +775,67 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Supported Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-party-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-Party Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-inference-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast Inference Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#localself-hosted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local/Self-Hosted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#specialized" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specialized
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -885,6 +946,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Environment Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#complete-list-of-api-key-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete List of API Key Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -997,6 +1075,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Models Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1787,6 +1893,67 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Supported Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-party-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-Party Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-inference-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fast Inference Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#additional-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional Providers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#localself-hosted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local/Self-Hosted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#specialized" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specialized
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1897,6 +2064,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Environment Variables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#complete-list-of-api-key-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete List of API Key Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2028,31 +2212,52 @@
 <h1 id="providers">Providers</h1>
 <p>Fred supports all AI providers available in the Vercel AI SDK. This guide covers how to configure and use different providers.</p>
 <h2 id="supported-providers">Supported Providers</h2>
-<p>Fred supports 20+ AI providers:</p>
+<p>Fred supports all AI providers available in the Vercel AI SDK. This includes 30+ providers:</p>
+<h3 id="first-party-providers">First-Party Providers</h3>
 <ul>
-<li><strong>OpenAI</strong> - GPT-4, GPT-3.5, and more</li>
-<li><strong>Anthropic</strong> - Claude models</li>
-<li><strong>Google</strong> - Gemini models</li>
-<li><strong>Groq</strong> - Fast inference</li>
-<li><strong>Mistral</strong> - Mistral AI models</li>
-<li><strong>Cohere</strong> - Cohere models</li>
-<li><strong>Vercel</strong> - Vercel's v0 API</li>
-<li><strong>Azure OpenAI</strong> - Azure-hosted OpenAI</li>
-<li><strong>Azure Anthropic</strong> - Azure-hosted Anthropic</li>
-<li><strong>Fireworks</strong> - Fireworks AI</li>
-<li><strong>X.AI</strong> - Grok models</li>
-<li><strong>Ollama</strong> - Local models</li>
-<li><strong>AI21</strong> - Jurassic models</li>
-<li><strong>NVIDIA</strong> - NVIDIA NIM</li>
-<li><strong>Amazon Bedrock</strong> - AWS Bedrock</li>
-<li><strong>Cloudflare</strong> - Cloudflare Workers AI</li>
-<li><strong>ElevenLabs</strong> - Voice AI</li>
-<li><strong>Lepton</strong> - Lepton AI</li>
-<li><strong>Perplexity</strong> - Perplexity AI</li>
-<li><strong>Replicate</strong> - Replicate models</li>
-<li><strong>Together</strong> - Together AI</li>
-<li><strong>Upstash</strong> - Upstash AI</li>
+<li><strong>OpenAI</strong> (<code>openai</code>) - GPT-5, GPT-4, GPT-3.5, and more</li>
+<li><strong>Anthropic</strong> (<code>anthropic</code>) - Claude Opus, Sonnet, Haiku models</li>
+<li><strong>Google Generative AI</strong> (<code>google</code>) - Gemini 2.0, Gemini 1.5 models</li>
+<li><strong>Google Vertex AI</strong> (<code>google-vertex</code>) - Google Vertex models</li>
+<li><strong>Azure OpenAI</strong> (<code>azure-openai</code> or <code>azure</code>) - Azure-hosted OpenAI</li>
+<li><strong>Azure Anthropic</strong> (<code>azure-anthropic</code>) - Azure-hosted Anthropic</li>
+<li><strong>Amazon Bedrock</strong> (<code>bedrock</code> or <code>amazon-bedrock</code>) - AWS Bedrock models</li>
+<li><strong>Vercel</strong> (<code>vercel</code>) - Vercel's v0 API</li>
 </ul>
+<h3 id="fast-inference-providers">Fast Inference Providers</h3>
+<ul>
+<li><strong>Groq</strong> (<code>groq</code>) - Ultra-fast inference with Llama models</li>
+<li><strong>Mistral</strong> (<code>mistral</code>) - Mistral AI models (Pixtral, Mistral Large/Medium/Small)</li>
+<li><strong>DeepSeek</strong> (<code>deepseek</code>) - DeepSeek Chat and Reasoner</li>
+<li><strong>Cerebras</strong> (<code>cerebras</code>) - Cerebras Llama models</li>
+<li><strong>Cloudflare</strong> (<code>cloudflare</code>) - Cloudflare Workers AI</li>
+</ul>
+<h3 id="additional-providers">Additional Providers</h3>
+<ul>
+<li><strong>Cohere</strong> (<code>cohere</code>) - Command models</li>
+<li><strong>Fireworks</strong> (<code>fireworks</code>) - Fireworks AI models</li>
+<li><strong>X.AI</strong> (<code>xai</code>) - Grok models</li>
+<li><strong>Together.ai</strong> (<code>together</code>) - Together AI models</li>
+<li><strong>Perplexity</strong> (<code>perplexity</code>) - Perplexity Sonar models</li>
+<li><strong>Replicate</strong> (<code>replicate</code>) - Replicate hosted models</li>
+<li><strong>AI21</strong> (<code>ai21</code>) - Jurassic models</li>
+<li><strong>NVIDIA</strong> (<code>nvidia</code>) - NVIDIA NIM models</li>
+<li><strong>Upstash</strong> (<code>upstash</code>) - Upstash AI models</li>
+<li><strong>Lepton</strong> (<code>lepton</code>) - Lepton AI models</li>
+<li><strong>DeepInfra</strong> (<code>deepinfra</code>) - DeepInfra hosted models</li>
+<li><strong>Baseten</strong> (<code>baseten</code>) - Baseten hosted models</li>
+</ul>
+<h3 id="localself-hosted">Local/Self-Hosted</h3>
+<ul>
+<li><strong>Ollama</strong> (<code>ollama</code>) - Local models via Ollama</li>
+</ul>
+<h3 id="specialized">Specialized</h3>
+<ul>
+<li><strong>ElevenLabs</strong> (<code>elevenlabs</code>) - Voice/TTS models</li>
+</ul>
+<blockquote>
+<p><strong>Note</strong>: For a complete list of all available models for each provider, see the <a href="../models/">Models Reference</a>.</p>
+</blockquote>
 <h2 id="using-providers">Using Providers</h2>
 <h3 id="basic-usage">Basic Usage</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// Use a provider</span>
@@ -2114,14 +2319,58 @@
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">});</span>
 </code></pre></div>
 <h2 id="environment-variables">Environment Variables</h2>
-<p>Set API keys via environment variables:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>your_key
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your_key
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>your_key
+<p>Set API keys via environment variables. Fred automatically detects available providers from environment variables.</p>
+<h3 id="complete-list-of-api-key-environment-variables">Complete List of API Key Environment Variables</h3>
+<p>Create a <code>.env</code> file in your project root with the API keys for the providers you want to use:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a># Core Providers
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>OPENAI_API_KEY=your_openai_key
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>ANTHROPIC_API_KEY=your_anthropic_key
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>GOOGLE_GENERATIVE_AI_API_KEY=your_google_key
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a># Fast &amp; Cost-Effective Providers
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>GROQ_API_KEY=your_groq_key
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>MISTRAL_API_KEY=your_mistral_key
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>DEEPSEEK_API_KEY=your_deepseek_key
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a># Additional Providers
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>COHERE_API_KEY=your_cohere_key
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>FIREWORKS_API_KEY=your_fireworks_key
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>XAI_API_KEY=your_xai_key
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>PERPLEXITY_API_KEY=your_perplexity_key
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>REPLICATE_API_KEY=your_replicate_key
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>TOGETHER_API_KEY=your_together_key
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>CEREBRAS_API_KEY=your_cerebras_key
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>DEEPINFRA_API_KEY=your_deepinfra_key
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>BASETEN_API_KEY=your_baseten_key
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a># Voice &amp; Specialized
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>ELEVENLABS_API_KEY=your_elevenlabs_key
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a># Cloud Services
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a># Azure OpenAI/Anthropic (use @ai-sdk/azure)
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>AZURE_OPENAI_API_KEY=your_azure_key
+<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>AZURE_OPENAI_ENDPOINT=your_azure_endpoint
+<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>
+<a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a># AWS Bedrock
+<a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a>AWS_ACCESS_KEY_ID=your_aws_key
+<a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a>AWS_SECRET_ACCESS_KEY=your_aws_secret
+<a id="__codelineno-6-33" name="__codelineno-6-33" href="#__codelineno-6-33"></a>AWS_REGION=your_aws_region
+<a id="__codelineno-6-34" name="__codelineno-6-34" href="#__codelineno-6-34"></a>
+<a id="__codelineno-6-35" name="__codelineno-6-35" href="#__codelineno-6-35"></a># Vercel AI Gateway (optional)
+<a id="__codelineno-6-36" name="__codelineno-6-36" href="#__codelineno-6-36"></a>AI_GATEWAY_API_KEY=your_vercel_gateway_key
+<a id="__codelineno-6-37" name="__codelineno-6-37" href="#__codelineno-6-37"></a>VERCEL_API_KEY=your_vercel_key
+<a id="__codelineno-6-38" name="__codelineno-6-38" href="#__codelineno-6-38"></a>
+<a id="__codelineno-6-39" name="__codelineno-6-39" href="#__codelineno-6-39"></a># Local/Community Providers
+<a id="__codelineno-6-40" name="__codelineno-6-40" href="#__codelineno-6-40"></a># Ollama (typically doesn&#39;t require API key, uses baseURL)
+<a id="__codelineno-6-41" name="__codelineno-6-41" href="#__codelineno-6-41"></a># OLLAMA_BASE_URL=http://localhost:11434
 </code></pre></div>
 <p>Then use default providers:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nx">fred</span><span class="p">.</span><span class="nx">registerDefaultProviders</span><span class="p">();</span>
 </code></pre></div>
+<p><strong>Note</strong>: 
+- Dev-chat automatically detects providers from environment variables
+- Some providers (Azure, AWS Bedrock) require additional configuration
+- Ollama typically runs locally and doesn't require an API key</p>
 <h2 id="provider-specific-examples">Provider-Specific Examples</h2>
 <h3 id="openai">OpenAI</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">useProvider</span><span class="p">(</span><span class="s1">&#39;openai&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span>
@@ -2181,6 +2430,7 @@
 <li><strong>Cost</strong>: OpenAI GPT-3.5, Groq</li>
 <li><strong>Local</strong>: Ollama</li>
 </ul>
+<p>For a comprehensive list of all available models, see the <a href="../models/">Models Reference</a>.</p>
 <h2 id="best-practices">Best Practices</h2>
 <ol>
 <li><strong>API Keys</strong>: Store API keys in environment variables, never in code</li>
@@ -2191,6 +2441,7 @@
 </ol>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
+<li>See <a href="../models/">Models Reference</a> for a complete list of available models</li>
 <li>Learn about <a href="../agents/">Agents</a></li>
 <li>Explore <a href="../../advanced/custom-providers/">Custom Providers</a></li>
 <li>Check <a href="../../api-reference/providers/">API Reference</a></li>
@@ -2217,7 +2468,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="January 16, 2026 03:20:05 UTC">January 16, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="January 18, 2026 03:28:06 UTC">January 18, 2026</span>
   </span>
 
     
@@ -2227,7 +2478,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="January 16, 2026 03:20:05 UTC">January 16, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="January 18, 2026 03:28:06 UTC">January 18, 2026</span>
   </span>
 
     
