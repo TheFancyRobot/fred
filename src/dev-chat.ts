@@ -2,7 +2,8 @@
 
 import { Fred } from './index';
 import { resolve, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { execSync } from 'child_process';
 
 /**
  * Development chat interface with hot reload
@@ -14,6 +15,341 @@ let conversationId: string;
 let isReloading = false;
 let reloadTimer: Timer | null = null;
 let isWaitingForInput = false;
+
+/**
+ * Detect available AI provider from environment variables
+ * Returns platform and model, or null if no provider available
+ * 
+ * Supports all major AI SDK providers with simple API key authentication.
+ * Providers are checked in order of preference (most stable/common first).
+ */
+function detectAvailableProvider(): { platform: string; model: string } | { platform: null; model: null } {
+  // Check environment variables in order of preference
+  // Priority: Most stable/common providers first, then others
+  
+  // Tier 1: Most popular and stable providers
+  if (process.env.OPENAI_API_KEY) {
+    return { platform: 'openai', model: 'gpt-3.5-turbo' };
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return { platform: 'anthropic', model: 'claude-3-5-haiku-latest' };
+  }
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    return { platform: 'google', model: 'gemini-1.5-flash' };
+  }
+  
+  // Tier 2: Fast and cost-effective providers
+  if (process.env.MISTRAL_API_KEY) {
+    return { platform: 'mistral', model: 'mistral-small-latest' };
+  }
+  if (process.env.DEEPSEEK_API_KEY) {
+    return { platform: 'deepseek', model: 'deepseek-chat' };
+  }
+  if (process.env.GROQ_API_KEY) {
+    return { platform: 'groq', model: 'openai/gpt-oss-120b' };
+  }
+  
+  // Tier 3: Additional providers
+  if (process.env.COHERE_API_KEY) {
+    return { platform: 'cohere', model: 'command' };
+  }
+  if (process.env.PERPLEXITY_API_KEY) {
+    return { platform: 'perplexity', model: 'llama-3.1-sonar-small-128k-online' };
+  }
+  if (process.env.FIREWORKS_API_KEY) {
+    return { platform: 'fireworks', model: 'accounts/fireworks/models/llama-v3-70b-instruct' };
+  }
+  if (process.env.TOGETHER_API_KEY) {
+    return { platform: 'together', model: 'meta-llama/Llama-3-70b-chat-hf' };
+  }
+  if (process.env.XAI_API_KEY) {
+    return { platform: 'xai', model: 'grok-beta' };
+  }
+  if (process.env.REPLICATE_API_KEY) {
+    return { platform: 'replicate', model: 'meta/llama-2-70b-chat' };
+  }
+  // Note: ai21, nvidia, upstash, lepton don't have official @ai-sdk packages
+  // They may be available as community packages but are not included in auto-detection
+  // Users should configure these manually in config files if needed
+  if (process.env.CEREBRAS_API_KEY) {
+    return { platform: 'cerebras', model: 'llama3.3-70b' };
+  }
+  // Note: DeepInfra and Baseten have various models available
+  // Model names vary - users should specify models in config files
+  // if (process.env.DEEPINFRA_API_KEY) {
+  //   return { platform: 'deepinfra', model: 'meta-llama/Llama-3-70b-instruct' };
+  // }
+  // if (process.env.BASETEN_API_KEY) {
+  //   return { platform: 'baseten', model: 'meta-llama/Llama-3-70b-instruct' };
+  // }
+  
+  // Note: Providers requiring complex auth (AWS Bedrock, Azure, etc.) are not auto-detected
+  // Note: Ollama requires local setup and baseURL, so not included in auto-detection
+  // Note: Cloudflare Workers AI requires different setup
+  
+  // No providers available
+  return { platform: null, model: null };
+}
+
+/**
+ * Map platform names to their @ai-sdk package names
+ */
+function getPackageNameForPlatform(platform: string): string | null {
+  const packageMap: Record<string, string> = {
+    'openai': '@ai-sdk/openai',
+    'anthropic': '@ai-sdk/anthropic',
+    'google': '@ai-sdk/google',
+    'mistral': '@ai-sdk/mistral',
+    'groq': '@ai-sdk/groq',
+    'cohere': '@ai-sdk/cohere',
+    'vercel': '@ai-sdk/vercel',
+    'azure-openai': '@ai-sdk/azure',
+    'azure-anthropic': '@ai-sdk/azure',
+    'azure': '@ai-sdk/azure',
+    'fireworks': '@ai-sdk/fireworks',
+    'xai': '@ai-sdk/xai',
+    'ollama': 'ai-sdk-ollama',
+    'bedrock': '@ai-sdk/amazon-bedrock',
+    'amazon-bedrock': '@ai-sdk/amazon-bedrock',
+    'elevenlabs': '@ai-sdk/elevenlabs',
+    'perplexity': '@ai-sdk/perplexity',
+    'replicate': '@ai-sdk/replicate',
+    'together': '@ai-sdk/togetherai',
+    'deepseek': '@ai-sdk/deepseek',
+    'cerebras': '@ai-sdk/cerebras',
+    'deepinfra': '@ai-sdk/deepinfra',
+    'baseten': '@ai-sdk/baseten',
+  };
+  
+  return packageMap[platform.toLowerCase()] || null;
+}
+
+/**
+ * Prompt user for yes/no input
+ */
+async function promptYesNo(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    
+    // Check if stdin is available
+    if (!stdin || stdin.destroyed) {
+      resolve(false);
+      return;
+    }
+    
+    process.stdout.write(`${question} (y/n): `);
+    
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    
+    let input = '';
+    
+    const onData = (data: string) => {
+      for (const char of data) {
+        if (char === '\n' || char === '\r') {
+          // End of line - process the input
+          const trimmed = input.trim().toLowerCase();
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          
+          if (trimmed === 'y' || trimmed === 'yes') {
+            process.stdout.write(`yes\n`);
+            resolve(true);
+            return;
+          } else if (trimmed === 'n' || trimmed === 'no' || trimmed === '') {
+            // Empty input defaults to 'no'
+            process.stdout.write(trimmed ? 'no\n' : '\n');
+            resolve(false);
+          } else {
+            // Invalid input - ask again
+            process.stdout.write(`\nPlease enter 'y' or 'n': `);
+            input = '';
+            // Don't re-add listener - it's already there, just resume
+            stdin.resume();
+          }
+          return;
+        } else if (char === '\u0003') {
+          // Ctrl+C
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          process.stdout.write('\n');
+          resolve(false);
+          return;
+        } else if (char >= ' ') {
+          // Printable character
+          input += char;
+        }
+      }
+    };
+    
+    stdin.on('data', onData);
+  });
+}
+
+/**
+ * Install a package using bun add
+ */
+async function installPackage(packageName: string): Promise<void> {
+  console.log(`\n📦 Installing ${packageName}...\n`);
+  
+  try {
+    // Use bun add to install the package
+    execSync(`bun add ${packageName}`, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: 'inherit',
+      shell: '/bin/bash',
+    });
+    
+    // Verify it was added to devDependencies or dependencies
+    const packageJsonPath = join(process.cwd(), 'package.json');
+    if (existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      
+      // Check if it's in devDependencies or dependencies with a valid version
+      const devVersion = packageJson.devDependencies?.[packageName];
+      const depVersion = packageJson.dependencies?.[packageName];
+      const version = devVersion || depVersion;
+      
+      if (version && version.trim() !== '') {
+        console.log(`\n✅ ${packageName} installed successfully! (version: ${version})\n`);
+        return;
+      }
+      
+      // If not found, add it to devDependencies manually
+      console.log(`\n⚠️  Package installed but not in devDependencies. Adding manually...\n`);
+      if (!packageJson.devDependencies) {
+        packageJson.devDependencies = {};
+      }
+      packageJson.devDependencies[packageName] = 'latest';
+      writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+      
+      // Run bun install to sync
+      execSync('bun install', {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: 'inherit',
+        shell: '/bin/bash',
+      });
+    }
+    
+    console.log(`\n✅ ${packageName} installed successfully!\n`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const exitCode = error && typeof error === 'object' && 'status' in error ? (error as any).status : 'unknown';
+    console.error(`\n❌ Failed to install ${packageName}`);
+    console.error(`   Error: ${errorMessage}`);
+    if (exitCode !== 'unknown') {
+      console.error(`   Exit code: ${exitCode}`);
+    }
+    console.error(`   Please install it manually: bun add ${packageName}\n`);
+    throw error;
+  }
+}
+
+/**
+ * Try to verify if a package is actually installed and resolvable
+ * This is more reliable than checking package.json, which can be out of sync
+ * 
+ * Strategy:
+ * 1. Try to dynamically import the package
+ * 2. If import succeeds -> package is installed
+ * 3. If "Cannot find module" -> package is NOT installed
+ * 4. If other errors (like zod/v4) -> package IS installed but has peer deps issues
+ */
+async function verifyPackageInstalled(packageName: string): Promise<boolean> {
+  try {
+    // Try to actually import the package - this is the most reliable check
+    await import(packageName);
+    // Import succeeded - package is installed and resolvable
+    return true;
+  } catch (error) {
+    if (error instanceof Error) {
+      const errorMessage = error.message;
+      
+      // "Cannot find module" means the package is not installed at all
+      if (errorMessage.includes('Cannot find module') || 
+          errorMessage.includes('Could not resolve')) {
+        return false;
+      }
+      
+      // Other errors (like zod/v4, peer deps, etc.) mean the package IS installed
+      // but has dependency issues. We consider it installed because:
+      // 1. The package exists and Bun can resolve it
+      // 2. The peer dependency issues will be handled when the provider is actually used
+      // 3. This prevents false negatives during debugging
+      return true;
+    }
+    
+    // Unknown error - assume not installed to be safe
+    return false;
+  }
+}
+
+/**
+ * Ensure required provider package is installed
+ * Checks for the package based on detected provider and installs if missing
+ * @returns true if a package was just installed, false otherwise
+ */
+async function ensureProviderPackageInstalled(): Promise<boolean> {
+  const providerInfo = detectAvailableProvider();
+  
+  if (!providerInfo.platform) {
+    // No provider detected, nothing to install
+    return false;
+  }
+
+  const packageName = getPackageNameForPlatform(providerInfo.platform);
+  
+  if (!packageName) {
+    // Platform doesn't have a corresponding @ai-sdk package
+    // (e.g., custom providers, community packages, etc.)
+    return false;
+  }
+
+  // Check if package is actually installed and resolvable
+  // This uses actual module resolution, which is more reliable than checking package.json
+  const isInstalled = await verifyPackageInstalled(packageName);
+  
+  if (isInstalled) {
+    // Package is already installed
+    return false;
+  }
+
+  // Package is not installed - prompt the user
+  console.log(`\n📦 Required package ${packageName} is not installed.`);
+  console.log(`   This package is required to run dev-chat with ${providerInfo.platform}.\n`);
+  
+  const shouldInstall = await promptYesNo('Would you like to install it now?');
+  
+  if (!shouldInstall) {
+    console.log('\n👋 Exiting. Please install the package manually and try again:');
+    console.log(`   bun add ${packageName}\n`);
+    process.exit(0);
+    return false; // Unreachable
+  }
+  
+  // User wants to install - install the package
+  console.log(`\n✅ User confirmed installation. Proceeding with installation of ${packageName}...\n`);
+  
+  try {
+    // Call installPackage and wait for it to complete
+    await installPackage(packageName);
+    
+    // If we reach here, installation succeeded
+    // After installation, prompt user to restart
+    // Note: installPackage already prints success message
+    console.log('🔄 Please run `bun run dev` again to start the chat.\n');
+    process.exit(0);
+    return true; // Unreachable
+  } catch (error) {
+    // installPackage already prints detailed error messages, but we add a final message
+    console.error(`\n   Installation failed. Please try installing manually:`);
+    console.error(`   bun add ${packageName}\n`);
+    process.exit(1);
+    return false; // Unreachable
+  }
+}
 
 /**
  * Initialize or reload Fred instance
@@ -68,10 +404,111 @@ async function initializeFred() {
 
     if (!configLoaded) {
       // Register default providers if no config
-      newFred.registerDefaultProviders();
+      await newFred.registerDefaultProviders();
       if (!isWaitingForInput) {
         console.log('✅ Using default providers (set OPENAI_API_KEY or GROQ_API_KEY)');
         console.log('💡 Tip: Create a config.json file or use initializeFromConfig() in your code');
+      }
+    }
+
+    // Auto-create dev agent if no agents exist
+    const agents = newFred.getAgents();
+    if (agents.length === 0) {
+      // Auto-create dev agent
+      const providerInfo = detectAvailableProvider();
+      if (providerInfo.platform && providerInfo.model) {
+        try {
+          // Ensure the provider is registered before creating the agent
+          // Register the provider explicitly to ensure it's available
+          try {
+            await newFred.useProvider(providerInfo.platform);
+            if (!isWaitingForInput) {
+              console.log(`✅ Registered ${providerInfo.platform} provider`);
+            }
+          } catch (providerError) {
+            // Always show provider registration errors
+            const packageName = providerInfo.platform === 'google' ? 'google' : providerInfo.platform;
+            console.error(`\n❌ Failed to register ${providerInfo.platform} provider:`, providerError instanceof Error ? providerError.message : providerError);
+            console.error(`   Install with: bun add @ai-sdk/${packageName}`);
+            console.error('');
+            // Can't create agent without provider
+            throw providerError;
+          }
+
+          // Now create the agent with the registered provider
+          if (!isWaitingForInput) {
+            console.log(`Creating dev agent with ${providerInfo.platform}/${providerInfo.model}...`);
+          }
+          
+          await newFred.createAgent({
+            id: '__dev_agent__',
+            systemMessage: 'You are a helpful development assistant. This is a temporary agent created for dev-chat. Create your own agents in your config file or code to replace this.',
+            platform: providerInfo.platform,
+            model: providerInfo.model,
+          });
+          
+          // Verify agent was created
+          const createdAgent = newFred.getAgent('__dev_agent__');
+          if (!createdAgent) {
+            throw new Error('Agent was created but could not be retrieved');
+          }
+          
+          // Set as default agent
+          newFred.setDefaultAgent('__dev_agent__');
+          
+          // Verify default agent is set
+          const defaultAgentId = newFred.getDefaultAgentId();
+          if (defaultAgentId !== '__dev_agent__') {
+            throw new Error(`Default agent not set correctly. Expected '__dev_agent__', got '${defaultAgentId}'`);
+          }
+          
+          // Verify agents list
+          const allAgents = newFred.getAgents();
+          if (allAgents.length === 0) {
+            throw new Error('Agent was created but does not appear in agents list');
+          }
+          
+          if (!isWaitingForInput) {
+            console.log('💡 Auto-created dev agent for testing (temporary)');
+            console.log(`   Platform: ${providerInfo.platform}, Model: ${providerInfo.model}`);
+            console.log(`   Agent ID: __dev_agent__, Default: ${newFred.getDefaultAgentId()}`);
+            console.log('   Create your own agents in config.json or code to replace this.\n');
+          }
+        } catch (error) {
+          // Failed to create agent (e.g., provider not properly registered)
+          // Always show error, even if user is typing (this is important)
+          console.error('\n❌ Failed to auto-create dev agent:', error instanceof Error ? error.message : error);
+          if (error instanceof Error && error.stack) {
+            console.error('Stack trace:', error.stack);
+          }
+          if (error instanceof Error && error.message.includes('not installed')) {
+            const packageName = providerInfo.platform === 'google' ? 'google' : providerInfo.platform;
+            console.error(`   Install the provider package: bun add @ai-sdk/${packageName}`);
+          } else if (error instanceof Error && error.message.includes('No provider registered')) {
+            console.error(`   The ${providerInfo.platform} provider failed to register. Check your API key.`);
+            console.error(`   Make sure ${providerInfo.platform.toUpperCase()}_API_KEY is set in your environment.`);
+          } else {
+            console.error('   Make sure the provider is properly registered and API keys are set.');
+          }
+          console.error('');
+        }
+      } else {
+        // No providers available
+        if (!isWaitingForInput) {
+          console.warn('⚠️  No AI providers available. Set one of the following API keys:');
+          console.warn('   - OPENAI_API_KEY (OpenAI)');
+          console.warn('   - ANTHROPIC_API_KEY (Anthropic)');
+          console.warn('   - GOOGLE_GENERATIVE_AI_API_KEY (Google)');
+          console.warn('   - MISTRAL_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, or others');
+          console.warn('   Dev-chat requires at least one provider to be configured.\n');
+        }
+      }
+    } else {
+      // Agents already exist - check if default is set
+      const defaultAgentId = newFred.getDefaultAgentId();
+      if (!defaultAgentId && !isWaitingForInput) {
+        console.warn('⚠️  Agents exist but no default agent is set.');
+        console.warn('   Set a default agent with: fred.setDefaultAgent(agentId)\n');
       }
     }
 
@@ -183,9 +620,15 @@ function setupFileWatcher() {
  * Read a line from stdin with better handling
  */
 async function readLine(): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     isWaitingForInput = true;
     const stdin = process.stdin;
+    
+    // Check if stdin is available
+    if (!stdin || stdin.destroyed) {
+      reject(new Error('stdin is not available or has been closed'));
+      return;
+    }
     
     // Set raw mode for better control (if available)
     if (stdin.isTTY && stdin.setRawMode) {
@@ -241,7 +684,20 @@ async function readLine(): Promise<string> {
  * Interactive chat interface
  */
 async function startChat() {
+  // Ensure required provider package is installed before initializing
+  let packageWasInstalled = false;
+  try {
+    packageWasInstalled = await ensureProviderPackageInstalled();
+  } catch (error) {
+    console.error('\n❌ Failed to ensure provider package is installed.');
+    console.error('   Please install the required package manually and try again.\n');
+    process.exit(1);
+  }
+  
   // Initialize Fred
+  // If we reach here, the package is installed (or no package needed)
+  // If a package was missing, ensureProviderPackageInstalled() will have
+  // prompted the user and exited the process
   await initializeFred();
   
   if (!fred) {
@@ -269,8 +725,33 @@ async function startChat() {
       }
     }
 
+    // Check if stdin is available and not destroyed
+    if (!process.stdin || process.stdin.destroyed) {
+      console.error('\n❌ stdin is not available. The process may have lost terminal access.');
+      console.error('   This can happen after a restart. Please restart dev-chat manually.\n');
+      process.exit(1);
+    }
+
+    // Ensure stdin is readable
+    if (!process.stdin.readable) {
+      console.error('\n❌ stdin is not readable. The process may have lost terminal access.');
+      console.error('   This can happen after a restart. Please restart dev-chat manually.\n');
+      process.exit(1);
+    }
+
     process.stdout.write('> ');
-    const message = await readLine();
+    let message: string;
+    try {
+      message = await readLine();
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('stdin') || error.message.includes('not available'))) {
+        console.error('\n❌ Failed to read from stdin:', error.message);
+        console.error('   The process may have lost terminal access after restart.');
+        console.error('   Please restart dev-chat manually: bun run dev\n');
+        process.exit(1);
+      }
+      throw error;
+    }
 
     if (!message.trim()) {
       continue;
@@ -330,8 +811,27 @@ async function startChat() {
           console.log(`🔧 Tools used: ${response.toolCalls.map(tc => tc.toolId).join(', ')}\n`);
         }
       } else {
-        console.log('\n❌ No response. Make sure you have a default agent set or matching intents.');
-        console.log('💡 Tip: Create src/index.ts to set up your agents, tools, and intents\n');
+        // No response - provide debugging information
+        const agents = fred.getAgents();
+        const defaultAgentId = fred.getDefaultAgentId();
+        const intents = fred.getIntents();
+        
+        console.log('\n❌ No response received.');
+        console.log(`   Agents available: ${agents.length}`);
+        if (agents.length > 0) {
+          console.log(`   Agent IDs: ${agents.map(a => a.id).join(', ')}`);
+        }
+        console.log(`   Default agent: ${defaultAgentId || 'not set'}`);
+        console.log(`   Intents registered: ${intents.length}`);
+        
+        if (agents.length === 0) {
+          console.log('\n💡 No agents found. The dev agent should have been auto-created.');
+          console.log('   Check the error messages above for provider registration issues.');
+        } else if (!defaultAgentId) {
+          console.log('\n💡 Agents exist but no default agent is set.');
+          console.log('   The dev agent should have been set as default automatically.');
+        }
+        console.log('');
       }
     } catch (error) {
       console.error('\n❌ Error:', error instanceof Error ? error.message : error);

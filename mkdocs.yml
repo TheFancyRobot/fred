@@ -61,6 +61,7 @@ nav:
     - guides/intents.md
     - guides/tools.md
     - guides/providers.md
+    - guides/models.md
     - guides/default-agent.md
     - guides/context-management.md
     - guides/hooks.md

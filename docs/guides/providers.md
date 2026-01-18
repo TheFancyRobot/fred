@@ -4,30 +4,51 @@ Fred supports all AI providers available in the Vercel AI SDK. This guide covers
 
 ## Supported Providers
 
-Fred supports 20+ AI providers:
+Fred supports all AI providers available in the Vercel AI SDK. This includes 30+ providers:
 
-- **OpenAI** - GPT-4, GPT-3.5, and more
-- **Anthropic** - Claude models
-- **Google** - Gemini models
-- **Groq** - Fast inference
-- **Mistral** - Mistral AI models
-- **Cohere** - Cohere models
-- **Vercel** - Vercel's v0 API
-- **Azure OpenAI** - Azure-hosted OpenAI
-- **Azure Anthropic** - Azure-hosted Anthropic
-- **Fireworks** - Fireworks AI
-- **X.AI** - Grok models
-- **Ollama** - Local models
-- **AI21** - Jurassic models
-- **NVIDIA** - NVIDIA NIM
-- **Amazon Bedrock** - AWS Bedrock
-- **Cloudflare** - Cloudflare Workers AI
-- **ElevenLabs** - Voice AI
-- **Lepton** - Lepton AI
-- **Perplexity** - Perplexity AI
-- **Replicate** - Replicate models
-- **Together** - Together AI
-- **Upstash** - Upstash AI
+### First-Party Providers
+
+- **OpenAI** (`openai`) - GPT-5, GPT-4, GPT-3.5, and more
+- **Anthropic** (`anthropic`) - Claude Opus, Sonnet, Haiku models
+- **Google Generative AI** (`google`) - Gemini 2.0, Gemini 1.5 models
+- **Google Vertex AI** (`google-vertex`) - Google Vertex models
+- **Azure OpenAI** (`azure-openai` or `azure`) - Azure-hosted OpenAI
+- **Azure Anthropic** (`azure-anthropic`) - Azure-hosted Anthropic
+- **Amazon Bedrock** (`bedrock` or `amazon-bedrock`) - AWS Bedrock models
+- **Vercel** (`vercel`) - Vercel's v0 API
+
+### Fast Inference Providers
+
+- **Groq** (`groq`) - Ultra-fast inference with Llama models
+- **Mistral** (`mistral`) - Mistral AI models (Pixtral, Mistral Large/Medium/Small)
+- **DeepSeek** (`deepseek`) - DeepSeek Chat and Reasoner
+- **Cerebras** (`cerebras`) - Cerebras Llama models
+- **Cloudflare** (`cloudflare`) - Cloudflare Workers AI
+
+### Additional Providers
+
+- **Cohere** (`cohere`) - Command models
+- **Fireworks** (`fireworks`) - Fireworks AI models
+- **X.AI** (`xai`) - Grok models
+- **Together.ai** (`together`) - Together AI models
+- **Perplexity** (`perplexity`) - Perplexity Sonar models
+- **Replicate** (`replicate`) - Replicate hosted models
+- **AI21** (`ai21`) - Jurassic models
+- **NVIDIA** (`nvidia`) - NVIDIA NIM models
+- **Upstash** (`upstash`) - Upstash AI models
+- **Lepton** (`lepton`) - Lepton AI models
+- **DeepInfra** (`deepinfra`) - DeepInfra hosted models
+- **Baseten** (`baseten`) - Baseten hosted models
+
+### Local/Self-Hosted
+
+- **Ollama** (`ollama`) - Local models via Ollama
+
+### Specialized
+
+- **ElevenLabs** (`elevenlabs`) - Voice/TTS models
+
+> **Note**: For a complete list of all available models for each provider, see the [Models Reference](models.md).
 
 ## Using Providers
 
@@ -201,6 +222,8 @@ Different providers offer different models. Choose based on your needs:
 - **Cost**: OpenAI GPT-3.5, Groq
 - **Local**: Ollama
 
+For a comprehensive list of all available models, see the [Models Reference](models.md).
+
 ## Best Practices
 
 1. **API Keys**: Store API keys in environment variables, never in code
@@ -211,6 +234,7 @@ Different providers offer different models. Choose based on your needs:
 
 ## Next Steps
 
+- See [Models Reference](models.md) for a complete list of available models
 - Learn about [Agents](agents.md)
 - Explore [Custom Providers](../advanced/custom-providers.md)
 - Check [API Reference](../api-reference/providers.md)
