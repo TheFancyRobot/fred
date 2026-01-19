@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, isAbsolute, relative, normalize } from 'path';
+import { isLangfuseURI, loadLangfusePrompt } from './langfuse-prompt-loader';
 
 /**
  * Check if a string looks like a file path
@@ -46,16 +47,31 @@ function isPathWithinSandbox(filePath: string, sandboxDir: string): boolean {
 
 /**
  * Load a prompt file if it's a file path, otherwise return the string as-is
- * @param systemMessage - Either a file path or literal string content
+ * @param systemMessage - Either a file path, literal string content, or Langfuse prompt URI (langfuse://prompt-name)
  * @param basePath - Base path to resolve relative paths against (usually config file directory)
  * @param allowAbsolutePaths - Whether to allow absolute paths (default: false for security)
+ * @param langfuseClient - Optional Langfuse client for loading prompts from Langfuse
  * @returns The loaded markdown content or the original string
  */
-export function loadPromptFile(
+export async function loadPromptFile(
   systemMessage: string,
   basePath?: string,
-  allowAbsolutePaths: boolean = false
-): string {
+  allowAbsolutePaths: boolean = false,
+  langfuseClient?: any
+): Promise<string> {
+  // Check if it's a Langfuse prompt URI
+  if (isLangfuseURI(systemMessage)) {
+    if (!langfuseClient) {
+      throw new Error(`Langfuse prompt URI detected but Langfuse client is not available. Use fred.useLangfuse() to enable Langfuse integration.`);
+    }
+    try {
+      const result = await loadLangfusePrompt(systemMessage, langfuseClient);
+      return result.content;
+    } catch (error) {
+      throw new Error(`Failed to load Langfuse prompt "${systemMessage}": ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
   // If it doesn't look like a file path, return as-is
   if (!isFilePath(systemMessage)) {
     return systemMessage;

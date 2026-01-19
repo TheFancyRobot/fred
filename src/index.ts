@@ -24,6 +24,7 @@ import { NoOpTracer } from './core/tracing/noop-tracer';
 import { SpanKind } from './core/tracing/types';
 import { setActiveSpan, getActiveSpan } from './core/tracing/context';
 import { validateMessageLength } from './utils/validation';
+import { initializeLangfuse, createLangfuseClient, type LangfuseOptions } from './core/langfuse';
 
 /**
  * Fred - Main class for building AI agents
@@ -38,6 +39,8 @@ export class Fred {
   private contextManager: ContextManager;
   private hookManager: HookManager;
   private tracer?: Tracer;
+  private langfuseClient?: any;
+  private langfuseEnabled: boolean = false;
 
   constructor(tracer?: Tracer) {
     this.toolRegistry = new ToolRegistry();
@@ -134,6 +137,40 @@ export class Fred {
     
     // Return the provider instance
     return provider;
+  }
+
+  /**
+   * Enable Langfuse integration for observability and prompt management
+   * This initializes OpenTelemetry with LangfuseSpanProcessor and creates a Langfuse client
+   * @param options - Langfuse configuration options
+   * @returns The Fred instance for chaining
+   * @example
+   * fred.useLangfuse({
+   *   secretKey: process.env.LANGFUSE_SECRET_KEY,
+   *   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+   *   baseUrl: process.env.LANGFUSE_BASE_URL,
+   * });
+   */
+  useLangfuse(options: LangfuseOptions): Fred {
+    // Initialize OpenTelemetry with LangfuseSpanProcessor (one-time setup)
+    const initialized = initializeLangfuse(options);
+    if (initialized) {
+      this.langfuseEnabled = true;
+    }
+
+    // Create Langfuse client for prompt management
+    const client = createLangfuseClient(options);
+    if (client) {
+      this.langfuseClient = client;
+    }
+
+    // Pass Langfuse client to agent manager for prompt loading
+    if (this.langfuseClient) {
+      this.agentManager.setLangfuseClient(this.langfuseClient);
+      this.agentManager.setLangfuseEnabled(this.langfuseEnabled);
+    }
+
+    return this;
   }
 
   /**

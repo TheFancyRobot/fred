@@ -68,6 +68,7 @@ nav:
     - guides/chat-api.md
     - guides/dev-chat.md
     - guides/cli.md
+    - guides/langfuse.md
   - API Reference:
     - api-reference/fred-class.md
     - api-reference/agents.md
@@ -85,6 +86,7 @@ nav:
     - advanced/custom-providers.md
     - advanced/custom-tools.md
     - advanced/deployment.md
+    - advanced/observability.md
 
 plugins:
   - search

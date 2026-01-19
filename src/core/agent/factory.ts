@@ -44,6 +44,8 @@ export class AgentFactory {
   };
   private mcpClients: Map<string, MCPClientImpl> = new Map(); // Track MCP clients per agent
   private tracer?: Tracer;
+  private langfuseClient?: any;
+  private langfuseEnabled: boolean = false;
   private metrics: MCPClientMetrics = {
     totalConnections: 0,
     activeConnections: 0,
@@ -63,6 +65,20 @@ export class AgentFactory {
    */
   setTracer(tracer?: Tracer): void {
     this.tracer = tracer;
+  }
+
+  /**
+   * Set Langfuse client for prompt loading
+   */
+  setLangfuseClient(client?: any): void {
+    this.langfuseClient = client;
+  }
+
+  /**
+   * Set Langfuse enabled flag for telemetry
+   */
+  setLangfuseEnabled(enabled: boolean): void {
+    this.langfuseEnabled = enabled;
   }
 
   /**
@@ -395,10 +411,32 @@ export class AgentFactory {
     // Merge MCP tools with regular tools
     Object.assign(sdkTools, mcpTools);
 
-    // Load system message (handle file paths for programmatic usage)
+    // Load system message (handle file paths, Langfuse prompts, or programmatic usage)
     // Note: When loaded from config, paths are already resolved in extractAgents
     // For programmatic usage, sandbox to current working directory and disallow absolute paths
-    const systemMessage = loadPromptFile(config.systemMessage, undefined, false);
+    // Support Langfuse prompts via langfuse:// URI
+    const systemMessage = await loadPromptFile(config.systemMessage, undefined, false, this.langfuseClient);
+    
+    // Track Langfuse prompt info if available (for telemetry metadata)
+    let langfusePromptInfo: { name?: string; version?: number; label?: string } | undefined;
+    if (this.langfuseClient && typeof config.systemMessage === 'string' && config.systemMessage.startsWith('langfuse://')) {
+      try {
+        const { parseLangfuseURI, loadLangfusePrompt } = await import('../../utils/langfuse-prompt-loader');
+        const parsed = parseLangfuseURI(config.systemMessage);
+        if (parsed) {
+          const result = await loadLangfusePrompt(config.systemMessage, this.langfuseClient);
+          if (result.info) {
+            langfusePromptInfo = {
+              name: result.info.name,
+              version: result.info.version,
+              label: result.info.label,
+            };
+          }
+        }
+      } catch (error) {
+        // Ignore errors - prompt info is optional for telemetry
+      }
+    }
 
     // Create ToolLoopAgent instance
     const agent = new ToolLoopAgent({
@@ -437,6 +475,22 @@ export class AgentFactory {
 
       let result;
       try {
+        // Prepare experimental_telemetry for Langfuse if enabled
+        const telemetryConfig = this.langfuseEnabled ? {
+          isEnabled: true,
+          functionId: `agent.${config.id}.generate`,
+          metadata: {
+            agentId: config.id,
+            model: config.model,
+            platform: config.platform,
+            ...(langfusePromptInfo && {
+              promptName: langfusePromptInfo.name,
+              promptVersion: langfusePromptInfo.version,
+              promptLabel: langfusePromptInfo.label,
+            }),
+          },
+        } : undefined;
+
         // Use ToolLoopAgent.generate() which handles the tool loop automatically
         // Use messages if we have history, otherwise use prompt
         // Note: maxTokens is not directly supported in generate(), it's set in the agent constructor
@@ -446,10 +500,12 @@ export class AgentFactory {
               ...previousMessages,
               { role: 'user', content: message },
             ],
+            experimental_telemetry: telemetryConfig,
           });
         } else {
           result = await agent.generate({
             prompt: message,
+            experimental_telemetry: telemetryConfig,
           });
         }
 
@@ -524,6 +580,22 @@ export class AgentFactory {
       message: string,
       previousMessages: AgentMessage[] = []
     ): AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown> {
+      // Prepare experimental_telemetry for Langfuse if enabled
+      const telemetryConfig = this.langfuseEnabled ? {
+        isEnabled: true,
+        functionId: `agent.${config.id}.stream`,
+        metadata: {
+          agentId: config.id,
+          model: config.model,
+          platform: config.platform,
+          ...(langfusePromptInfo && {
+            promptName: langfusePromptInfo.name,
+            promptVersion: langfusePromptInfo.version,
+            promptLabel: langfusePromptInfo.label,
+          }),
+        },
+      } : undefined;
+
       // Use ToolLoopAgent.stream() which handles the tool loop automatically
       // Use messages if we have history, otherwise use prompt (can't use both)
       const streamResult = previousMessages.length > 0
@@ -532,9 +604,11 @@ export class AgentFactory {
               ...previousMessages,
               { role: 'user', content: message },
             ],
+            experimental_telemetry: telemetryConfig,
           })
         : await agent.stream({
             prompt: message,
+            experimental_telemetry: telemetryConfig,
           });
       
       const stream = streamResult;

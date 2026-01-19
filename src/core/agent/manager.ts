@@ -13,6 +13,8 @@ export class AgentManager {
   private factory: AgentFactory;
   private providers: Map<string, AIProvider> = new Map();
   private tracer?: Tracer;
+  private langfuseClient?: any;
+  private langfuseEnabled: boolean = false;
 
   constructor(toolRegistry: ToolRegistry, tracer?: Tracer) {
     this.tracer = tracer;
@@ -31,6 +33,22 @@ export class AgentManager {
   setTracer(tracer?: Tracer): void {
     this.tracer = tracer;
     this.factory.setTracer(tracer);
+  }
+
+  /**
+   * Set Langfuse client for prompt loading
+   */
+  setLangfuseClient(client?: any): void {
+    this.langfuseClient = client;
+    this.factory.setLangfuseClient(client);
+  }
+
+  /**
+   * Set Langfuse enabled flag for telemetry
+   */
+  setLangfuseEnabled(enabled: boolean): void {
+    this.langfuseEnabled = enabled;
+    this.factory.setLangfuseEnabled(enabled);
   }
 
   /**
