@@ -7,6 +7,7 @@ import { PipelineConfig, PipelineInstance } from './core/pipeline';
 import { PipelineManager } from './core/pipeline/manager';
 import { Tool } from './core/tool/tool';
 import { ToolRegistry } from './core/tool/registry';
+import { createCalculatorTool } from './core/tool/calculator';
 import { AIProvider, ProviderConfig } from './core/platform/provider';
 // OpenAIProvider and GroqProvider are no longer imported here
 // They use dynamic imports to avoid requiring packages at build time
@@ -53,8 +54,21 @@ export class Fred {
       this.hookManager.setTracer(this.tracer);
     }
     
+    // Register built-in tools
+    this.registerBuiltInTools();
+    
     // Register shutdown hooks for MCP client cleanup
     this.agentManager.registerShutdownHooks();
+  }
+
+  /**
+   * Register built-in tools that are available by default
+   * These tools are automatically available to all agents
+   */
+  private registerBuiltInTools(): void {
+    // Register calculator tool
+    const calculatorTool = createCalculatorTool();
+    this.toolRegistry.registerTool(calculatorTool);
   }
 
   /**
