@@ -462,9 +462,10 @@ class DevChatRunner {
           
           await newFred.createAgent({
             id: '__dev_agent__',
-            systemMessage: 'You are a helpful development assistant. This is a temporary agent created for dev-chat. Create your own agents in your config file or code to replace this.',
+            systemMessage: 'You are a helpful development assistant. This is a temporary agent created for dev-chat. Create your own agents in your config file or code to replace this.\n\nYou have access to a calculator tool that can perform basic arithmetic operations. When users ask mathematical questions or need calculations, use the calculator tool to get accurate results. The calculator supports addition (+), subtraction (-), multiplication (*), division (/), parentheses for grouping, and decimal numbers. **NON NEGOTIABLE**: Always use the calculator tool for mathematical expressions rather than trying to calculate them yourself.',
             platform: providerInfo.platform,
             model: providerInfo.model,
+            tools: ['calculator'], // Include the built-in calculator tool
           });
           
           // Verify agent was created
@@ -869,6 +870,7 @@ class DevChatRunner {
         let fullText = '';
         let toolCallsUsed: string[] = [];
         let hasShownToolIndicator = false;
+        let calculatorToolUsed = false;
 
         // Ensure stdout is ready for immediate writes
         // Unbuffer stdout if it's corked (shouldn't be, but ensure it)
@@ -949,19 +951,32 @@ class DevChatRunner {
             hasReceivedChunk = true;
 
             // Handle tool calls - show indicator when tools are detected
-            if (chunk.toolCalls && chunk.toolCalls.length > 0 && !hasShownToolIndicator) {
-              // If we've already written some text, add a newline before tool indicator
-              if (fullText) {
-                await writeImmediate('\n');
-              }
-              await writeImmediate('🔧 Using tools...\n');
-              hasShownToolIndicator = true;
-              
-              // Track which tools are being used
+            if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+              // First pass: track which tools are being used
               for (const toolCall of chunk.toolCalls) {
                 if (toolCall.toolId && !toolCallsUsed.includes(toolCall.toolId)) {
                   toolCallsUsed.push(toolCall.toolId);
+                  
+                  // Track calculator tool usage for subtle indicator
+                  if (toolCall.toolId === 'calculator') {
+                    calculatorToolUsed = true;
+                  }
                 }
+              }
+              
+              // Show tool indicator only once, with subtle calculator hint
+              if (!hasShownToolIndicator) {
+                // If we've already written some text, add a newline before tool indicator
+                if (fullText) {
+                  await writeImmediate('\n');
+                }
+                // Show subtle indicator - include calculator emoji if calculator is being used
+                if (calculatorToolUsed) {
+                  await writeImmediate('🔧 🧮 Using calculator...\n');
+                } else {
+                  await writeImmediate('🔧 Using tools...\n');
+                }
+                hasShownToolIndicator = true;
               }
             }
 
