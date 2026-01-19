@@ -524,23 +524,18 @@ export class AgentFactory {
       message: string,
       previousMessages: AgentMessage[] = []
     ): AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown> {
-      let streamResult;
-      try {
-        // Use ToolLoopAgent.stream() which handles the tool loop automatically
-        // Use messages if we have history, otherwise use prompt (can't use both)
-        streamResult = previousMessages.length > 0
-          ? await agent.stream({
-              messages: [
-                ...previousMessages,
-                { role: 'user', content: message },
-              ],
-            })
-          : await agent.stream({
-              prompt: message,
-            });
-      } catch (streamError) {
-        throw streamError;
-      }
+      // Use ToolLoopAgent.stream() which handles the tool loop automatically
+      // Use messages if we have history, otherwise use prompt (can't use both)
+      const streamResult = previousMessages.length > 0
+        ? await agent.stream({
+            messages: [
+              ...previousMessages,
+              { role: 'user', content: message },
+            ],
+          })
+        : await agent.stream({
+            prompt: message,
+          });
       
       const stream = streamResult;
 
