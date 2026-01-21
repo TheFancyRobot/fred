@@ -24,7 +24,13 @@ import { NoOpTracer } from './core/tracing/noop-tracer';
 import { SpanKind } from './core/tracing/types';
 import { setActiveSpan, getActiveSpan } from './core/tracing/context';
 import { validateMessageLength } from './utils/validation';
-import { initializeLangfuse, createLangfuseClient, type LangfuseOptions } from './core/langfuse';
+
+// Langfuse configuration options (typed locally to avoid static imports)
+interface LangfuseOptions {
+  secretKey: string;
+  publicKey: string;
+  baseUrl?: string;
+}
 
 /**
  * Fred - Main class for building AI agents
@@ -151,25 +157,66 @@ export class Fred {
    *   baseUrl: process.env.LANGFUSE_BASE_URL,
    * });
    */
-  useLangfuse(options: LangfuseOptions): Fred {
-    // Initialize OpenTelemetry with LangfuseSpanProcessor (one-time setup)
-    const initialized = initializeLangfuse(options);
-    if (initialized) {
+  /**
+   * Enable Langfuse integration (async version - waits for initialization)
+   * Use this when you need to ensure Langfuse is initialized before creating agents
+   * 
+   * IMPORTANT: This must complete BEFORE any AI SDK calls with experimental_telemetry
+   * The OpenTelemetry SDK must be started to capture spans from AI SDK
+   */
+  async useLangfuseAsync(options: LangfuseOptions): Promise<Fred> {
+    try {
+      const { initializeLangfuse, createLangfuseClient } = await import('./core/langfuse');
+      
+      // Initialize OpenTelemetry with LangfuseSpanProcessor (one-time setup)
+      // This MUST complete before any AI SDK calls with experimental_telemetry
+      const initialized = await initializeLangfuse(options);
+      if (!initialized) {
+        console.warn('[Fred] Langfuse OpenTelemetry initialization failed. Traces will not be sent to Langfuse.');
+        return this;
+      }
+      
       this.langfuseEnabled = true;
+
+      // Create Langfuse client for prompt management
+      const client = await createLangfuseClient(options);
+      if (client) {
+        this.langfuseClient = client;
+      } else {
+        console.warn('[Fred] Langfuse client creation failed. Prompt management will not be available.');
+      }
+
+      // Pass Langfuse client to agent manager for prompt loading
+      if (this.langfuseClient) {
+        this.agentManager.setLangfuseClient(this.langfuseClient);
+        this.agentManager.setLangfuseEnabled(this.langfuseEnabled);
+      }
+    } catch (error) {
+      console.error('[Fred] Error initializing Langfuse:', error);
+      if (error instanceof Error && error.stack) {
+        console.error('[Fred] Stack trace:', error.stack);
+      }
     }
 
-    // Create Langfuse client for prompt management
-    const client = createLangfuseClient(options);
-    if (client) {
-      this.langfuseClient = client;
-    }
+    return this;
+  }
 
-    // Pass Langfuse client to agent manager for prompt loading
-    if (this.langfuseClient) {
-      this.agentManager.setLangfuseClient(this.langfuseClient);
-      this.agentManager.setLangfuseEnabled(this.langfuseEnabled);
-    }
+  useLangfuse(options: LangfuseOptions): Fred {
+    // Lazy-load Langfuse modules to avoid pulling them into bundles unless used
+    const loadLangfuse = async () => {
+      try {
+        await this.useLangfuseAsync(options);
+      } catch (error) {
+        console.error('[Fred] Failed to initialize Langfuse:', error);
+      }
+    };
 
+    // Fire and forget; errors surface on use
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    loadLangfuse();
+
+    // Note: we deliberately return immediately; Langfuse loads asynchronously
+    // For synchronous initialization, use useLangfuseAsync() instead
     return this;
   }
 

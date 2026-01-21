@@ -75,6 +75,12 @@ await fred.createAgent({
 
 Once `useLangfuse()` is called, all agent calls automatically send traces to Langfuse. No additional configuration needed!
 
+### Using with `fred dev` / `bun run dev`
+
+- Set `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY` in your environment.
+- Langfuse enables automatically in dev if both keys are present.
+- To explicitly disable when keys are present, run: `fred dev --no-langfuse`.
+
 ## Using Langfuse Prompts
 
 Fred supports loading prompts directly from Langfuse using a special URI format.

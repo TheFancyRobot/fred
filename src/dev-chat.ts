@@ -348,6 +348,93 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
   }
 }
 
+export interface DevChatOptions {
+  disableLangfuse?: boolean;
+}
+
+/**
+ * Check which Langfuse packages are installed
+ * Returns an object with availability status for each required package
+ * 
+ * Uses async import() pattern (same as verifyPackageInstalled) for reliable detection.
+ * Bun's require() may resolve packages from cache even when not installed.
+ */
+export async function checkLangfusePackages(): Promise<{
+  '@langfuse/client': boolean;
+  '@langfuse/otel': boolean;
+  '@opentelemetry/sdk-node': boolean;
+  allInstalled: boolean;
+  missing: string[];
+}> {
+  const packages = {
+    '@langfuse/client': false,
+    '@langfuse/otel': false,
+    '@opentelemetry/sdk-node': false,
+  };
+
+  // Check each package using async import (more reliable than require)
+  for (const pkg of Object.keys(packages) as Array<keyof typeof packages>) {
+    try {
+      // Try to actually import the module - this will fail if not installed
+      await import(pkg);
+      packages[pkg] = true;
+    } catch (error) {
+      if (error instanceof Error) {
+        const errorMessage = error.message;
+        // "Cannot find module" means the package is not installed at all
+        // This includes transitive dependency errors (e.g., "Cannot find module '@opentelemetry/api'")
+        if (
+          errorMessage.includes('Cannot find module') ||
+          errorMessage.includes('Could not resolve')
+        ) {
+          packages[pkg] = false;
+        } else {
+          // Other errors might mean package is installed but has issues
+          // For Langfuse, we consider it installed if it can be imported
+          // (dependency issues will surface when actually used)
+          packages[pkg] = true;
+        }
+      } else {
+        // Unknown error - assume not installed to be safe
+        packages[pkg] = false;
+      }
+    }
+  }
+
+  const missing = Object.entries(packages)
+    .filter(([, installed]) => !installed)
+    .map(([pkg]) => pkg);
+
+  return {
+    ...packages,
+    allInstalled: missing.length === 0,
+    missing,
+  };
+}
+
+/**
+ * Decide Langfuse config from env + flag
+ * Returns null when Langfuse should not be enabled
+ */
+export function getLangfuseConfigFromEnv(
+  env: NodeJS.ProcessEnv,
+  disableLangfuse?: boolean
+): { secretKey: string; publicKey: string; baseUrl?: string } | null {
+  if (disableLangfuse) {
+    return null;
+  }
+
+  const secretKey = env.LANGFUSE_SECRET_KEY;
+  const publicKey = env.LANGFUSE_PUBLIC_KEY;
+  const baseUrl = env.LANGFUSE_BASE_URL;
+
+  if (secretKey && publicKey) {
+    return { secretKey, publicKey, baseUrl };
+  }
+
+  return null;
+}
+
 /**
  * DevChatRunner class encapsulates all dev chat state and logic
  */
@@ -359,9 +446,11 @@ class DevChatRunner {
   private isWaitingForInput = false;
   private fileWatcher: chokidar.FSWatcher | null = null;
   private setupHook?: (fred: Fred) => Promise<void>;
+  private disableLangfuse?: boolean;
 
-  constructor(setupHook?: (fred: Fred) => Promise<void>) {
+  constructor(setupHook?: (fred: Fred) => Promise<void>, options?: DevChatOptions) {
     this.setupHook = setupHook;
+    this.disableLangfuse = options?.disableLangfuse;
   }
 
   /**
@@ -380,6 +469,34 @@ class DevChatRunner {
 
       // Create new Fred instance
       const newFred = new Fred();
+
+      // Optional: enable Langfuse if env vars are set and flag not disabled
+      const langfuseConfig = getLangfuseConfigFromEnv(process.env, this.disableLangfuse);
+      if (langfuseConfig) {
+        // Check if Langfuse packages are installed (async check for reliability)
+        const packageCheck = await checkLangfusePackages();
+        if (!packageCheck.allInstalled) {
+          // Always show this warning - it's important information
+          console.warn('⚠️  Langfuse environment variables are set, but required packages are not installed:');
+          console.warn(`   Missing: ${packageCheck.missing.join(', ')}`);
+          console.warn(`   Install with: bun add ${packageCheck.missing.join(' ')}`);
+          console.warn('   Langfuse integration will be disabled until packages are installed.\n');
+        } else {
+          // Await initialization to ensure OpenTelemetry SDK is started before agents are created
+          // This is critical: SDK must be started BEFORE AI SDK calls with experimental_telemetry
+          try {
+            await newFred.useLangfuseAsync(langfuseConfig);
+            if (!this.isWaitingForInput) {
+              console.log('✅ Langfuse enabled (dev)');
+            }
+          } catch (error) {
+            if (!this.isWaitingForInput) {
+              console.error('❌ Failed to initialize Langfuse:', error instanceof Error ? error.message : error);
+              console.error('   Traces will not be sent to Langfuse.');
+            }
+          }
+        }
+      }
       
       // Try to load config files
       const configPaths = [
@@ -1097,8 +1214,11 @@ class DevChatRunner {
  * Start dev chat interface (exported for CLI use)
  * @param setupHook Optional function to call after Fred is initialized but before auto-agent creation
  */
-export async function startDevChat(setupHook?: (fred: Fred) => Promise<void>) {
-  const runner = new DevChatRunner(setupHook);
+export async function startDevChat(
+  setupHook?: (fred: Fred) => Promise<void>,
+  options?: DevChatOptions
+) {
+  const runner = new DevChatRunner(setupHook, options);
   runner.setupCleanup();
   runner.setupFileWatcher();
   await runner.start();

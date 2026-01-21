@@ -17,20 +17,31 @@ export {
  * @param options - Langfuse client configuration
  * @returns Langfuse client instance or null if packages not available
  */
-export function createLangfuseClient(options: {
+export async function createLangfuseClient(options: {
   secretKey: string;
   publicKey: string;
   baseUrl?: string;
-}): any | null {
+}): Promise<any | null> {
   try {
-    const { LangfuseClient } = require('@langfuse/client');
+    const langfuseClientModule = await import('@langfuse/client');
+    // Handle both default and named exports (for ESM/CJS compatibility)
+    const LangfuseClient = langfuseClientModule.LangfuseClient ?? langfuseClientModule.default?.LangfuseClient;
+    
+    if (!LangfuseClient) {
+      throw new Error('Failed to load LangfuseClient from @langfuse/client');
+    }
+    
     return new LangfuseClient({
       secretKey: options.secretKey,
       publicKey: options.publicKey,
       baseUrl: options.baseUrl,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Cannot find module')) {
+    if (error instanceof Error && (
+      error.message.includes('Cannot find module') ||
+      error.message.includes('Could not resolve') ||
+      error.message.includes('Failed to load')
+    )) {
       console.warn('[Fred] @langfuse/client not found. Install it to enable Langfuse prompt management.');
       return null;
     }

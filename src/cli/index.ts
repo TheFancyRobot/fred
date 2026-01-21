@@ -110,7 +110,9 @@ async function main(): Promise<void> {
 
     switch (command) {
       case 'dev':
-        exitCode = await handleDevCommand();
+        exitCode = await handleDevCommand({
+          noLangfuse: options['no-langfuse'] === true,
+        });
         break;
 
       case 'test':

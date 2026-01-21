@@ -47,9 +47,9 @@ const response = await fred.processMessage('Hello, world!');
 // - agent.handoff (if handoffs occur)
 ```
 
-## OpenTelemetry Integration
+## OpenTelemetry & Langfuse Integration
 
-Fred can export traces to OpenTelemetry for integration with observability platforms.
+Fred can export traces to OpenTelemetry for integration with observability platforms like Langfuse.
 
 ### Installation
 
@@ -57,22 +57,25 @@ Fred can export traces to OpenTelemetry for integration with observability platf
 npm install @opentelemetry/api
 ```
 
-### Using OpenTelemetry Tracer
+### Using Langfuse (recommended)
+
+Langfuse automatically captures AI SDK spans via OpenTelemetry. Enable it with:
 
 ```typescript
 import { Fred } from 'fred';
-import { createOpenTelemetryTracer } from 'fred/core/tracing/otel-exporter';
 
-// Check if OpenTelemetry is available
-if (isOpenTelemetryAvailable()) {
-  const otelTracer = createOpenTelemetryTracer();
-  if (otelTracer) {
-    fred.enableTracing(otelTracer);
-  }
-}
+const fred = new Fred();
+
+fred.useLangfuse({
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+});
+
+// All agent.generate/stream calls now emit telemetry to Langfuse automatically
 ```
 
-### Full OpenTelemetry Setup
+### Full OpenTelemetry Setup (manual)
 
 For a complete OpenTelemetry setup, you'll need to configure exporters:
 

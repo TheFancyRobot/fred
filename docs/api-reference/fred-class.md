@@ -32,6 +32,18 @@ await fred.useProvider(platform: string, config?: ProviderConfig): Promise<AIPro
 const openai = await fred.useProvider('openai', { apiKey: 'your-key' });
 ```
 
+### useLangfuse()
+
+Enable Langfuse integration (OpenTelemetry + Langfuse client) for automatic telemetry and Langfuse prompt loading.
+
+```typescript
+fred.useLangfuse({
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+});
+```
+
 ### use()
 
 Register a custom integration/plugin.

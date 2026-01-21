@@ -11,6 +11,10 @@ import { pathToFileURL } from 'url';
 import { Fred } from '../index';
 import { startDevChat } from '../dev-chat';
 
+export interface DevCommandOptions {
+  noLangfuse?: boolean;
+}
+
 /**
  * Try to load and call project's setup() function if it exists
  */
@@ -50,7 +54,7 @@ async function loadProjectSetup(fred: Fred): Promise<void> {
 /**
  * Handle dev command
  */
-export async function handleDevCommand(): Promise<number> {
+export async function handleDevCommand(options?: DevCommandOptions): Promise<number> {
   try {
     // Create a setup hook that will be called by dev-chat
     const setupHook = async (fred: Fred) => {
@@ -58,7 +62,9 @@ export async function handleDevCommand(): Promise<number> {
     };
 
     // Start the dev chat with the setup hook
-    await startDevChat(setupHook);
+    await startDevChat(setupHook, {
+      disableLangfuse: options?.noLangfuse,
+    });
     
     // startDevChat runs indefinitely, so this should never be reached
     return 0;

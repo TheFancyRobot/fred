@@ -18,6 +18,7 @@ Fred is a flexible framework for building AI agents with intent-based routing, c
 - **Flexible Configuration**: Use programmatic API or JSON/YAML config files
 - **Library + Server Mode**: Use as a library or run as a standalone HTTP server
 - **Observability & Tracing**: Lightweight tracing system with optional OpenTelemetry integration for full observability
+- **Langfuse Integration**: Optional Langfuse integration for automatic tracing and prompt management
 - **Evaluation Harness**: Golden trace-based evaluation system for deterministic testing and regression detection
 
 ## Installation
@@ -309,6 +310,16 @@ const fred = new Fred();
 
 // Enable tracing (opt-in, zero overhead when disabled)
 fred.enableTracing();
+
+// Optional: Enable Langfuse (automatic telemetry + prompt management)
+fred.useLangfuse({
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+});
+
+// In dev (`fred dev` / `bun run dev`), Langfuse auto-enables when the env vars above are set.
+// To disable in dev even when env vars are present, pass: fred dev --no-langfuse
 
 // Process messages - spans are automatically created
 const response = await fred.processMessage('Hello!');

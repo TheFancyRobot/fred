@@ -437,6 +437,7 @@ export class AgentFactory {
         // Ignore errors - prompt info is optional for telemetry
       }
     }
+    const langfuseEnabled = this.langfuseEnabled;
 
     // Create ToolLoopAgent instance
     const agent = new ToolLoopAgent({
@@ -476,7 +477,7 @@ export class AgentFactory {
       let result;
       try {
         // Prepare experimental_telemetry for Langfuse if enabled
-        const telemetryConfig = this.langfuseEnabled ? {
+      const telemetryConfig = langfuseEnabled ? {
           isEnabled: true,
           functionId: `agent.${config.id}.generate`,
           metadata: {
@@ -490,6 +491,14 @@ export class AgentFactory {
             }),
           },
         } : undefined;
+
+        // Debug logging (only if DEBUG_LANGFUSE env var is set)
+        if (typeof process !== 'undefined' && process.env.DEBUG_LANGFUSE) {
+          console.log(`[Fred] Langfuse telemetry ${langfuseEnabled ? 'enabled' : 'disabled'} for agent.generate()`);
+          if (telemetryConfig) {
+            console.log(`[Fred] Telemetry config:`, JSON.stringify(telemetryConfig, null, 2));
+          }
+        }
 
         // Use ToolLoopAgent.generate() which handles the tool loop automatically
         // Use messages if we have history, otherwise use prompt
@@ -581,7 +590,7 @@ export class AgentFactory {
       previousMessages: AgentMessage[] = []
     ): AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown> {
       // Prepare experimental_telemetry for Langfuse if enabled
-      const telemetryConfig = this.langfuseEnabled ? {
+      const telemetryConfig = langfuseEnabled ? {
         isEnabled: true,
         functionId: `agent.${config.id}.stream`,
         metadata: {
@@ -595,6 +604,14 @@ export class AgentFactory {
           }),
         },
       } : undefined;
+
+      // Debug logging (only if DEBUG_LANGFUSE env var is set)
+      if (typeof process !== 'undefined' && process.env.DEBUG_LANGFUSE) {
+        console.log(`[Fred] Langfuse telemetry ${langfuseEnabled ? 'enabled' : 'disabled'} for agent.stream()`);
+        if (telemetryConfig) {
+          console.log(`[Fred] Telemetry config:`, JSON.stringify(telemetryConfig, null, 2));
+        }
+      }
 
       // Use ToolLoopAgent.stream() which handles the tool loop automatically
       // Use messages if we have history, otherwise use prompt (can't use both)
