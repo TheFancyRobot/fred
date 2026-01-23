@@ -190,6 +190,16 @@ export class Fred {
       if (this.langfuseClient) {
         this.agentManager.setLangfuseClient(this.langfuseClient);
         this.agentManager.setLangfuseEnabled(this.langfuseEnabled);
+        
+        // Set up trace ID getter for conversation grouping
+        const { getConversationTraceManager } = await import('./core/langfuse');
+        const traceManager = getConversationTraceManager();
+        traceManager.setLangfuseClient(this.langfuseClient);
+        
+        // Pass trace ID getter to agent factory so it can include langfuseTraceId in metadata
+        this.agentManager.setTraceIdGetter((conversationId: string, message: string) => {
+          return traceManager.getTraceId(conversationId, message);
+        });
       }
     } catch (error) {
       console.error('[Fred] Error initializing Langfuse:', error);
@@ -623,6 +633,13 @@ export class Fred {
 
     try {
       const conversationId = options?.conversationId || this.contextManager.generateConversationId();
+      
+      // Debug logging for conversation ID consistency
+      if (typeof process !== 'undefined' && process.env.DEBUG_LANGFUSE) {
+        console.log(`[Fred] processMessage called with conversationId: ${conversationId}`);
+        console.log(`[Fred] conversationId from options: ${options?.conversationId || 'NOT PROVIDED (generated new)'}`);
+      }
+      
       const useSemantic = options?.useSemanticMatching ?? true;
       const threshold = options?.semanticThreshold ?? 0.6;
 
@@ -630,215 +647,227 @@ export class Fred {
         rootSpan.setAttribute('conversation.id', conversationId);
       }
 
-      // Get conversation history (already in ModelMessage format)
+      // Get conversation history to determine message count
       const history = await this.contextManager.getHistory(conversationId);
-      
-      // Filter to user/assistant messages for agent processing
-      // Since AgentMessage is now ModelMessage, we can use history directly
-      const previousMessages: AgentMessage[] = history.filter(
-        msg => msg.role === 'user' || msg.role === 'assistant'
-      ) as AgentMessage[];
+      const messageCount = history.length + 1; // +1 for the message we're about to add
 
-      // Add user message to context
-      const userMessage: ModelMessage = {
-        role: 'user',
-        content: message,
-      };
-      await this.contextManager.addMessage(conversationId, userMessage);
+      // Wrap agent processing with conversation trace context
+      // Uses startActiveSpan pattern - AI SDK spans will automatically be children
+      const processWithTrace = async (): Promise<AgentResponse> => {
+        // Filter to user/assistant messages for agent processing
+        // Since AgentMessage is now ModelMessage, we can use history directly
+        const previousMessages: AgentMessage[] = history.filter(
+          msg => msg.role === 'user' || msg.role === 'assistant'
+        ) as AgentMessage[];
 
-      // Create semantic matcher if enabled
-      const semanticMatcher = useSemantic
-        ? async (msg: string, utterances: string[]) => {
-            return semanticMatch(msg, utterances, threshold);
+        // Add user message to context
+        const userMessage: ModelMessage = {
+          role: 'user',
+          content: message,
+        };
+        await this.contextManager.addMessage(conversationId, userMessage);
+
+        // Create semantic matcher if enabled
+        const semanticMatcher = useSemantic
+          ? async (msg: string, utterances: string[]) => {
+              return semanticMatch(msg, utterances, threshold);
+            }
+          : undefined;
+
+        // Route message to appropriate handler
+        const route = await this._routeMessage(message, semanticMatcher, previousMessages);
+
+        let response: AgentResponse;
+        let usedAgentId: string | null = null;
+
+        // Handle routing result
+        if (route.type === 'none') {
+          return null;
+        }
+
+        if (route.type === 'pipeline' || route.type === 'intent') {
+          // Pipeline or intent already executed, use the response
+          if (!route.response) {
+            throw new Error(`Route type ${route.type} did not return a response`);
           }
-        : undefined;
+          response = route.response;
+        } else if (route.type === 'agent' || route.type === 'default') {
+          // Agent routing - need to execute
+          if (!route.agent) {
+            throw new Error(`Route type ${route.type} did not return an agent`);
+          }
+          usedAgentId = route.agentId || null;
+          
+          // Create span for agent execution
+          const agentSpan = this.tracer?.startSpan('agent.process', {
+            kind: SpanKind.INTERNAL,
+            attributes: {
+              'agent.id': route.agentId || 'unknown',
+            },
+          });
 
-      // Route message to appropriate handler
-      const route = await this._routeMessage(message, semanticMatcher, previousMessages);
-
-      let response: AgentResponse;
-      let usedAgentId: string | null = null;
-
-      // Handle routing result
-      if (route.type === 'none') {
-        return null;
-      }
-
-      if (route.type === 'pipeline' || route.type === 'intent') {
-        // Pipeline or intent already executed, use the response
-        if (!route.response) {
-          throw new Error(`Route type ${route.type} did not return a response`);
-        }
-        response = route.response;
-      } else if (route.type === 'agent' || route.type === 'default') {
-        // Agent routing - need to execute
-        if (!route.agent) {
-          throw new Error(`Route type ${route.type} did not return an agent`);
-        }
-        usedAgentId = route.agentId || null;
-        
-        // Create span for agent execution
-        const agentSpan = this.tracer?.startSpan('agent.process', {
-          kind: SpanKind.INTERNAL,
-          attributes: {
-            'agent.id': route.agentId || 'unknown',
-          },
-        });
-
-        const previousAgentSpan = this.tracer?.getActiveSpan();
-        if (agentSpan) {
-          this.tracer?.setActiveSpan(agentSpan);
-        }
-
-        try {
-          response = await route.agent.processMessage(message, previousMessages);
+          const previousAgentSpan = this.tracer?.getActiveSpan();
           if (agentSpan) {
-            agentSpan.setAttribute('response.length', response.content.length);
-            agentSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
-            agentSpan.setAttribute('response.hasHandoff', response.handoff !== undefined);
-            agentSpan.setStatus('ok');
+            this.tracer?.setActiveSpan(agentSpan);
           }
-        } catch (error) {
-          if (agentSpan && error instanceof Error) {
-            agentSpan.recordException(error);
-            agentSpan.setStatus('error', error.message);
-          }
-          throw error;
-        } finally {
-          agentSpan?.end();
-          if (previousAgentSpan) {
-            this.tracer?.setActiveSpan(previousAgentSpan);
-          }
-        }
-      } else {
-        throw new Error(`Unknown route type: ${route.type}`);
-      }
 
-      // Process handoffs recursively (with max depth to prevent infinite loops)
-      const maxHandoffDepth = 10;
-      let handoffDepth = 0;
-      let currentResponse = response;
-      
-      while (currentResponse.handoff && handoffDepth < maxHandoffDepth) {
-        handoffDepth++;
-        const handoff = currentResponse.handoff;
-        
-        // Create span for handoff
-        const handoffSpan = this.tracer?.startSpan('agent.handoff', {
-          kind: SpanKind.INTERNAL,
-          attributes: {
-            'handoff.depth': handoffDepth,
-            'handoff.fromAgent': currentResponse.handoff?.agentId || 'unknown',
-            'handoff.toAgent': handoff.agentId,
-            'handoff.hasContext': handoff.context !== undefined,
-          },
-        });
-
-        const previousHandoffSpan = this.tracer?.getActiveSpan();
-        if (handoffSpan) {
-          this.tracer?.setActiveSpan(handoffSpan);
-        }
-
-        try {
-          // Get target agent
-          const targetAgent = this.agentManager.getAgent(handoff.agentId);
-          if (!targetAgent) {
-            // Target agent not found, return current response
-            if (handoffSpan) {
-              handoffSpan.addEvent('agent.notFound', { 'agent.id': handoff.agentId });
-              handoffSpan.setStatus('error', 'Target agent not found');
+          try {
+            response = await route.agent.processMessage(message, previousMessages, conversationId);
+            if (agentSpan) {
+              agentSpan.setAttribute('response.length', response.content.length);
+              agentSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
+              agentSpan.setAttribute('response.hasHandoff', response.handoff !== undefined);
+              agentSpan.setStatus('ok');
             }
-            break;
+          } catch (error) {
+            if (agentSpan && error instanceof Error) {
+              agentSpan.recordException(error);
+              agentSpan.setStatus('error', error.message);
+            }
+            throw error;
+          } finally {
+            agentSpan?.end();
+            if (previousAgentSpan) {
+              this.tracer?.setActiveSpan(previousAgentSpan);
+            }
           }
+        } else {
+          throw new Error(`Unknown route type: ${route.type}`);
+        }
 
-          // Prepare handoff message (use provided message or original message)
-          const handoffMessage = handoff.message || message;
+        // Process handoffs recursively (with max depth to prevent infinite loops)
+        const maxHandoffDepth = 10;
+        let handoffDepth = 0;
+        let currentResponse = response;
+        
+        while (currentResponse.handoff && handoffDepth < maxHandoffDepth) {
+          handoffDepth++;
+          const handoff = currentResponse.handoff;
           
-          // Add context from handoff if provided
-          const handoffContext = handoff.context ? `\n\nContext: ${JSON.stringify(handoff.context)}` : '';
-          const messageWithContext = handoffMessage + handoffContext;
+          // Create span for handoff
+          const handoffSpan = this.tracer?.startSpan('agent.handoff', {
+            kind: SpanKind.INTERNAL,
+            attributes: {
+              'handoff.depth': handoffDepth,
+              'handoff.fromAgent': currentResponse.handoff?.agentId || 'unknown',
+              'handoff.toAgent': handoff.agentId,
+              'handoff.hasContext': handoff.context !== undefined,
+            },
+          });
 
-          // Process message with target agent
-          currentResponse = await targetAgent.processMessage(messageWithContext, previousMessages);
-          
+          const previousHandoffSpan = this.tracer?.getActiveSpan();
           if (handoffSpan) {
-            handoffSpan.setAttribute('handoff.response.length', currentResponse.content.length);
-            handoffSpan.setStatus('ok');
+            this.tracer?.setActiveSpan(handoffSpan);
           }
-        } catch (error) {
-          if (handoffSpan && error instanceof Error) {
-            handoffSpan.recordException(error);
-            handoffSpan.setStatus('error', error.message);
-          }
-          throw error;
-        } finally {
-          handoffSpan?.end();
-          if (previousHandoffSpan) {
-            this.tracer?.setActiveSpan(previousHandoffSpan);
-          }
-        }
-      }
 
-      if (handoffDepth >= maxHandoffDepth) {
-        console.warn('Maximum handoff depth reached. Stopping handoff chain.');
-        if (rootSpan) {
-          rootSpan.addEvent('handoff.maxDepthReached', { 'maxDepth': maxHandoffDepth });
-        }
-      }
+          try {
+            // Get target agent
+            const targetAgent = this.agentManager.getAgent(handoff.agentId);
+            if (!targetAgent) {
+              // Target agent not found, return current response
+              if (handoffSpan) {
+                handoffSpan.addEvent('agent.notFound', { 'agent.id': handoff.agentId });
+                handoffSpan.setStatus('error', 'Target agent not found');
+              }
+              break;
+            }
 
-      if (rootSpan) {
-        rootSpan.setAttributes({
-          'response.length': currentResponse.content.length,
-          'response.hasToolCalls': (currentResponse.toolCalls?.length ?? 0) > 0,
-          'handoff.depth': handoffDepth,
-        });
-        rootSpan.setStatus('ok');
-      }
+            // Prepare handoff message (use provided message or original message)
+            const handoffMessage = handoff.message || message;
+            
+            // Add context from handoff if provided
+            const handoffContext = handoff.context ? `\n\nContext: ${JSON.stringify(handoff.context)}` : '';
+            const messageWithContext = handoffMessage + handoffContext;
 
-      // Handle tool calls: add them to context for persistence
-      // Note: ToolLoopAgent handles the tool loop internally, so we don't need to continue
-      // the conversation manually. The response is already the final response after all tool calls.
-      if (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
-        const hasToolResults = currentResponse.toolCalls.some(tc => tc.result !== undefined);
-        
-        if (hasToolResults) {
-          // Add assistant message with tool calls to context
-          // The AI SDK format uses toolCalls array in assistant messages
-          const assistantMessage: ModelMessage = {
-            role: 'assistant',
-            content: currentResponse.content || '', // May be empty if only tool calls
-            toolCalls: currentResponse.toolCalls.map((tc, idx) => ({
-              toolCallId: `call_${tc.toolId}_${Date.now()}_${idx}`,
-              toolName: tc.toolId,
-              args: tc.args,
-            })),
-          };
-          await this.contextManager.addMessage(conversationId, assistantMessage);
-
-          // Add tool results to context (AI SDK uses 'tool' role for tool results)
-          for (let idx = 0; idx < currentResponse.toolCalls.length; idx++) {
-            const toolCall = currentResponse.toolCalls[idx];
-            if (toolCall.result !== undefined) {
-              const toolCallId = `call_${toolCall.toolId}_${Date.now()}_${idx}`;
-              const toolResultMessage: ModelMessage = {
-                role: 'tool',
-                content: typeof toolCall.result === 'string' 
-                  ? toolCall.result 
-                  : JSON.stringify(toolCall.result),
-                toolCallId,
-              };
-              await this.contextManager.addMessage(conversationId, toolResultMessage);
+            // Process message with target agent
+            currentResponse = await targetAgent.processMessage(messageWithContext, previousMessages, conversationId);
+            
+            if (handoffSpan) {
+              handoffSpan.setAttribute('handoff.response.length', currentResponse.content.length);
+              handoffSpan.setStatus('ok');
+            }
+          } catch (error) {
+            if (handoffSpan && error instanceof Error) {
+              handoffSpan.recordException(error);
+              handoffSpan.setStatus('error', error.message);
+            }
+            throw error;
+          } finally {
+            handoffSpan?.end();
+            if (previousHandoffSpan) {
+              this.tracer?.setActiveSpan(previousHandoffSpan);
             }
           }
         }
-      }
 
-      // Add assistant response to context (if no tool calls or tool calls already handled)
-      const assistantMessage: ModelMessage = {
-        role: 'assistant',
-        content: currentResponse.content,
+        if (handoffDepth >= maxHandoffDepth) {
+          console.warn('Maximum handoff depth reached. Stopping handoff chain.');
+          if (rootSpan) {
+            rootSpan.addEvent('handoff.maxDepthReached', { 'maxDepth': maxHandoffDepth });
+          }
+        }
+
+        if (rootSpan) {
+          rootSpan.setAttributes({
+            'response.length': currentResponse.content.length,
+            'response.hasToolCalls': (currentResponse.toolCalls?.length ?? 0) > 0,
+            'handoff.depth': handoffDepth,
+          });
+          rootSpan.setStatus('ok');
+        }
+
+        // Handle tool calls: add them to context for persistence
+        // Note: ToolLoopAgent handles the tool loop internally, so we don't need to continue
+        // the conversation manually. The response is already the final response after all tool calls.
+        if (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
+          const hasToolResults = currentResponse.toolCalls.some(tc => tc.result !== undefined);
+          
+          if (hasToolResults) {
+            // Add assistant message with tool calls to context
+            // The AI SDK format uses toolCalls array in assistant messages
+            const assistantMessage: ModelMessage = {
+              role: 'assistant',
+              content: currentResponse.content || '', // May be empty if only tool calls
+              toolCalls: currentResponse.toolCalls.map((tc, idx) => ({
+                toolCallId: `call_${tc.toolId}_${Date.now()}_${idx}`,
+                toolName: tc.toolId,
+                args: tc.args,
+              })),
+            };
+            await this.contextManager.addMessage(conversationId, assistantMessage);
+
+            // Add tool results to context (AI SDK uses 'tool' role for tool results)
+            for (let idx = 0; idx < currentResponse.toolCalls.length; idx++) {
+              const toolCall = currentResponse.toolCalls[idx];
+              if (toolCall.result !== undefined) {
+                const toolCallId = `call_${toolCall.toolId}_${Date.now()}_${idx}`;
+                const toolResultMessage: ModelMessage = {
+                  role: 'tool',
+                  content: typeof toolCall.result === 'string' 
+                    ? toolCall.result 
+                    : JSON.stringify(toolCall.result),
+                  toolCallId,
+                };
+                await this.contextManager.addMessage(conversationId, toolResultMessage);
+              }
+            }
+          }
+        }
+
+        // Add assistant response to context (if no tool calls or tool calls already handled)
+        const assistantMessage: ModelMessage = {
+          role: 'assistant',
+          content: currentResponse.content,
+        };
+        await this.contextManager.addMessage(conversationId, assistantMessage);
+
+        return currentResponse;
       };
-      await this.contextManager.addMessage(conversationId, assistantMessage);
+
+      // Execute message processing
+      // Trace grouping is handled via langfuseTraceId in experimental_telemetry.metadata
+      // which is passed when calling agent.processMessage with conversationId
+      const currentResponse = await processWithTrace();
 
       return currentResponse;
     } catch (error) {
@@ -879,8 +908,9 @@ export class Fred {
     const useSemantic = options?.useSemanticMatching ?? true;
     const threshold = options?.semanticThreshold ?? 0.6;
 
-    // Get conversation history (already in ModelMessage format)
+    // Get conversation history to determine message count
     const history = await this.contextManager.getHistory(conversationId);
+    const messageCount = history.length + 1; // +1 for the message we're about to add
     
     // Filter to user/assistant messages for agent processing
     // Since AgentMessage is now ModelMessage, we can use history directly
@@ -943,92 +973,101 @@ export class Fred {
       throw new Error(`Unknown route type: ${route.type}`);
     }
 
-    // Stream the message using the agent's streamMessage method
-    if (agent.streamMessage) {
-      let fullText = '';
-      let finalToolCalls: any[] | undefined;
-      let hasYieldedAnything = false;
+    // Helper async generator for streaming
+    const streamGenerator = async function* (this: Fred) {
+      // Stream the message using the agent's streamMessage method
+      if (agent.streamMessage) {
+        let fullText = '';
+        let finalToolCalls: any[] | undefined;
+        let hasYieldedAnything = false;
 
-      try {
-        for await (const chunk of agent.streamMessage(message, previousMessages)) {
-          hasYieldedAnything = true;
-          // Only update fullText if chunk has actual content
-          if (chunk.fullText) {
-            fullText = chunk.fullText;
+        try {
+          for await (const chunk of agent.streamMessage(message, previousMessages, conversationId)) {
+            hasYieldedAnything = true;
+            // Only update fullText if chunk has actual content
+            if (chunk.fullText) {
+              fullText = chunk.fullText;
+            }
+            if (chunk.toolCalls) {
+              finalToolCalls = chunk.toolCalls;
+            }
+            // Always yield chunks - even if empty, they indicate progress
+            yield {
+              textDelta: chunk.textDelta || '',
+              fullText: chunk.fullText || fullText,
+              toolCalls: chunk.toolCalls,
+            };
           }
-          if (chunk.toolCalls) {
-            finalToolCalls = chunk.toolCalls;
-          }
-          // Always yield chunks - even if empty, they indicate progress
-          yield {
-            textDelta: chunk.textDelta || '',
-            fullText: chunk.fullText || fullText,
-            toolCalls: chunk.toolCalls,
-          };
-        }
         } catch (streamError) {
           throw streamError;
         }
 
         if (!hasYieldedAnything) {
-      }
+          // Handle case where no chunks were yielded
+        }
 
-      // Add assistant response to context
-      const assistantMessage: ModelMessage = {
-        role: 'assistant',
-        content: fullText,
-      };
-      await this.contextManager.addMessage(conversationId, assistantMessage);
+        // Add assistant response to context
+        const assistantMessage: ModelMessage = {
+          role: 'assistant',
+          content: fullText,
+        };
+        await this.contextManager.addMessage(conversationId, assistantMessage);
 
-      // Handle tool calls if any
-      if (finalToolCalls && finalToolCalls.length > 0) {
-        const hasToolResults = finalToolCalls.some(tc => tc.result !== undefined);
-        
-        if (hasToolResults) {
-          // Add tool calls and results to context
-          const toolCallMessage: ModelMessage = {
-            role: 'assistant',
-            content: '',
-            toolCalls: finalToolCalls.map((tc, idx) => ({
-              toolCallId: `call_${tc.toolId}_${Date.now()}_${idx}`,
-              toolName: tc.toolId,
-              args: tc.args,
-            })),
-          };
-          await this.contextManager.addMessage(conversationId, toolCallMessage);
+        // Handle tool calls if any
+        if (finalToolCalls && finalToolCalls.length > 0) {
+          const hasToolResults = finalToolCalls.some(tc => tc.result !== undefined);
+          
+          if (hasToolResults) {
+            // Add tool calls and results to context
+            const toolCallMessage: ModelMessage = {
+              role: 'assistant',
+              content: '',
+              toolCalls: finalToolCalls.map((tc, idx) => ({
+                toolCallId: `call_${tc.toolId}_${Date.now()}_${idx}`,
+                toolName: tc.toolId,
+                args: tc.args,
+              })),
+            };
+            await this.contextManager.addMessage(conversationId, toolCallMessage);
 
-          for (let idx = 0; idx < finalToolCalls.length; idx++) {
-            const toolCall = finalToolCalls[idx];
-            if (toolCall.result !== undefined) {
-              const toolCallId = `call_${toolCall.toolId}_${Date.now()}_${idx}`;
-              const toolResultMessage: ModelMessage = {
-                role: 'tool',
-                content: typeof toolCall.result === 'string' 
-                  ? toolCall.result 
-                  : JSON.stringify(toolCall.result),
-                toolCallId,
-              };
-              await this.contextManager.addMessage(conversationId, toolResultMessage);
+            for (let idx = 0; idx < finalToolCalls.length; idx++) {
+              const toolCall = finalToolCalls[idx];
+              if (toolCall.result !== undefined) {
+                const toolCallId = `call_${toolCall.toolId}_${Date.now()}_${idx}`;
+                const toolResultMessage: ModelMessage = {
+                  role: 'tool',
+                  content: typeof toolCall.result === 'string' 
+                    ? toolCall.result 
+                    : JSON.stringify(toolCall.result),
+                  toolCallId,
+                };
+                await this.contextManager.addMessage(conversationId, toolResultMessage);
+              }
             }
-          }
 
-          // Note: ToolLoopAgent handles the tool loop internally, so we don't need to continue
-          // streaming if there's no content. The ToolLoopAgent already handled that and the
-          // fullText should already contain the final response after all tool calls.
+            // Note: ToolLoopAgent handles the tool loop internally, so we don't need to continue
+            // streaming if there's no content. The ToolLoopAgent already handled that and the
+            // fullText should already contain the final response after all tool calls.
+          }
+        }
+      } else {
+        // Fallback to non-streaming if agent doesn't support streaming
+        const response = await agent.processMessage(message, previousMessages, conversationId);
+        if (response.content) {
+          // Simulate streaming by yielding the full text
+          yield {
+            textDelta: response.content,
+            fullText: response.content,
+            toolCalls: response.toolCalls,
+          };
         }
       }
-    } else {
-      // Fallback to non-streaming if agent doesn't support streaming
-      const response = await agent.processMessage(message, previousMessages);
-      if (response.content) {
-        // Simulate streaming by yielding the full text
-        yield {
-          textDelta: response.content,
-          fullText: response.content,
-          toolCalls: response.toolCalls,
-        };
-      }
-    }
+    }.bind(this);
+
+    // Execute streaming
+    // Trace grouping is handled via langfuseTraceId in experimental_telemetry.metadata
+    // which is passed when calling agent.streamMessage with conversationId
+    yield* streamGenerator();
   }
 
   /**

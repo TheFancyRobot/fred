@@ -11,6 +11,7 @@ export {
   compileLangfusePrompt,
   type LangfusePromptInfo,
 } from '../../utils/langfuse-prompt-loader';
+export { ConversationTraceManager, getConversationTraceManager } from './trace-manager';
 
 /**
  * Create a Langfuse client instance

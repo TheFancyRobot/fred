@@ -885,6 +885,9 @@ class DevChatRunner {
       this.conversationId = this.fred.getContextManager().generateConversationId();
     }
 
+    // Note: Conversation trace is created automatically by processMessage()/streamMessage()
+    // when Langfuse is enabled - no need to create it here
+
     console.log(`\n💬 Fred Dev Chat`);
     console.log(`📝 Conversation ID: ${this.conversationId}`);
     console.log('💡 Type your messages and press Enter. Code changes auto-reload!');
@@ -942,9 +945,20 @@ class DevChatRunner {
 
       if (cmd === 'clear' || cmd === '/clear') {
         if (this.fred) {
+          // End current conversation trace if Langfuse is enabled
+          if ((this.fred as any).langfuseEnabled && this.conversationId) {
+            const { getConversationTraceManager } = await import('./core/langfuse');
+            const traceManager = getConversationTraceManager();
+            traceManager.endConversationTrace(this.conversationId);
+          }
+
           const contextManager = this.fred.getContextManager();
           await contextManager.clearContext(this.conversationId!);
           this.conversationId = this.fred.getContextManager().generateConversationId();
+          
+          // Note: New conversation trace will be created automatically by processMessage()
+          // when the next message is processed
+          
           console.log(`\n🧹 Conversation cleared. New ID: ${this.conversationId}\n`);
         }
         continue;

@@ -46,6 +46,7 @@ export class AgentFactory {
   private tracer?: Tracer;
   private langfuseClient?: any;
   private langfuseEnabled: boolean = false;
+  private getTraceId?: (conversationId: string, message: string) => string; // Function to get trace ID for a conversation
   private metrics: MCPClientMetrics = {
     totalConnections: 0,
     activeConnections: 0,
@@ -79,6 +80,14 @@ export class AgentFactory {
    */
   setLangfuseEnabled(enabled: boolean): void {
     this.langfuseEnabled = enabled;
+  }
+
+  /**
+   * Set function to get trace ID for a conversation
+   * This trace ID will be passed to AI SDK via experimental_telemetry.metadata.langfuseTraceId
+   */
+  setTraceIdGetter(getTraceId: (conversationId: string, message: string) => string): void {
+    this.getTraceId = getTraceId;
   }
 
   /**
@@ -217,8 +226,8 @@ export class AgentFactory {
     config: AgentConfig,
     provider: AIProvider
   ): Promise<{
-    processMessage: (message: string, messages?: AgentMessage[]) => Promise<AgentResponse>;
-    streamMessage: (message: string, messages?: AgentMessage[]) => AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown>;
+    processMessage: (message: string, messages?: AgentMessage[], conversationId?: string) => Promise<AgentResponse>;
+    streamMessage: (message: string, messages?: AgentMessage[], conversationId?: string) => AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown>;
   }> {
     const model = provider.getModel(config.model);
     
@@ -450,9 +459,11 @@ export class AgentFactory {
     });
 
     // Create the agent processing function
+    // Accept optional conversationId to get trace ID for Langfuse grouping
     const processMessage = async (
       message: string,
-      previousMessages: AgentMessage[] = []
+      previousMessages: AgentMessage[] = [],
+      conversationId?: string
     ): Promise<AgentResponse> => {
       // Create span for model call if tracing is enabled
       const modelSpan = this.tracer?.startSpan('model.call', {
@@ -477,13 +488,24 @@ export class AgentFactory {
       let result;
       try {
         // Prepare experimental_telemetry for Langfuse if enabled
+        // Following AI SDK pattern: pass langfuseTraceId to group multiple executions in one trace
+        // The trace must be created BEFORE this call (done in getTraceId)
+        // IMPORTANT: conversationId must be consistent across all messages in the conversation
+        const langfuseTraceId = (conversationId && this.getTraceId) 
+          ? this.getTraceId(conversationId, message)
+          : undefined;
+          
       const telemetryConfig = langfuseEnabled ? {
           isEnabled: true,
-          functionId: `agent.${config.id}.generate`,
+          functionId: `agent.${config.id}.generate`, // This becomes the root span name for this execution
           metadata: {
             agentId: config.id,
             model: config.model,
             platform: config.platform,
+            ...(langfuseTraceId && {
+              langfuseTraceId, // Pass trace ID to group all messages in one trace (must match existing trace)
+              langfuseUpdateParent: false, // Do not update the parent trace with execution results
+            }),
             ...(langfusePromptInfo && {
               promptName: langfusePromptInfo.name,
               promptVersion: langfusePromptInfo.version,
@@ -585,18 +607,31 @@ export class AgentFactory {
     };
 
     // Create streaming function for this agent
+    // Accept optional conversationId to get trace ID for Langfuse grouping
     const streamMessage = async function* (
       message: string,
-      previousMessages: AgentMessage[] = []
+      previousMessages: AgentMessage[] = [],
+      conversationId?: string
     ): AsyncGenerator<{ textDelta: string; fullText: string; toolCalls?: any[] }, void, unknown> {
       // Prepare experimental_telemetry for Langfuse if enabled
+      // Following AI SDK pattern: pass langfuseTraceId to group multiple executions in one trace
+      // The trace must be created BEFORE this call (done in getTraceId)
+      // IMPORTANT: conversationId must be consistent across all messages in the conversation
+      const langfuseTraceId = (conversationId && this.getTraceId) 
+        ? this.getTraceId(conversationId, message)
+        : undefined;
+        
       const telemetryConfig = langfuseEnabled ? {
         isEnabled: true,
-        functionId: `agent.${config.id}.stream`,
+        functionId: `agent.${config.id}.stream`, // This becomes the root span name for this execution
         metadata: {
           agentId: config.id,
           model: config.model,
           platform: config.platform,
+          ...(langfuseTraceId && {
+            langfuseTraceId, // Pass trace ID to group all messages in one trace (must match existing trace)
+            langfuseUpdateParent: false, // Do not update the parent trace with execution results
+          }),
           ...(langfusePromptInfo && {
             promptName: langfusePromptInfo.name,
             promptVersion: langfusePromptInfo.version,

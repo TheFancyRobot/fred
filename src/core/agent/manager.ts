@@ -52,6 +52,14 @@ export class AgentManager {
   }
 
   /**
+   * Set trace ID getter for conversation grouping
+   * This allows agents to include langfuseTraceId in experimental_telemetry.metadata
+   */
+  setTraceIdGetter(getTraceId: (conversationId: string, message: string) => string): void {
+    this.factory.setTraceIdGetter(getTraceId);
+  }
+
+  /**
    * Get MCP client connection metrics
    */
   getMCPMetrics() {
