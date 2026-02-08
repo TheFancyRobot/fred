@@ -25,6 +25,10 @@ import {
   submitInput,
   backspaceAtCursor,
   deleteAtCursor,
+  toggleCommandPalette,
+  closeCommandPalette,
+  updateCommandPaletteQuery,
+  moveCommandPaletteSelection,
 } from './state.js';
 
 /**
@@ -44,6 +48,13 @@ export type KeyAction =
   | { type: 'delete' }
   | { type: 'insert-newline' }
   | { type: 'submit' }
+  | { type: 'toggle-command-palette' }
+  | { type: 'close-command-palette' }
+  | { type: 'palette-next' }
+  | { type: 'palette-prev' }
+  | { type: 'palette-backspace' }
+  | { type: 'palette-query'; text: string }
+  | { type: 'palette-submit' }
   | { type: 'quit' }
   | { type: 'noop' };
 
@@ -52,6 +63,43 @@ export type KeyAction =
  */
 export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   const { name, shift, ctrl, meta } = event;
+
+  const isPaletteToggle = (ctrl || meta) && name === 'k';
+  if (isPaletteToggle) {
+    return { type: 'toggle-command-palette' };
+  }
+
+  if (state.commandPalette.isOpen) {
+    if (name === 'escape') {
+      return { type: 'close-command-palette' };
+    }
+
+    if (name === 'up') {
+      return { type: 'palette-prev' };
+    }
+
+    if (name === 'down') {
+      return { type: 'palette-next' };
+    }
+
+    if (name === 'backspace' || name === 'delete') {
+      return { type: 'palette-backspace' };
+    }
+
+    if (name === 'enter' || name === 'return') {
+      return { type: 'palette-submit' };
+    }
+
+    if (name === 'space') {
+      return { type: 'palette-query', text: ' ' };
+    }
+
+    if (name.length === 1 && !ctrl && !meta) {
+      return { type: 'palette-query', text: name };
+    }
+
+    return { type: 'noop' };
+  }
 
   // Global keybindings (work regardless of focus)
   if (name === 'tab') {
@@ -199,6 +247,31 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'submit':
       return submitInput(state).state;
+
+    case 'toggle-command-palette':
+      return toggleCommandPalette(state);
+
+    case 'close-command-palette':
+      return closeCommandPalette(state);
+
+    case 'palette-next':
+      return moveCommandPaletteSelection(state, 1);
+
+    case 'palette-prev':
+      return moveCommandPaletteSelection(state, -1);
+
+    case 'palette-backspace': {
+      if (state.commandPalette.query.length === 0) {
+        return state;
+      }
+      return updateCommandPaletteQuery(state, state.commandPalette.query.slice(0, -1));
+    }
+
+    case 'palette-query':
+      return updateCommandPaletteQuery(state, state.commandPalette.query + action.text);
+
+    case 'palette-submit':
+      return closeCommandPalette(state);
 
     case 'quit':
       // Handled by app, just return state

@@ -34,6 +34,33 @@ export interface StreamingState {
   lastError: string | null;
 }
 
+export interface SessionTelemetry {
+  model: string;
+  provider: string;
+  sessionCostUsd: number;
+  inputTokenCount: number;
+  outputTokenCount: number;
+}
+
+export type CommandPaletteScope = FocusablePaneId;
+
+export interface CommandPaletteAction {
+  id: string;
+  label: string;
+  group: 'global' | FocusablePaneId;
+  scopes: ReadonlyArray<CommandPaletteScope>;
+  keywords?: ReadonlyArray<string>;
+}
+
+export interface CommandPaletteState {
+  isOpen: boolean;
+  query: string;
+  selectedIndex: number;
+  scope: CommandPaletteScope;
+  actions: ReadonlyArray<CommandPaletteAction>;
+  filteredActions: ReadonlyArray<CommandPaletteAction>;
+}
+
 /**
  * Input history state for Up/Down navigation
  */
@@ -52,6 +79,8 @@ export interface TuiState {
     messages: Array<{ role: string; content: string }>;
   };
   streaming: StreamingState;
+  telemetry: SessionTelemetry;
+  commandPalette: CommandPaletteState;
   input: {
     text: string;
     cursorPosition: number;
@@ -67,6 +96,8 @@ export interface TuiState {
  * Create initial TUI state with input pane focused
  */
 export function createInitialTuiState(): TuiState {
+  const commandPaletteActions = createCommandPaletteActions();
+
   return {
     focusedPane: 'input',
     transcript: {
@@ -86,6 +117,21 @@ export function createInitialTuiState(): TuiState {
       tokensPerSecond: 0,
       lastError: null,
     },
+    telemetry: {
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      sessionCostUsd: 0,
+      inputTokenCount: 0,
+      outputTokenCount: 0,
+    },
+    commandPalette: {
+      isOpen: false,
+      query: '',
+      selectedIndex: 0,
+      scope: 'input',
+      actions: commandPaletteActions,
+      filteredActions: getFilteredPaletteActions(commandPaletteActions, '', 'input'),
+    },
     input: {
       text: '',
       cursorPosition: 0,
@@ -99,6 +145,206 @@ export function createInitialTuiState(): TuiState {
       items: [],
     },
   };
+}
+
+const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
+  {
+    id: 'focus-next-pane',
+    label: 'Focus Next Pane',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['tab', 'focus', 'pane', 'next'],
+  },
+  {
+    id: 'focus-previous-pane',
+    label: 'Focus Previous Pane',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['shift', 'tab', 'focus', 'pane', 'prev'],
+  },
+  {
+    id: 'jump-input-pane',
+    label: 'Jump to Input Pane',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['input', 'composer', 'focus'],
+  },
+  {
+    id: 'jump-sidebar-pane',
+    label: 'Jump to Sidebar Pane',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['sidebar', 'sessions', 'focus'],
+  },
+  {
+    id: 'jump-transcript-pane',
+    label: 'Jump to Transcript Pane',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['transcript', 'chat', 'focus'],
+  },
+  {
+    id: 'clear-input',
+    label: 'Clear Input',
+    group: 'input',
+    scopes: ['input'],
+    keywords: ['clear', 'reset', 'composer'],
+  },
+  {
+    id: 'scroll-transcript-down',
+    label: 'Scroll Transcript Down',
+    group: 'transcript',
+    scopes: ['transcript'],
+    keywords: ['scroll', 'down', 'transcript'],
+  },
+  {
+    id: 'scroll-transcript-up',
+    label: 'Scroll Transcript Up',
+    group: 'transcript',
+    scopes: ['transcript'],
+    keywords: ['scroll', 'up', 'transcript'],
+  },
+  {
+    id: 'select-next-session',
+    label: 'Select Next Session',
+    group: 'sidebar',
+    scopes: ['sidebar'],
+    keywords: ['session', 'next', 'sidebar'],
+  },
+  {
+    id: 'select-previous-session',
+    label: 'Select Previous Session',
+    group: 'sidebar',
+    scopes: ['sidebar'],
+    keywords: ['session', 'previous', 'sidebar'],
+  },
+  {
+    id: 'submit-input',
+    label: 'Submit Input',
+    group: 'input',
+    scopes: ['input'],
+    keywords: ['submit', 'send', 'input'],
+  },
+];
+
+function createCommandPaletteActions(): ReadonlyArray<CommandPaletteAction> {
+  return [...DEFAULT_COMMAND_PALETTE_ACTIONS];
+}
+
+export function getFilteredPaletteActions(
+  actions: ReadonlyArray<CommandPaletteAction>,
+  query: string,
+  scope: CommandPaletteScope,
+): ReadonlyArray<CommandPaletteAction> {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const scoped = actions.filter((action) => action.scopes.includes(scope));
+  const ranked = scoped.map((action, index) => {
+    const haystack = [action.label, action.id, ...(action.keywords ?? [])].join(' ').toLowerCase();
+    const startsWithScore = normalizedQuery.length > 0 && action.label.toLowerCase().startsWith(normalizedQuery) ? 2 : 0;
+    const containsScore = normalizedQuery.length > 0 && haystack.includes(normalizedQuery) ? 1 : 0;
+    const score = normalizedQuery.length === 0 ? 0 : startsWithScore + containsScore;
+    return { action, index, score, matches: normalizedQuery.length === 0 || containsScore > 0 || startsWithScore > 0 };
+  });
+
+  return ranked
+    .filter((entry) => entry.matches)
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return right.score - left.score;
+      }
+
+      const nameOrder = left.action.label.localeCompare(right.action.label);
+      if (nameOrder !== 0) {
+        return nameOrder;
+      }
+
+      return left.index - right.index;
+    })
+    .map((entry) => entry.action);
+}
+
+function withCommandPaletteState(
+  state: TuiState,
+  updates: Partial<CommandPaletteState>,
+): CommandPaletteState {
+  return {
+    ...state.commandPalette,
+    ...updates,
+  };
+}
+
+export function openCommandPalette(state: TuiState): TuiState {
+  const scope = state.focusedPane;
+  const filteredActions = getFilteredPaletteActions(state.commandPalette.actions, '', scope);
+
+  return {
+    ...state,
+    commandPalette: withCommandPaletteState(state, {
+      isOpen: true,
+      query: '',
+      selectedIndex: 0,
+      scope,
+      filteredActions,
+    }),
+  };
+}
+
+export function closeCommandPalette(state: TuiState): TuiState {
+  const scope = state.focusedPane;
+
+  return {
+    ...state,
+    commandPalette: withCommandPaletteState(state, {
+      isOpen: false,
+      query: '',
+      selectedIndex: 0,
+      scope,
+      filteredActions: getFilteredPaletteActions(state.commandPalette.actions, '', scope),
+    }),
+  };
+}
+
+export function toggleCommandPalette(state: TuiState): TuiState {
+  return state.commandPalette.isOpen ? closeCommandPalette(state) : openCommandPalette(state);
+}
+
+export function updateCommandPaletteQuery(state: TuiState, query: string): TuiState {
+  const filteredActions = getFilteredPaletteActions(
+    state.commandPalette.actions,
+    query,
+    state.commandPalette.scope,
+  );
+
+  return {
+    ...state,
+    commandPalette: withCommandPaletteState(state, {
+      query,
+      selectedIndex: Math.max(0, Math.min(state.commandPalette.selectedIndex, Math.max(0, filteredActions.length - 1))),
+      filteredActions,
+    }),
+  };
+}
+
+export function moveCommandPaletteSelection(state: TuiState, delta: number): TuiState {
+  const count = state.commandPalette.filteredActions.length;
+  if (count === 0) {
+    return {
+      ...state,
+      commandPalette: withCommandPaletteState(state, { selectedIndex: 0 }),
+    };
+  }
+
+  const normalized = ((state.commandPalette.selectedIndex + delta) % count + count) % count;
+  return {
+    ...state,
+    commandPalette: withCommandPaletteState(state, { selectedIndex: normalized }),
+  };
+}
+
+export function getSelectedCommandPaletteAction(state: TuiState): CommandPaletteAction | null {
+  const selected = state.commandPalette.filteredActions[state.commandPalette.selectedIndex];
+  return selected ?? null;
 }
 
 /**
@@ -128,9 +374,19 @@ export function prevFocusablePane(current: FocusablePaneId): FocusablePaneId {
  * Apply focus change to state
  */
 export function setFocusedPane(state: TuiState, pane: FocusablePaneId): TuiState {
+  const nextScope = state.commandPalette.isOpen ? pane : state.commandPalette.scope;
+  const filteredActions = state.commandPalette.isOpen
+    ? getFilteredPaletteActions(state.commandPalette.actions, state.commandPalette.query, pane)
+    : state.commandPalette.filteredActions;
+
   return {
     ...state,
     focusedPane: pane,
+    commandPalette: withCommandPaletteState(state, {
+      scope: nextScope,
+      filteredActions,
+      selectedIndex: 0,
+    }),
   };
 }
 
