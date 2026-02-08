@@ -44,7 +44,12 @@
       },
       "dependencies": {
         "@fancyrobot/fred": "workspace:^",
+        "@fancyrobot/fred-anthropic": "workspace:^",
         "@fancyrobot/fred-dev": "workspace:^",
+        "@fancyrobot/fred-google": "workspace:^",
+        "@fancyrobot/fred-groq": "workspace:^",
+        "@fancyrobot/fred-openai": "workspace:^",
+        "@fancyrobot/fred-openrouter": "workspace:^",
         "@opentui/core": "^0.1.77",
       },
       "devDependencies": {

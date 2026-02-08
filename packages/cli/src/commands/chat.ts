@@ -9,6 +9,26 @@ import { createFredTuiApp } from '../tui/app.js';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 
 /**
+ * Map platform ID to its provider package name.
+ * Dynamic import triggers the package's self-registration via registerBuiltinPack().
+ */
+export const PROVIDER_PACKAGES: Record<string, string> = {
+  openai: '@fancyrobot/fred-openai',
+  anthropic: '@fancyrobot/fred-anthropic',
+  google: '@fancyrobot/fred-google',
+  groq: '@fancyrobot/fred-groq',
+  openrouter: '@fancyrobot/fred-openrouter',
+};
+
+export async function loadProviderPackage(platform: string): Promise<void> {
+  const packageName = PROVIDER_PACKAGES[platform];
+  if (!packageName) {
+    throw new Error(`Unknown provider platform: ${platform}. Supported: ${Object.keys(PROVIDER_PACKAGES).join(', ')}`);
+  }
+  await import(packageName);
+}
+
+/**
  * Detect which AI provider is available based on environment variables
  * Returns platform and model, or null if no provider available
  */
@@ -70,8 +90,6 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
   }
 
   // No config or config failed - use auto-detection
-  await fred.registerDefaultProviders();
-
   const providerInfo = detectAvailableProvider();
   if (!providerInfo.platform || !providerInfo.model) {
     throw new Error(
@@ -83,6 +101,12 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
       '  OPENROUTER_API_KEY'
     );
   }
+
+  // Import the detected provider package (triggers self-registration via registerBuiltinPack)
+  await loadProviderPackage(providerInfo.platform);
+
+  // Now register — BUILTIN_PACKS will contain the imported provider
+  await fred.registerDefaultProviders();
 
   // Create default agent if none exist
   const agents = fred.getAgents();
