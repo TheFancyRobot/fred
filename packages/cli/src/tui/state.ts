@@ -310,7 +310,7 @@ export function updateInputText(state: TuiState, text: string, cursorPosition?: 
  * Navigate input history (Up/Down when input is empty or already navigating history)
  */
 export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'): TuiState {
-  const { history, text } = state.input;
+  const { history, text, cursorPosition } = state.input;
 
   if (history.entries.length === 0) {
     return state;
@@ -321,8 +321,9 @@ export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'):
   // 2. We're already navigating history (currentIndex !== -1)
   const isNavigatingHistory = history.currentIndex !== -1;
   const textIsEmpty = text.length === 0;
+  const cursorAtStart = cursorPosition === 0;
 
-  if (!textIsEmpty && !isNavigatingHistory) {
+  if (!isNavigatingHistory && (!textIsEmpty || !cursorAtStart)) {
     return state;
   }
 
@@ -376,21 +377,20 @@ export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'):
  */
 export function submitInput(state: TuiState): { state: TuiState; submittedText: string } {
   const text = state.input.text;
+  if (!text.trim()) {
+    return { state, submittedText: '' };
+  }
+
   const newState: TuiState = {
     ...state,
     input: {
       ...state.input,
       text: '',
       cursorPosition: 0,
-      history: text.trim()
-        ? {
-            entries: [...state.input.history.entries, text],
-            currentIndex: -1,
-          }
-        : {
-            ...state.input.history,
-            currentIndex: -1,
-          },
+      history: {
+        entries: [...state.input.history.entries, text],
+        currentIndex: -1,
+      },
     },
   };
   return { state: newState, submittedText: text };

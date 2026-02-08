@@ -204,6 +204,33 @@ describe('TUI Keymap', () => {
       expect(action.type).toBe('cursor-left');
     });
 
+    test('Up arrow does not start history when cursor is not at position 0', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = '';
+      state.input.cursorPosition = 2;
+      state.input.history.entries = ['command 1', 'command 2'];
+
+      const event = makeKey({ name: 'up' });
+      const action = mapKeyToAction(event, state);
+
+      expect(action.type).toBe('cursor-left');
+    });
+
+    test('history navigation continues after first recall even if cursor moved', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = 'command 2';
+      state.input.cursorPosition = 3;
+      state.input.history.entries = ['command 1', 'command 2'];
+      state.input.history.currentIndex = 1;
+
+      const event = makeKey({ name: 'up' });
+      const action = mapKeyToAction(event, state);
+
+      expect(action.type).toBe('history-up');
+    });
+
     test('Down arrow navigates history forward when navigating', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'input';
@@ -399,6 +426,22 @@ describe('TUI Keymap', () => {
       expect(newState.input.cursorPosition).toBe(0);
     });
 
+    test('Shift+Enter inserts newline instead of submitting', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = 'hello';
+      state.input.cursorPosition = 5;
+
+      const event = makeKey({ name: 'enter', shift: true });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('insert-newline');
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.input.text).toBe('hello\n');
+      expect(newState.input.cursorPosition).toBe(6);
+      expect(newState.input.history.entries).toHaveLength(0);
+    });
+
     test('submit adds text to history', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'input';
@@ -420,6 +463,20 @@ describe('TUI Keymap', () => {
       const action = mapKeyToAction(event, state);
       const newState = applyKeyAction(state, action);
 
+      expect(newState.input.history.entries).toHaveLength(0);
+    });
+
+    test('submit with whitespace-only text is ignored', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = '   ';
+      state.input.cursorPosition = 3;
+
+      const event = makeKey({ name: 'enter' });
+      const action = mapKeyToAction(event, state);
+      const newState = applyKeyAction(state, action);
+
+      expect(newState.input.text).toBe('   ');
       expect(newState.input.history.entries).toHaveLength(0);
     });
   });

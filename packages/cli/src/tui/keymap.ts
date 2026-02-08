@@ -42,6 +42,7 @@ export type KeyAction =
   | { type: 'cursor-right' }
   | { type: 'backspace' }
   | { type: 'delete' }
+  | { type: 'insert-newline' }
   | { type: 'submit' }
   | { type: 'quit' }
   | { type: 'noop' };
@@ -88,9 +89,13 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   if (focusedPane === 'input') {
     const inputIsEmpty = state.input.text.length === 0;
     const isNavigatingHistory = state.input.history.currentIndex !== -1;
-    const shouldUseHistory = inputIsEmpty || isNavigatingHistory;
+    const cursorAtStart = state.input.cursorPosition === 0;
+    const shouldUseHistory = isNavigatingHistory || (inputIsEmpty && cursorAtStart);
 
     if (name === 'enter' || name === 'return') {
+      if (shift) {
+        return { type: 'insert-newline' };
+      }
       return { type: 'submit' };
     }
 
@@ -185,6 +190,12 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'delete':
       return deleteAtCursor(state);
+
+    case 'insert-newline': {
+      const { text, cursorPosition } = state.input;
+      const newText = text.slice(0, cursorPosition) + '\n' + text.slice(cursorPosition);
+      return updateInputText(state, newText, cursorPosition + 1);
+    }
 
     case 'submit':
       return submitInput(state).state;
