@@ -97,11 +97,7 @@ export function renderInputContent(
   const composerLines = hasInput
     ? formatComposerLines(state.input.text, DEFAULT_LAYOUT.inputMaxVisibleLines)
     : [`> ${placeholder}`];
-  const affordance = ' [Enter send | Shift+Enter newline | Ctrl+U clear]';
-  const lines = [
-    `${composerLines[0]}${affordance}`,
-    ...composerLines.slice(1),
-  ];
+  const lines = composerLines;
 
   const desiredHeight = Math.max(
     DEFAULT_LAYOUT.inputHeight,
@@ -193,17 +189,19 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
       : null;
 
   const totalOutput = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
+  const totalTokens = state.telemetry.inputTokenCount + totalOutput;
   const telemetrySegments = [`Focus: ${state.focusedPane}`];
   if (streamSegment) {
     telemetrySegments.push(streamSegment);
   }
 
   telemetrySegments.push(
-    `mdl ${state.telemetry.model}`,
-    `cost ${formatUsd(state.telemetry.sessionCostUsd)}`,
-    `tok in:${state.telemetry.inputTokenCount} out:${totalOutput}`,
+    `tok total:${totalTokens}`,
     formatRate(state.streaming.tokensPerSecond),
     formatLatency(state.streaming.firstTokenLatencyMs),
+    `in:${state.telemetry.inputTokenCount} out:${totalOutput}`,
+    `mdl ${state.telemetry.model}`,
+    `cost ${formatUsd(state.telemetry.sessionCostUsd)}`,
     'Tab: cycle focus',
     'Ctrl/Cmd+K palette',
     'Esc: quit',

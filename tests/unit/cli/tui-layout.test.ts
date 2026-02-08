@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  renderInputContent,
   renderSidebarContent,
   renderTranscriptContent,
   renderStatusContent,
@@ -81,9 +82,18 @@ describe('TUI Layout', () => {
       const content = renderStatusContent(state);
 
       expect(content.lines[0]).toContain('Focus: transcript');
-      expect(content.lines[0]).toContain('Tab: cycle focus');
+      expect(content.lines[0]).toContain('Esc: quit');
       expect(content.lines[0]).toContain('cost $0.0000');
-      expect(content.lines[0]).toContain('tok in:0 out:0');
+      expect(content.lines[0]).toContain('tok total:0');
+      expect(content.lines[0]).toContain('in:0 out:0');
+    });
+
+    test('renders composer without shortcut hint suffix', () => {
+      const state = createInitialTuiState();
+      const content = renderInputContent(state, true, 'Type a message...');
+
+      expect(content.lines[0]).toBe('> Type a message...');
+      expect(content.lines[0]).not.toContain('Enter send');
     });
 
     test('renders command palette content in sidebar mode', () => {

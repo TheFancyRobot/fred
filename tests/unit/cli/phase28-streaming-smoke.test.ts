@@ -157,7 +157,7 @@ describe('Phase 28 streaming smoke', () => {
       const idleStatus = String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
       expect(idleStatus).not.toContain('streaming');
       expect(idleStatus).toContain('cost $');
-      expect(idleStatus).toContain('tok in:');
+      expect(idleStatus).toContain('tok total:');
     } finally {
       if (app.isRunning()) {
         app.stop();
