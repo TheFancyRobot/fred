@@ -15,7 +15,15 @@ import {
   type CliRenderer,
 } from '@opentui/core';
 import type { TuiState, FocusablePaneId } from './state.js';
-import { createInitialTuiState, submitInput } from './state.js';
+import {
+  createInitialTuiState,
+  submitInput,
+  appendAssistant,
+  appendUserMessage,
+  finishStreaming,
+  recordStreamingError,
+  startStreaming,
+} from './state.js';
 import { mapKeyToAction, applyKeyAction, handleKeyEvent } from './keymap.js';
 import {
   renderSidebarContent,
@@ -23,12 +31,19 @@ import {
   renderStatusContent,
   DEFAULT_LAYOUT,
 } from './layout.js';
+import {
+  createStreamingController,
+  type StreamingController,
+  type StreamingBatch,
+} from './streaming.js';
 
 /**
  * TUI app configuration
  */
 export interface TuiAppConfig {
   showStartupHint?: boolean;
+  streamingFrameMs?: number;
+  maxRenderQueue?: number;
 }
 
 /**
@@ -48,7 +63,9 @@ export class FredTuiApp {
   private state: TuiState;
   private renderer: CliRenderer;
   private events: TuiAppEvents;
+  private config: TuiAppConfig;
   private running: boolean = false;
+  private streamingController: StreamingController;
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
@@ -61,20 +78,29 @@ export class FredTuiApp {
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
 
-  private constructor(renderer: CliRenderer, events: TuiAppEvents = {}) {
+  private constructor(renderer: CliRenderer, events: TuiAppEvents = {}, config: TuiAppConfig = {}) {
     this.state = createInitialTuiState();
     this.renderer = renderer;
     this.events = events;
+    this.config = config;
+    this.streamingController = createStreamingController({
+      frameMs: config.streamingFrameMs,
+      maxRenderQueue: config.maxRenderQueue,
+      callbacks: {
+        onBatch: (batch) => this.handleStreamingBatch(batch),
+        onError: (error) => this.handleStreamError(error),
+      },
+    });
   }
 
   /**
    * Create app with CLI renderer (production)
    */
-  static async create(events: TuiAppEvents = {}): Promise<FredTuiApp> {
+  static async create(events: TuiAppEvents = {}, config: TuiAppConfig = {}): Promise<FredTuiApp> {
     const renderer = await createCliRenderer({
       exitOnCtrlC: false,
     });
-    const app = new FredTuiApp(renderer, events);
+    const app = new FredTuiApp(renderer, events, config);
     app.buildComponentTree();
     app.registerKeyboardHandler();
     app.syncStateToUI();
@@ -85,8 +111,12 @@ export class FredTuiApp {
   /**
    * Create app with injected renderer (testing)
    */
-  static createWithRenderer(renderer: CliRenderer, events: TuiAppEvents = {}): FredTuiApp {
-    const app = new FredTuiApp(renderer, events);
+  static createWithRenderer(
+    renderer: CliRenderer,
+    events: TuiAppEvents = {},
+    config: TuiAppConfig = {},
+  ): FredTuiApp {
+    const app = new FredTuiApp(renderer, events, config);
     app.buildComponentTree();
     app.registerKeyboardHandler();
     app.syncStateToUI();
@@ -243,7 +273,7 @@ export class FredTuiApp {
 
     if (action.type === 'submit') {
       const { state: newState, submittedText } = submitInput(this.state);
-      this.state = newState;
+      this.state = appendUserMessage(newState, submittedText);
       this.events.onStateChange?.(this.state);
       this.events.onSubmit?.(submittedText);
       this.syncStateToUI();
@@ -252,6 +282,46 @@ export class FredTuiApp {
 
     const newState = applyKeyAction(this.state, action);
     this.state = newState;
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  startAssistantStream(nowMs = Date.now()): void {
+    this.state = startStreaming(this.state, nowMs);
+    this.streamingController.start();
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  pushAssistantToken(token: string, tokenCount = 1): void {
+    this.streamingController.pushToken(token, tokenCount);
+  }
+
+  completeAssistantStream(nowMs = Date.now()): void {
+    this.streamingController.finish();
+    this.state = finishStreaming(this.state, nowMs);
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  failAssistantStream(error: unknown, nowMs = Date.now()): void {
+    this.streamingController.fail(error);
+    const message = error instanceof Error ? error.message : String(error);
+    this.state = recordStreamingError(this.state, message, nowMs);
+    this.events.onError?.(error instanceof Error ? error : new Error(message));
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  private handleStreamingBatch(batch: StreamingBatch): void {
+    this.state = appendAssistant(this.state, batch.text, batch.tokenCount);
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  private handleStreamError(error: Error): void {
+    this.state = recordStreamingError(this.state, error.message);
+    this.events.onError?.(error);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
@@ -412,6 +482,7 @@ export class FredTuiApp {
   stop(): void {
     if (!this.running) return;
     this.running = false;
+    this.streamingController.stop();
     this.renderer.destroy();
     this.events.onQuit?.();
   }
@@ -428,7 +499,8 @@ export class FredTuiApp {
  * Create and start TUI app (convenience function)
  */
 export async function createFredTuiApp(
-  events?: TuiAppEvents
+  events?: TuiAppEvents,
+  config?: TuiAppConfig,
 ): Promise<FredTuiApp> {
-  return FredTuiApp.create(events);
+  return FredTuiApp.create(events, config);
 }

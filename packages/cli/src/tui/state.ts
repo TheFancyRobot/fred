@@ -22,6 +22,16 @@ export interface TranscriptViewport {
   scrollOffset: number;
   totalLines: number;
   visibleLines: number;
+  pinnedToBottom: boolean;
+}
+
+export interface StreamingState {
+  isStreaming: boolean;
+  streamStartMs: number | null;
+  firstTokenLatencyMs: number | null;
+  outputTokenCount: number;
+  tokensPerSecond: number;
+  lastError: string | null;
 }
 
 /**
@@ -41,6 +51,7 @@ export interface TuiState {
     viewport: TranscriptViewport;
     messages: Array<{ role: string; content: string }>;
   };
+  streaming: StreamingState;
   input: {
     text: string;
     cursorPosition: number;
@@ -63,8 +74,17 @@ export function createInitialTuiState(): TuiState {
         scrollOffset: 0,
         totalLines: 0,
         visibleLines: 20,
+        pinnedToBottom: true,
       },
       messages: [],
+    },
+    streaming: {
+      isStreaming: false,
+      streamStartMs: null,
+      firstTokenLatencyMs: null,
+      outputTokenCount: 0,
+      tokensPerSecond: 0,
+      lastError: null,
     },
     input: {
       text: '',
@@ -122,6 +142,7 @@ export function scrollTranscript(state: TuiState, delta: number): TuiState {
   const maxOffset = Math.max(0, totalLines - visibleLines);
 
   const newOffset = Math.max(0, Math.min(maxOffset, scrollOffset + delta));
+  const pinnedToBottom = newOffset >= maxOffset;
 
   return {
     ...state,
@@ -130,9 +151,145 @@ export function scrollTranscript(state: TuiState, delta: number): TuiState {
       viewport: {
         ...state.transcript.viewport,
         scrollOffset: newOffset,
+        pinnedToBottom,
       },
     },
   };
+}
+
+function countMessageLines(messages: Array<{ role: string; content: string }>): number {
+  return messages.reduce((total, message) => {
+    const roleLines = 1;
+    const contentLines = Math.max(1, message.content.split('\n').length);
+    const spacerLines = 1;
+    return total + roleLines + contentLines + spacerLines;
+  }, 0);
+}
+
+function withViewportUpdated(state: TuiState): TuiState {
+  const totalLines = countMessageLines(state.transcript.messages);
+  const { visibleLines, pinnedToBottom } = state.transcript.viewport;
+  const maxOffset = Math.max(0, totalLines - visibleLines);
+  const scrollOffset = pinnedToBottom
+    ? maxOffset
+    : Math.max(0, Math.min(state.transcript.viewport.scrollOffset, maxOffset));
+
+  return {
+    ...state,
+    transcript: {
+      ...state.transcript,
+      viewport: {
+        ...state.transcript.viewport,
+        totalLines,
+        scrollOffset,
+      },
+    },
+  };
+}
+
+function getStreamRate(streamStartMs: number | null, outputTokenCount: number, nowMs: number): number {
+  if (streamStartMs === null || outputTokenCount <= 0) {
+    return 0;
+  }
+
+  const elapsedMs = Math.max(1, nowMs - streamStartMs);
+  return (outputTokenCount * 1000) / elapsedMs;
+}
+
+export function startStreaming(state: TuiState, nowMs = Date.now()): TuiState {
+  return {
+    ...state,
+    streaming: {
+      isStreaming: true,
+      streamStartMs: nowMs,
+      firstTokenLatencyMs: null,
+      outputTokenCount: 0,
+      tokensPerSecond: 0,
+      lastError: null,
+    },
+  };
+}
+
+export function appendAssistant(
+  state: TuiState,
+  tokenText: string,
+  tokenCount = 1,
+  nowMs = Date.now(),
+): TuiState {
+  if (!tokenText) {
+    return state;
+  }
+
+  const messages = [...state.transcript.messages];
+  const lastMessage = messages[messages.length - 1];
+
+  if (lastMessage?.role === 'assistant') {
+    messages[messages.length - 1] = {
+      ...lastMessage,
+      content: lastMessage.content + tokenText,
+    };
+  } else {
+    messages.push({ role: 'assistant', content: tokenText });
+  }
+
+  const nextOutputTokenCount = state.streaming.outputTokenCount + Math.max(0, tokenCount);
+  const firstTokenLatencyMs = state.streaming.firstTokenLatencyMs ?? (
+    state.streaming.streamStartMs !== null
+      ? Math.max(0, nowMs - state.streaming.streamStartMs)
+      : null
+  );
+
+  return withViewportUpdated({
+    ...state,
+    transcript: {
+      ...state.transcript,
+      messages,
+    },
+    streaming: {
+      ...state.streaming,
+      isStreaming: state.streaming.isStreaming,
+      firstTokenLatencyMs,
+      outputTokenCount: nextOutputTokenCount,
+      tokensPerSecond: getStreamRate(state.streaming.streamStartMs, nextOutputTokenCount, nowMs),
+    },
+  });
+}
+
+export function finishStreaming(state: TuiState, nowMs = Date.now()): TuiState {
+  return {
+    ...state,
+    streaming: {
+      ...state.streaming,
+      isStreaming: false,
+      tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
+    },
+  };
+}
+
+export function recordStreamingError(state: TuiState, error: string, nowMs = Date.now()): TuiState {
+  return {
+    ...state,
+    streaming: {
+      ...state.streaming,
+      isStreaming: false,
+      lastError: error,
+      tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
+    },
+  };
+}
+
+export function appendUserMessage(state: TuiState, content: string): TuiState {
+  if (!content.trim()) {
+    return state;
+  }
+
+  return withViewportUpdated({
+    ...state,
+    transcript: {
+      ...state.transcript,
+      messages: [...state.transcript.messages, { role: 'user', content }],
+    },
+  });
 }
 
 /**
