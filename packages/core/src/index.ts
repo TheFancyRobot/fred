@@ -179,7 +179,7 @@ export class Fred implements FredLike {
       console.warn(
         '[Fred] Deprecation: new Fred() is deprecated for long-running apps. ' +
         'Use Fred.create() for proper Effect runtime initialization. ' +
-        'See: https://fred.dev/docs/migration/v0.2.5'
+        'See: https://fred.dev/docs/migration/v0.1.0'
       );
     }
   }
