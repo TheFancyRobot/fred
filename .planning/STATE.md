@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 Phase: 28 of 32 (Streaming Performance & Core TUI)
 Plan: 6 of 6 in current phase
 Status: PHASE COMPLETE
-Last activity: 2026-02-08 — Completed 28-06-PLAN.md (Provider registration fix - gap closure)
+Last activity: 2026-02-08 — Completed quick task 001-PLAN.md (milestone label normalization across planning docs)
 
 Progress: [█████████░] 99% (130/131 plans complete)
 
@@ -68,6 +68,7 @@ Recent decisions affecting current work:
 - Telemetry defaults to '--' (28-05) — Avoids misleading users before provider actually connects
 - Provider packages as CLI workspace dependencies (28-06) — Enables dynamic import resolution from CLI context
 - Dynamic provider import before registration (28-06) — Triggers side-effect self-registration before useProvider call
+- Milestone label normalization mapping (quick-001-01) — Standardized planning references to v0.1.0/v0.2.0/v0.2.1 without renaming archive files
 
 ### Pending Todos
 
@@ -92,8 +93,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T16:31:35Z
-Stopped at: Completed 28-06-PLAN.md
-Resume file: .planning/phases/28-streaming-performance-core-tui/28-06-SUMMARY.md
+Last session: 2026-02-08T17:29:31Z
+Stopped at: Completed quick-001-PLAN.md
+Resume file: .planning/quick/001-fix-milestone-version-labels-across-docu/001-SUMMARY.md
 
 **Next step:** Phase 28 complete (all UAT blockers resolved) — ready for final UAT validation, then Phase 29 planning/execution (session sidebar and transcript persistence workflows)
