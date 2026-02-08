@@ -120,6 +120,7 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
         model: providerInfo.model,
         tools: ['calculator'],
       });
+      fred.setDefaultAgent('__tui_agent__');
     } catch (error) {
       throw new Error(
         `Failed to create agent with ${providerInfo.platform}: ${error instanceof Error ? error.message : String(error)}`
@@ -185,23 +186,43 @@ export async function handleChatCommand(): Promise<void> {
             // Stream completed successfully
             app.completeAssistantStream();
           } catch (error) {
-            // Stream failed - report error
+            // Stream failed — display error in TUI status bar, don't crash
             app.failAssistantStream(error);
           }
-        })();
+        })().catch((error) => {
+          // Safety net: if failAssistantStream itself throws, clean up terminal
+          app.stop();
+          console.error('Fatal streaming error:', error);
+          process.exit(1);
+        });
       },
       onQuit: () => {
         console.log('Exiting Fred chat...');
         process.exit(0);
       },
-      onError: (error) => {
-        console.error('TUI error:', error);
-        process.exit(1);
+      onError: (_error) => {
+        // Streaming errors are displayed in the TUI status bar via recordStreamingError.
+        // Don't exit — let the user see the error and retry or quit manually.
       },
     });
 
     // Update telemetry with actual model info
     app.updateTelemetryModel(model, provider);
+
+    // Ensure terminal cleanup on unexpected crashes
+    const emergencyCleanup = () => {
+      if (app.isRunning()) app.stop();
+    };
+    process.on('uncaughtException', (error) => {
+      emergencyCleanup();
+      console.error('Uncaught exception:', error);
+      process.exit(1);
+    });
+    process.on('unhandledRejection', (reason) => {
+      emergencyCleanup();
+      console.error('Unhandled rejection:', reason);
+      process.exit(1);
+    });
 
     // Handle SIGINT as backup (app also handles Ctrl+C via keymap)
     process.on('SIGINT', () => {
