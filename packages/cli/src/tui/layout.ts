@@ -13,8 +13,25 @@ import type { TuiState } from './state.js';
 export const DEFAULT_LAYOUT = {
   sidebarWidth: 30,
   inputHeight: 3,
+  inputMaxHeight: 6,
+  inputMaxVisibleLines: 4,
   statusHeight: 1,
 };
+
+export const INPUT_PLACEHOLDERS = [
+  'Type a message...',
+  'Say something...',
+  'Ask anything...',
+  "What's on your mind?",
+  'How can I help?',
+] as const;
+
+export type InputPlaceholder = (typeof INPUT_PLACEHOLDERS)[number];
+
+export function selectInputPlaceholder(random = Math.random): InputPlaceholder {
+  const index = Math.floor(random() * INPUT_PLACEHOLDERS.length) % INPUT_PLACEHOLDERS.length;
+  return INPUT_PLACEHOLDERS[index];
+}
 
 /**
  * Render content for a pane (framework-agnostic content model)
@@ -22,6 +39,43 @@ export const DEFAULT_LAYOUT = {
 export interface PaneContent {
   lines: string[];
   focusIndicator?: string;
+}
+
+export interface InputPaneContent extends PaneContent {
+  height: number;
+}
+
+function formatComposerLines(text: string, maxVisibleLines: number): string[] {
+  const lines = text.split('\n');
+  const visible = lines.slice(Math.max(0, lines.length - maxVisibleLines));
+  return visible.map((line, index) => `${index === 0 ? '> ' : '  '}${line}`);
+}
+
+export function renderInputContent(
+  state: TuiState,
+  focused: boolean,
+  placeholder: InputPlaceholder,
+): InputPaneContent {
+  const hasInput = state.input.text.length > 0;
+  const composerLines = hasInput
+    ? formatComposerLines(state.input.text, DEFAULT_LAYOUT.inputMaxVisibleLines)
+    : [`> ${placeholder}`];
+  const affordance = ' [Enter send | Shift+Enter newline | Ctrl+U clear]';
+  const lines = [
+    `${composerLines[0]}${affordance}`,
+    ...composerLines.slice(1),
+  ];
+
+  const desiredHeight = Math.max(
+    DEFAULT_LAYOUT.inputHeight,
+    Math.min(DEFAULT_LAYOUT.inputMaxHeight, lines.length + 2),
+  );
+
+  return {
+    lines,
+    height: desiredHeight,
+    focusIndicator: focused ? '>' : undefined,
+  };
 }
 
 /**

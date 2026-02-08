@@ -24,12 +24,15 @@ import {
   recordStreamingError,
   startStreaming,
 } from './state.js';
-import { mapKeyToAction, applyKeyAction, handleKeyEvent } from './keymap.js';
+import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
   renderSidebarContent,
   renderTranscriptContent,
+  renderInputContent,
+  selectInputPlaceholder,
   renderStatusContent,
   DEFAULT_LAYOUT,
+  type InputPlaceholder,
 } from './layout.js';
 import {
   createStreamingController,
@@ -71,18 +74,19 @@ export class FredTuiApp {
   private sidebarTitle!: TextRenderable;
   private sidebarItems!: ScrollBoxRenderable;
   private transcriptContent!: ScrollBoxRenderable;
-  private inputPrompt!: TextRenderable;
   private inputText!: TextRenderable;
   private statusText!: TextRenderable;
   private sidebarBox!: BoxRenderable;
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
+  private inputPlaceholder: InputPlaceholder;
 
   private constructor(renderer: CliRenderer, events: TuiAppEvents = {}, config: TuiAppConfig = {}) {
     this.state = createInitialTuiState();
     this.renderer = renderer;
     this.events = events;
     this.config = config;
+    this.inputPlaceholder = selectInputPlaceholder();
     this.streamingController = createStreamingController({
       frameMs: config.streamingFrameMs,
       maxRenderQueue: config.maxRenderQueue,
@@ -207,15 +211,7 @@ export class FredTuiApp {
       height: DEFAULT_LAYOUT.inputHeight,
       border: true,
       borderStyle: 'single',
-      flexDirection: 'row',
-      alignItems: 'center',
-    });
-
-    this.inputPrompt = new TextRenderable(r, {
-      id: 'input-prompt',
-      content: '> ',
-      attributes: TextAttributes.BOLD,
-      fg: '#00FF00',
+      flexDirection: 'column',
     });
 
     this.inputText = new TextRenderable(r, {
@@ -224,7 +220,6 @@ export class FredTuiApp {
       flexGrow: 1,
     });
 
-    this.inputBar.add(this.inputPrompt);
     this.inputBar.add(this.inputText);
 
     // Status bar
@@ -264,6 +259,24 @@ export class FredTuiApp {
    * Process a key event through the state machine
    */
   processKey(key: KeyEvent): void {
+    if (this.state.focusedPane === 'input' && key.ctrl && key.name === 'u') {
+      this.state = {
+        ...this.state,
+        input: {
+          ...this.state.input,
+          text: '',
+          cursorPosition: 0,
+          history: {
+            ...this.state.input.history,
+            currentIndex: -1,
+          },
+        },
+      };
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
     const action = mapKeyToAction(key, this.state);
 
     if (action.type === 'quit') {
@@ -273,7 +286,17 @@ export class FredTuiApp {
 
     if (action.type === 'submit') {
       const { state: newState, submittedText } = submitInput(this.state);
+      if (!submittedText.trim()) {
+        return;
+      }
+
       this.state = appendUserMessage(newState, submittedText);
+
+      if (!this.state.streaming.isStreaming) {
+        this.state = startStreaming(this.state);
+        this.streamingController.start();
+      }
+
       this.events.onStateChange?.(this.state);
       this.events.onSubmit?.(submittedText);
       this.syncStateToUI();
@@ -393,24 +416,21 @@ export class FredTuiApp {
     this.transcriptBox.add(this.transcriptContent);
 
     // Input text
+    const inputData = renderInputContent(
+      this.state,
+      this.state.focusedPane === 'input',
+      this.inputPlaceholder,
+    );
+    this.inputBar.height = inputData.height;
+
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
       id: 'input-text',
-      content: this.state.input.text || (this.state.focusedPane === 'input' ? '' : 'Type a message...'),
+      content: inputData.lines.join('\n'),
       flexGrow: 1,
       fg: this.state.input.text ? '#FFFFFF' : '#666666',
     });
     this.inputBar.add(this.inputText);
-
-    // Input prompt styling based on focus
-    this.inputPrompt.destroy();
-    this.inputPrompt = new TextRenderable(r, {
-      id: 'input-prompt',
-      content: '> ',
-      attributes: this.state.focusedPane === 'input' ? TextAttributes.BOLD : 0,
-      fg: this.state.focusedPane === 'input' ? '#00FF00' : '#888888',
-    });
-    this.inputBar.add(this.inputPrompt);
 
     // Status bar
     const statusData = renderStatusContent(this.state);
