@@ -118,8 +118,8 @@ export function createInitialTuiState(): TuiState {
       lastError: null,
     },
     telemetry: {
-      model: 'gpt-5-mini',
-      provider: 'openai',
+      model: '--',
+      provider: '--',
       sessionCostUsd: 0,
       inputTokenCount: 0,
       outputTokenCount: 0,

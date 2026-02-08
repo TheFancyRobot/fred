@@ -344,6 +344,19 @@ export class FredTuiApp {
     this.syncStateToUI();
   }
 
+  updateTelemetryModel(model: string, provider: string): void {
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        model,
+        provider,
+      },
+    };
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
   private handleStreamingBatch(batch: StreamingBatch): void {
     this.state = appendAssistant(this.state, batch.text, batch.tokenCount);
     this.events.onStateChange?.(this.state);
