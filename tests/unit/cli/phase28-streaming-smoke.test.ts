@@ -15,6 +15,9 @@ const mockApp = {
   isRunning: () => true,
   getState: () => ({}),
   updateTelemetryModel: mock(() => {}),
+  pushAssistantToken: mock(() => {}),
+  completeAssistantStream: mock(() => {}),
+  failAssistantStream: mock(() => {}),
 };
 
 const mockCreateFredTuiApp = mock(async () => mockApp);
@@ -23,6 +26,7 @@ const mockCreateFredTuiApp = mock(async () => mockApp);
 class MockFred {
   private agents: any[] = [];
   private providers: Map<string, any> = new Map();
+  private defaultAgentId: string | null = null;
 
   async registerDefaultProviders() {
     // Register fake providers
@@ -33,6 +37,10 @@ class MockFred {
     this.providers.set('openrouter', { id: 'openrouter' });
   }
 
+  async setToolPolicies() {
+    // no-op for smoke tests
+  }
+
   async initializeFromConfig() {
     // Add a fake agent immediately
     this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
@@ -41,6 +49,18 @@ class MockFred {
 
   getAgents() {
     return this.agents;
+  }
+
+  getAgent(id: string) {
+    return this.agents.find((agent) => agent.id === id);
+  }
+
+  getDefaultAgentId() {
+    return this.defaultAgentId;
+  }
+
+  setDefaultAgent(agentId: string) {
+    this.defaultAgentId = agentId;
   }
 
   useProvider(platform: string) {
@@ -54,6 +74,9 @@ class MockFred {
   createAgent(config: any) {
     // Add the agent to the list
     this.agents.push({ ...config, id: config.id || '__test_agent__' });
+    if (!this.defaultAgentId) {
+      this.defaultAgentId = config.id || '__test_agent__';
+    }
     return Promise.resolve(this.agents[this.agents.length - 1]);
   }
 
@@ -129,6 +152,9 @@ describe('Phase 28 streaming smoke', () => {
     process.env.OPENAI_API_KEY = 'sk-test-key-for-smoke-tests';
 
     mockCreateFredTuiApp.mockClear();
+    mockApp.pushAssistantToken.mockClear();
+    mockApp.completeAssistantStream.mockClear();
+    mockApp.failAssistantStream.mockClear();
   });
 
   afterEach(() => {
@@ -255,6 +281,53 @@ describe('Phase 28 streaming smoke', () => {
         app.stop();
       }
       setup.renderer.destroy();
+    }
+  });
+
+  test('stream callback forwards provider chunks as-is (not token-splitting)', async () => {
+    const chunk = '/function=brave_search>{"query":"annual potato production"}</function>';
+    const originalStreamMessage = MockFred.prototype.streamMessage;
+    MockFred.prototype.streamMessage = function () {
+      return {
+        fullStream: (async function* () {
+          yield { type: 'token', delta: chunk };
+        })(),
+      };
+    };
+
+    const mockStdin = {
+      isTTY: true,
+      isRaw: false,
+      setRawMode: mock(() => {}),
+    } as any;
+    const mockStdout = {
+      isTTY: true,
+      columns: 120,
+      rows: 40,
+    } as any;
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    try {
+      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+      await handleChatCommand();
+
+      const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
+      const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);
+      expect(typeof events?.onSubmit).toBe('function');
+      if (!events?.onSubmit) {
+        throw new Error('onSubmit callback not provided to createFredTuiApp');
+      }
+
+      events.onSubmit('test message');
+      await Bun.sleep(40);
+
+      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(chunk, 1);
+      expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
+    } finally {
+      MockFred.prototype.streamMessage = originalStreamMessage;
     }
   });
 });

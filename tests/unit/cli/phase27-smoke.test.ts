@@ -30,6 +30,7 @@ const mockCreateFredTuiApp = mock(async () => mockApp);
 class MockFred {
   private agents: any[] = [];
   private providers: Map<string, any> = new Map();
+  private defaultAgentId: string | null = null;
 
   async registerDefaultProviders() {
     // Register fake providers
@@ -40,6 +41,10 @@ class MockFred {
     this.providers.set('openrouter', { id: 'openrouter' });
   }
 
+  async setToolPolicies() {
+    // no-op for smoke tests
+  }
+
   async initializeFromConfig() {
     // Add a fake agent immediately
     this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
@@ -48,6 +53,18 @@ class MockFred {
 
   getAgents() {
     return this.agents;
+  }
+
+  getAgent(id: string) {
+    return this.agents.find((agent) => agent.id === id);
+  }
+
+  getDefaultAgentId() {
+    return this.defaultAgentId;
+  }
+
+  setDefaultAgent(agentId: string) {
+    this.defaultAgentId = agentId;
   }
 
   useProvider(platform: string) {
@@ -61,6 +78,9 @@ class MockFred {
   createAgent(config: any) {
     // Add the agent to the list
     this.agents.push({ ...config, id: config.id || '__test_agent__' });
+    if (!this.defaultAgentId) {
+      this.defaultAgentId = config.id || '__test_agent__';
+    }
     return Promise.resolve(this.agents[this.agents.length - 1]);
   }
 

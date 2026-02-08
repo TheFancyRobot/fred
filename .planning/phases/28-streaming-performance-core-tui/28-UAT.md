@@ -1,9 +1,9 @@
 ---
-status: complete
+status: passed
 phase: 28-streaming-performance-core-tui
-source: 28-01-SUMMARY.md, 28-02-SUMMARY.md, 28-03-SUMMARY.md, 28-04-SUMMARY.md
-started: 2026-02-08T12:00:00Z
-updated: 2026-02-08T12:30:00Z
+source: 28-01-SUMMARY.md, 28-02-SUMMARY.md, 28-03-SUMMARY.md, 28-04-SUMMARY.md, 28-05-SUMMARY.md, 28-06-SUMMARY.md
+started: 2026-02-08T16:00:00Z
+updated: 2026-02-08T18:05:00Z
 ---
 
 ## Current Test
@@ -12,78 +12,42 @@ updated: 2026-02-08T12:30:00Z
 
 ## Tests
 
-### 1. Type and Submit Message via Input Bar
-expected: Launch TUI with `fred` or `fred chat`. Type a message in the bottom input bar. Press Enter to submit. The message appears in the transcript pane as a user turn immediately.
-result: pass
+### 1. Launch TUI and Submit Message
+expected: Run `fred chat`. TUI launches without provider errors and message submission works.
+result: passed
 
-### 2. Multiline Input with Shift+Enter
-expected: In the input bar, press Shift+Enter to insert a newline. The composer grows to accommodate multiple lines (up to ~4 visible lines). Press Enter to submit the full multiline message.
-result: pass
+### 2. Streaming Assistant Response
+expected: Assistant response appears incrementally while streaming.
+result: passed
+notes: Provider emits chunked deltas; UI renders chunks immediately and continuously.
 
-### 3. Whitespace-Only Submit Rejected
-expected: With only spaces/newlines in the composer, press Enter. Nothing happens — no user turn is added to the transcript and no streaming starts.
-result: pass
+### 3. Status Bar Model + Metrics
+expected: Status bar shows real provider/model, token metrics, rate, latency, and streaming indicator transitions.
+result: passed
 
-### 4. Streaming Token Response
-expected: After submitting a message, the assistant response streams token-by-token in the transcript pane in real-time without visible flickering or freezing.
-result: issue
-reported: "there is no assistant response or streaming"
-severity: major
+### 4. Transcript Scrolling
+expected: Transcript scroll works with PgUp/PgDn and mouse wheel.
+result: passed
 
-### 5. Status Bar Shows Model and Token Count
-expected: The status bar at the bottom displays the active model name and accumulated token count (total tokens shown prominently, with in/out as secondary detail).
-result: issue
-reported: "The status bar shows separate value for tokens in and out but this should be a combined value. the status bar is showing gpt-5-mini as the model but i don't remember ever configuring that model."
-severity: major
+### 5. Transcript Selection + Copy
+expected: Transcript text selection remains in transcript area and copy works.
+result: passed
+notes: Added explicit `Ctrl+Shift+C` transcript copy path.
 
-### 6. Streaming Indicator in Status Bar
-expected: While the assistant is streaming a response, the status bar shows a streaming indicator (spinner or similar). When streaming finishes, the indicator disappears.
-result: skipped
-reason: No streaming happening — blocked by test 4 issue
-
-### 7. Status Bar Shows Cost and Rate
-expected: During and after streaming, the status bar shows session cost, token rate (tok/s), and latency information.
-result: skipped
-reason: No streaming happening — blocked by test 4 issue
-
-### 8. Command Palette Opens with Ctrl+K
-expected: Press Ctrl+K (or Cmd+K on Mac). A command palette appears in the sidebar area with a search/filter input. Actions are listed and can be filtered by typing.
-result: pass
-
-### 9. Command Palette Navigation and Selection
-expected: With the palette open, use arrow keys to navigate between actions. Press Enter to select/execute an action. Press Esc to dismiss the palette without executing.
-result: pass
-
-### 10. Composer Has Clean Appearance
-expected: The input bar shows a placeholder prompt (e.g., "Ask anything...") when empty. No persistent keyboard shortcut hints clutter the composer line.
-result: pass
+### 6. Command Palette + Input Controls
+expected: Ctrl/Cmd+K palette, Enter/Shift+Enter, whitespace submit guard all behave correctly.
+result: passed
 
 ## Summary
 
-total: 10
+total: 6
 passed: 6
-issues: 2
+issues: 0
 pending: 0
-skipped: 2
+skipped: 0
 
-## Gaps
+## Resolved Gaps
 
-- truth: "Assistant response streams token-by-token in the transcript pane in real-time"
-  status: failed
-  reason: "User reported: there is no assistant response or streaming"
-  severity: major
-  test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
-
-- truth: "Status bar displays active model name and accumulated token count as combined total"
-  status: failed
-  reason: "User reported: The status bar shows separate value for tokens in and out but this should be a combined value. the status bar is showing gpt-5-mini as the model but i don't remember ever configuring that model."
-  severity: major
-  test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+- provider registration blocker (`No provider registered for platform: groq`) resolved by provider dependencies + dynamic import path.
+- default-agent/routing fallback errors resolved via shared `@fancyrobot/fred-dev` bootstrap logic.
+- transcript stability/usability issues resolved (viewport math, mouse wheel scrolling, non-flickering scroll surfaces, transcript copy).

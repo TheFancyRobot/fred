@@ -11,3 +11,9 @@
 // Re-export main dev tools
 export { startDevChat } from './dev-chat';
 export { startServer, ServerApp } from './server';
+export {
+  DEV_CHAT_PROVIDER_PACKAGES,
+  detectAvailableProvider,
+  loadProviderPackage,
+  ensureDefaultChatAgent,
+} from './chat-defaults';

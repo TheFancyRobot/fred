@@ -55,6 +55,7 @@ export type KeyAction =
   | { type: 'palette-backspace' }
   | { type: 'palette-query'; text: string }
   | { type: 'palette-submit' }
+  | { type: 'copy-transcript' }
   | { type: 'quit' }
   | { type: 'noop' };
 
@@ -110,8 +111,20 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'quit' };
   }
 
+  if (ctrl && shift && name === 'c') {
+    return { type: 'copy-transcript' };
+  }
+
   if (ctrl && name === 'c') {
     return { type: 'quit' };
+  }
+
+  if (name === 'pageup') {
+    return { type: 'scroll-up', lines: 10 };
+  }
+
+  if (name === 'pagedown') {
+    return { type: 'scroll-down', lines: 10 };
   }
 
   // Pane-specific keybindings
@@ -139,6 +152,7 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     const isNavigatingHistory = state.input.history.currentIndex !== -1;
     const cursorAtStart = state.input.cursorPosition === 0;
     const shouldUseHistory = isNavigatingHistory || (inputIsEmpty && cursorAtStart);
+    const hasHistory = state.input.history.entries.length > 0;
 
     if (name === 'enter' || name === 'return') {
       if (shift) {
@@ -156,10 +170,22 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
 
     if (name === 'up') {
-      return shouldUseHistory ? { type: 'history-up' } : { type: 'cursor-left' };
+      if (shouldUseHistory && hasHistory) {
+        return { type: 'history-up' };
+      }
+      if (inputIsEmpty && cursorAtStart) {
+        return { type: 'scroll-up', lines: 1 };
+      }
+      return { type: 'cursor-left' };
     }
     if (name === 'down') {
-      return shouldUseHistory ? { type: 'history-down' } : { type: 'cursor-right' };
+      if (shouldUseHistory && hasHistory) {
+        return { type: 'history-down' };
+      }
+      if (inputIsEmpty && cursorAtStart) {
+        return { type: 'scroll-down', lines: 1 };
+      }
+      return { type: 'cursor-right' };
     }
     if (name === 'left') {
       return { type: 'cursor-left' };
@@ -272,6 +298,9 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'palette-submit':
       return closeCommandPalette(state);
+
+    case 'copy-transcript':
+      return state;
 
     case 'quit':
       // Handled by app, just return state

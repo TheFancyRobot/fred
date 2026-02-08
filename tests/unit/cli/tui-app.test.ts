@@ -218,6 +218,55 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(quitFired).toBe(true);
   });
 
+  test('Ctrl+Shift+C copies transcript to clipboard without quitting', async () => {
+    await createTestApp();
+
+    const copySpy = (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52;
+    let copiedText = '';
+    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = (text: string) => {
+      copiedText = text;
+      return true;
+    };
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+    app.startAssistantStream();
+    app.pushAssistantToken('hello world');
+    await Bun.sleep(30);
+
+    app.processKey(makeKey({ name: 'c', ctrl: true, shift: true }));
+
+    expect(copiedText).toContain('user:');
+    expect(copiedText).toContain('hi');
+    expect(app.isRunning()).toBe(true);
+
+    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = copySpy;
+  });
+
+  test('mouse wheel scrolling updates transcript viewport offset', async () => {
+    await createTestApp();
+
+    // Seed transcript with enough lines to scroll.
+    for (let i = 0; i < 40; i += 1) {
+      app.processKey(makeKey({ name: 'x' }));
+      app.processKey(makeKey({ name: 'enter' }));
+    }
+
+    (app as any).handleTranscriptMouseScroll({
+      scroll: { direction: 'up', delta: 2 },
+    });
+
+    const afterUp = app.getState().transcript.viewport.scrollOffset;
+
+    (app as any).handleTranscriptMouseScroll({
+      scroll: { direction: 'down', delta: 3 },
+    });
+
+    const afterDown = app.getState().transcript.viewport.scrollOffset;
+    expect(afterDown).toBeGreaterThan(afterUp);
+  });
+
   test('Ctrl+K and Cmd+K toggle command palette', async () => {
     await createTestApp();
 

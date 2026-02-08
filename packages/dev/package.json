@@ -10,6 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./chat-defaults": {
+      "types": "./src/chat-defaults.ts",
+      "import": "./src/chat-defaults.ts"
     }
   },
   "scripts": {

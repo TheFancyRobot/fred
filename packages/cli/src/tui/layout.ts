@@ -78,6 +78,12 @@ export interface PaneContent {
   focusIndicator?: string;
 }
 
+export interface TranscriptPaneContent extends PaneContent {
+  totalLines: number;
+  scrollOffset: number;
+  pinnedToBottom: boolean;
+}
+
 export interface InputPaneContent extends PaneContent {
   height: number;
 }
@@ -146,31 +152,82 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
 /**
  * Generate transcript content
  */
-export function renderTranscriptContent(state: TuiState, focused: boolean): PaneContent {
+interface TranscriptRenderOptions {
+  maxWidth?: number;
+}
+
+function wrapLine(line: string, maxWidth: number): string[] {
+  if (maxWidth <= 0) {
+    return [line];
+  }
+
+  if (line.length <= maxWidth) {
+    return [line];
+  }
+
+  const wrapped: string[] = [];
+  let remaining = line;
+  while (remaining.length > maxWidth) {
+    wrapped.push(remaining.slice(0, maxWidth));
+    remaining = remaining.slice(maxWidth);
+  }
+  wrapped.push(remaining);
+  return wrapped;
+}
+
+export function renderTranscriptContent(
+  state: TuiState,
+  focused: boolean,
+  options: TranscriptRenderOptions = {},
+): TranscriptPaneContent {
   const { messages, viewport } = state.transcript;
+  const maxWidth = options.maxWidth;
 
   if (messages.length === 0) {
     return {
       lines: ['', 'Fred AI Framework', '', 'Type a message to begin...'],
       focusIndicator: focused ? '>' : undefined,
+      totalLines: 4,
+      scrollOffset: 0,
+      pinnedToBottom: true,
     };
   }
 
-  // Apply viewport scrolling
-  const lines = messages.flatMap((msg) => [
-    `${msg.role}:`,
-    msg.content,
-    '',
-  ]);
+  // Build line model with explicit wrapping so viewport math matches rendered content.
+  const lines = messages.flatMap((msg) => {
+    const contentLines = msg.content.split('\n').flatMap((line) => {
+      if (typeof maxWidth === 'number' && maxWidth > 0) {
+        return wrapLine(line, maxWidth);
+      }
+      return [line];
+    });
+
+    return [
+      `${msg.role}:`,
+      ...contentLines,
+      '',
+    ];
+  });
+
+  const totalLines = lines.length;
+  const visibleLinesCount = Math.max(1, viewport.visibleLines);
+  const maxOffset = Math.max(0, totalLines - visibleLinesCount);
+  const normalizedOffset = viewport.pinnedToBottom
+    ? maxOffset
+    : Math.max(0, Math.min(viewport.scrollOffset, maxOffset));
+  const pinnedToBottom = normalizedOffset >= maxOffset;
 
   const visibleLines = lines.slice(
-    viewport.scrollOffset,
-    viewport.scrollOffset + viewport.visibleLines
+    normalizedOffset,
+    normalizedOffset + visibleLinesCount,
   );
 
   return {
     lines: visibleLines,
     focusIndicator: focused ? '>' : undefined,
+    totalLines,
+    scrollOffset: normalizedOffset,
+    pinnedToBottom,
   };
 }
 
@@ -202,7 +259,10 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
     `in:${state.telemetry.inputTokenCount} out:${totalOutput}`,
     `mdl ${state.telemetry.model}`,
     `cost ${formatUsd(state.telemetry.sessionCostUsd)}`,
+    'Mouse wheel scroll',
+    'PgUp/PgDn scroll',
     'Tab: cycle focus',
+    'Ctrl+Shift+C copy',
     'Ctrl/Cmd+K palette',
     'Esc: quit',
   );

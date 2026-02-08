@@ -50,7 +50,7 @@ export interface StreamingController {
 
 const DEFAULT_FRAME_MS = 16;
 const DEFAULT_MAX_RENDER_QUEUE = 3;
-const GROUP_SIZE = 512;
+const GROUP_SIZE = 1;
 
 export function createStreamingController(options: StreamingControllerOptions = {}): StreamingController {
   const frameMs = options.frameMs ?? DEFAULT_FRAME_MS;

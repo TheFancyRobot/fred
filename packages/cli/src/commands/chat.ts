@@ -4,6 +4,12 @@
  */
 
 import { Fred } from '@fancyrobot/fred';
+import {
+  DEV_CHAT_PROVIDER_PACKAGES,
+  detectAvailableProvider as detectAvailableProviderFromDev,
+  loadProviderPackage as loadProviderPackageFromDev,
+  ensureDefaultChatAgent,
+} from '@fancyrobot/fred-dev/chat-defaults';
 import { detectTerminalMode } from '../runtime/tty-mode.js';
 import { createFredTuiApp } from '../tui/app.js';
 import { resolveProjectConfig } from '../project/resolve-config.js';
@@ -13,19 +19,11 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
  * Dynamic import triggers the package's self-registration via registerBuiltinPack().
  */
 export const PROVIDER_PACKAGES: Record<string, string> = {
-  openai: '@fancyrobot/fred-openai',
-  anthropic: '@fancyrobot/fred-anthropic',
-  google: '@fancyrobot/fred-google',
-  groq: '@fancyrobot/fred-groq',
-  openrouter: '@fancyrobot/fred-openrouter',
+  ...DEV_CHAT_PROVIDER_PACKAGES,
 };
 
 export async function loadProviderPackage(platform: string): Promise<void> {
-  const packageName = PROVIDER_PACKAGES[platform];
-  if (!packageName) {
-    throw new Error(`Unknown provider platform: ${platform}. Supported: ${Object.keys(PROVIDER_PACKAGES).join(', ')}`);
-  }
-  await import(packageName);
+  await loadProviderPackageFromDev(platform);
 }
 
 /**
@@ -33,30 +31,7 @@ export async function loadProviderPackage(platform: string): Promise<void> {
  * Returns platform and model, or null if no provider available
  */
 export function detectAvailableProvider(): { platform: string; model: string } | { platform: null; model: null } {
-  // Check environment variables in order of preference
-  // Priority: Most stable/common providers first
-
-  // Tier 1: Most popular and stable providers
-  if (process.env.OPENAI_API_KEY) {
-    return { platform: 'openai', model: 'gpt-4o-mini' };
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return { platform: 'anthropic', model: 'claude-3-5-haiku-latest' };
-  }
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    return { platform: 'google', model: 'gemini-2.0-flash-exp' };
-  }
-
-  // Tier 2: Fast and cost-effective providers
-  if (process.env.GROQ_API_KEY) {
-    return { platform: 'groq', model: 'llama-3.1-8b-instant' };
-  }
-  if (process.env.OPENROUTER_API_KEY) {
-    return { platform: 'openrouter', model: 'openai/gpt-4o-mini' };
-  }
-
-  // No providers available
-  return { platform: null, model: null };
+  return detectAvailableProviderFromDev();
 }
 
 /**
@@ -74,64 +49,52 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
     try {
       await fred.initializeFromConfig(configResult.configPath);
 
-      // Extract model info from first agent in config
-      const agents = fred.getAgents();
-      if (agents.length > 0) {
-        const firstAgent = agents[0];
-        // Get platform and model from agent's provider config
-        const platform = firstAgent.platform ?? 'openai';
-        const model = firstAgent.model ?? 'gpt-4o-mini';
-        return { fred, model, provider: platform };
+      const result = await ensureDefaultChatAgent(fred, {
+        agentId: '__tui_agent__',
+      });
+
+      if (fred.getAgents().length === 1) {
+        await fred.setToolPolicies({
+          agents: {
+            [result.agentId]: {
+              deny: ['handoff_to_agent'],
+              conflictResolution: 'deny-overrides',
+            },
+          },
+        });
       }
+
+      return {
+        fred,
+        model: result.model,
+        provider: result.provider,
+      };
     } catch (error) {
       // Config exists but failed to initialize - fall through to auto-detection
       console.warn(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  // No config or config failed - use auto-detection
-  const providerInfo = detectAvailableProvider();
-  if (!providerInfo.platform || !providerInfo.model) {
-    throw new Error(
-      'No AI provider configured. Please set one of:\n' +
-      '  OPENAI_API_KEY\n' +
-      '  ANTHROPIC_API_KEY\n' +
-      '  GOOGLE_GENERATIVE_AI_API_KEY\n' +
-      '  GROQ_API_KEY\n' +
-      '  OPENROUTER_API_KEY'
-    );
-  }
+  // No config or config failed - apply shared dev-chat fallback behavior
+  const result = await ensureDefaultChatAgent(fred, {
+    agentId: '__tui_agent__',
+  });
 
-  // Import the detected provider package (triggers self-registration via registerBuiltinPack)
-  await loadProviderPackage(providerInfo.platform);
-
-  // Now register — BUILTIN_PACKS will contain the imported provider
-  await fred.registerDefaultProviders();
-
-  // Create default agent if none exist
-  const agents = fred.getAgents();
-  if (agents.length === 0) {
-    try {
-      fred.useProvider(providerInfo.platform);
-      fred.createAgent({
-        id: '__tui_agent__',
-        systemMessage: 'You are a helpful assistant.',
-        platform: providerInfo.platform,
-        model: providerInfo.model,
-        tools: ['calculator'],
-      });
-      fred.setDefaultAgent('__tui_agent__');
-    } catch (error) {
-      throw new Error(
-        `Failed to create agent with ${providerInfo.platform}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+  if (fred.getAgents().length === 1) {
+    await fred.setToolPolicies({
+      agents: {
+        [result.agentId]: {
+          deny: ['handoff_to_agent'],
+          conflictResolution: 'deny-overrides',
+        },
+      },
+    });
   }
 
   return {
     fred,
-    model: providerInfo.model,
-    provider: providerInfo.platform,
+    model: result.model,
+    provider: result.provider,
   };
 }
 

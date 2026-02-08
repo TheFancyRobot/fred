@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 29 kickoff ready — session sidebar can build on validated Phase 28 TUI foundation
+**Current focus:** Phase 29 planning kickoff — session management implementation on validated Phase 28 foundation
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 28 of 32 (Streaming Performance & Core TUI)
-Plan: 6 of 6 in current phase
-Status: PHASE COMPLETE
-Last activity: 2026-02-08 - Completed quick task 001: Fix milestone version labels across documentation (v0.2.5->v0.1.0, v0.3.0->v0.2.0, v0.3.1->v0.2.1)
+Phase: 29 of 32 (Session Management)
+Plan: 0 of TBD in current phase
+Status: READY TO PLAN
+Last activity: 2026-02-08 - Finalized Phase 28 UAT fixes (provider bootstrap, default-agent fallback, scrolling/selection UX)
 
-Progress: [█████████░] 99% (130/131 plans complete)
+Progress: [██████████] 100% (131/131 plans complete in Phase 28 scope)
 
 ## Performance Metrics
 
@@ -99,8 +99,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T17:29:31Z
-Stopped at: Completed quick-001-PLAN.md
-Resume file: .planning/quick/001-fix-milestone-version-labels-across-docu/001-SUMMARY.md
+Last session: 2026-02-08T18:05:00Z
+Stopped at: Cleanup pass complete; Phase 28 closed and Phase 29 handoff prepared
+Resume file: (none)
 
-**Next step:** Phase 28 complete (all UAT blockers resolved) — ready for final UAT validation, then Phase 29 planning/execution (session sidebar and transcript persistence workflows)
+**Next step:** Run `/gsd/plan-phase 29` to generate executable Session Management plans from existing phase context/research docs

@@ -13,6 +13,7 @@ import {
   TextAttributes,
   type KeyEvent,
   type CliRenderer,
+  type MouseEvent,
 } from '@opentui/core';
 import type { TuiState, FocusablePaneId } from './state.js';
 import {
@@ -115,6 +116,7 @@ export class FredTuiApp {
   static async create(events: TuiAppEvents = {}, config: TuiAppConfig = {}): Promise<FredTuiApp> {
     const renderer = await createCliRenderer({
       exitOnCtrlC: false,
+      useMouse: true,
     });
     const app = new FredTuiApp(renderer, events, config);
     app.buildComponentTree();
@@ -193,7 +195,10 @@ export class FredTuiApp {
     this.sidebarItems = new ScrollBoxRenderable(r, {
       id: 'sidebar-items',
       flexGrow: 1,
+      verticalScrollbarOptions: { visible: false },
+      horizontalScrollbarOptions: { visible: false },
     });
+    this.sidebarItems.selectable = false;
 
     this.sidebarBox.add(this.sidebarTitle);
     this.sidebarBox.add(this.sidebarItems);
@@ -205,12 +210,17 @@ export class FredTuiApp {
       border: true,
       borderStyle: 'rounded',
       flexDirection: 'column',
+      onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
     });
 
     this.transcriptContent = new ScrollBoxRenderable(r, {
       id: 'transcript-content',
       flexGrow: 1,
+      onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
+      verticalScrollbarOptions: { visible: false },
+      horizontalScrollbarOptions: { visible: false },
     });
+    this.transcriptContent.selectable = true;
 
     this.transcriptBox.add(this.transcriptContent);
 
@@ -231,6 +241,7 @@ export class FredTuiApp {
       content: '',
       flexGrow: 1,
     });
+    this.inputText.selectable = false;
 
     this.inputBar.add(this.inputText);
 
@@ -246,6 +257,7 @@ export class FredTuiApp {
       content: '',
       attributes: TextAttributes.INVERSE,
     });
+    this.statusText.selectable = false;
 
     statusBar.add(this.statusText);
 
@@ -303,6 +315,11 @@ export class FredTuiApp {
 
     if (action.type === 'submit') {
       this.submitCurrentInput();
+      return;
+    }
+
+    if (action.type === 'copy-transcript') {
+      this.copyTranscriptToClipboard();
       return;
     }
 
@@ -527,11 +544,63 @@ export class FredTuiApp {
     return typeof candidate === 'number' && candidate > 0 ? candidate : 120;
   }
 
+  private getRendererHeight(): number {
+    const candidate = (this.renderer as unknown as { height?: number; terminal?: { height?: number } }).height
+      ?? (this.renderer as unknown as { terminal?: { height?: number } }).terminal?.height
+      ?? 40;
+    return typeof candidate === 'number' && candidate > 0 ? candidate : 40;
+  }
+
+  private getTranscriptPlainText(): string {
+    if (this.state.transcript.messages.length === 0) {
+      return '';
+    }
+
+    return this.state.transcript.messages
+      .map((message) => `${message.role}:\n${message.content}`)
+      .join('\n\n');
+  }
+
+  private copyTranscriptToClipboard(): void {
+    const text = this.getTranscriptPlainText();
+    if (!text) {
+      return;
+    }
+
+    this.renderer.copyToClipboardOSC52(text);
+  }
+
   /**
    * Push current state to OpenTUI renderables
    */
   private syncStateToUI(): void {
     const r = this.renderer;
+
+    // Input text (calculate first so transcript viewport can account for dynamic composer height)
+    const inputData = renderInputContent(
+      this.state,
+      this.state.focusedPane === 'input',
+      this.inputPlaceholder,
+    );
+    this.inputBar.height = inputData.height;
+
+    const rendererHeight = this.getRendererHeight();
+    const transcriptVisibleLines = Math.max(
+      3,
+      rendererHeight - inputData.height - DEFAULT_LAYOUT.statusHeight - 2,
+    );
+    if (this.state.transcript.viewport.visibleLines !== transcriptVisibleLines) {
+      this.state = {
+        ...this.state,
+        transcript: {
+          ...this.state.transcript,
+          viewport: {
+            ...this.state.transcript.viewport,
+            visibleLines: transcriptVisibleLines,
+          },
+        },
+      };
+    }
 
     // Sidebar content
     const sidebarContent = renderSidebarContent(
@@ -540,25 +609,16 @@ export class FredTuiApp {
     );
     const sidebarHeader = sidebarContent.lines[0] ?? '[Sessions]';
 
-    // Clear and re-populate sidebar items
-    // Remove existing children first
-    const existingSidebarChildren: TextRenderable[] = [];
-    // We track items by rebuilding each sync
-    this.sidebarItems.destroy();
-    this.sidebarItems = new ScrollBoxRenderable(r, {
-      id: 'sidebar-items',
-      flexGrow: 1,
-    });
     const itemLines = sidebarContent.lines.slice(1);
-    for (let i = 0; i < itemLines.length; i++) {
+    this.repopulateScrollBox(this.sidebarItems, itemLines, (line, i) => {
       const text = new TextRenderable(r, {
         id: `sidebar-item-${i}`,
-        content: itemLines[i],
+        content: line,
         fg: this.state.focusedPane === 'sidebar' ? '#FFFFFF' : '#888888',
       });
-      this.sidebarItems.add(text);
-    }
-    this.sidebarBox.add(this.sidebarItems);
+      text.selectable = false;
+      return text;
+    });
 
     // Sidebar title styling based on focus
     this.sidebarTitle = this.rebuildText(
@@ -572,16 +632,32 @@ export class FredTuiApp {
     // Transcript content
     const transcriptData = renderTranscriptContent(
       this.state,
-      this.state.focusedPane === 'transcript'
+      this.state.focusedPane === 'transcript',
+      {
+        maxWidth: Math.max(20, this.getRendererWidth() - DEFAULT_LAYOUT.sidebarWidth - 8),
+      },
     );
 
-    this.transcriptContent.destroy();
-    this.transcriptContent = new ScrollBoxRenderable(r, {
-      id: 'transcript-content',
-      flexGrow: 1,
-    });
-    for (let i = 0; i < transcriptData.lines.length; i++) {
-      const line = transcriptData.lines[i];
+    if (
+      this.state.transcript.viewport.totalLines !== transcriptData.totalLines
+      || this.state.transcript.viewport.scrollOffset !== transcriptData.scrollOffset
+      || this.state.transcript.viewport.pinnedToBottom !== transcriptData.pinnedToBottom
+    ) {
+      this.state = {
+        ...this.state,
+        transcript: {
+          ...this.state.transcript,
+          viewport: {
+            ...this.state.transcript.viewport,
+            totalLines: transcriptData.totalLines,
+            scrollOffset: transcriptData.scrollOffset,
+            pinnedToBottom: transcriptData.pinnedToBottom,
+          },
+        },
+      };
+    }
+
+    this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
       const isRoleLabel = line.endsWith(':') && (line === 'user:' || line === 'assistant:');
       const text = new TextRenderable(r, {
         id: `transcript-line-${i}`,
@@ -589,17 +665,9 @@ export class FredTuiApp {
         fg: isRoleLabel ? '#00FFFF' : (this.state.focusedPane === 'transcript' ? '#FFFFFF' : '#CCCCCC'),
         attributes: isRoleLabel ? TextAttributes.BOLD : 0,
       });
-      this.transcriptContent.add(text);
-    }
-    this.transcriptBox.add(this.transcriptContent);
-
-    // Input text
-    const inputData = renderInputContent(
-      this.state,
-      this.state.focusedPane === 'input',
-      this.inputPlaceholder,
-    );
-    this.inputBar.height = inputData.height;
+      text.selectable = true;
+      return text;
+    });
 
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
@@ -608,6 +676,7 @@ export class FredTuiApp {
       flexGrow: 1,
       fg: this.state.input.text ? '#FFFFFF' : '#666666',
     });
+    this.inputText.selectable = false;
     this.inputBar.add(this.inputText);
 
     // Status bar
@@ -652,6 +721,7 @@ export class FredTuiApp {
       attributes: TextAttributes.INVERSE,
       fg: statusFg,
     });
+    this.statusText.selectable = false;
     const statusBar = r.root.getRenderable('root')?.getRenderable('status-bar');
     if (statusBar) {
       statusBar.add(this.statusText);
@@ -678,8 +748,45 @@ export class FredTuiApp {
       fg,
       attributes,
     });
+    newText.selectable = false;
     this.sidebarBox.add(newText);
     return newText;
+  }
+
+  private repopulateScrollBox(
+    scrollBox: ScrollBoxRenderable,
+    lines: string[],
+    renderLine: (line: string, index: number) => TextRenderable,
+  ): void {
+    const children = scrollBox.getChildren();
+    for (const child of children) {
+      scrollBox.remove(child.id);
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      scrollBox.add(renderLine(lines[i], i));
+    }
+  }
+
+  private handleTranscriptMouseScroll(event: MouseEvent): void {
+    const direction = event.scroll?.direction;
+    if (!direction) {
+      return;
+    }
+
+    const delta = event.scroll?.delta ?? 1;
+    const lines = Math.max(1, Math.round(delta));
+
+    if (direction === 'up') {
+      this.state = scrollTranscript(this.state, -lines);
+    } else if (direction === 'down') {
+      this.state = scrollTranscript(this.state, lines);
+    } else {
+      return;
+    }
+
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
   }
 
   /**

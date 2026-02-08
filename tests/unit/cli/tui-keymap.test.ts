@@ -105,6 +105,20 @@ describe('TUI Keymap', () => {
   });
 
   describe('Transcript scrolling', () => {
+    test('PgUp scrolls transcript even when transcript is not focused', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.transcript.viewport.scrollOffset = 20;
+      state.transcript.viewport.totalLines = 100;
+
+      const event = makeKey({ name: 'pageup' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('scroll-up');
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.transcript.viewport.scrollOffset).toBe(10);
+    });
+
     test('Up arrow scrolls transcript up when transcript focused', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'transcript';
@@ -196,6 +210,36 @@ describe('TUI Keymap', () => {
 
       const newState = applyKeyAction(state, action);
       expect(newState.input.text).toBe('command 2'); // Most recent
+    });
+
+    test('Up arrow scrolls transcript when input is empty and history is empty', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = '';
+      state.input.cursorPosition = 0;
+      state.input.history.entries = [];
+
+      const event = makeKey({ name: 'up' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('scroll-up');
+      if (action.type === 'scroll-up') {
+        expect(action.lines).toBe(1);
+      }
+    });
+
+    test('Down arrow scrolls transcript when input is empty and history is empty', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.text = '';
+      state.input.cursorPosition = 0;
+      state.input.history.entries = [];
+
+      const event = makeKey({ name: 'down' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('scroll-down');
+      if (action.type === 'scroll-down') {
+        expect(action.lines).toBe(1);
+      }
     });
 
     test('Up arrow moves cursor when input has text', () => {
@@ -558,6 +602,13 @@ describe('TUI Keymap', () => {
   });
 
   describe('Quit handling', () => {
+    test('Ctrl+Shift+C triggers transcript copy action', () => {
+      const state = createInitialTuiState();
+      const event = makeKey({ name: 'c', ctrl: true, shift: true });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('copy-transcript');
+    });
+
     test('Esc triggers quit action', () => {
       const state = createInitialTuiState();
       const event = makeKey({ name: 'escape' });
