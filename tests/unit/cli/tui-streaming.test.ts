@@ -46,6 +46,37 @@ describe('TUI streaming controller', () => {
     expect(metrics.firstTokenLatencyMs).not.toBeNull();
   });
 
+  test('handles 100+ tokens/sec without unbounded queue growth', async () => {
+    const controller = createStreamingController({
+      frameMs: 16,
+      maxRenderQueue: 2,
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    const startedAt = Date.now();
+
+    const burstTokens = 140;
+    for (let i = 0; i < burstTokens; i += 1) {
+      controller.pushToken('t');
+    }
+
+    await Bun.sleep(30);
+
+    const elapsedMs = Date.now() - startedAt;
+    const rate = burstTokens / Math.max(0.001, elapsedMs / 1000);
+    expect(rate).toBeGreaterThan(100);
+
+    const buffer = controller.getBufferSnapshot();
+    expect(buffer.renderQueueDepth).toBeLessThanOrEqual(2);
+
+    await Bun.sleep(90);
+
+    const metrics = controller.getMetricsSnapshot();
+    expect(metrics.tokensProcessed).toBe(burstTokens);
+    expect(metrics.droppedRenderSignals).toBeGreaterThan(0);
+  });
+
   test('keeps render queue bounded while coalescing render signals', async () => {
     const controller = createStreamingController({
       frameMs: 16,

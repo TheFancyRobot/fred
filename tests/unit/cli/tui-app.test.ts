@@ -23,7 +23,7 @@ function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
     option: overrides.option ?? false,
     eventType: overrides.eventType ?? 'press',
     repeated: overrides.repeated ?? false,
-  };
+  } as KeyEvent;
 }
 
 describe('TUI App (OpenTUI integration)', () => {
@@ -180,5 +180,50 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'tab' }));
     expect(states.length).toBeGreaterThan(0);
     expect(states[states.length - 1].focusedPane).toBe('sidebar');
+  });
+
+  test('streams assistant output incrementally under high token burst', async () => {
+    await createTestApp();
+
+    app.startAssistantStream();
+
+    const tokens = Array.from({ length: 150 }, (_, index) => `${index % 10}`);
+    for (const token of tokens) {
+      app.pushAssistantToken(token);
+    }
+
+    await Bun.sleep(90);
+    app.completeAssistantStream();
+
+    const state = app.getState();
+    const lastMessage = state.transcript.messages[state.transcript.messages.length - 1];
+    expect(lastMessage?.role).toBe('assistant');
+    expect(lastMessage?.content).toBe(tokens.join(''));
+    expect(state.streaming.outputTokenCount).toBe(150);
+    expect(state.streaming.tokensPerSecond).toBeGreaterThan(0);
+    expect(state.streaming.isStreaming).toBe(false);
+  });
+
+  test('records streaming errors and keeps accumulated output', async () => {
+    let capturedErrorMessage: string | undefined;
+    await createTestApp({
+      onError: (error) => {
+        capturedErrorMessage = error.message;
+      },
+    });
+
+    app.startAssistantStream();
+    app.pushAssistantToken('hello ');
+    app.pushAssistantToken('world');
+    await Bun.sleep(40);
+    app.failAssistantStream(new Error('provider disconnected'));
+    await Bun.sleep(40);
+
+    const state = app.getState();
+    expect(state.streaming.isStreaming).toBe(false);
+    expect(state.streaming.lastError).toBe('provider disconnected');
+    expect(state.streaming.outputTokenCount).toBe(2);
+    expect(state.transcript.messages[state.transcript.messages.length - 1]?.content).toBe('hello world');
+    expect(capturedErrorMessage).toBe('provider disconnected');
   });
 });
