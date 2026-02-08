@@ -106,8 +106,8 @@ describe('PostgresContextStorage', () => {
         },
         messages: {
           rows: [
-            { payload: { _tag: 'UserMessage', parts: [{ _tag: 'Text', content: 'Hello' }] } },
-            { payload: { _tag: 'AssistantMessage', parts: [{ _tag: 'Text', content: 'Hi there!' }] } },
+            { payload: { role: 'user', content: [{ type: 'text', text: 'Hello' }] } },
+            { payload: { role: 'assistant', content: [{ type: 'text', text: 'Hi there!' }] } },
           ],
         },
       });
@@ -119,8 +119,8 @@ describe('PostgresContextStorage', () => {
       expect(result).not.toBeNull();
       expect(result!.id).toBe('thread-1');
       expect(result!.messages).toHaveLength(2);
-      expect(result!.messages[0]._tag).toBe('UserMessage');
-      expect(result!.messages[1]._tag).toBe('AssistantMessage');
+      expect((result!.messages[0] as any).role).toBe('user');
+      expect((result!.messages[1] as any).role).toBe('assistant');
       expect(result!.metadata.createdAt).toBeInstanceOf(Date);
       expect(result!.metadata.updatedAt).toBeInstanceOf(Date);
 
@@ -343,6 +343,72 @@ describe('PostgresContextStorage', () => {
       await storage.close();
 
       expect(pool.end).toHaveBeenCalled();
+    });
+  });
+
+  describe('listSessions()', () => {
+    it('returns session summaries ordered by updated_at desc', async () => {
+      const now = new Date('2024-01-03T09:00:00Z');
+      const earlier = new Date('2024-01-01T10:00:00Z');
+
+      const { client } = createMockClient({
+        conversation: { rows: [] },
+        messages: { rows: [] },
+      });
+      const pool = createMockPool(client);
+      const storage = new PostgresContextStorage({ pool: pool as any });
+
+      const listResult = {
+        rows: [
+          {
+            id: 'thread-2',
+            created_at: now,
+            updated_at: now,
+            metadata: { sessionTitle: 'Latest', agent: { id: 'agent-b', name: 'Beta' } },
+            message_count: '2',
+            last_payload: { role: 'assistant', content: [{ type: 'text', text: 'Response' }] },
+          },
+          {
+            id: 'thread-1',
+            created_at: earlier,
+            updated_at: earlier,
+            metadata: { title: 'First', agentId: 'agent-a', agentName: 'Alpha' },
+            message_count: 1,
+            last_payload: { role: 'user', content: [{ type: 'text', text: 'First message' }] },
+          },
+        ],
+      };
+
+      client.query = mock(async (text: string, values?: unknown[]) => {
+        if (text.includes('CREATE TABLE')) {
+          return { rows: [] };
+        }
+        if (text.includes('SELECT') && text.includes('FROM conversations') && text.includes('last_payload')) {
+          return listResult;
+        }
+        if (text.includes('SELECT') && text.includes('conversations')) {
+          return { rows: [] };
+        }
+        if (text.includes('SELECT') && text.includes('messages')) {
+          return { rows: [] };
+        }
+        return { rows: [], rowCount: 0 };
+      });
+
+      const sessions = await storage.listSessions();
+
+      expect(sessions).toHaveLength(2);
+      expect(sessions[0].id).toBe('thread-2');
+      expect(sessions[0].title).toBe('Latest');
+      expect(sessions[0].preview).toBe('Response');
+      expect(sessions[0].messageCount).toBe(2);
+      expect(sessions[0].agent).toEqual({ id: 'agent-b', name: 'Beta' });
+
+      expect(sessions[1].id).toBe('thread-1');
+      expect(sessions[1].title).toBe('First');
+      expect(sessions[1].preview).toBe('First message');
+      expect(sessions[1].messageCount).toBe(1);
+      expect(sessions[1].agent).toEqual({ id: 'agent-a', name: 'Alpha' });
     });
   });
 });
