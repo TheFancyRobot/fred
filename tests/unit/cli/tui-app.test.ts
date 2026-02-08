@@ -383,4 +383,46 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(idleLine.includes('streaming')).toBe(false);
     expect(idleLine).toContain('cost $');
   });
+
+  describe('updateTelemetryModel', () => {
+    test('updates model and provider in telemetry state', async () => {
+      await createTestApp();
+
+      // Initial state should have '--' defaults
+      expect(app.getState().telemetry.model).toBe('--');
+      expect(app.getState().telemetry.provider).toBe('--');
+
+      // Update to real model
+      app.updateTelemetryModel('claude-3-5-haiku-latest', 'anthropic');
+
+      // Verify state updated
+      expect(app.getState().telemetry.model).toBe('claude-3-5-haiku-latest');
+      expect(app.getState().telemetry.provider).toBe('anthropic');
+    });
+
+    test('initial telemetry model is "--" not a real model name', async () => {
+      await createTestApp();
+
+      // Verify defaults are '--' not hardcoded model names
+      expect(app.getState().telemetry.model).toBe('--');
+      expect(app.getState().telemetry.provider).toBe('--');
+    });
+
+    test('triggers state change event when telemetry updated', async () => {
+      let stateChangeCount = 0;
+      await createTestApp({
+        onStateChange: () => {
+          stateChangeCount++;
+        },
+      });
+
+      const initialCount = stateChangeCount;
+      app.updateTelemetryModel('gpt-4o-mini', 'openai');
+
+      // Should trigger state change
+      expect(stateChangeCount).toBeGreaterThan(initialCount);
+      expect(app.getState().telemetry.model).toBe('gpt-4o-mini');
+      expect(app.getState().telemetry.provider).toBe('openai');
+    });
+  });
 });

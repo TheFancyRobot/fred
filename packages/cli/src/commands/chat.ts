@@ -12,7 +12,7 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
  * Detect which AI provider is available based on environment variables
  * Returns platform and model, or null if no provider available
  */
-function detectAvailableProvider(): { platform: string; model: string } | { platform: null; model: null } {
+export function detectAvailableProvider(): { platform: string; model: string } | { platform: null; model: null } {
   // Check environment variables in order of preference
   // Priority: Most stable/common providers first
 

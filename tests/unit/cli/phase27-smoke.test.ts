@@ -21,9 +21,56 @@ const mockApp = {
   stop: mock(() => {}),
   isRunning: () => true,
   getState: () => ({}),
+  updateTelemetryModel: mock(() => {}),
 };
 
 const mockCreateFredTuiApp = mock(async () => mockApp);
+
+// Mock Fred class to avoid actual provider initialization
+class MockFred {
+  private agents: any[] = [];
+
+  async registerDefaultProviders() {
+    // Add a fake agent immediately so getAgents() returns non-empty
+    this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
+  }
+
+  async initializeFromConfig() {
+    // Add a fake agent immediately
+    this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
+  }
+
+  getAgents() {
+    return this.agents;
+  }
+
+  useProvider() {}
+
+  createAgent() {
+    // Should never be called if getAgents() returns non-empty
+    throw new Error('MockFred.createAgent should not be called in tests');
+  }
+
+  streamMessage() {
+    return {
+      fullStream: (async function* () {
+        yield { type: 'token', delta: 'test' };
+      })(),
+    };
+  }
+}
+
+mock.module('@fancyrobot/fred', () => ({
+  Fred: MockFred,
+}));
+
+// Mock resolveProjectConfig to return failure (forces detectAvailableProvider path)
+mock.module('../../../packages/cli/src/project/resolve-config', () => ({
+  resolveProjectConfig: () => ({
+    success: false,
+    diagnostics: [],
+  }),
+}));
 
 // Use mock.module to intercept only createFredTuiApp, preserve FredTuiApp
 mock.module('../../../packages/cli/src/tui/app', () => ({
@@ -36,11 +83,24 @@ describe('phase 27 smoke', () => {
   let originalStdout: typeof process.stdout;
   let originalExit: typeof process.exit;
   let exitCode: number | undefined;
+  let savedEnvVars: Record<string, string | undefined>;
 
   beforeEach(() => {
     originalStdin = process.stdin;
     originalStdout = process.stdout;
     originalExit = process.exit;
+
+    // Save and clear provider env vars to ensure tests use mocks
+    savedEnvVars = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    };
+
+    // Set a fake key to satisfy detectAvailableProvider
+    process.env.OPENAI_API_KEY = 'sk-test-key-for-smoke-tests';
 
     exitCode = undefined;
     (process as any).exit = mock((code?: number) => {
@@ -60,6 +120,15 @@ describe('phase 27 smoke', () => {
       configurable: true,
     });
     (process as any).exit = originalExit;
+
+    // Restore env vars
+    for (const [key, value] of Object.entries(savedEnvVars)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   });
 
   describe('bare command path emits help-first guidance', () => {

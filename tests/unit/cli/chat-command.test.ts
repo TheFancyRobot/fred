@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
+import { detectAvailableProvider } from '../../../packages/cli/src/commands/chat';
 
 /**
  * Tests for chat command routing and help-first behavior
@@ -204,6 +205,108 @@ describe('Chat Command', () => {
       const command = args[0];
 
       expect(command).toBe('dev');
+    });
+  });
+
+  describe('detectAvailableProvider', () => {
+    let savedEnv: Record<string, string | undefined>;
+
+    beforeEach(() => {
+      // Save current env vars
+      savedEnv = {
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+        GROQ_API_KEY: process.env.GROQ_API_KEY,
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      };
+
+      // Clear all provider env vars for clean test state
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      delete process.env.GROQ_API_KEY;
+      delete process.env.OPENROUTER_API_KEY;
+    });
+
+    afterEach(() => {
+      // Restore saved env vars
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    });
+
+    test('returns openai when OPENAI_API_KEY is set', () => {
+      process.env.OPENAI_API_KEY = 'sk-test-key';
+
+      const result = detectAvailableProvider();
+
+      expect(result.platform).toBe('openai');
+      expect(result.model).toBe('gpt-4o-mini');
+    });
+
+    test('returns anthropic when ANTHROPIC_API_KEY is set', () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+
+      const result = detectAvailableProvider();
+
+      expect(result.platform).toBe('anthropic');
+      expect(result.model).toBe('claude-3-5-haiku-latest');
+    });
+
+    test('returns google when GOOGLE_GENERATIVE_AI_API_KEY is set', () => {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+
+      const result = detectAvailableProvider();
+
+      expect(result.platform).toBe('google');
+      expect(result.model).toBe('gemini-2.0-flash-exp');
+    });
+
+    test('returns groq when GROQ_API_KEY is set', () => {
+      process.env.GROQ_API_KEY = 'test-key';
+
+      const result = detectAvailableProvider();
+
+      expect(result.platform).toBe('groq');
+      expect(result.model).toBe('llama-3.1-8b-instant');
+    });
+
+    test('returns null platform when no API keys set', () => {
+      // All env vars already cleared in beforeEach
+
+      const result = detectAvailableProvider();
+
+      expect(result.platform).toBe(null);
+      expect(result.model).toBe(null);
+    });
+
+    test('respects priority order (openai before anthropic)', () => {
+      // Set both keys
+      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-key';
+
+      const result = detectAvailableProvider();
+
+      // Should return OpenAI since it has higher priority
+      expect(result.platform).toBe('openai');
+      expect(result.model).toBe('gpt-4o-mini');
+    });
+
+    test('respects priority order (anthropic before google)', () => {
+      // Set anthropic and google, but not openai
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-key';
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'google-key';
+
+      const result = detectAvailableProvider();
+
+      // Should return Anthropic since it has higher priority than Google
+      expect(result.platform).toBe('anthropic');
+      expect(result.model).toBe('claude-3-5-haiku-latest');
     });
   });
 });
