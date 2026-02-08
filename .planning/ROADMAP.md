@@ -24,7 +24,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 **Milestone Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
 - [x] **Phase 27: Terminal Foundation & Project Detection** - Terminal lifecycle management and project auto-detection (completed 2026-02-08)
-- [x] **Phase 28: Streaming Performance & Core TUI** - High-performance streaming token rendering and TUI layout (completed 2026-02-08)
+- [ ] **Phase 28: Streaming Performance & Core TUI** - High-performance streaming token rendering and TUI layout (UAT gap closure in progress)
 - [ ] **Phase 29: Session Management** - Persistent sessions with export capabilities
 - [ ] **Phase 30: CLI Commands** - Headless operation and config validation
 - [ ] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands
@@ -59,7 +59,7 @@ Plans:
   2. TUI streams agent responses token-by-token in real-time without flickering or CPU spikes at 50-100+ tokens/second
   3. TUI status bar shows active model, accumulated cost, token count, and streaming indicator updated in real-time
   4. Effect Stream integration uses throttle/buffer operators with backpressure handling to prevent memory bloat during high-volume streaming
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 - [x] 28-01-PLAN.md — Build throttled streaming pipeline with bounded backpressure and token metrics (completed 2026-02-08, 5.92 min)
@@ -67,6 +67,7 @@ Plans:
 - [x] 28-03-PLAN.md — Add command palette interactions and real-time telemetry status bar (completed 2026-02-08, 8.00 min)
 - [x] 28-04-PLAN.md — Validate via phase smoke/performance tests and blocking human verification (completed 2026-02-08, 19.00 min)
 - [x] 28-05-PLAN.md — Wire Fred core AI backend to TUI chat command and fix model telemetry (completed 2026-02-08, 5.58 min, gap closure)
+- [ ] 28-06-PLAN.md — Fix provider registration blocker: add provider dependencies and dynamic import (gap closure)
 
 ### Phase 29: Session Management
 **Goal**: Enable persistent sessions with sidebar navigation, CLI access, and export capabilities
@@ -133,7 +134,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 27. Terminal Foundation & Project Detection | 4/4 | Complete | 2026-02-08 |
-| 28. Streaming Performance & Core TUI | 5/5 | Complete | 2026-02-08 |
+| 28. Streaming Performance & Core TUI | 5/6 | Gap closure | - |
 | 29. Session Management | 0/TBD | Not started | - |
 | 30. CLI Commands | 0/TBD | Not started | - |
 | 31. CLI Testing & Debugging | 0/TBD | Not started | - |
@@ -159,4 +160,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-08 - Phase 28 complete (gap closure 28-05 executed, verification passed)*
+*Last updated: 2026-02-08 - Phase 28 UAT gap closure plan 28-06 created (provider registration blocker)*
