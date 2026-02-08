@@ -75,6 +75,48 @@ describe('TUI streaming controller', () => {
     const metrics = controller.getMetricsSnapshot();
     expect(metrics.tokensProcessed).toBe(burstTokens);
     expect(metrics.droppedRenderSignals).toBeGreaterThan(0);
+    expect(metrics.bufferedChars).toBeGreaterThanOrEqual(0);
+  });
+
+  test('maintains stable update cadence at >=100 tokens/sec throughput', async () => {
+    const metricTimestamps: number[] = [];
+    const controller = createStreamingController({
+      frameMs: 16,
+      maxRenderQueue: 2,
+      callbacks: {
+        onMetrics: () => {
+          metricTimestamps.push(Date.now());
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+
+    const runMs = 320;
+    const startMs = Date.now();
+    let pushed = 0;
+    while ((Date.now() - startMs) < runMs) {
+      controller.pushToken('z');
+      pushed += 1;
+      await Bun.sleep(5);
+    }
+
+    await Bun.sleep(120);
+
+    const metrics = controller.getMetricsSnapshot();
+    const buffer = controller.getBufferSnapshot();
+
+    expect(pushed).toBeGreaterThan(40);
+    expect(metrics.tokensPerSecond).toBeGreaterThan(100);
+    expect(buffer.renderQueueDepth).toBeLessThanOrEqual(2);
+
+    const uniqueMetricTimestamps = Array.from(new Set(metricTimestamps));
+    expect(uniqueMetricTimestamps.length).toBeGreaterThan(2);
+    const deltas = uniqueMetricTimestamps
+      .slice(1)
+      .map((time, index) => time - uniqueMetricTimestamps[index]);
+    expect(Math.max(...deltas)).toBeLessThanOrEqual(120);
   });
 
   test('keeps render queue bounded while coalescing render signals', async () => {
