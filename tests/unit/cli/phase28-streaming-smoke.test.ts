@@ -22,26 +22,39 @@ const mockCreateFredTuiApp = mock(async () => mockApp);
 // Mock Fred class to avoid actual provider initialization
 class MockFred {
   private agents: any[] = [];
+  private providers: Map<string, any> = new Map();
 
   async registerDefaultProviders() {
-    // Add a fake agent immediately so getAgents() returns non-empty
-    this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
+    // Register fake providers
+    this.providers.set('openai', { id: 'openai' });
+    this.providers.set('anthropic', { id: 'anthropic' });
+    this.providers.set('google', { id: 'google' });
+    this.providers.set('groq', { id: 'groq' });
+    this.providers.set('openrouter', { id: 'openrouter' });
   }
 
   async initializeFromConfig() {
     // Add a fake agent immediately
     this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
+    this.providers.set('openai', { id: 'openai' });
   }
 
   getAgents() {
     return this.agents;
   }
 
-  useProvider() {}
+  useProvider(platform: string) {
+    // Register provider if not already registered
+    if (!this.providers.has(platform)) {
+      this.providers.set(platform, { id: platform });
+    }
+    return Promise.resolve({ id: platform });
+  }
 
-  createAgent() {
-    // Should never be called if getAgents() returns non-empty
-    throw new Error('MockFred.createAgent should not be called in tests');
+  createAgent(config: any) {
+    // Add the agent to the list
+    this.agents.push({ ...config, id: config.id || '__test_agent__' });
+    return Promise.resolve(this.agents[this.agents.length - 1]);
   }
 
   streamMessage() {
@@ -55,6 +68,7 @@ class MockFred {
 
 mock.module('@fancyrobot/fred', () => ({
   Fred: MockFred,
+  registerBuiltinPack: mock(() => {}), // Mock for provider package imports
 }));
 
 // Mock resolveProjectConfig to return failure (forces detectAvailableProvider path)
@@ -65,10 +79,18 @@ mock.module('../../../packages/cli/src/project/resolve-config', () => ({
   }),
 }));
 
+// Mock provider package imports to avoid peer dependency issues in tests
+mock.module('@fancyrobot/fred-openai', () => ({}));
+mock.module('@fancyrobot/fred-anthropic', () => ({}));
+mock.module('@fancyrobot/fred-google', () => ({}));
+mock.module('@fancyrobot/fred-groq', () => ({}));
+mock.module('@fancyrobot/fred-openrouter', () => ({}));
+
 mock.module('../../../packages/cli/src/tui/app', () => ({
   createFredTuiApp: mockCreateFredTuiApp,
   FredTuiApp,
 }));
+
 
 function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
   return {

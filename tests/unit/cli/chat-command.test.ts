@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
-import { detectAvailableProvider } from '../../../packages/cli/src/commands/chat';
+import { detectAvailableProvider, loadProviderPackage, PROVIDER_PACKAGES } from '../../../packages/cli/src/commands/chat';
 
 /**
  * Tests for chat command routing and help-first behavior
@@ -307,6 +307,37 @@ describe('Chat Command', () => {
       // Should return Anthropic since it has higher priority than Google
       expect(result.platform).toBe('anthropic');
       expect(result.model).toBe('claude-3-5-haiku-latest');
+    });
+  });
+
+  describe('loadProviderPackage', () => {
+    test('PROVIDER_PACKAGES maps all 5 supported platforms', () => {
+      expect(Object.keys(PROVIDER_PACKAGES)).toEqual(
+        expect.arrayContaining(['openai', 'anthropic', 'google', 'groq', 'openrouter'])
+      );
+      expect(Object.keys(PROVIDER_PACKAGES)).toHaveLength(5);
+    });
+
+    test('maps platform ids to @fancyrobot/fred-{platform} packages', () => {
+      expect(PROVIDER_PACKAGES.openai).toBe('@fancyrobot/fred-openai');
+      expect(PROVIDER_PACKAGES.anthropic).toBe('@fancyrobot/fred-anthropic');
+      expect(PROVIDER_PACKAGES.google).toBe('@fancyrobot/fred-google');
+      expect(PROVIDER_PACKAGES.groq).toBe('@fancyrobot/fred-groq');
+      expect(PROVIDER_PACKAGES.openrouter).toBe('@fancyrobot/fred-openrouter');
+    });
+
+    test('loadProviderPackage throws for unknown platform', async () => {
+      await expect(loadProviderPackage('nonexistent')).rejects.toThrow('Unknown provider platform: nonexistent');
+    });
+
+    test('loadProviderPackage throws with supported platforms list', async () => {
+      try {
+        await loadProviderPackage('invalid');
+        expect(true).toBe(false); // Should not reach here
+      } catch (error) {
+        expect(error instanceof Error).toBe(true);
+        expect((error as Error).message).toContain('Supported: openai, anthropic, google, groq, openrouter');
+      }
     });
   });
 });
