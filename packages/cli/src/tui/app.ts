@@ -23,6 +23,11 @@ import {
   finishStreaming,
   recordStreamingError,
   startStreaming,
+  getSelectedCommandPaletteAction,
+  setFocusedPane,
+  nextFocusablePane,
+  prevFocusablePane,
+  scrollTranscript,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -80,6 +85,12 @@ export class FredTuiApp {
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
   private inputPlaceholder: InputPlaceholder;
+  private statusThrottleMs = 100;
+  private lastStatusRenderMs = 0;
+  private lastStatusLine = '';
+
+  private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
+  private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
 
   private constructor(renderer: CliRenderer, events: TuiAppEvents = {}, config: TuiAppConfig = {}) {
     this.state = createInitialTuiState();
@@ -259,7 +270,7 @@ export class FredTuiApp {
    * Process a key event through the state machine
    */
   processKey(key: KeyEvent): void {
-    if (this.state.focusedPane === 'input' && key.ctrl && key.name === 'u') {
+    if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen && key.ctrl && key.name === 'u') {
       this.state = {
         ...this.state,
         input: {
@@ -284,22 +295,13 @@ export class FredTuiApp {
       return;
     }
 
+    if (action.type === 'palette-submit') {
+      this.executeSelectedCommandPaletteAction();
+      return;
+    }
+
     if (action.type === 'submit') {
-      const { state: newState, submittedText } = submitInput(this.state);
-      if (!submittedText.trim()) {
-        return;
-      }
-
-      this.state = appendUserMessage(newState, submittedText);
-
-      if (!this.state.streaming.isStreaming) {
-        this.state = startStreaming(this.state);
-        this.streamingController.start();
-      }
-
-      this.events.onStateChange?.(this.state);
-      this.events.onSubmit?.(submittedText);
-      this.syncStateToUI();
+      this.submitCurrentInput();
       return;
     }
 
@@ -312,6 +314,7 @@ export class FredTuiApp {
   startAssistantStream(nowMs = Date.now()): void {
     this.state = startStreaming(this.state, nowMs);
     this.streamingController.start();
+    this.refreshSessionCost(true);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
@@ -322,7 +325,9 @@ export class FredTuiApp {
 
   completeAssistantStream(nowMs = Date.now()): void {
     this.streamingController.finish();
+    this.finalizeStreamingTelemetry();
     this.state = finishStreaming(this.state, nowMs);
+    this.refreshSessionCost(false);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
@@ -330,7 +335,9 @@ export class FredTuiApp {
   failAssistantStream(error: unknown, nowMs = Date.now()): void {
     this.streamingController.fail(error);
     const message = error instanceof Error ? error.message : String(error);
+    this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, message, nowMs);
+    this.refreshSessionCost(false);
     this.events.onError?.(error instanceof Error ? error : new Error(message));
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
@@ -343,10 +350,167 @@ export class FredTuiApp {
   }
 
   private handleStreamError(error: Error): void {
+    this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, error.message);
+    this.refreshSessionCost(false);
     this.events.onError?.(error);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+  }
+
+  private submitCurrentInput(): void {
+    const { state: newState, submittedText } = submitInput(this.state);
+    if (!submittedText.trim()) {
+      return;
+    }
+
+    this.state = appendUserMessage(newState, submittedText);
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(submittedText),
+      },
+    };
+
+    if (!this.state.streaming.isStreaming) {
+      this.state = startStreaming(this.state);
+      this.streamingController.start();
+    }
+
+    this.refreshSessionCost(true);
+    this.events.onStateChange?.(this.state);
+    this.events.onSubmit?.(submittedText);
+    this.syncStateToUI();
+  }
+
+  private executeSelectedCommandPaletteAction(): void {
+    const selectedAction = getSelectedCommandPaletteAction(this.state);
+    this.state = {
+      ...this.state,
+      commandPalette: {
+        ...this.state.commandPalette,
+        isOpen: false,
+        query: '',
+        selectedIndex: 0,
+      },
+    };
+
+    if (!selectedAction) {
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    switch (selectedAction.id) {
+      case 'focus-next-pane':
+        this.state = setFocusedPane(this.state, nextFocusablePane(this.state.focusedPane));
+        break;
+      case 'focus-previous-pane':
+        this.state = setFocusedPane(this.state, prevFocusablePane(this.state.focusedPane));
+        break;
+      case 'jump-sidebar-pane':
+        this.state = setFocusedPane(this.state, 'sidebar');
+        break;
+      case 'jump-transcript-pane':
+        this.state = setFocusedPane(this.state, 'transcript');
+        break;
+      case 'jump-input-pane':
+        this.state = setFocusedPane(this.state, 'input');
+        break;
+      case 'scroll-transcript-up':
+        this.state = scrollTranscript(this.state, -1);
+        break;
+      case 'scroll-transcript-down':
+        this.state = scrollTranscript(this.state, 1);
+        break;
+      case 'clear-input':
+        this.state = {
+          ...this.state,
+          input: {
+            ...this.state.input,
+            text: '',
+            cursorPosition: 0,
+          },
+        };
+        break;
+      case 'submit-input':
+        this.submitCurrentInput();
+        return;
+      case 'select-next-session':
+        this.state = {
+          ...this.state,
+          sidebar: {
+            ...this.state.sidebar,
+            selectedIndex: Math.min(
+              this.state.sidebar.items.length - 1,
+              this.state.sidebar.selectedIndex + 1,
+            ),
+          },
+        };
+        break;
+      case 'select-previous-session':
+        this.state = {
+          ...this.state,
+          sidebar: {
+            ...this.state.sidebar,
+            selectedIndex: Math.max(0, this.state.sidebar.selectedIndex - 1),
+          },
+        };
+        break;
+      default:
+        break;
+    }
+
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  private estimateTokenCount(text: string): number {
+    const normalized = text.trim();
+    if (!normalized) {
+      return 0;
+    }
+
+    const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+    return Math.max(1, wordCount);
+  }
+
+  private finalizeStreamingTelemetry(): void {
+    if (this.state.streaming.outputTokenCount <= 0) {
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        outputTokenCount: this.state.telemetry.outputTokenCount + this.state.streaming.outputTokenCount,
+      },
+    };
+  }
+
+  private refreshSessionCost(includeActiveStream: boolean): void {
+    const activeOutput = includeActiveStream ? this.state.streaming.outputTokenCount : 0;
+    const totalOutput = this.state.telemetry.outputTokenCount + activeOutput;
+    const sessionCostUsd =
+      (this.state.telemetry.inputTokenCount * FredTuiApp.INPUT_TOKEN_COST_USD)
+      + (totalOutput * FredTuiApp.OUTPUT_TOKEN_COST_USD);
+
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        sessionCostUsd,
+      },
+    };
+  }
+
+  private getRendererWidth(): number {
+    const candidate = (this.renderer as unknown as { width?: number; terminal?: { width?: number } }).width
+      ?? (this.renderer as unknown as { terminal?: { width?: number } }).terminal?.width
+      ?? 120;
+    return typeof candidate === 'number' && candidate > 0 ? candidate : 120;
   }
 
   /**
@@ -360,6 +524,7 @@ export class FredTuiApp {
       this.state,
       this.state.focusedPane === 'sidebar'
     );
+    const sidebarHeader = sidebarContent.lines[0] ?? '[Sessions]';
 
     // Clear and re-populate sidebar items
     // Remove existing children first
@@ -370,8 +535,7 @@ export class FredTuiApp {
       id: 'sidebar-items',
       flexGrow: 1,
     });
-    // Skip first line (title) and blank line from sidebarContent
-    const itemLines = sidebarContent.lines.slice(2);
+    const itemLines = sidebarContent.lines.slice(1);
     for (let i = 0; i < itemLines.length; i++) {
       const text = new TextRenderable(r, {
         id: `sidebar-item-${i}`,
@@ -386,7 +550,7 @@ export class FredTuiApp {
     this.sidebarTitle = this.rebuildText(
       this.sidebarTitle,
       'sidebar-title',
-      '[Sessions]',
+      sidebarHeader,
       this.state.focusedPane === 'sidebar' ? '#00FFFF' : '#888888',
       TextAttributes.BOLD,
     );
@@ -433,12 +597,33 @@ export class FredTuiApp {
     this.inputBar.add(this.inputText);
 
     // Status bar
-    const statusData = renderStatusContent(this.state);
+    const nowMs = Date.now();
+    const shouldThrottleStatus = this.state.streaming.isStreaming;
+    const shouldRenderFreshStatus = !shouldThrottleStatus
+      || this.lastStatusLine.length === 0
+      || (nowMs - this.lastStatusRenderMs) >= this.statusThrottleMs;
+
+    if (shouldRenderFreshStatus) {
+      const statusData = renderStatusContent(this.state, {
+        maxWidth: Math.max(40, this.getRendererWidth() - 4),
+        nowMs,
+      });
+      this.lastStatusLine = statusData.lines[0] ?? '';
+      this.lastStatusRenderMs = nowMs;
+    }
+
+    const statusFg = this.state.streaming.lastError
+      ? '#ff6b6b'
+      : this.state.streaming.isStreaming
+        ? '#5dade2'
+        : '#7bd88f';
+
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
-      content: ` ${statusData.lines[0]} `,
+      content: ` ${this.lastStatusLine} `,
       attributes: TextAttributes.INVERSE,
+      fg: statusFg,
     });
     const statusBar = r.root.getRenderable('root')?.getRenderable('status-bar');
     if (statusBar) {
