@@ -125,12 +125,14 @@ export async function handleChatCommand(): Promise<void> {
       process.exit(1);
     }
 
+    const sessionId = fred.getContextManager().generateConversationId();
+
     const app = await createFredTuiApp({
       onSubmit: (text: string) => {
         // Fire-and-forget async streaming (don't await to avoid blocking TUI)
         (async () => {
           try {
-            const streamResult = fred.streamMessage(text);
+            const streamResult = fred.streamMessage(text, { conversationId: sessionId });
 
             // Iterate over the full stream to get all events
             for await (const event of streamResult.fullStream) {

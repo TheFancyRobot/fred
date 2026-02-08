@@ -1,32 +1,34 @@
-import { Intent } from './intent/intent';
+import type { Intent } from './intent/intent';
 import { IntentMatcher, createIntentMatcherSync } from './intent/matcher';
 import { IntentRouter, createIntentRouterSync } from './intent/router';
-import { AgentConfig, AgentInstance, AgentResponse, AgentMessage } from './agent/agent';
+import type { AgentConfig, AgentInstance, AgentResponse, AgentMessage } from './agent/agent';
 import { AgentManager } from './agent/manager';
-import { PipelineConfig, PipelineInstance } from './pipeline';
-import { PipelineManager, ResumeResult } from './pipeline/manager';
+import type { PipelineConfig, PipelineInstance } from './pipeline';
+import { PipelineManager } from './pipeline/manager';
+import type { ResumeResult } from './pipeline/manager';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
-import { Tool } from './tool/tool';
+import type { Tool } from './tool/tool';
 import { ToolRegistry } from './tool/registry';
 import { createCalculatorTool } from './tool/calculator';
 import {
-  ProviderConfig,
-  ProviderConfigInput,
-  ProviderDefinition,
+  type ProviderConfig,
+  type ProviderConfigInput,
+  type ProviderDefinition,
 } from './platform/provider';
 import type { EffectProviderFactory } from './platform/base';
 import { ProviderRegistry } from './platform/registry';
 import { ContextManager } from './context/manager';
-import { HookManager, HookType, HookHandler } from './hooks';
-import { Tracer } from './tracing';
+import { HookManager } from './hooks';
+import type { HookType, HookHandler } from './hooks';
+import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
 import { Effect, Runtime, Layer, Exit } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { MessageRouter } from './routing/router';
-import { RoutingConfig, RoutingDecision } from './routing/types';
+import type { RoutingConfig, RoutingDecision } from './routing/types';
 import { WorkflowManager } from './workflow/manager';
-import { Workflow } from './workflow/types';
+import type { Workflow } from './workflow/types';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
 import type { ObservabilityConfig } from './config/types';
 import type { ToolPoliciesConfig } from './config/types';
@@ -39,6 +41,12 @@ import { ProviderService } from './provider/service';
 import { MessageProcessor } from './message-processor/processor';
 import type { ProcessingOptions, MemoryDefaults } from './message-processor/types';
 import { ConfigInitializer, type FredLike } from './config/initializer';
+import type {
+  SessionDetails,
+  SessionExportJson,
+  SessionExportMarkdown,
+  SessionSummary,
+} from './context/context';
 import {
   FredLayers,
   type FredRuntime,
@@ -515,6 +523,27 @@ export class Fred implements FredLike {
     return this.contextManager;
   }
 
+  // --- Session Management ---
+
+  async listSessions(): Promise<SessionSummary[]> {
+    return this.contextManager.listSessions();
+  }
+
+  async getSession(conversationId: string): Promise<SessionDetails | null> {
+    return this.contextManager.getSession(conversationId);
+  }
+
+  async exportSession(
+    conversationId: string,
+    format: 'json' | 'markdown' = 'json'
+  ): Promise<SessionExportJson | SessionExportMarkdown | null> {
+    return this.contextManager.exportSession(conversationId, format);
+  }
+
+  async deleteSession(conversationId: string): Promise<void> {
+    await this.contextManager.deleteSession(conversationId);
+  }
+
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
@@ -622,6 +651,14 @@ export class Fred implements FredLike {
     configs: Array<MCPGlobalServerConfig & { id: string }>
   ): Promise<void> {
     for (const config of configs) {
+      const retry = config.retry
+        ? {
+            maxAttempts: config.retry.maxRetries,
+            initialDelayMs: config.retry.backoffMs,
+            maxDelayMs: config.retry.maxBackoffMs,
+          }
+        : undefined;
+
       // Convert MCPGlobalServerConfig to MCPServerConfig format
       const serverConfig = {
         id: config.id,
@@ -634,7 +671,7 @@ export class Fred implements FredLike {
         timeout: config.timeout,
         enabled: config.enabled,
         lazy: config.lazy,
-        retry: config.retry,
+        retry,
       };
 
       if (config.lazy) {

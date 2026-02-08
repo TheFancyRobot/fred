@@ -9,6 +9,7 @@ import { handleTestCommand } from './test';
 import { handleDevCommand } from './dev';
 import { handleEvalCommand } from './eval';
 import { handleChatCommand } from './commands/chat';
+import { handleSessionCommand } from './commands/session';
 
 /**
  * Options that require a value
@@ -31,6 +32,7 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'baseline',
   'candidate',
   'mode',
+  'format',
 ]);
 
 /**
@@ -102,7 +104,12 @@ Commands:
                                     Optional: --from-step <n> --mode retry|skip|restart --config <file>
   eval compare --baseline <id> --candidate <id>  Compare two evaluation traces
   eval suite --suite <file>           Run evaluation suite manifest
-                                    Outputs: pass/fail totals, latency/token metrics, intent confusion matrix
+                                     Outputs: pass/fail totals, latency/token metrics, intent confusion matrix
+  session                 Manage saved chat sessions
+  session list             List sessions (table or --json)
+  session show <id>        Show a session transcript
+  session export <id>      Export a session transcript (use --format json|markdown)
+  session rm <id...>       Delete one or more sessions (confirmation required)
 
 Options:
   --config <file>          Path to Fred config file
@@ -119,6 +126,11 @@ Examples:
   fred eval replay --trace-id trace-abc --from-step 2
   fred eval compare --baseline trace-a --candidate trace-b
   fred eval suite --suite ./eval/suite.yaml --output json
+  fred session list
+  fred session list --json
+  fred session show conv_123
+  fred session export conv_123 --format markdown
+  fred session rm conv_123 conv_456
 
 Get started:
   Run 'fred chat' to start an interactive session with your AI agents.
@@ -167,6 +179,10 @@ async function main(): Promise<void> {
 
       case 'eval':
         exitCode = await handleEvalCommand(commandArgs, options);
+        break;
+
+      case 'session':
+        exitCode = await handleSessionCommand(commandArgs, options);
         break;
 
       default:
