@@ -1,5 +1,20 @@
 import type { Prompt } from '@effect/ai';
-import { ConversationContext, ConversationMetadata, ConversationPolicy, ContextStorage } from './context';
+import type {
+  ConversationContext,
+  ConversationMetadata,
+  ConversationPolicy,
+  ContextStorage,
+  SessionDetails,
+  SessionExportJson,
+  SessionExportMarkdown,
+  SessionSummary,
+} from './context';
+import {
+  buildSessionDetails,
+  buildSessionSummary,
+  exportSessionToJson,
+  exportSessionToMarkdown,
+} from './session';
 import { normalizeMessage, normalizeMessages } from '../messages';
 
 /**
@@ -18,6 +33,12 @@ class InMemoryContextStorage implements ContextStorage {
 
   async delete(id: string): Promise<void> {
     this.contexts.delete(id);
+  }
+
+  async listSessions(): Promise<SessionSummary[]> {
+    const entries = Array.from(this.contexts.values());
+    entries.sort((a, b) => b.metadata.updatedAt.getTime() - a.metadata.updatedAt.getTime());
+    return entries.map((context) => buildSessionSummary(context));
   }
 
   async clear(): Promise<void> {
@@ -137,6 +158,43 @@ export class ContextManager {
       updatedAt: new Date(),
     };
     await this.storage.set(conversationId, context);
+  }
+
+  /**
+   * List session summaries from storage.
+   */
+  async listSessions(): Promise<SessionSummary[]> {
+    return this.storage.listSessions();
+  }
+
+  /**
+   * Get session details (summary + messages + metadata).
+   */
+  async getSession(conversationId: string): Promise<SessionDetails | null> {
+    const context = await this.storage.get(conversationId);
+    if (!context) return null;
+    return buildSessionDetails(context);
+  }
+
+  /**
+   * Export session to JSON or Markdown.
+   */
+  async exportSession(
+    conversationId: string,
+    format: 'json' | 'markdown' = 'json'
+  ): Promise<SessionExportJson | SessionExportMarkdown | null> {
+    const context = await this.storage.get(conversationId);
+    if (!context) return null;
+    return format === 'markdown'
+      ? exportSessionToMarkdown(context)
+      : exportSessionToJson(context);
+  }
+
+  /**
+   * Delete a session and its messages.
+   */
+  async deleteSession(conversationId: string): Promise<void> {
+    await this.storage.delete(conversationId);
   }
 
   /**
