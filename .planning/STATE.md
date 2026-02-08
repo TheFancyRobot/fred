@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 Phase: 28 of 32 (Streaming Performance & Core TUI)
 Plan: 6 of 6 in current phase
 Status: PHASE COMPLETE
-Last activity: 2026-02-08 — Completed quick task 001-PLAN.md (milestone label normalization across planning docs)
+Last activity: 2026-02-08 - Completed quick task 001: Fix milestone version labels across documentation (v0.2.5->v0.1.0, v0.3.0->v0.2.0, v0.3.1->v0.2.1)
 
 Progress: [█████████░] 99% (130/131 plans complete)
 
@@ -90,6 +90,12 @@ None yet.
 - Phase 30 depends on Phase 27 only (CLI commands independent of TUI) — ✓ Phase 27 complete
 - Phase 31 depends on Phase 30 (extends CLI commands)
 - Phase 32 depends on Phase 28 + Phase 30 (plugins extend both TUI and CLI)
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 001 | Fix milestone version labels across documentation (v0.2.5->v0.1.0, v0.3.0->v0.2.0, v0.3.1->v0.2.1) | 2026-02-08 | 2b09211 | [001-fix-milestone-version-labels-across-docu](./quick/001-fix-milestone-version-labels-across-docu/) |
 
 ## Session Continuity
 
