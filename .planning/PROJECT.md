@@ -29,13 +29,13 @@ Route any message to the right agent and execute multi-step pipelines with share
 - ✓ **PERS-02**: Pipeline checkpoint and resume — v0.2.0
 - ✓ **PERS-03**: Human-in-the-loop pauses and resume — v0.2.0
 - ✓ **DX-01**: Interactive dev chat via `bun run dev` — v0.2.0
-- ✓ **OBS-01**: Structured observability hooks for agent runs — v0.3.0
-- ✓ **OBS-02**: Evaluation and replay tooling for historical runs — v0.3.0
-- ✓ **SAFE-01**: Intent-aware tool gating policies — v0.3.0
-- ✓ **INTG-01**: MCP server integration for external tool discovery — v0.3.0
-- ✓ **ROUT-04**: Routing explainability metadata (match scores, rationale) — v0.3.0
+- ✓ **OBS-01**: Structured observability hooks for agent runs — v0.2.0
+- ✓ **OBS-02**: Evaluation and replay tooling for historical runs — v0.2.0
+- ✓ **SAFE-01**: Intent-aware tool gating policies — v0.2.0
+- ✓ **INTG-01**: MCP server integration for external tool discovery — v0.2.0
+- ✓ **ROUT-04**: Routing explainability metadata (match scores, rationale) — v0.2.0
 
-### Active (v0.3.1)
+### Active (v0.2.1)
 
 - [ ] **DX-02**: CLI/TUI-first developer workflow for Fred projects
 - [ ] **DX-03**: Project auto-detection and config validation in CLI startup
@@ -56,8 +56,8 @@ Route any message to the right agent and execute multi-step pipelines with share
 
 ## Current State
 
-**Shipped:** v0.3.0 (2026-02-07)
-- 35/35 v0.3.0 requirements complete
+**Shipped:** v0.2.0 (2026-02-07)
+- 35/35 v0.2.0 requirements complete
 - 5 phases delivered (22-26)
 - 34 plans executed
 - 111 files changed in milestone range
@@ -71,7 +71,7 @@ Route any message to the right agent and execute multi-step pipelines with share
 - Checkpoint/resume with human-in-the-loop
 - OTel-compatible observability
 
-**Next Milestone Goals (v0.3.1):**
+**Next Milestone Goals (v0.2.1):**
 - TUI-first experience with OpenCode-style interface
 - CLI command parity for scripting and automation
 - Project auto-detection and config validation
@@ -84,7 +84,7 @@ Route any message to the right agent and execute multi-step pipelines with share
 - ~50,000 LOC TypeScript across packages
 - Bun runtime with TypeScript project references
 - CI/CD with automatic npm publishing via GitHub Actions
-- v0.3.0 adds observability services, deterministic evaluation/replay, tool policy gating, MCP integration, and routing explainability APIs
+- v0.2.0 adds observability services, deterministic evaluation/replay, tool policy gating, MCP integration, and routing explainability APIs
 
 ## Constraints
 
@@ -93,7 +93,7 @@ Route any message to the right agent and execute multi-step pipelines with share
 - **AI SDK**: Full Effect replacement — no Vercel AI SDK dependencies
 - **Persistence**: In-memory by default; SQL optional — no persistence without explicit adapter
 
-## Current Milestone: v0.3.1 CLI/TUI Developer Experience
+## Current Milestone: v0.2.1 CLI/TUI Developer Experience
 
 **Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
@@ -105,10 +105,10 @@ Route any message to the right agent and execute multi-step pipelines with share
 - Effect Layers throughout (ConfigService, ProjectRootService, ProviderRegistry, SessionStore, Runner, UIAdapter)
 - Persistent sessions with export to Markdown/JSON
 
-## Previous Milestone: v0.3.0 Observability & Safety
+## Previous Milestone: v0.2.0 Observability & Safety
 
 **Status:** ✅ Shipped 2026-02-07
-**Archive:** `.planning/milestones/v0.3.0-ROADMAP.md`, `.planning/milestones/v0.3.0-REQUIREMENTS.md`
+**Archive:** `.planning/milestones/v0.2.0-ROADMAP.md`, `.planning/milestones/v0.2.0-REQUIREMENTS.md`
 
 **Delivered:**
 - Structured observability with correlation context, token/cost metrics, and trace export
@@ -132,4 +132,4 @@ Route any message to the right agent and execute multi-step pipelines with share
 | OpenTUI for TUI framework | User preference; TypeScript-native terminal UI | — Pending |
 
 ---
-*Last updated: 2026-02-07 after v0.3.1 milestone start*
+*Last updated: 2026-02-07 after v0.2.1 milestone start*

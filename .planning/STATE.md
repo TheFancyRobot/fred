@@ -6,7 +6,7 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
 **Current focus:** Phase 29 kickoff ready — session sidebar can build on validated Phase 28 TUI foundation
-**Milestone:** v0.3.1 CLI/TUI Developer Experience
+**Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
@@ -20,7 +20,7 @@ Progress: [█████████░] 99% (130/131 plans complete)
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (v0.3.1 milestone)
+- Total plans completed: 10 (v0.2.1 milestone)
 - Average duration: 7.48 min
 - Total execution time: 1.25 hours
 
@@ -37,7 +37,7 @@ Progress: [█████████░] 99% (130/131 plans complete)
 - Automated plans averaging 7.48 min in current milestone window
 
 **Previous Milestones:**
-- v0.3.0: 32 plans, ~4.2 min/plan (2 days)
+- v0.2.0: 32 plans, ~4.2 min/plan (2 days)
 - v0.2.0: 86 plans, ~3.9 min/plan (13 days)
 
 *Updated after each plan completion*

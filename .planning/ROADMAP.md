@@ -4,22 +4,22 @@
 
 Roadmap is milestone-scoped; shipped milestones are archived under `.planning/milestones/`.
 
-**Current Milestone:** v0.3.1 CLI/TUI Developer Experience
-**Last Shipped:** v0.3.0 Observability & Safety (2026-02-07)
+**Current Milestone:** v0.2.1 CLI/TUI Developer Experience
+**Last Shipped:** v0.2.0 Observability & Safety (2026-02-07)
 
 ---
 
 ## Milestones
 
 - ✅ **v0.2.0 Effect Migration + Monorepo** — Phases 1-21.1 (shipped 2026-02-01, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
-- ✅ **v0.3.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.3.0-ROADMAP.md`)
-- 🚧 **v0.3.1 CLI/TUI Developer Experience** — Phases 27-32 (in progress)
+- ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
+- 🚧 **v0.2.1 CLI/TUI Developer Experience** — Phases 27-32 (in progress)
 
 ---
 
 ## Phases
 
-### 🚧 v0.3.1 CLI/TUI Developer Experience (In Progress)
+### 🚧 v0.2.1 CLI/TUI Developer Experience (In Progress)
 
 **Milestone Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
@@ -34,7 +34,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 ### Phase 27: Terminal Foundation & Project Detection
 **Goal**: Establish robust terminal lifecycle management and project auto-detection with Effect-based resource cleanup
-**Depends on**: Nothing (first phase of v0.3.1)
+**Depends on**: Nothing (first phase of v0.2.1)
 **Requirements**: TUI-01, TUI-02, TUI-03, TUI-04, TUI-09, TUI-10, PROJ-01, PROJ-02, PROJ-03, PROJ-04
 **Success Criteria** (what must be TRUE):
   1. User can launch TUI with `fred` or `fred tui` and see multi-pane layout with sidebar, transcript, and status bar
@@ -145,9 +145,9 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 ## Previous Milestones
 
 <details>
-<summary>✅ v0.3.0 Observability & Safety (Phases 22-26) - SHIPPED 2026-02-07</summary>
+<summary>✅ v0.2.0 Observability & Safety (Phases 22-26) - SHIPPED 2026-02-07</summary>
 
-See `.planning/milestones/v0.3.0-ROADMAP.md` for complete details.
+See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 </details>
 

@@ -1,6 +1,6 @@
 # Fred Project Milestones
 
-## v0.3.0 Observability & Safety (Shipped: 2026-02-07)
+## v0.2.0 Observability & Safety (Shipped: 2026-02-07)
 
 **Delivered:** Production-grade observability, deterministic evaluation/replay, tool safety policies, MCP integration, and routing explainability across Fred core and CLI surfaces.
 
@@ -19,11 +19,11 @@
 - 111 files changed
 - 19,456 insertions and 664 deletions in milestone commit range
 - 5 phases, 34 plans, ~71 tracked tasks from summary metadata
-- ~16h 19m from first v0.3.0 feat commit to final v0.3.0 feat commit
+- ~16h 19m from first v0.2.0 feat commit to final v0.2.0 feat commit
 
 **Git range:** `feat(22-01)` -> `feat(26-03)`
 
-**What's next:** v0.3.1 CLI/TUI Developer Experience (`/gsd/new-milestone`)
+**What's next:** v0.2.1 CLI/TUI Developer Experience (`/gsd/new-milestone`)
 
 ---
 
@@ -53,7 +53,7 @@
 
 **Git range:** Initial roadmap commit → v0.2.0 milestone completion
 
-**What's next:** v0.3.0 Observability & Safety — structured hooks, evaluation tooling, tool gating, MCP integration
+**What's next:** v0.2.0 Observability & Safety — structured hooks, evaluation tooling, tool gating, MCP integration
 
 ---
 
