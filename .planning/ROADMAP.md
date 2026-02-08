@@ -59,10 +59,13 @@ Plans:
   2. TUI streams agent responses token-by-token in real-time without flickering or CPU spikes at 50-100+ tokens/second
   3. TUI status bar shows active model, accumulated cost, token count, and streaming indicator updated in real-time
   4. Effect Stream integration uses throttle/buffer operators with backpressure handling to prevent memory bloat during high-volume streaming
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 28-01: TBD
+- [ ] 28-01-PLAN.md — Build throttled streaming pipeline with bounded backpressure and token metrics
+- [ ] 28-02-PLAN.md — Implement multiline input composer and submit-to-stream wiring
+- [ ] 28-03-PLAN.md — Add command palette interactions and real-time telemetry status bar
+- [ ] 28-04-PLAN.md — Validate via phase smoke/performance tests and blocking human verification
 
 ### Phase 29: Session Management
 **Goal**: Enable persistent sessions with sidebar navigation, CLI access, and export capabilities
