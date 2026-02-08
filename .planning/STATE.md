@@ -11,30 +11,30 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 28 of 32 (Streaming Performance & Core TUI)
-Plan: 4 of 4 in current phase
+Plan: 5 of 5 in current phase
 Status: PHASE COMPLETE
-Last activity: 2026-02-08 — Completed 28-04-PLAN.md (streaming smoke/performance validation + checkpoint feedback fixes)
+Last activity: 2026-02-08 — Completed 28-05-PLAN.md (AI backend wiring and model telemetry gap closure)
 
-Progress: [█████████░] 98% (128/131 plans complete)
+Progress: [█████████░] 99% (129/131 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8 (v0.3.1 milestone)
-- Average duration: 8.06 min
-- Total execution time: 1.07 hours
+- Total plans completed: 9 (v0.3.1 milestone)
+- Average duration: 7.77 min
+- Total execution time: 1.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 27 | 4 | 27.55 min | 6.89 min |
-| 28 | 4 | 36.92 min | 9.23 min |
+| 28 | 5 | 42.50 min | 8.50 min |
 
 **Recent Trend:**
-- Last 5 plans: ~12 min (27-04), 5.92 min (28-01), 4.00 min (28-02), 8.00 min (28-03), 19.00 min (28-04 with checkpoint continuation)
-- Trend: Throughput stable with expected duration increase on human checkpoint closure and end-to-end validation
-- Automated plans averaging 8.06 min in current milestone window
+- Last 5 plans: 5.92 min (28-01), 4.00 min (28-02), 8.00 min (28-03), 19.00 min (28-04 with checkpoint), 5.58 min (28-05)
+- Trend: Throughput stable; gap closure plans faster than end-to-end validation
+- Automated plans averaging 7.77 min in current milestone window
 
 **Previous Milestones:**
 - v0.3.0: 32 plans, ~4.2 min/plan (2 days)
@@ -62,6 +62,10 @@ Recent decisions affecting current work:
 - Throttled telemetry status transitions (28-03) — 100ms streaming cadence with immediate refresh at stream start/stop/error
 - Total-first token telemetry (28-04) — Status now prioritizes combined token count with in/out as secondary detail
 - Minimal composer chrome (28-04) — Removed persistent input shortcut hint to reduce distraction
+- Fire-and-forget streaming pattern (28-05) — onSubmit callback streams async without blocking TUI event loop
+- Provider priority cascade (28-05) — OpenAI > Anthropic > Google > Groq > OpenRouter based on ecosystem maturity
+- Config-first with auto-detection fallback (28-05) — Respects explicit config, convenient env-based setup otherwise
+- Telemetry defaults to '--' (28-05) — Avoids misleading users before provider actually connects
 
 ### Pending Todos
 
@@ -86,8 +90,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T07:01:55Z
-Stopped at: Completed 28-04-PLAN.md
-Resume file: .planning/phases/28-streaming-performance-core-tui/28-04-SUMMARY.md
+Last session: 2026-02-08T15:36:58Z
+Stopped at: Completed 28-05-PLAN.md
+Resume file: .planning/phases/28-streaming-performance-core-tui/28-05-SUMMARY.md
 
-**Next step:** Begin Phase 29 planning/execution (session sidebar and transcript persistence workflows)
+**Next step:** Phase 28 complete — ready for Phase 29 planning/execution (session sidebar and transcript persistence workflows)
