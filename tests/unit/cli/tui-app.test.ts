@@ -128,6 +128,53 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().input.text).toBe('');
     expect(app.getState().input.cursorPosition).toBe(0);
     expect(submitted).toBe('hi');
+    expect(app.getState().streaming.isStreaming).toBe(true);
+  });
+
+  test('Shift+Enter creates multiline input and Enter submits full payload', async () => {
+    let submitted = '';
+    await createTestApp({
+      onSubmit: (text) => { submitted = text; },
+    });
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter', shift: true }));
+    app.processKey(makeKey({ name: 't' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+
+    expect(app.getState().input.text).toBe('hi\nthere');
+
+    app.processKey(makeKey({ name: 'enter' }));
+
+    const state = app.getState();
+    expect(submitted).toBe('hi\nthere');
+    expect(state.transcript.messages[state.transcript.messages.length - 1]).toEqual({
+      role: 'user',
+      content: 'hi\nthere',
+    });
+    expect(state.streaming.isStreaming).toBe(true);
+  });
+
+  test('whitespace-only input is ignored on submit', async () => {
+    let submitCount = 0;
+    await createTestApp({
+      onSubmit: () => { submitCount += 1; },
+    });
+
+    app.processKey(makeKey({ name: 'space' }));
+    app.processKey(makeKey({ name: 'space' }));
+    app.processKey(makeKey({ name: 'space' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    const state = app.getState();
+    expect(submitCount).toBe(0);
+    expect(state.transcript.messages).toHaveLength(0);
+    expect(state.streaming.isStreaming).toBe(false);
+    expect(state.input.text).toBe('   ');
   });
 
   test('backspace deletes character', async () => {
@@ -180,6 +227,42 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'tab' }));
     expect(states.length).toBeGreaterThan(0);
     expect(states[states.length - 1].focusedPane).toBe('sidebar');
+  });
+
+  test('submit immediately appends transcript and starts streaming lifecycle', async () => {
+    const states: Array<ReturnType<FredTuiApp['getState']>> = [];
+    await createTestApp({
+      onStateChange: (state) => { states.push(state); },
+    });
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    const state = app.getState();
+    expect(state.transcript.messages).toHaveLength(1);
+    expect(state.transcript.messages[0]).toEqual({ role: 'user', content: 'hi' });
+    expect(state.streaming.isStreaming).toBe(true);
+    expect(state.streaming.outputTokenCount).toBe(0);
+    expect(states[states.length - 1]?.streaming.isStreaming).toBe(true);
+  });
+
+  test('input remains usable while assistant stream is active', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+    expect(app.getState().streaming.isStreaming).toBe(true);
+
+    app.processKey(makeKey({ name: 'n' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'x' }));
+    app.processKey(makeKey({ name: 't' }));
+
+    expect(app.getState().input.text).toBe('next');
+    expect(app.getState().focusedPane).toBe('input');
+    expect(app.getState().streaming.isStreaming).toBe(true);
   });
 
   test('streams assistant output incrementally under high token burst', async () => {
