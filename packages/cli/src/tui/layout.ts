@@ -143,7 +143,7 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
 
   const sidebarWidth = DEFAULT_LAYOUT.sidebarWidth;
   const maxLineLength = Math.max(10, sidebarWidth - 4);
-  const newSessionLine = '+ New Session';
+  const newSessionLine = '+ New Session (Enter)';
 
   const items = state.sessions.items;
   const selectedId = state.sessions.selectedId;

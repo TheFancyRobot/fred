@@ -559,6 +559,25 @@ function getSidebarSelectedIndex(
   return getSelectedSessionIndex(items, selectedId);
 }
 
+function setSidebarSelectedIndex(state: TuiState, index: number): TuiState {
+  const maxIndex = state.sidebar.hasNewSessionAction
+    ? state.sessions.items.length
+    : Math.max(0, state.sessions.items.length - 1);
+  const clamped = Math.max(0, Math.min(index, maxIndex));
+
+  if (clamped === state.sidebar.selectedIndex) {
+    return state;
+  }
+
+  return {
+    ...state,
+    sidebar: {
+      ...state.sidebar,
+      selectedIndex: clamped,
+    },
+  };
+}
+
 function updateSessionItem(
   state: TuiState,
   sessionId: string,
@@ -1096,10 +1115,14 @@ export function selectNextSession(state: TuiState): TuiState {
   if (state.sessions.items.length === 0) return state;
   const maxIndex = state.sessions.items.length - 1;
   if (state.sidebar.hasNewSessionAction) {
-    const baseIndex = Math.min(maxIndex + 1, state.sidebar.selectedIndex + 1);
-    if (baseIndex === 0) {
-      return state;
+    if (state.sidebar.selectedIndex === 0) {
+      const nextId = state.sessions.items[0]?.id ?? null;
+      if (!nextId || nextId === state.sessions.selectedId) {
+        return setSidebarSelectedIndex(state, 1);
+      }
+      return switchSession(state, nextId);
     }
+    const baseIndex = Math.min(maxIndex + 1, state.sidebar.selectedIndex + 1);
     const nextIndex = baseIndex - 1;
     const nextId = state.sessions.items[nextIndex]?.id ?? null;
     return switchSession(state, nextId);
@@ -1112,10 +1135,13 @@ export function selectNextSession(state: TuiState): TuiState {
 export function selectPreviousSession(state: TuiState): TuiState {
   if (state.sessions.items.length === 0) return state;
   if (state.sidebar.hasNewSessionAction) {
-    const baseIndex = Math.max(0, state.sidebar.selectedIndex - 1);
-    if (baseIndex === 0) {
+    if (state.sidebar.selectedIndex === 1) {
+      return setSidebarSelectedIndex(state, 0);
+    }
+    if (state.sidebar.selectedIndex === 0) {
       return state;
     }
+    const baseIndex = Math.max(0, state.sidebar.selectedIndex - 1);
     const nextIndex = baseIndex - 1;
     const nextId = state.sessions.items[nextIndex]?.id ?? null;
     return switchSession(state, nextId);

@@ -98,6 +98,32 @@ describe('TUI Session State', () => {
     expect(state.sessions.selectedId).toBe('s2');
   });
 
+  test('selectPreviousSession focuses new session action', () => {
+    let state = createInitialTuiState();
+    state = applySessionList(state, [
+      {
+        id: 's1',
+        title: 'First',
+        updatedAt: new Date('2026-02-08T12:00:00Z'),
+        messageCount: 0,
+        preview: null,
+        unread: false,
+      },
+      {
+        id: 's2',
+        title: 'Second',
+        updatedAt: new Date('2026-02-08T11:00:00Z'),
+        messageCount: 0,
+        preview: null,
+        unread: false,
+      },
+    ], 's1');
+
+    state = selectPreviousSession(state);
+    expect(state.sessions.selectedId).toBe('s1');
+    expect(state.sidebar.selectedIndex).toBe(0);
+  });
+
   test('addSession auto-selects new session by default', () => {
     let state = createInitialTuiState();
     state = applySessionList(state, [
