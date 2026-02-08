@@ -78,10 +78,13 @@ Plans:
   2. User can list sessions via `fred session list` with tabular and --json output
   3. User can view session transcript via `fred session show <id>` and export via `fred session export <id>` in JSON and markdown formats
   4. User can delete sessions via `fred session rm <id>` with confirmation prompt
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 29-01: TBD
+- [x] 29-01-PLAN.md — Add session storage list/query and export helpers in core (completed 2026-02-08)
+- [ ] 29-02-PLAN.md — Implement CLI session commands for list/show/export/rm
+- [ ] 29-03-PLAN.md — Wire TUI session sidebar navigation, switching, and creation
+- [ ] 29-04-PLAN.md — Add TUI session deletion with confirmation prompt
 
 ### Phase 30: CLI Commands
 **Goal**: Deliver full CLI command parity for headless operation, project scaffolding, and config validation

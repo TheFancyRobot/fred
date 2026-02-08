@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 29 of 32 (Session Management)
-Plan: 0 of TBD in current phase
-Status: READY TO PLAN
-Last activity: 2026-02-08 - Finalized Phase 28 UAT fixes (provider bootstrap, default-agent fallback, scrolling/selection UX)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-02-08 - Completed 29-01-PLAN.md
 
-Progress: [██████████] 100% (131/131 plans complete in Phase 28 scope)
+Progress: [█████████░] 96% (132/137 plans complete)
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Recent decisions affecting current work:
 - Provider packages as CLI workspace dependencies (28-06) — Enables dynamic import resolution from CLI context
 - Dynamic provider import before registration (28-06) — Triggers side-effect self-registration before useProvider call
 - Milestone label normalization mapping (quick-001-01) — Standardized planning references to v0.1.0/v0.2.0/v0.2.1 without renaming archive files
+- Storage-level session summaries (29-01) — Session lists computed via SQL for counts and preview payloads
 
 ### Pending Todos
 
@@ -99,8 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T18:05:00Z
-Stopped at: Cleanup pass complete; Phase 28 closed and Phase 29 handoff prepared
-Resume file: (none)
-
-**Next step:** Run `/gsd/plan-phase 29` to generate executable Session Management plans from existing phase context/research docs
+Last session: 2026-02-08T20:22:14Z
+Stopped at: Completed 29-01-PLAN.md
+Resume file: None
