@@ -7,7 +7,7 @@
 
 import type { TuiState } from './state.js';
 
-const STREAM_SPINNER_FRAMES = ['-', '\\', '|', '/'] as const;
+const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
 
 interface StatusRenderOptions {
   maxWidth?: number;
@@ -193,21 +193,21 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
       : null;
 
   const totalOutput = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
-  const telemetrySegments = [
-    `Focus: ${state.focusedPane}`,
+  const telemetrySegments = [`Focus: ${state.focusedPane}`];
+  if (streamSegment) {
+    telemetrySegments.push(streamSegment);
+  }
+
+  telemetrySegments.push(
     `mdl ${state.telemetry.model}`,
     `cost ${formatUsd(state.telemetry.sessionCostUsd)}`,
     `tok in:${state.telemetry.inputTokenCount} out:${totalOutput}`,
-    'Tab: cycle focus',
-    'Ctrl/Cmd+K palette',
     formatRate(state.streaming.tokensPerSecond),
     formatLatency(state.streaming.firstTokenLatencyMs),
+    'Tab: cycle focus',
+    'Ctrl/Cmd+K palette',
     'Esc: quit',
-  ];
-
-  if (streamSegment) {
-    telemetrySegments.splice(5, 0, streamSegment);
-  }
+  );
 
   const statusText = trimStatusSegments(telemetrySegments, maxWidth);
 

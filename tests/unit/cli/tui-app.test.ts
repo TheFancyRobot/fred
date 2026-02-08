@@ -218,6 +218,50 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(quitFired).toBe(true);
   });
 
+  test('Ctrl+K and Cmd+K toggle command palette', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'k', ctrl: true }));
+    expect(app.getState().commandPalette.isOpen).toBe(true);
+
+    app.processKey(makeKey({ name: 'k', ctrl: true }));
+    expect(app.getState().commandPalette.isOpen).toBe(false);
+
+    app.processKey(makeKey({ name: 'k', meta: true }));
+    expect(app.getState().commandPalette.isOpen).toBe(true);
+  });
+
+  test('Esc dismisses command palette without quitting app', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'k', ctrl: true }));
+    expect(app.getState().commandPalette.isOpen).toBe(true);
+
+    app.processKey(makeKey({ name: 'escape' }));
+    expect(app.getState().commandPalette.isOpen).toBe(false);
+    expect(app.isRunning()).toBe(true);
+  });
+
+  test('palette action selection executes clear input command', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'y' }));
+    expect(app.getState().input.text).toBe('hey');
+
+    app.processKey(makeKey({ name: 'k', ctrl: true }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'l' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    expect(app.getState().commandPalette.isOpen).toBe(false);
+    expect(app.getState().input.text).toBe('');
+  });
+
   test('onStateChange fires on state updates', async () => {
     const states: any[] = [];
     await createTestApp({
@@ -308,5 +352,35 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.streaming.outputTokenCount).toBe(2);
     expect(state.transcript.messages[state.transcript.messages.length - 1]?.content).toBe('hello world');
     expect(capturedErrorMessage).toBe('provider disconnected');
+  });
+
+  test('status telemetry is throttled during active streaming and clears indicator when idle', async () => {
+    await createTestApp();
+
+    const getStatusContent = (): string => {
+      return String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
+    };
+
+    app.startAssistantStream();
+    app.pushAssistantToken('a');
+    const firstStreamingLine = getStatusContent();
+
+    await Bun.sleep(30);
+    app.pushAssistantToken('b');
+    const secondStreamingLine = getStatusContent();
+
+    expect(firstStreamingLine).toContain('streaming');
+    expect(secondStreamingLine).toBe(firstStreamingLine);
+
+    await Bun.sleep(120);
+    app.pushAssistantToken('c');
+    await Bun.sleep(40);
+    const thirdStreamingLine = getStatusContent();
+    expect(thirdStreamingLine).not.toBe(firstStreamingLine);
+
+    app.completeAssistantStream();
+    const idleLine = getStatusContent();
+    expect(idleLine.includes('streaming')).toBe(false);
+    expect(idleLine).toContain('cost $');
   });
 });

@@ -88,6 +88,7 @@ export class FredTuiApp {
   private statusThrottleMs = 100;
   private lastStatusRenderMs = 0;
   private lastStatusLine = '';
+  private previousStreamingState = false;
 
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
@@ -599,7 +600,9 @@ export class FredTuiApp {
     // Status bar
     const nowMs = Date.now();
     const shouldThrottleStatus = this.state.streaming.isStreaming;
+    const streamingTransitioned = this.state.streaming.isStreaming !== this.previousStreamingState;
     const shouldRenderFreshStatus = !shouldThrottleStatus
+      || streamingTransitioned
       || this.lastStatusLine.length === 0
       || (nowMs - this.lastStatusRenderMs) >= this.statusThrottleMs;
 
@@ -611,6 +614,7 @@ export class FredTuiApp {
       this.lastStatusLine = statusData.lines[0] ?? '';
       this.lastStatusRenderMs = nowMs;
     }
+    this.previousStreamingState = this.state.streaming.isStreaming;
 
     const statusFg = this.state.streaming.lastError
       ? '#ff6b6b'

@@ -82,6 +82,45 @@ describe('TUI Layout', () => {
 
       expect(content.lines[0]).toContain('Focus: transcript');
       expect(content.lines[0]).toContain('Tab: cycle focus');
+      expect(content.lines[0]).toContain('cost $0.0000');
+      expect(content.lines[0]).toContain('tok in:0 out:0');
+    });
+
+    test('renders command palette content in sidebar mode', () => {
+      const state = createInitialTuiState();
+      state.commandPalette.isOpen = true;
+      state.commandPalette.query = 'focus';
+
+      const content = renderSidebarContent(state, true);
+      expect(content.lines[0]).toBe('[Command Palette]');
+      expect(content.lines[1]).toContain('focus');
+      expect(content.lines.join('\n')).toContain('Focus Next Pane');
+    });
+
+    test('shows streaming indicator only when actively streaming', () => {
+      const state = createInitialTuiState();
+
+      state.streaming.isStreaming = true;
+      state.streaming.tokensPerSecond = 42.4;
+      state.streaming.firstTokenLatencyMs = 91;
+      const streaming = renderStatusContent(state, { nowMs: 1_000 });
+      expect(streaming.lines[0]).toContain('streaming');
+      expect(streaming.lines[0]).toContain('42.4 tok/s');
+      expect(streaming.lines[0]).toContain('lat 91ms');
+
+      state.streaming.isStreaming = false;
+      const idle = renderStatusContent(state, { nowMs: 1_150 });
+      expect(idle.lines[0]).not.toContain('streaming');
+    });
+
+    test('degrades status output for compact widths', () => {
+      const state = createInitialTuiState();
+      state.streaming.isStreaming = true;
+      state.streaming.tokensPerSecond = 120.2;
+
+      const content = renderStatusContent(state, { maxWidth: 52, nowMs: 1_200 });
+      expect(content.lines[0].length).toBeLessThanOrEqual(52);
+      expect(content.lines[0].length).toBeGreaterThan(0);
     });
   });
 

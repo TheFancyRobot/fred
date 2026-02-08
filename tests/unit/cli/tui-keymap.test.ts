@@ -25,7 +25,7 @@ function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
     option: overrides.option ?? false,
     eventType: overrides.eventType ?? 'press',
     repeated: overrides.repeated ?? false,
-  };
+  } as KeyEvent;
 }
 
 describe('TUI Keymap', () => {
@@ -114,7 +114,9 @@ describe('TUI Keymap', () => {
       const event = makeKey({ name: 'up' });
       const action = mapKeyToAction(event, state);
       expect(action.type).toBe('scroll-up');
-      expect(action.lines).toBe(1);
+      if (action.type === 'scroll-up') {
+        expect(action.lines).toBe(1);
+      }
 
       const newState = applyKeyAction(state, action);
       expect(newState.transcript.viewport.scrollOffset).toBe(9);
@@ -143,7 +145,9 @@ describe('TUI Keymap', () => {
       const event = makeKey({ name: 'pageup' });
       const action = mapKeyToAction(event, state);
       expect(action.type).toBe('scroll-up');
-      expect(action.lines).toBe(10);
+      if (action.type === 'scroll-up') {
+        expect(action.lines).toBe(10);
+      }
 
       const newState = applyKeyAction(state, action);
       expect(newState.transcript.viewport.scrollOffset).toBe(10);
@@ -158,7 +162,9 @@ describe('TUI Keymap', () => {
       const event = makeKey({ name: 'pagedown' });
       const action = mapKeyToAction(event, state);
       expect(action.type).toBe('scroll-down');
-      expect(action.lines).toBe(10);
+      if (action.type === 'scroll-down') {
+        expect(action.lines).toBe(10);
+      }
 
       const newState = applyKeyAction(state, action);
       expect(newState.transcript.viewport.scrollOffset).toBe(15);
@@ -478,6 +484,76 @@ describe('TUI Keymap', () => {
 
       expect(newState.input.text).toBe('   ');
       expect(newState.input.history.entries).toHaveLength(0);
+    });
+  });
+
+  describe('Command palette controls', () => {
+    test('Ctrl+K toggles command palette on Windows/Linux', () => {
+      const state = createInitialTuiState();
+
+      const openAction = mapKeyToAction(makeKey({ name: 'k', ctrl: true }), state);
+      expect(openAction.type).toBe('toggle-command-palette');
+
+      const opened = applyKeyAction(state, openAction);
+      expect(opened.commandPalette.isOpen).toBe(true);
+
+      const closeAction = mapKeyToAction(makeKey({ name: 'k', ctrl: true }), opened);
+      const closed = applyKeyAction(opened, closeAction);
+      expect(closed.commandPalette.isOpen).toBe(false);
+    });
+
+    test('Cmd+K toggles command palette on macOS', () => {
+      const state = createInitialTuiState();
+
+      const action = mapKeyToAction(makeKey({ name: 'k', meta: true }), state);
+      const opened = applyKeyAction(state, action);
+
+      expect(action.type).toBe('toggle-command-palette');
+      expect(opened.commandPalette.isOpen).toBe(true);
+    });
+
+    test('palette search is case-insensitive and keeps alphabetical fallback', () => {
+      let state = createInitialTuiState();
+      state.focusedPane = 'transcript';
+      state = applyKeyAction(state, { type: 'toggle-command-palette' });
+
+      for (const text of ['S', 'c', 'R', 'o', 'L', 'l']) {
+        state = applyKeyAction(state, { type: 'palette-query', text });
+      }
+
+      expect(state.commandPalette.query).toBe('ScRoLl');
+      expect(state.commandPalette.filteredActions.length).toBeGreaterThan(0);
+      expect(state.commandPalette.filteredActions[0]?.label).toContain('Scroll');
+
+      const labels = state.commandPalette.filteredActions.map((action) => action.label);
+      const sorted = [...labels].sort((a, b) => a.localeCompare(b));
+      expect(labels).toEqual(sorted);
+    });
+
+    test('Esc dismisses palette and restores normal key handling', () => {
+      let state = createInitialTuiState();
+      state = applyKeyAction(state, { type: 'toggle-command-palette' });
+
+      const escAction = mapKeyToAction(makeKey({ name: 'escape' }), state);
+      expect(escAction.type).toBe('close-command-palette');
+
+      state = applyKeyAction(state, escAction);
+      expect(state.commandPalette.isOpen).toBe(false);
+
+      const tabAction = mapKeyToAction(makeKey({ name: 'tab' }), state);
+      expect(tabAction.type).toBe('focus-next');
+    });
+
+    test('palette selection uses arrow keys and wraps', () => {
+      let state = createInitialTuiState();
+      state = applyKeyAction(state, { type: 'toggle-command-palette' });
+
+      const initial = state.commandPalette.selectedIndex;
+      state = applyKeyAction(state, { type: 'palette-next' });
+      expect(state.commandPalette.selectedIndex).toBe((initial + 1) % state.commandPalette.filteredActions.length);
+
+      state = applyKeyAction(state, { type: 'palette-prev' });
+      expect(state.commandPalette.selectedIndex).toBe(initial);
     });
   });
 
