@@ -115,6 +115,7 @@ export interface TuiState {
   };
   sidebar: {
     selectedIndex: number;
+    hasNewSessionAction: boolean;
   };
 }
 
@@ -168,6 +169,7 @@ export function createInitialTuiState(): TuiState {
     },
     sidebar: {
       selectedIndex: 0,
+      hasNewSessionAction: true,
     },
   };
 }
@@ -544,6 +546,19 @@ function getSelectedSessionIndex(items: SessionListItem[], selectedId: string | 
   return index >= 0 ? index : 0;
 }
 
+function getSidebarSelectedIndex(
+  items: SessionListItem[],
+  selectedId: string | null,
+  hasNewSessionAction: boolean,
+): number {
+  if (hasNewSessionAction) {
+    if (!selectedId) return 0;
+    const index = items.findIndex((item) => item.id === selectedId);
+    return index >= 0 ? index + 1 : 0;
+  }
+  return getSelectedSessionIndex(items, selectedId);
+}
+
 function updateSessionItem(
   state: TuiState,
   sessionId: string,
@@ -558,7 +573,11 @@ function updateSessionItem(
     ...items.filter((item) => item.id !== sessionId),
     updated,
   ]);
-  const selectedIndex = getSelectedSessionIndex(nextItems, state.sessions.selectedId);
+  const selectedIndex = getSidebarSelectedIndex(
+    nextItems,
+    state.sessions.selectedId,
+    state.sidebar.hasNewSessionAction,
+  );
 
   return {
     ...state,
@@ -966,7 +985,7 @@ export function applySessionList(
 ): TuiState {
   const sorted = sortSessions(items);
   const resolvedSelected = selectedId ?? state.sessions.selectedId ?? sorted[0]?.id ?? null;
-  const selectedIndex = getSelectedSessionIndex(sorted, resolvedSelected);
+  const selectedIndex = getSidebarSelectedIndex(sorted, resolvedSelected, state.sidebar.hasNewSessionAction);
 
   const nextTranscripts = { ...state.sessions.transcripts };
   for (const item of sorted) {
@@ -979,13 +998,34 @@ export function applySessionList(
     ? nextTranscripts[resolvedSelected]
     : state.transcript;
 
+  const nextDrafts = resolvedSelected && state.sessions.selectedId && state.sessions.selectedId !== resolvedSelected
+    ? {
+        ...state.sessions.drafts,
+        [state.sessions.selectedId]: state.input.text,
+      }
+    : state.sessions.drafts;
+  const nextInputText = resolvedSelected
+    ? (nextDrafts[resolvedSelected] ?? '')
+    : (state.sessions.selectedId ? state.sessions.drafts[state.sessions.selectedId] ?? '' : state.input.text);
+  const nextCursor = nextInputText.length;
+
   return {
     ...state,
     transcript,
+    input: {
+      ...state.input,
+      text: nextInputText,
+      cursorPosition: nextCursor,
+      history: {
+        ...state.input.history,
+        currentIndex: -1,
+      },
+    },
     sessions: {
       ...state.sessions,
       items: sorted,
       selectedId: resolvedSelected,
+      drafts: nextDrafts,
       transcripts: nextTranscripts,
     },
     sidebar: {
@@ -1002,7 +1042,7 @@ export function addSession(state: TuiState, item: SessionListItem, options: { se
   ]);
   const shouldSelect = options.select ?? true;
   const nextSelected = shouldSelect ? item.id : state.sessions.selectedId;
-  const selectedIndex = getSelectedSessionIndex(nextItems, nextSelected);
+  const selectedIndex = getSidebarSelectedIndex(nextItems, nextSelected, state.sidebar.hasNewSessionAction);
 
   const nextTranscripts = state.sessions.transcripts[item.id]
     ? state.sessions.transcripts
@@ -1015,13 +1055,34 @@ export function addSession(state: TuiState, item: SessionListItem, options: { se
     ? nextTranscripts[nextSelected]
     : state.transcript;
 
+  const nextDrafts = shouldSelect && state.sessions.selectedId
+    ? {
+        ...state.sessions.drafts,
+        [state.sessions.selectedId]: state.input.text,
+      }
+    : state.sessions.drafts;
+  const nextInputText = shouldSelect ? (nextDrafts[nextSelected ?? ''] ?? '') : state.input.text;
+  const nextCursor = shouldSelect ? nextInputText.length : state.input.cursorPosition;
+
   return {
     ...state,
     transcript,
+    input: {
+      ...state.input,
+      text: nextInputText,
+      cursorPosition: nextCursor,
+      history: shouldSelect
+        ? {
+            ...state.input.history,
+            currentIndex: -1,
+          }
+        : state.input.history,
+    },
     sessions: {
       ...state.sessions,
       items: nextItems,
       selectedId: nextSelected,
+      drafts: nextDrafts,
       transcripts: nextTranscripts,
     },
     sidebar: {
@@ -1033,15 +1094,48 @@ export function addSession(state: TuiState, item: SessionListItem, options: { se
 
 export function selectNextSession(state: TuiState): TuiState {
   if (state.sessions.items.length === 0) return state;
-  const nextIndex = Math.min(state.sessions.items.length - 1, state.sidebar.selectedIndex + 1);
+  const maxIndex = state.sessions.items.length - 1;
+  if (state.sidebar.hasNewSessionAction) {
+    const baseIndex = Math.min(maxIndex + 1, state.sidebar.selectedIndex + 1);
+    if (baseIndex === 0) {
+      return state;
+    }
+    const nextIndex = baseIndex - 1;
+    const nextId = state.sessions.items[nextIndex]?.id ?? null;
+    return switchSession(state, nextId);
+  }
+  const nextIndex = Math.min(maxIndex, state.sidebar.selectedIndex + 1);
   const nextId = state.sessions.items[nextIndex]?.id ?? null;
   return switchSession(state, nextId);
 }
 
 export function selectPreviousSession(state: TuiState): TuiState {
   if (state.sessions.items.length === 0) return state;
+  if (state.sidebar.hasNewSessionAction) {
+    const baseIndex = Math.max(0, state.sidebar.selectedIndex - 1);
+    if (baseIndex === 0) {
+      return state;
+    }
+    const nextIndex = baseIndex - 1;
+    const nextId = state.sessions.items[nextIndex]?.id ?? null;
+    return switchSession(state, nextId);
+  }
   const nextIndex = Math.max(0, state.sidebar.selectedIndex - 1);
   const nextId = state.sessions.items[nextIndex]?.id ?? null;
+  return switchSession(state, nextId);
+}
+
+export function selectSidebarSelection(state: TuiState): TuiState {
+  const items = state.sessions.items;
+  if (items.length === 0) return state;
+  if (state.sidebar.hasNewSessionAction && state.sidebar.selectedIndex === 0) {
+    return state;
+  }
+
+  const index = state.sidebar.hasNewSessionAction
+    ? Math.max(0, state.sidebar.selectedIndex - 1)
+    : state.sidebar.selectedIndex;
+  const nextId = items[index]?.id ?? null;
   return switchSession(state, nextId);
 }
 
@@ -1082,7 +1176,7 @@ export function switchSession(state: TuiState, sessionId: string | null): TuiSta
     },
     sidebar: {
       ...state.sidebar,
-      selectedIndex: getSelectedSessionIndex(state.sessions.items, sessionId),
+      selectedIndex: getSidebarSelectedIndex(state.sessions.items, sessionId, state.sidebar.hasNewSessionAction),
     },
   };
 

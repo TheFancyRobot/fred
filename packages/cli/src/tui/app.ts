@@ -18,6 +18,8 @@ import {
 import type { TuiState, FocusablePaneId } from './state.js';
 import {
   createInitialTuiState,
+  applySessionList,
+  addSession,
   submitInput,
   appendAssistant,
   appendUserMessage,
@@ -29,6 +31,10 @@ import {
   nextFocusablePane,
   prevFocusablePane,
   scrollTranscript,
+  selectNextSession,
+  selectPreviousSession,
+  selectSidebarSelection,
+  upsertSessionTranscript,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -45,6 +51,12 @@ import {
   type StreamingController,
   type StreamingBatch,
 } from './streaming.js';
+import {
+  loadSessions,
+  createSession,
+  loadSessionTranscript,
+  type SessionServiceDependencies,
+} from './session.js';
 
 /**
  * TUI app configuration
@@ -53,6 +65,8 @@ export interface TuiAppConfig {
   showStartupHint?: boolean;
   streamingFrameMs?: number;
   maxRenderQueue?: number;
+  sessionService?: SessionServiceDependencies;
+  initialSessionId?: string | null;
 }
 
 /**
@@ -60,7 +74,7 @@ export interface TuiAppConfig {
  */
 export interface TuiAppEvents {
   onStateChange?: (state: TuiState) => void;
-  onSubmit?: (text: string) => void;
+  onSubmit?: (text: string, sessionId: string | null) => void;
   onQuit?: () => void;
   onError?: (error: Error) => void;
 }
@@ -75,6 +89,7 @@ export class FredTuiApp {
   private config: TuiAppConfig;
   private running: boolean = false;
   private streamingController: StreamingController;
+  private sessionService?: SessionServiceDependencies;
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
@@ -108,6 +123,7 @@ export class FredTuiApp {
         onError: (error) => this.handleStreamError(error),
       },
     });
+    this.sessionService = config.sessionService;
   }
 
   /**
@@ -121,6 +137,7 @@ export class FredTuiApp {
     const app = new FredTuiApp(renderer, events, config);
     app.buildComponentTree();
     app.registerKeyboardHandler();
+    await app.initializeSessions(config.initialSessionId ?? null);
     app.syncStateToUI();
     app.running = true;
     return app;
@@ -137,9 +154,56 @@ export class FredTuiApp {
     const app = new FredTuiApp(renderer, events, config);
     app.buildComponentTree();
     app.registerKeyboardHandler();
+    void app.initializeSessions(config.initialSessionId ?? null);
     app.syncStateToUI();
     app.running = true;
     return app;
+  }
+
+  private async initializeSessions(initialSessionId: string | null): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+
+    try {
+      const items = await loadSessions(this.sessionService);
+      this.state = applySessionList(this.state, items, initialSessionId);
+
+      const selectedId = this.state.sessions.selectedId;
+      if (selectedId) {
+        const messages = await loadSessionTranscript(this.sessionService, selectedId);
+        this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+      }
+      this.events.onStateChange?.(this.state);
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private async ensureSessionSelected(): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+    if (this.state.sessions.selectedId) {
+      return;
+    }
+
+    try {
+    const item = await createSession(this.sessionService);
+    this.state = addSession(this.state, item, { select: true });
+    const messages = await loadSessionTranscript(this.sessionService, item.id);
+    this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+    this.state = {
+      ...this.state,
+      sessions: {
+        ...this.state.sessions,
+        items: [item, ...this.state.sessions.items.filter((existing) => existing.id !== item.id)],
+      },
+    };
+      this.events.onStateChange?.(this.state);
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   /**
@@ -323,6 +387,13 @@ export class FredTuiApp {
       return;
     }
 
+    if (action.type === 'session-select') {
+      this.state = selectSidebarSelection(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
     const newState = applyKeyAction(this.state, action);
     this.state = newState;
     this.events.onStateChange?.(this.state);
@@ -390,29 +461,35 @@ export class FredTuiApp {
   }
 
   private submitCurrentInput(): void {
-    const { state: newState, submittedText } = submitInput(this.state);
+    const { submittedText } = submitInput(this.state);
     if (!submittedText.trim()) {
       return;
     }
 
-    this.state = appendUserMessage(newState, submittedText);
-    this.state = {
-      ...this.state,
-      telemetry: {
-        ...this.state.telemetry,
-        inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(submittedText),
-      },
+    const run = async () => {
+      await this.ensureSessionSelected();
+
+      this.state = appendUserMessage(this.state, submittedText);
+      this.state = {
+        ...this.state,
+        telemetry: {
+          ...this.state.telemetry,
+          inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(submittedText),
+        },
+      };
+
+      if (!this.state.streaming.isStreaming) {
+        this.state = startStreaming(this.state);
+        this.streamingController.start();
+      }
+
+      this.refreshSessionCost(true);
+      this.events.onStateChange?.(this.state);
+      this.events.onSubmit?.(submittedText, this.state.sessions.selectedId);
+      this.syncStateToUI();
     };
 
-    if (!this.state.streaming.isStreaming) {
-      this.state = startStreaming(this.state);
-      this.streamingController.start();
-    }
-
-    this.refreshSessionCost(true);
-    this.events.onStateChange?.(this.state);
-    this.events.onSubmit?.(submittedText);
-    this.syncStateToUI();
+    void run();
   }
 
   private executeSelectedCommandPaletteAction(): void {
@@ -469,26 +546,14 @@ export class FredTuiApp {
         this.submitCurrentInput();
         return;
       case 'select-next-session':
-        this.state = {
-          ...this.state,
-          sidebar: {
-            ...this.state.sidebar,
-            selectedIndex: Math.min(
-              this.state.sidebar.items.length - 1,
-              this.state.sidebar.selectedIndex + 1,
-            ),
-          },
-        };
+        this.state = selectNextSession(this.state);
         break;
       case 'select-previous-session':
-        this.state = {
-          ...this.state,
-          sidebar: {
-            ...this.state.sidebar,
-            selectedIndex: Math.max(0, this.state.sidebar.selectedIndex - 1),
-          },
-        };
+        this.state = selectPreviousSession(this.state);
         break;
+      case 'create-session':
+        void this.handleCreateSession();
+        return;
       default:
         break;
     }
@@ -505,6 +570,23 @@ export class FredTuiApp {
 
     const wordCount = normalized.split(/\s+/).filter(Boolean).length;
     return Math.max(1, wordCount);
+  }
+
+  private async handleCreateSession(): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+
+    try {
+      const item = await createSession(this.sessionService);
+      this.state = addSession(this.state, item, { select: true });
+      const messages = await loadSessionTranscript(this.sessionService, item.id);
+      this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   private finalizeStreamingTelemetry(): void {

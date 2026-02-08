@@ -35,12 +35,32 @@ describe('TUI Layout', () => {
 
     test('renders sidebar with items', () => {
       const state = createInitialTuiState();
-      state.sidebar.items = ['Session 1', 'Session 2'];
+      state.sessions.items = [
+        {
+          id: 's1',
+          title: 'Session 1',
+          updatedAt: new Date('2026-02-08T12:00:00Z'),
+          messageCount: 2,
+          preview: 'Hello there',
+          unread: false,
+        },
+        {
+          id: 's2',
+          title: 'Session 2',
+          updatedAt: new Date('2026-02-08T11:00:00Z'),
+          messageCount: 1,
+          preview: 'Preview text',
+          unread: true,
+        },
+      ];
+      state.sessions.selectedId = 's1';
 
       const content = renderSidebarContent(state, false);
 
-      expect(content.lines).toContain('Session 1');
-      expect(content.lines).toContain('Session 2');
+      expect(content.lines).toContain('[Sessions]');
+      expect(content.lines).toContain('+ New Session');
+      expect(content.lines.join('\n')).toContain('Session 1');
+      expect(content.lines.join('\n')).toContain('Session 2');
     });
 
     test('sidebar shows focus indicator when focused', () => {

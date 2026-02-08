@@ -121,7 +121,7 @@ describe('TUI Session State', () => {
     });
 
     expect(state.sessions.selectedId).toBe('s2');
-    expect(state.sidebar.selectedIndex).toBe(0);
+    expect(state.sidebar.selectedIndex).toBe(1);
   });
 
   test('upsertSessionTranscript updates message counts and preview', () => {

@@ -125,14 +125,15 @@ export async function handleChatCommand(): Promise<void> {
       process.exit(1);
     }
 
-    const sessionId = fred.getContextManager().generateConversationId();
+    const contextManager = fred.getContextManager();
 
     const app = await createFredTuiApp({
-      onSubmit: (text: string) => {
+      onSubmit: (text: string, sessionId: string | null) => {
+        const activeSessionId = sessionId ?? contextManager.generateConversationId();
         // Fire-and-forget async streaming (don't await to avoid blocking TUI)
         (async () => {
           try {
-            const streamResult = fred.streamMessage(text, { conversationId: sessionId });
+            const streamResult = fred.streamMessage(text, { conversationId: activeSessionId });
 
             // Iterate over the full stream to get all events
             for await (const event of streamResult.fullStream) {
@@ -169,6 +170,11 @@ export async function handleChatCommand(): Promise<void> {
         // Streaming errors are displayed in the TUI status bar via recordStreamingError.
         // Don't exit — let the user see the error and retry or quit manually.
       },
+    }, {
+      sessionService: {
+        contextManager,
+      },
+      initialSessionId: null,
     });
 
     // Update telemetry with actual model info

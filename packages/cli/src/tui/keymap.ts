@@ -29,6 +29,9 @@ import {
   closeCommandPalette,
   updateCommandPaletteQuery,
   moveCommandPaletteSelection,
+  selectNextSession,
+  selectPreviousSession,
+  selectSidebarSelection,
 } from './state.js';
 
 /**
@@ -55,6 +58,9 @@ export type KeyAction =
   | { type: 'palette-backspace' }
   | { type: 'palette-query'; text: string }
   | { type: 'palette-submit' }
+  | { type: 'session-next' }
+  | { type: 'session-prev' }
+  | { type: 'session-select' }
   | { type: 'copy-transcript' }
   | { type: 'quit' }
   | { type: 'noop' };
@@ -205,6 +211,19 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
   }
 
+  // Sidebar pane: session navigation
+  if (focusedPane === 'sidebar') {
+    if (name === 'up') {
+      return { type: 'session-prev' };
+    }
+    if (name === 'down') {
+      return { type: 'session-next' };
+    }
+    if (name === 'enter' || name === 'return') {
+      return { type: 'session-select' };
+    }
+  }
+
   return { type: 'noop' };
 }
 
@@ -298,6 +317,15 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'palette-submit':
       return closeCommandPalette(state);
+
+    case 'session-next':
+      return selectNextSession(state);
+
+    case 'session-prev':
+      return selectPreviousSession(state);
+
+    case 'session-select':
+      return selectSidebarSelection(state);
 
     case 'copy-transcript':
       return state;

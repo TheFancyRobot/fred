@@ -141,7 +141,42 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
     };
   }
 
-  const lines = ['[Sessions]', '', ...(state.sidebar.items.length > 0 ? state.sidebar.items : ['(empty)'])];
+  const sidebarWidth = DEFAULT_LAYOUT.sidebarWidth;
+  const maxLineLength = Math.max(10, sidebarWidth - 4);
+  const newSessionLine = '+ New Session';
+
+  const items = state.sessions.items;
+  const selectedId = state.sessions.selectedId;
+  const selectedItem = selectedId ? items.find((item) => item.id === selectedId) : null;
+  const rest = items.filter((item) => item.id !== selectedId);
+  const ordered = selectedItem ? [selectedItem, ...rest] : rest;
+
+  const formatUpdatedTime = (date: Date): string => date.toISOString().slice(11, 16);
+  const truncate = (value: string): string => value.length > maxLineLength
+    ? `${value.slice(0, Math.max(0, maxLineLength - 1)).trimEnd()}…`
+    : value;
+
+  const sessionLines = ordered.length > 0
+    ? ordered.flatMap((item) => {
+        const isSelected = item.id === selectedId;
+        const marker = isSelected ? '▸' : ' ';
+        const unread = item.unread ? ' •' : '';
+        const title = item.title ?? '(untitled)';
+        const agentName = item.agent?.name ?? item.agent?.id ?? 'default';
+        const updated = formatUpdatedTime(item.updatedAt);
+        const meta = `${updated} · ${agentName} · ${item.messageCount} msg`;
+        const preview = item.preview ?? '(no messages)';
+
+        return [
+          truncate(`${marker} ${title}${unread}`),
+          truncate(`  ${meta}`),
+          truncate(`  ${preview}`),
+          '',
+        ];
+      })
+    : ['(empty)'];
+
+  const lines = ['[Sessions]', newSessionLine, '', ...sessionLines];
 
   return {
     lines,
