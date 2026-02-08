@@ -607,7 +607,17 @@ export class FredTuiApp {
       || (nowMs - this.lastStatusRenderMs) >= this.statusThrottleMs;
 
     if (shouldRenderFreshStatus) {
-      const statusData = renderStatusContent(this.state, {
+      const statusState = this.state.streaming.isStreaming
+        ? this.state
+        : {
+            ...this.state,
+            streaming: {
+              ...this.state.streaming,
+              outputTokenCount: 0,
+            },
+          };
+
+      const statusData = renderStatusContent(statusState, {
         maxWidth: Math.max(40, this.getRendererWidth() - 4),
         nowMs,
       });
