@@ -37,6 +37,7 @@ import {
   upsertSessionTranscript,
   openDeleteConfirm,
   closeDeleteConfirm,
+  isNewSessionActionSelected,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -403,6 +404,10 @@ export class FredTuiApp {
     }
 
     if (action.type === 'session-select') {
+      if (isNewSessionActionSelected(this.state)) {
+        void this.handleCreateSession();
+        return;
+      }
       this.state = selectSidebarSelection(this.state);
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();

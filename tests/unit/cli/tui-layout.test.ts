@@ -31,6 +31,7 @@ describe('TUI Layout', () => {
 
       expect(content.lines).toContain('[Sessions]');
       expect(content.lines).toContain('(empty)');
+      expect(content.lines).toContain('▸ + New Session (Enter)');
     });
 
     test('renders sidebar with items', () => {
@@ -54,13 +55,33 @@ describe('TUI Layout', () => {
         },
       ];
       state.sessions.selectedId = 's1';
+      state.sidebar.selectedIndex = 1;
 
       const content = renderSidebarContent(state, false);
 
       expect(content.lines).toContain('[Sessions]');
-      expect(content.lines).toContain('+ New Session');
+      expect(content.lines).toContain('  + New Session (Enter)');
+      expect(content.lines.join('\n')).toContain('▸ Session 1');
       expect(content.lines.join('\n')).toContain('Session 1');
       expect(content.lines.join('\n')).toContain('Session 2');
+    });
+
+    test('highlights new session action when selected', () => {
+      const state = createInitialTuiState();
+      state.sidebar.selectedIndex = 0;
+      state.sessions.items = [
+        {
+          id: 's1',
+          title: 'Session 1',
+          updatedAt: new Date('2026-02-08T12:00:00Z'),
+          messageCount: 2,
+          preview: 'Hello there',
+          unread: false,
+        },
+      ];
+
+      const content = renderSidebarContent(state, true);
+      expect(content.lines).toContain('▸ + New Session (Enter)');
     });
 
     test('sidebar shows focus indicator when focused', () => {

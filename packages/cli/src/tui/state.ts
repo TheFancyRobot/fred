@@ -1285,6 +1285,10 @@ export function selectSidebarSelection(state: TuiState): TuiState {
   return switchSession(state, nextId);
 }
 
+export function isNewSessionActionSelected(state: TuiState): boolean {
+  return state.sidebar.hasNewSessionAction && state.sidebar.selectedIndex === 0;
+}
+
 export function switchSession(state: TuiState, sessionId: string | null): TuiState {
   if (!sessionId || sessionId === state.sessions.selectedId) {
     return state;

@@ -160,21 +160,24 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
   const sidebarWidth = DEFAULT_LAYOUT.sidebarWidth;
   const maxLineLength = Math.max(10, sidebarWidth - 4);
   const newSessionLine = '+ New Session (Enter)';
+  const newSessionSelected = state.sidebar.hasNewSessionAction && state.sidebar.selectedIndex === 0;
+  const newSessionLineDisplay = newSessionSelected
+    ? `▸ ${newSessionLine}`
+    : `  ${newSessionLine}`;
 
   const items = state.sessions.items;
-  const selectedId = state.sessions.selectedId;
-  const selectedItem = selectedId ? items.find((item) => item.id === selectedId) : null;
-  const rest = items.filter((item) => item.id !== selectedId);
-  const ordered = selectedItem ? [selectedItem, ...rest] : rest;
+  const selectedSessionIndex = state.sidebar.hasNewSessionAction
+    ? state.sidebar.selectedIndex - 1
+    : state.sidebar.selectedIndex;
 
   const formatUpdatedTime = (date: Date): string => date.toISOString().slice(11, 16);
   const truncate = (value: string): string => value.length > maxLineLength
     ? `${value.slice(0, Math.max(0, maxLineLength - 1)).trimEnd()}…`
     : value;
 
-  const sessionLines = ordered.length > 0
-    ? ordered.flatMap((item) => {
-        const isSelected = item.id === selectedId;
+  const sessionLines = items.length > 0
+    ? items.flatMap((item, index) => {
+        const isSelected = index === selectedSessionIndex;
         const marker = isSelected ? '▸' : ' ';
         const unread = item.unread ? ' •' : '';
         const title = item.title ?? '(untitled)';
@@ -192,7 +195,7 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
       })
     : ['(empty)'];
 
-  const lines = ['[Sessions]', newSessionLine, '', ...sessionLines];
+  const lines = ['[Sessions]', newSessionLineDisplay, '', ...sessionLines];
 
   return {
     lines,
