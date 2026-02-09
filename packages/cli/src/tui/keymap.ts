@@ -61,6 +61,8 @@ export type KeyAction =
   | { type: 'session-next' }
   | { type: 'session-prev' }
   | { type: 'session-select' }
+  | { type: 'confirm-delete-session' }
+  | { type: 'cancel-delete-session' }
   | { type: 'copy-transcript' }
   | { type: 'quit' }
   | { type: 'noop' };
@@ -74,6 +76,16 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   const isPaletteToggle = (ctrl || meta) && name === 'k';
   if (isPaletteToggle) {
     return { type: 'toggle-command-palette' };
+  }
+
+  if (state.deleteConfirm.isOpen) {
+    if (name === 'escape' || name === 'n') {
+      return { type: 'cancel-delete-session' };
+    }
+    if (name === 'enter' || name === 'return' || name === 'y') {
+      return { type: 'confirm-delete-session' };
+    }
+    return { type: 'noop' };
   }
 
   if (state.commandPalette.isOpen) {

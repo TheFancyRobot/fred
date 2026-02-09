@@ -121,6 +121,22 @@ export function renderInputContent(
  * Generate sidebar content
  */
 export function renderSidebarContent(state: TuiState, focused: boolean): PaneContent {
+  if (state.deleteConfirm.isOpen) {
+    const title = state.deleteConfirm.title ?? '(untitled)';
+    return {
+      lines: [
+        '[Delete Session]',
+        '',
+        'Are you sure you want to delete:',
+        `"${title}"`,
+        '',
+        'Enter/Y: delete',
+        'Esc/N: cancel',
+      ],
+      focusIndicator: focused ? '>' : undefined,
+    };
+  }
+
   if (state.commandPalette.isOpen) {
     const paletteLines = state.commandPalette.filteredActions.length > 0
       ? state.commandPalette.filteredActions.map((action, index) => {

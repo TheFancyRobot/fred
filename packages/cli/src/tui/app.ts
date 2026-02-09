@@ -35,6 +35,8 @@ import {
   selectPreviousSession,
   selectSidebarSelection,
   upsertSessionTranscript,
+  openDeleteConfirm,
+  closeDeleteConfirm,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -56,6 +58,7 @@ import {
   createSession,
   loadSessionTranscript,
   type SessionServiceDependencies,
+  deleteSession,
 } from './session.js';
 
 /**
@@ -382,6 +385,18 @@ export class FredTuiApp {
       return;
     }
 
+    if (action.type === 'confirm-delete-session') {
+      void this.confirmDeleteSession();
+      return;
+    }
+
+    if (action.type === 'cancel-delete-session') {
+      this.state = closeDeleteConfirm(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
     if (action.type === 'copy-transcript') {
       this.copyTranscriptToClipboard();
       return;
@@ -554,6 +569,9 @@ export class FredTuiApp {
       case 'create-session':
         void this.handleCreateSession();
         return;
+      case 'delete-session':
+        this.state = openDeleteConfirm(this.state, this.state.sessions.selectedId);
+        break;
       default:
         break;
     }
@@ -582,6 +600,28 @@ export class FredTuiApp {
       this.state = addSession(this.state, item, { select: true });
       const messages = await loadSessionTranscript(this.sessionService, item.id);
       this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private async confirmDeleteSession(): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+    const sessionId = this.state.deleteConfirm.sessionId;
+    if (!sessionId) {
+      this.state = closeDeleteConfirm(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    try {
+      this.state = await deleteSession(this.sessionService, this.state, sessionId);
+      this.state = closeDeleteConfirm(this.state);
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
     } catch (error) {
