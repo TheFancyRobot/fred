@@ -85,6 +85,12 @@ export interface CommandPaletteState {
   filteredActions: ReadonlyArray<CommandPaletteAction>;
 }
 
+export interface DeleteConfirmState {
+  isOpen: boolean;
+  sessionId: string | null;
+  title: string | null;
+}
+
 /**
  * Input history state for Up/Down navigation
  */
@@ -117,6 +123,7 @@ export interface TuiState {
     selectedIndex: number;
     hasNewSessionAction: boolean;
   };
+  deleteConfirm: DeleteConfirmState;
 }
 
 /**
@@ -170,6 +177,11 @@ export function createInitialTuiState(): TuiState {
     sidebar: {
       selectedIndex: 0,
       hasNewSessionAction: true,
+    },
+    deleteConfirm: {
+      isOpen: false,
+      sessionId: null,
+      title: null,
     },
   };
 }
@@ -251,6 +263,13 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'new', 'create'],
+  },
+  {
+    id: 'delete-session',
+    label: 'Delete Session',
+    group: 'sidebar',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['session', 'delete', 'remove'],
   },
   {
     id: 'submit-input',
@@ -1050,6 +1069,107 @@ export function applySessionList(
     sidebar: {
       ...state.sidebar,
       selectedIndex,
+    },
+  };
+}
+
+export function openDeleteConfirm(state: TuiState, sessionId: string | null): TuiState {
+  if (!sessionId) {
+    return state;
+  }
+
+  const session = state.sessions.items.find((item) => item.id === sessionId);
+  if (!session) {
+    return state;
+  }
+
+  return {
+    ...state,
+    deleteConfirm: {
+      isOpen: true,
+      sessionId,
+      title: session.title ?? null,
+    },
+  };
+}
+
+export function closeDeleteConfirm(state: TuiState): TuiState {
+  if (!state.deleteConfirm.isOpen) {
+    return state;
+  }
+
+  return {
+    ...state,
+    deleteConfirm: {
+      isOpen: false,
+      sessionId: null,
+      title: null,
+    },
+  };
+}
+
+export function applySessionDeletion(
+  state: TuiState,
+  items: SessionListItem[],
+  options: { selectedId: string | null }
+): TuiState {
+  const sorted = sortSessions(items);
+  const remainingIds = new Set(sorted.map((item) => item.id));
+  const resolvedSelected = options.selectedId && remainingIds.has(options.selectedId)
+    ? options.selectedId
+    : sorted[0]?.id ?? null;
+
+  const nextDrafts: Record<string, string> = {};
+  for (const [id, draft] of Object.entries(state.sessions.drafts)) {
+    if (remainingIds.has(id)) {
+      nextDrafts[id] = draft;
+    }
+  }
+
+  const nextTranscripts: Record<string, SessionTranscript> = {};
+  for (const item of sorted) {
+    nextTranscripts[item.id] = state.sessions.transcripts[item.id]
+      ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  }
+
+  let transcript = state.transcript;
+  if (resolvedSelected) {
+    const selectedTranscript = nextTranscripts[resolvedSelected]
+      ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+    transcript = updateTranscriptViewport(selectedTranscript, { pinnedToBottom: true });
+    nextTranscripts[resolvedSelected] = transcript;
+  } else {
+    transcript = createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  }
+
+  const inputText = resolvedSelected ? (nextDrafts[resolvedSelected] ?? '') : '';
+  const cursorPosition = inputText.length;
+  const normalizedItems = sorted.map((item) => (
+    item.id === resolvedSelected ? { ...item, unread: false } : item
+  ));
+
+  return {
+    ...state,
+    transcript,
+    input: {
+      ...state.input,
+      text: inputText,
+      cursorPosition,
+      history: {
+        ...state.input.history,
+        currentIndex: -1,
+      },
+    },
+    sessions: {
+      ...state.sessions,
+      items: normalizedItems,
+      selectedId: resolvedSelected,
+      drafts: nextDrafts,
+      transcripts: nextTranscripts,
+    },
+    sidebar: {
+      ...state.sidebar,
+      selectedIndex: getSidebarSelectedIndex(normalizedItems, resolvedSelected, state.sidebar.hasNewSessionAction),
     },
   };
 }

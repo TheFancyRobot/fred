@@ -1,7 +1,7 @@
 import type { SessionSummary } from '@fancyrobot/fred';
 import { ContextManager } from '@fancyrobot/fred';
 import type { SessionListItem, TuiState } from './state.js';
-import { addSession } from './state.js';
+import { addSession, applySessionDeletion, createTranscriptState } from './state.js';
 
 export interface SessionServiceDependencies {
   contextManager: ContextManager;
@@ -76,4 +76,37 @@ export async function loadSessionTranscript(
     role: message.role,
     content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? ''),
   }));
+}
+
+export async function deleteSession(
+  deps: SessionServiceDependencies,
+  state: TuiState,
+  sessionId: string
+): Promise<TuiState> {
+  await deps.contextManager.deleteSession(sessionId);
+
+  const summaries = await deps.contextManager.listSessions();
+  const items = summaries.map(toSessionListItem);
+  const sorted = [...items].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+  const selectedId = sorted[0]?.id ?? null;
+
+  const nextState = applySessionDeletion(state, items, { selectedId });
+  if (!nextState.sessions.selectedId) {
+    return nextState;
+  }
+
+  const messages = await loadSessionTranscript(deps, nextState.sessions.selectedId);
+  const transcript = createTranscriptState(messages, nextState.transcript.viewport.visibleLines, true);
+
+  return {
+    ...nextState,
+    transcript,
+    sessions: {
+      ...nextState.sessions,
+      transcripts: {
+        ...nextState.sessions.transcripts,
+        [nextState.sessions.selectedId]: transcript,
+      },
+    },
+  };
 }

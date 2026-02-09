@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 29 of 32 (Session Management)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-08 - Completed 29-02-PLAN.md
+Last activity: 2026-02-08 - Completed 29-03-PLAN.md
 
-Progress: [█████████░] 97% (133/137 plans complete)
+Progress: [█████████░] 97% (134/137 plans complete)
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Recent decisions affecting current work:
 - Milestone label normalization mapping (quick-001-01) — Standardized planning references to v0.1.0/v0.2.0/v0.2.1 without renaming archive files
 - Storage-level session summaries (29-01) — Session lists computed via SQL for counts and preview payloads
 - Default session exports to markdown (29-02) — Export filenames derived from title + date
+- Sidebar action row selection (29-03) — allow new-session action to be focusable without switching sessions
 
 ### Pending Todos
 
@@ -101,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-08T21:46:14Z
-Stopped at: Completed 29-02-PLAN.md
+Last session: 2026-02-08T22:41:13Z
+Stopped at: Completed 29-03-PLAN.md
 Resume file: None
