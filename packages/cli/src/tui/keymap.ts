@@ -61,6 +61,7 @@ export type KeyAction =
   | { type: 'session-next' }
   | { type: 'session-prev' }
   | { type: 'session-select' }
+  | { type: 'delete-session' }
   | { type: 'confirm-delete-session' }
   | { type: 'cancel-delete-session' }
   | { type: 'copy-transcript' }
@@ -172,6 +173,7 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     const shouldUseHistory = isNavigatingHistory || (inputIsEmpty && cursorAtStart);
     const hasHistory = state.input.history.entries.length > 0;
 
+
     if (name === 'enter' || name === 'return') {
       if (shift) {
         return { type: 'insert-newline' };
@@ -223,8 +225,16 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
   }
 
+  // Delete session shortcut (outside input/palette/prompt)
+  if (name === 'delete' || name === 'backspace') {
+    return { type: 'delete-session' };
+  }
+
   // Sidebar pane: session navigation
   if (focusedPane === 'sidebar') {
+    if (name === 'delete' || name === 'backspace') {
+      return { type: 'delete-session' };
+    }
     if (name === 'up') {
       return { type: 'session-prev' };
     }
@@ -338,6 +348,9 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'session-select':
       return selectSidebarSelection(state);
+
+    case 'delete-session':
+      return state;
 
     case 'copy-transcript':
       return state;

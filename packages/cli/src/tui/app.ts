@@ -414,6 +414,16 @@ export class FredTuiApp {
       return;
     }
 
+    if (action.type === 'delete-session') {
+      const selectedId = this.state.sessions.selectedId;
+      if (selectedId) {
+        this.state = openDeleteConfirm(this.state, selectedId);
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+      }
+      return;
+    }
+
     const newState = applyKeyAction(this.state, action);
     this.state = newState;
     this.events.onStateChange?.(this.state);
@@ -481,35 +491,36 @@ export class FredTuiApp {
   }
 
   private submitCurrentInput(): void {
-    const { submittedText } = submitInput(this.state);
+    const { state: clearedState, submittedText } = submitInput(this.state);
+    this.state = clearedState;
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
     if (!submittedText.trim()) {
       return;
     }
 
-    const run = async () => {
-      await this.ensureSessionSelected();
-
-      this.state = appendUserMessage(this.state, submittedText);
-      this.state = {
-        ...this.state,
-        telemetry: {
-          ...this.state.telemetry,
-          inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(submittedText),
-        },
-      };
-
-      if (!this.state.streaming.isStreaming) {
-        this.state = startStreaming(this.state);
-        this.streamingController.start();
-      }
-
-      this.refreshSessionCost(true);
-      this.events.onStateChange?.(this.state);
-      this.events.onSubmit?.(submittedText, this.state.sessions.selectedId);
-      this.syncStateToUI();
+    this.state = appendUserMessage(this.state, submittedText);
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(submittedText),
+      },
     };
 
-    void run();
+    if (!this.state.streaming.isStreaming) {
+      this.state = startStreaming(this.state);
+      this.streamingController.start();
+    }
+
+    this.refreshSessionCost(true);
+    this.events.onStateChange?.(this.state);
+    this.events.onSubmit?.(submittedText, this.state.sessions.selectedId);
+    this.syncStateToUI();
+
+    if (this.state.sessions.selectedId === null) {
+      void this.ensureSessionSelected();
+    }
   }
 
   private executeSelectedCommandPaletteAction(): void {

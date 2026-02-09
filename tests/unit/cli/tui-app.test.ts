@@ -190,6 +190,28 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().input.cursorPosition).toBe(2);
   });
 
+  test('backspace in sidebar opens delete confirmation', async () => {
+    await createTestApp();
+    const state = app.getState();
+    state.focusedPane = 'sidebar';
+    state.sessions.items = [
+      {
+        id: 's1',
+        title: 'Session 1',
+        updatedAt: new Date('2026-02-08T12:00:00Z'),
+        messageCount: 1,
+        preview: 'preview',
+        unread: false,
+      },
+    ];
+    state.sessions.selectedId = 's1';
+
+    app.processKey(makeKey({ name: 'backspace' }));
+
+    expect(app.getState().deleteConfirm.isOpen).toBe(true);
+    expect(app.getState().deleteConfirm.sessionId).toBe('s1');
+  });
+
   test('up arrow navigates history', async () => {
     await createTestApp();
 

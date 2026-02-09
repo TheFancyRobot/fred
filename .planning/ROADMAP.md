@@ -25,7 +25,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - [x] **Phase 27: Terminal Foundation & Project Detection** - Terminal lifecycle management and project auto-detection (completed 2026-02-08)
 - [x] **Phase 28: Streaming Performance & Core TUI** - High-performance streaming token rendering and TUI layout (completed 2026-02-08)
-- [ ] **Phase 29: Session Management** - Persistent sessions with export capabilities
+- [x] **Phase 29: Session Management** - Persistent sessions with export capabilities (completed 2026-02-09)
 - [ ] **Phase 30: CLI Commands** - Headless operation and config validation
 - [ ] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands
 - [ ] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels
@@ -82,9 +82,9 @@ Plans:
 
 Plans:
 - [x] 29-01-PLAN.md — Add session storage list/query and export helpers in core (completed 2026-02-08)
-- [ ] 29-02-PLAN.md — Implement CLI session commands for list/show/export/rm
-- [ ] 29-03-PLAN.md — Wire TUI session sidebar navigation, switching, and creation
-- [ ] 29-04-PLAN.md — Add TUI session deletion with confirmation prompt
+- [x] 29-02-PLAN.md — Implement CLI session commands for list/show/export/rm (completed 2026-02-08)
+- [x] 29-03-PLAN.md — Wire TUI session sidebar navigation, switching, and creation (completed 2026-02-08)
+- [x] 29-04-PLAN.md — Add TUI session deletion with confirmation prompt (completed 2026-02-09)
 
 ### Phase 30: CLI Commands
 **Goal**: Deliver full CLI command parity for headless operation, project scaffolding, and config validation
@@ -138,7 +138,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 |-------|----------------|--------|-----------|
 | 27. Terminal Foundation & Project Detection | 4/4 | Complete | 2026-02-08 |
 | 28. Streaming Performance & Core TUI | 6/6 | Complete | 2026-02-08 |
-| 29. Session Management | 0/TBD | Not started | - |
+| 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 0/TBD | Not started | - |
 | 31. CLI Testing & Debugging | 0/TBD | Not started | - |
 | 32. Plugin Architecture | 0/TBD | Not started | - |
@@ -163,4 +163,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-08 - Phase 28 finalized after live UAT validation; ready for Phase 29 planning*
+*Last updated: 2026-02-09 - Phase 29 session management complete; ready for Phase 30 planning*

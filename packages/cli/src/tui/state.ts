@@ -694,7 +694,32 @@ export function appendAssistant(
 
   const sessionId = state.streaming.sessionId ?? state.sessions.selectedId;
   if (!sessionId) {
-    return state;
+    const messages = [...state.transcript.messages];
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role === 'assistant') {
+      messages[messages.length - 1] = {
+        ...lastMessage,
+        content: lastMessage.content + tokenText,
+      };
+    } else {
+      messages.push({ role: 'assistant', content: tokenText });
+    }
+
+    const transcript = updateTranscriptViewport({
+      ...state.transcript,
+      messages,
+    });
+
+    return {
+      ...state,
+      transcript,
+      streaming: {
+        ...state.streaming,
+        outputTokenCount: state.streaming.outputTokenCount + Math.max(0, tokenCount),
+        tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount + Math.max(0, tokenCount), nowMs),
+      },
+    };
   }
 
   const currentTranscript = state.sessions.transcripts[sessionId]
@@ -795,7 +820,14 @@ export function appendUserMessage(state: TuiState, content: string, nowMs = Date
 
   const sessionId = state.sessions.selectedId;
   if (!sessionId) {
-    return state;
+    const nextTranscript = updateTranscriptViewport({
+      ...state.transcript,
+      messages: [...state.transcript.messages, { role: 'user', content }],
+    }, { pinnedToBottom: true });
+    return {
+      ...state,
+      transcript: nextTranscript,
+    };
   }
 
   const currentTranscript = state.sessions.transcripts[sessionId]

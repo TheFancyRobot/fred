@@ -531,6 +531,26 @@ describe('TUI Keymap', () => {
     });
   });
 
+  describe('Sidebar delete shortcut', () => {
+    test('backspace triggers delete action in sidebar focus', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const event = makeKey({ name: 'backspace' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('delete-session');
+    });
+
+    test('delete triggers delete action in sidebar focus', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const event = makeKey({ name: 'delete' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('delete-session');
+    });
+  });
+
   describe('Command palette controls', () => {
     test('Ctrl+K toggles command palette on Windows/Linux', () => {
       const state = createInitialTuiState();
