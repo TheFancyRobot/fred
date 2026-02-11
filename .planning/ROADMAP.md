@@ -98,7 +98,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 30-01-PLAN.md — Entity listing commands (agents, tools, intents, providers, workflows)
+- [x] 30-01-PLAN.md — Entity listing commands (agents, tools, intents, providers, workflows) (completed 2026-02-11)
 - [ ] 30-02-PLAN.md — Config validate and init scaffolding commands
 - [ ] 30-03-PLAN.md — Headless run command and CLI entrypoint wiring
 

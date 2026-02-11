@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 29 planning kickoff — session management implementation on validated Phase 28 foundation
+**Current focus:** Phase 30 execution — CLI commands for headless operation, listing, validation, and scaffolding
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 29 of 32 (Session Management)
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-02-09 - Completed 29-04-PLAN.md
+Phase: 30 of 32 (CLI Commands)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-11 - Completed 30-01-PLAN.md (entity listing commands)
 
-Progress: [█████████░] 98% (134/137 plans complete)
+Progress: [█████████░] 98% (135/137 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (v0.2.1 milestone)
-- Average duration: 7.48 min
-- Total execution time: 1.25 hours
+- Total plans completed: 11 (v0.2.1 milestone)
+- Average duration: 7.07 min
+- Total execution time: 1.30 hours
 
 **By Phase:**
 
@@ -30,10 +30,12 @@ Progress: [█████████░] 98% (134/137 plans complete)
 |-------|-------|-------|----------|
 | 27 | 4 | 27.55 min | 6.89 min |
 | 28 | 6 | 47.65 min | 7.94 min |
+| 29 | 4 | ~28 min | ~7.00 min |
+| 30 | 1 | 3.00 min | 3.00 min |
 
 **Recent Trend:**
-- Last 5 plans: 4.00 min (28-02), 8.00 min (28-03), 19.00 min (28-04 with checkpoint), 5.58 min (28-05), 5.15 min (28-06)
-- Trend: Throughput stable; gap closure plans consistently faster than checkpoint-based validation
+- Last 5 plans: 19.00 min (28-04 with checkpoint), 5.58 min (28-05), 5.15 min (28-06), ~7.00 min (29-avg), 3.00 min (30-01)
+- Trend: Entity listing plan fast at 3 min due to clear pattern from session.ts
 - Automated plans averaging 7.48 min in current milestone window
 
 **Previous Milestones:**
@@ -72,6 +74,7 @@ Recent decisions affecting current work:
 - Storage-level session summaries (29-01) — Session lists computed via SQL for counts and preview payloads
 - Default session exports to markdown (29-02) — Export filenames derived from title + date
 - Sidebar action row selection (29-03) — allow new-session action to be focusable without switching sessions
+- Duplicated initializeFred helper in list.ts (30-01) — defer shared extraction to 30-03 wiring plan
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-09T03:31:51Z
-Stopped at: Completed 29-04-PLAN.md
+Last session: 2026-02-11T02:31:44Z
+Stopped at: Completed 30-01-PLAN.md (entity listing commands)
 Resume file: None
