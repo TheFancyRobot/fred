@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 30 execution — CLI commands for headless operation, listing, validation, and scaffolding
+**Current focus:** Phase 30 execution — CLI commands (listing done, validation+init done, wiring next)
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 30 of 32 (CLI Commands)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-11 - Completed 30-01-PLAN.md (entity listing commands)
+Last activity: 2026-02-11 - Completed 30-02-PLAN.md (config validate + init commands)
 
-Progress: [█████████░] 98% (135/137 plans complete)
+Progress: [█████████░] 99% (136/137 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (v0.2.1 milestone)
-- Average duration: 7.07 min
-- Total execution time: 1.30 hours
+- Total plans completed: 12 (v0.2.1 milestone)
+- Average duration: 6.70 min
+- Total execution time: 1.34 hours
 
 **By Phase:**
 
@@ -31,12 +31,12 @@ Progress: [█████████░] 98% (135/137 plans complete)
 | 27 | 4 | 27.55 min | 6.89 min |
 | 28 | 6 | 47.65 min | 7.94 min |
 | 29 | 4 | ~28 min | ~7.00 min |
-| 30 | 1 | 3.00 min | 3.00 min |
+| 30 | 2 | 5.63 min | 2.82 min |
 
 **Recent Trend:**
-- Last 5 plans: 19.00 min (28-04 with checkpoint), 5.58 min (28-05), 5.15 min (28-06), ~7.00 min (29-avg), 3.00 min (30-01)
-- Trend: Entity listing plan fast at 3 min due to clear pattern from session.ts
-- Automated plans averaging 7.48 min in current milestone window
+- Last 5 plans: 5.58 min (28-05), 5.15 min (28-06), ~7.00 min (29-avg), 3.00 min (30-01), 2.63 min (30-02)
+- Trend: CLI command plans completing fast with clear patterns from prior commands
+- Automated plans averaging 6.70 min in current milestone window
 
 **Previous Milestones:**
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
@@ -75,6 +75,7 @@ Recent decisions affecting current work:
 - Default session exports to markdown (29-02) — Export filenames derived from title + date
 - Sidebar action row selection (29-03) — allow new-session action to be focusable without switching sessions
 - Duplicated initializeFred helper in list.ts (30-01) — defer shared extraction to 30-03 wiring plan
+- Raw config entity counting in config validate (30-02) — avoids heavyweight Fred instantiation for validation summary
 
 ### Pending Todos
 
@@ -105,6 +106,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-11T02:31:44Z
-Stopped at: Completed 30-01-PLAN.md (entity listing commands)
+Last session: 2026-02-11T02:33:39Z
+Stopped at: Completed 30-02-PLAN.md (config validate + init commands)
 Resume file: None
