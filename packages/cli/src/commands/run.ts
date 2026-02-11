@@ -85,9 +85,9 @@ export async function handleRunCommand(
   let input: string | undefined = options.input as string | undefined;
 
   if (!input) {
-    // Try stdin if not a TTY
+    // Try stdin: use injected stdin (for testing) or real stdin if not a TTY
     const isTTY = process.stdin.isTTY ?? false;
-    if (!isTTY) {
+    if (deps.stdin || !isTTY) {
       try {
         const stdinFn = deps.stdin ?? readStdin;
         input = await stdinFn();
