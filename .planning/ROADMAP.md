@@ -95,10 +95,12 @@ Plans:
   2. User can list registered agents, tools, intents, providers, and workflows via `fred list <type>` commands
   3. User can validate config via `fred config validate` with clear error messages showing file path, line number, and fix suggestions
   4. User can scaffold new Fred project via `fred init` with starter config and example agent
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 30-01: TBD
+- [ ] 30-01-PLAN.md — Entity listing commands (agents, tools, intents, providers, workflows)
+- [ ] 30-02-PLAN.md — Config validate and init scaffolding commands
+- [ ] 30-03-PLAN.md — Headless run command and CLI entrypoint wiring
 
 ### Phase 31: CLI Testing & Debugging
 **Goal**: Provide debugging and evaluation commands for intent testing, routing analysis, and MCP server management
@@ -139,7 +141,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 27. Terminal Foundation & Project Detection | 4/4 | Complete | 2026-02-08 |
 | 28. Streaming Performance & Core TUI | 6/6 | Complete | 2026-02-08 |
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
-| 30. CLI Commands | 0/TBD | Not started | - |
+| 30. CLI Commands | 0/3 | Not started | - |
 | 31. CLI Testing & Debugging | 0/TBD | Not started | - |
 | 32. Plugin Architecture | 0/TBD | Not started | - |
 
