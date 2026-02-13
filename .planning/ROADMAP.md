@@ -27,7 +27,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 28: Streaming Performance & Core TUI** - High-performance streaming token rendering and TUI layout (completed 2026-02-08)
 - [x] **Phase 29: Session Management** - Persistent sessions with export capabilities (completed 2026-02-09)
 - [x] **Phase 30: CLI Commands** - Headless operation and config validation (completed 2026-02-11)
-- [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-12)
+- [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-13)
 - [ ] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels
 
 ## Phase Details
@@ -117,7 +117,7 @@ Plans:
 - [x] 31-01-PLAN.md — Intent test and route test commands with TTY-aware color output (completed 2026-02-12, 4.56 min)
 - [x] 31-02-PLAN.md — MCP server management commands and CLI entrypoint wiring (completed 2026-02-12, 4.47 min)
 - [x] 31-03-PLAN.md — Add visible exit codes to CLI error messages (completed 2026-02-12, 2.12 min, gap closure)
-- [ ] 31-04-PLAN.md — Fix --json flag handling on error paths in intent, route, and mcp commands (gap closure)
+- [x] 31-04-PLAN.md — Fix --json flag handling on error paths in intent, route, and mcp commands (completed 2026-02-13, 4.12 min, gap closure)
 
 ### Phase 32: Plugin Architecture
 **Goal**: Enable extensible plugin system with custom CLI commands, TUI slash commands, and stable typed contract
@@ -145,7 +145,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 28. Streaming Performance & Core TUI | 6/6 | Complete | 2026-02-08 |
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
-| 31. CLI Testing & Debugging | 3/4 | In Progress | - |
+| 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 0/TBD | Not started | - |
 
 ---
@@ -168,4 +168,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-13 - Phase 31 gap closure plan 04 created for --json error path fix*
+*Last updated: 2026-02-13 - Phase 31 complete (all 4 plans including gap closures)*

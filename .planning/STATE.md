@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 31 complete — all debugging/evaluation commands delivered; ready for Phase 32 planning
+**Current focus:** Phase 31 fully complete (including gap closures) — ready for Phase 32 planning
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
@@ -83,6 +83,7 @@ Recent decisions affecting current work:
 - Minimal MCPServerRegistry extensions (31-02) — added only getAllConfiguredServers() and getServerConfig() methods
 - Tool count display limitation in MCP list (31-02) — show "-" for tool count in table view; status command provides detailed info
 - Graceful error handling in MCP batch operations (31-02) — continue processing all servers even if some fail in --all mode
+- Exclusive output channels for --json mode (31-04) — JSON to stdout OR plain text to stderr, never both simultaneously
 
 ### Pending Todos
 
