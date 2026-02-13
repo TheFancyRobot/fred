@@ -6,7 +6,6 @@
  */
 
 import { Fred } from '@fancyrobot/fred';
-import { createIntentMatcherSync } from '@fancyrobot/fred/intent/matcher';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { createColors } from './color.js';
@@ -77,15 +76,11 @@ async function handleIntentTest(
     return 2;
   }
 
-  // Create matcher and register intents
-  const matcher = createIntentMatcherSync();
-  await Effect.runPromise(matcher.registerIntents(intents));
-
-  // Match intent
+  // Match intent using Fred's internal matcher
   const startTime = Date.now();
   let matchResult;
   try {
-    matchResult = await Effect.runPromise(matcher.matchIntent(message));
+    matchResult = await Effect.runPromise((fred as any).intentMatcher.matchIntent(message));
   } catch (error) {
     io.stderr(`Error: Intent matching failed: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
