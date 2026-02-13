@@ -157,7 +157,7 @@ async function handleMcpStart(
     }
 
     if (errors.length > 0) {
-      io.stderr(colors.red(`Failed to start ${errors.length} server(s):`));
+      io.stderr(colors.red(`Error (exit 2): Failed to start ${errors.length} server(s):`));
       for (const err of errors) {
         io.stderr(colors.red(`  ${err}`));
       }
@@ -178,7 +178,7 @@ async function handleMcpStart(
   // Start a specific server
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error: Server ID is required. Usage: fred mcp start <id>'));
+    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp start <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-start', error: 'Server ID is required' }, null, 2));
     }
@@ -194,7 +194,7 @@ async function handleMcpStart(
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    io.stderr(colors.red(`Failed to start ${serverId}: ${message}`));
+    io.stderr(colors.red(`Error (exit 2): Failed to start ${serverId}: ${message}`));
     io.stderr('Try running with --verbose for more details, or check server configuration.');
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-start', serverId, error: message }, null, 2));
@@ -239,7 +239,7 @@ async function handleMcpStop(
   // Stop a specific server
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error: Server ID is required. Usage: fred mcp stop <id>'));
+    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp stop <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-stop', error: 'Server ID is required' }, null, 2));
     }
@@ -278,7 +278,7 @@ async function handleMcpStatus(
 
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error: Server ID is required. Usage: fred mcp status <id>'));
+    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp status <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-status', error: 'Server ID is required' }, null, 2));
     }
@@ -289,7 +289,7 @@ async function handleMcpStatus(
   const config = registry.getServerConfig(serverId);
 
   if (!config) {
-    io.stderr(colors.red(`Error: Server "${serverId}" not found.`));
+    io.stderr(colors.red(`Error (exit 1): Server "${serverId}" not found.`));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-status', serverId, error: 'Server not found' }, null, 2));
     }
@@ -385,7 +385,7 @@ export async function handleMcpCommand(
       case 'status':
         return await handleMcpStatus(args, options, deps, io, fred);
       default:
-        io.stderr(`Unknown subcommand: ${subcommand ?? '(none)'}`);
+        io.stderr(`Error (exit 2): Unknown subcommand: ${subcommand ?? '(none)'}`);
         io.stderr('Available: list, start, stop, status');
         return 2;
     }
