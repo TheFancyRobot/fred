@@ -1,9 +1,9 @@
 ---
 status: complete
 phase: 31-cli-testing-debugging
-source: [31-01-SUMMARY.md, 31-02-SUMMARY.md]
-started: 2026-02-12T12:00:00Z
-updated: 2026-02-12T12:15:00Z
+source: [31-01-SUMMARY.md, 31-02-SUMMARY.md, 31-03-SUMMARY.md]
+started: 2026-02-13T05:30:00Z
+updated: 2026-02-13T05:40:00Z
 ---
 
 ## Current Test
@@ -12,73 +12,59 @@ updated: 2026-02-12T12:15:00Z
 
 ## Tests
 
-### 1. CLI help shows all Phase 31 commands
-expected: Running `fred --help` shows intent test, route test, and mcp commands in the help text with usage descriptions and examples.
+### 1. Intent test shows matched intent with confidence
+expected: Run `fred intent test "hello"` in the project root. You should see a compact single-line output like `greeting (1.00) -> assistant` showing matched intent ID, confidence as decimal, and target agent name. If no intents are configured, you should see an error message containing "Error (exit 2)" indicating the exit code visibly.
 result: pass
 
-### 2. Intent test shows error when message missing
-expected: Running `fred intent test` (no message argument) prints an error to stderr like "Error: Message required. Usage: fred intent test \"message\"" and exits with code 2.
-result: issue
-reported: "error message is correct but no error code is reported"
-severity: minor
-
-### 3. Intent test matches an intent from config
-expected: Running `fred intent test "hello"` against a project with intents configured shows a compact single-line output like `greeting (1.00) -> assistant` with the matched intent ID, confidence as decimal, and target agent.
-result: issue
-reported: "error message is correct but error code is missing"
-severity: minor
-
-### 4. Intent test JSON output
-expected: Running `fred intent test "hello" --json` outputs a JSON object with `{ "ok": true, "matched": true, "intent": "...", "confidence": ..., "agent": "..." }` structure.
-result: skipped
-reason: No intents configured in project
-
-### 5. Route test shows error when message missing
-expected: Running `fred route test` (no message argument) prints an error to stderr and exits with code 2.
-result: issue
-reported: "message is correct but exit code is missing"
-severity: minor
-
-### 6. Route test shows routing decision
-expected: Running `fred route test "hello"` against a project with routing configured shows compact output like `-> agentName` with green color in TTY.
-result: issue
-reported: "message is correct but exit code is missing"
-severity: minor
-
-### 7. Route test JSON output
-expected: Running `fred route test "hello" --json` outputs a JSON object with `{ "ok": true, "agent": "...", "fallback": false }` structure.
-result: skipped
-reason: No routing configured in project
-
-### 8. MCP list shows configured servers
-expected: Running `fred mcp list` shows table of servers or "No MCP servers configured." for empty state.
+### 2. Intent test error shows visible exit code
+expected: Run `fred intent test` (no message). You should see an error like "Error (exit 2): Message required. Usage: fred intent test \"message\"" — the key thing is that "(exit 2)" appears visibly in the error text.
 result: pass
 
-### 9. MCP status for a specific server
-expected: Running `fred mcp status <server-id>` shows server details or "Server not found" error.
-result: issue
-reported: "message is correct but exit code is missing"
-severity: minor
+### 3. Route test shows routing decision
+expected: Run `fred route test "hello"`. You should see compact output like `-> agentName` (green in TTY). If routing isn't configured, you should see an error message containing "Error (exit 2)" with visible exit code.
+result: pass
 
-### 10. All Phase 31 unit tests pass
-expected: Running `bun test packages/cli/tests/commands/intent.test.ts packages/cli/tests/commands/route.test.ts packages/cli/tests/commands/mcp.test.ts` — all 37 tests pass with 0 failures.
+### 4. Route test error shows visible exit code
+expected: Run `fred route test` (no message). You should see "Error (exit 2): Message required" with the exit code visible in the error text.
+result: pass
+
+### 5. MCP list shows servers or empty state
+expected: Run `fred mcp list`. You should see either a table of configured servers (ID, Status, Transport, Tools columns) or "No MCP servers configured." for empty state.
+result: pass
+
+### 6. MCP status error shows visible exit code
+expected: Run `fred mcp status` (no server ID). You should see "Error (exit 2): Server ID is required" with the exit code visible in the error text.
+result: pass
+
+### 7. JSON output works for intent test
+expected: Run `fred intent test "hello" --json`. Output should be valid JSON with at minimum an `ok` field. If intents exist: `{ "ok": true, "matched": ..., "intent": ..., "confidence": ... }`. If no intents: `{ "ok": false, "error": ... }`.
+result: issue
+reported: "no json on error — running fred intent test \"hello\" --json outputs plain text 'Error (exit 2): No intents registered.' instead of JSON"
+severity: major
+
+### 8. CLI help shows all Phase 31 commands
+expected: Run `fred --help`. The help text should list `intent test`, `route test`, and `mcp` commands with brief descriptions and usage examples.
+result: pass
+
+### 9. All Phase 31 unit tests pass
+expected: Run `bun test packages/cli/tests/commands/intent.test.ts packages/cli/tests/commands/route.test.ts packages/cli/tests/commands/mcp.test.ts`. All tests should pass with 0 failures.
 result: pass
 
 ## Summary
 
-total: 10
-passed: 3
-issues: 5
+total: 9
+passed: 8
+issues: 1
 pending: 0
-skipped: 2
+skipped: 0
 
 ## Gaps
 
-- truth: "CLI commands report exit code visibly when exiting with non-zero status"
+- truth: "When --json flag is passed, all output including errors should be valid JSON"
   status: failed
-  reason: "User reported: error messages are correct but exit codes are not reported visibly in output across intent test, route test, and mcp status commands"
-  severity: minor
-  test: 2, 3, 5, 6, 9
+  reason: "User reported: no json on error — running fred intent test \"hello\" --json outputs plain text 'Error (exit 2): No intents registered.' instead of JSON"
+  severity: major
+  test: 7
   root_cause: ""
   artifacts: []
   missing: []
