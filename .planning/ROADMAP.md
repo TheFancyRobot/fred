@@ -116,7 +116,7 @@ Plans:
 Plans:
 - [x] 31-01-PLAN.md — Intent test and route test commands with TTY-aware color output (completed 2026-02-12, 4.56 min)
 - [x] 31-02-PLAN.md — MCP server management commands and CLI entrypoint wiring (completed 2026-02-12, 4.47 min)
-- [ ] 31-03-PLAN.md — Add visible exit codes to CLI error messages (gap closure)
+- [x] 31-03-PLAN.md — Add visible exit codes to CLI error messages (completed 2026-02-12, 2.12 min, gap closure)
 
 ### Phase 32: Plugin Architecture
 **Goal**: Enable extensible plugin system with custom CLI commands, TUI slash commands, and stable typed contract
@@ -144,7 +144,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 28. Streaming Performance & Core TUI | 6/6 | Complete | 2026-02-08 |
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
-| 31. CLI Testing & Debugging | 2/3 | Gap closure | 2026-02-12 |
+| 31. CLI Testing & Debugging | 3/3 | Complete | 2026-02-12 |
 | 32. Plugin Architecture | 0/TBD | Not started | - |
 
 ---
@@ -167,4 +167,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-12 - Phase 31 gap closure (1 plan); Phase 32 next*
+*Last updated: 2026-02-12 - Phase 31 complete (gap closure done); Phase 32 next*
