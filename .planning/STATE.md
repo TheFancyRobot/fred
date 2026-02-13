@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 30 complete — all CLI commands delivered; ready for Phase 31 planning
+**Current focus:** Phase 31 complete — all debugging/evaluation commands delivered; ready for Phase 32 planning
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
