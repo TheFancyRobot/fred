@@ -57,7 +57,11 @@ async function handleIntentTest(
   // Validate message argument
   const message = args[1];
   if (!message) {
-    io.stderr('Error: Message required. Usage: fred intent test "message"');
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: 'Message required. Usage: fred intent test "message"' }, null, 2));
+    } else {
+      io.stderr('Error (exit 2): Message required. Usage: fred intent test "message"');
+    }
     return 2;
   }
 
@@ -66,13 +70,22 @@ async function handleIntentTest(
   try {
     fred = deps.fred ?? await initializeFred(io);
   } catch (error) {
-    io.stderr(`Error: Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = `Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`;
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
+    } else {
+      io.stderr(`Error (exit 2): ${errorMessage}`);
+    }
     return 2;
   }
 
   const intents = fred.getIntents();
   if (intents.length === 0) {
-    io.stderr('Error: No intents registered.');
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: 'No intents registered.' }, null, 2));
+    } else {
+      io.stderr('Error (exit 2): No intents registered.');
+    }
     return 2;
   }
 
@@ -82,7 +95,12 @@ async function handleIntentTest(
   try {
     matchResult = await Effect.runPromise((fred as any).intentMatcher.matchIntent(message));
   } catch (error) {
-    io.stderr(`Error: Intent matching failed: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = `Intent matching failed: ${error instanceof Error ? error.message : String(error)}`;
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
+    } else {
+      io.stderr(`Error (exit 2): ${errorMessage}`);
+    }
     return 2;
   }
   const durationMs = Date.now() - startTime;
@@ -181,6 +199,10 @@ export async function handleIntentCommand(
     return handleIntentTest(args, options, deps);
   }
 
-  io.stderr(`Error: Unknown subcommand "${subcommand}". Available: test`);
+  if (options.json === true) {
+    io.stdout(JSON.stringify({ ok: false, error: `Unknown subcommand "${subcommand}". Available: test` }, null, 2));
+  } else {
+    io.stderr(`Error (exit 2): Unknown subcommand "${subcommand}". Available: test`);
+  }
   return 2;
 }

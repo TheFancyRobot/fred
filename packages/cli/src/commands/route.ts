@@ -56,7 +56,11 @@ async function handleRouteTest(
   // Validate message argument
   const message = args[1];
   if (!message) {
-    io.stderr('Error: Message required. Usage: fred route test "message"');
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: 'Message required. Usage: fred route test "message"' }, null, 2));
+    } else {
+      io.stderr('Error (exit 2): Message required. Usage: fred route test "message"');
+    }
     return 2;
   }
 
@@ -65,7 +69,12 @@ async function handleRouteTest(
   try {
     fred = deps.fred ?? await initializeFred(io);
   } catch (error) {
-    io.stderr(`Error: Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = `Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`;
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
+    } else {
+      io.stderr(`Error (exit 2): ${errorMessage}`);
+    }
     return 2;
   }
 
@@ -75,14 +84,23 @@ async function handleRouteTest(
   try {
     decision = await fred.testRoute(message, {});
   } catch (error) {
-    io.stderr(`Error: Routing failed: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = `Routing failed: ${error instanceof Error ? error.message : String(error)}`;
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
+    } else {
+      io.stderr(`Error (exit 2): ${errorMessage}`);
+    }
     return 2;
   }
   const durationMs = Date.now() - startTime;
 
   // Routing not configured
   if (!decision) {
-    io.stderr('Error: Routing not configured.');
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, error: 'Routing not configured.' }, null, 2));
+    } else {
+      io.stderr('Error (exit 2): Routing not configured.');
+    }
     return 2;
   }
 
@@ -192,6 +210,10 @@ export async function handleRouteCommand(
     return handleRouteTest(args, options, deps);
   }
 
-  io.stderr(`Error: Unknown subcommand "${subcommand}". Available: test`);
+  if (options.json === true) {
+    io.stdout(JSON.stringify({ ok: false, error: `Unknown subcommand "${subcommand}". Available: test` }, null, 2));
+  } else {
+    io.stderr(`Error (exit 2): Unknown subcommand "${subcommand}". Available: test`);
+  }
   return 2;
 }
