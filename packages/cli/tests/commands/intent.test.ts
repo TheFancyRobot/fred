@@ -218,6 +218,7 @@ describe('intent command', () => {
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Message required');
     expect(captured.errors[0]).toContain('Usage:');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('outputs JSON on no match', async () => {
@@ -252,6 +253,7 @@ describe('intent command', () => {
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Unknown subcommand');
     expect(captured.errors[0]).toContain('Available: test');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('verbose JSON includes extra fields', async () => {
@@ -286,5 +288,6 @@ describe('intent command', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('No intents registered');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 });

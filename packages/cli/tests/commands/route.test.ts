@@ -210,6 +210,7 @@ describe('route command', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Routing not configured');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('returns exit code 2 when message is missing', async () => {
@@ -225,6 +226,7 @@ describe('route command', () => {
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Message required');
     expect(captured.errors[0]).toContain('Usage:');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('verbose JSON includes explanation fields', async () => {
@@ -282,6 +284,7 @@ describe('route command', () => {
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Unknown subcommand');
     expect(captured.errors[0]).toContain('Available: test');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('displays concerns in verbose mode', async () => {

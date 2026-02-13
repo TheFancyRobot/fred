@@ -263,6 +263,7 @@ describe('mcp start', () => {
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Failed to start');
     expect(captured.errors[0]).toContain('broken-server');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 
   test('returns exit 2 when server ID is missing', async () => {
@@ -277,6 +278,7 @@ describe('mcp start', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Server ID is required');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 });
 
@@ -340,6 +342,7 @@ describe('mcp stop', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Server ID is required');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 });
 
@@ -408,6 +411,7 @@ describe('mcp status', () => {
     expect(exitCode).toBe(1);
     expect(captured.errors[0]).toContain('not found');
     expect(captured.errors[0]).toContain('nonexistent');
+    expect(captured.errors[0]).toContain('exit 1');
   });
 
   test('returns JSON status with --json', async () => {
@@ -449,6 +453,7 @@ describe('mcp status', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Server ID is required');
+    expect(captured.errors[0]).toContain('exit 2');
   });
 });
 
@@ -465,6 +470,7 @@ describe('mcp command errors', () => {
 
     expect(exitCode).toBe(2);
     expect(captured.errors[0]).toContain('Unknown subcommand');
+    expect(captured.errors[0]).toContain('exit 2');
     expect(captured.errors[1]).toContain('Available: list, start, stop, status');
   });
 });
