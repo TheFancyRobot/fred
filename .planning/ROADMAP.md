@@ -111,10 +111,11 @@ Plans:
   2. User can test routing via `fred route test "message"` showing full routing decision with explanation
   3. All eval commands support --json output for CI integration
   4. User can manage MCP servers via `fred mcp list/start/stop <id>` showing configured servers and connection status
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 31-01: TBD
+- [ ] 31-01-PLAN.md — Intent test and route test commands with TTY-aware color output
+- [ ] 31-02-PLAN.md — MCP server management commands and CLI entrypoint wiring
 
 ### Phase 32: Plugin Architecture
 **Goal**: Enable extensible plugin system with custom CLI commands, TUI slash commands, and stable typed contract
@@ -142,7 +143,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 28. Streaming Performance & Core TUI | 6/6 | Complete | 2026-02-08 |
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
-| 31. CLI Testing & Debugging | 0/TBD | Not started | - |
+| 31. CLI Testing & Debugging | 0/2 | Not started | - |
 | 32. Plugin Architecture | 0/TBD | Not started | - |
 
 ---
@@ -165,4 +166,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-11 - Phase 30 CLI commands complete; ready for Phase 31 planning*
+*Last updated: 2026-02-12 - Phase 31 planned (2 plans); ready for execution*
