@@ -157,20 +157,22 @@ async function handleMcpStart(
     }
 
     if (errors.length > 0) {
-      io.stderr(colors.red(`Error (exit 2): Failed to start ${errors.length} server(s):`));
-      for (const err of errors) {
-        io.stderr(colors.red(`  ${err}`));
-      }
       if (options.json === true) {
         io.stdout(JSON.stringify({ ok: false, command: 'mcp-start', servers: allServers, errors }, null, 2));
+      } else {
+        io.stderr(colors.red(`Error (exit 2): Failed to start ${errors.length} server(s):`));
+        for (const err of errors) {
+          io.stderr(colors.red(`  ${err}`));
+        }
       }
       return 2;
     }
 
-    const message = colors.green(`Started ${allServers.length} server(s)`);
-    io.stdout(message);
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-start', servers: allServers }, null, 2));
+    } else {
+      const message = colors.green(`Started ${allServers.length} server(s)`);
+      io.stdout(message);
     }
     return 0;
   }
@@ -178,26 +180,29 @@ async function handleMcpStart(
   // Start a specific server
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp start <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-start', error: 'Server ID is required' }, null, 2));
+    } else {
+      io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp start <id>'));
     }
     return 2;
   }
 
   try {
     await Effect.runPromise(registry.ensureConnected(serverId));
-    io.stdout(colors.green(`Started: ${serverId}`));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-start', serverId }, null, 2));
+    } else {
+      io.stdout(colors.green(`Started: ${serverId}`));
     }
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    io.stderr(colors.red(`Error (exit 2): Failed to start ${serverId}: ${message}`));
-    io.stderr('Try running with --verbose for more details, or check server configuration.');
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-start', serverId, error: message }, null, 2));
+    } else {
+      io.stderr(colors.red(`Error (exit 2): Failed to start ${serverId}: ${message}`));
+      io.stderr('Try running with --verbose for more details, or check server configuration.');
     }
     return 2;
   }
@@ -229,9 +234,10 @@ async function handleMcpStop(
       }
     }
 
-    io.stdout(`Stopped ${connectedServers.length} server(s)`);
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-stop', servers: connectedServers }, null, 2));
+    } else {
+      io.stdout(`Stopped ${connectedServers.length} server(s)`);
     }
     return 0;
   }
@@ -239,25 +245,28 @@ async function handleMcpStop(
   // Stop a specific server
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp stop <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-stop', error: 'Server ID is required' }, null, 2));
+    } else {
+      io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp stop <id>'));
     }
     return 2;
   }
 
   try {
     await Effect.runPromise(registry.removeServer(serverId));
-    io.stdout(`Stopped: ${serverId}`);
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-stop', serverId }, null, 2));
+    } else {
+      io.stdout(`Stopped: ${serverId}`);
     }
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    io.stderr(colors.red(`Failed to stop ${serverId}: ${message}`));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-stop', serverId, error: message }, null, 2));
+    } else {
+      io.stderr(colors.red(`Failed to stop ${serverId}: ${message}`));
     }
     return 2;
   }
@@ -278,9 +287,10 @@ async function handleMcpStatus(
 
   const serverId = args[1];
   if (!serverId) {
-    io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp status <id>'));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-status', error: 'Server ID is required' }, null, 2));
+    } else {
+      io.stderr(colors.red('Error (exit 2): Server ID is required. Usage: fred mcp status <id>'));
     }
     return 2;
   }
@@ -289,9 +299,10 @@ async function handleMcpStatus(
   const config = registry.getServerConfig(serverId);
 
   if (!config) {
-    io.stderr(colors.red(`Error (exit 1): Server "${serverId}" not found.`));
     if (options.json === true) {
       io.stdout(JSON.stringify({ ok: false, command: 'mcp-status', serverId, error: 'Server not found' }, null, 2));
+    } else {
+      io.stderr(colors.red(`Error (exit 1): Server "${serverId}" not found.`));
     }
     return 1;
   }
@@ -385,12 +396,21 @@ export async function handleMcpCommand(
       case 'status':
         return await handleMcpStatus(args, options, deps, io, fred);
       default:
-        io.stderr(`Error (exit 2): Unknown subcommand: ${subcommand ?? '(none)'}`);
-        io.stderr('Available: list, start, stop, status');
+        if (options.json === true) {
+          io.stdout(JSON.stringify({ ok: false, command: 'mcp', error: `Unknown subcommand: ${subcommand ?? '(none)'}. Available: list, start, stop, status` }, null, 2));
+        } else {
+          io.stderr(`Error (exit 2): Unknown subcommand: ${subcommand ?? '(none)'}`);
+          io.stderr('Available: list, start, stop, status');
+        }
         return 2;
     }
   } catch (error) {
-    io.stderr(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    if (options.json === true) {
+      io.stdout(JSON.stringify({ ok: false, command: 'mcp', error: message }, null, 2));
+    } else {
+      io.stderr(message);
+    }
     return 2;
   }
 }
