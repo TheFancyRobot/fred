@@ -473,4 +473,77 @@ describe('mcp command errors', () => {
     expect(captured.errors[0]).toContain('exit 2');
     expect(captured.errors[1]).toContain('Available: list, start, stop, status');
   });
+
+  test('outputs JSON error when server ID missing for start with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleMcpCommand(
+      ['start'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.command).toBe('mcp-start');
+    expect(payload.error).toContain('Server ID is required');
+  });
+
+  test('outputs JSON error when server ID missing for stop with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleMcpCommand(
+      ['stop'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.command).toBe('mcp-stop');
+    expect(payload.error).toContain('Server ID is required');
+  });
+
+  test('outputs JSON error when server ID missing for status with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleMcpCommand(
+      ['status'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.command).toBe('mcp-status');
+    expect(payload.error).toContain('Server ID is required');
+  });
+
+  test('outputs JSON error on unknown subcommand with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleMcpCommand(
+      ['unknown'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.command).toBe('mcp');
+    expect(payload.error).toContain('Unknown subcommand');
+    expect(payload.error).toContain('Available: list, start, stop, status');
+  });
 });

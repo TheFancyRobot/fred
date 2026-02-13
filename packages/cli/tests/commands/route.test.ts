@@ -329,4 +329,56 @@ describe('route command', () => {
     expect(fullOutput).toContain('warning');
     expect(fullOutput).toContain('Confidence below 0.6');
   });
+
+  test('outputs JSON error when message missing with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred({ agent: 'assistant', fallback: false });
+
+    const exitCode = await handleRouteCommand(
+      ['test'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('Message required');
+  });
+
+  test('outputs JSON error when routing not configured with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred(null); // Routing not configured
+
+    const exitCode = await handleRouteCommand(
+      ['test', 'hello'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('Routing not configured');
+  });
+
+  test('outputs JSON error on unknown subcommand with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred({ agent: 'assistant', fallback: false });
+
+    const exitCode = await handleRouteCommand(
+      ['unknown'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('Unknown subcommand');
+    expect(payload.error).toContain('Available: test');
+  });
 });

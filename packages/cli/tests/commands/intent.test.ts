@@ -290,4 +290,56 @@ describe('intent command', () => {
     expect(captured.errors[0]).toContain('No intents registered');
     expect(captured.errors[0]).toContain('exit 2');
   });
+
+  test('outputs JSON error when message missing with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleIntentCommand(
+      ['test'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('Message required');
+  });
+
+  test('outputs JSON error when no intents registered with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]); // No intents
+
+    const exitCode = await handleIntentCommand(
+      ['test', 'hello'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('No intents registered');
+  });
+
+  test('outputs JSON error on unknown subcommand with --json', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([]);
+
+    const exitCode = await handleIntentCommand(
+      ['unknown'],
+      { json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(captured.errors).toHaveLength(0); // No stderr output
+    const payload = JSON.parse(captured.output[0] ?? '{}');
+    expect(payload.ok).toBe(false);
+    expect(payload.error).toContain('Unknown subcommand');
+    expect(payload.error).toContain('Available: test');
+  });
 });
