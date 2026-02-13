@@ -14,6 +14,9 @@ import { handleListCommand } from './commands/list';
 import { handleConfigCommand } from './commands/config';
 import { handleInitCommand } from './commands/init';
 import { handleRunCommand } from './commands/run';
+import { handleIntentCommand } from './commands/intent';
+import { handleRouteCommand } from './commands/route';
+import { handleMcpCommand } from './commands/mcp';
 
 /**
  * Options that require a value
@@ -42,6 +45,7 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'workflow',
   'conversation-id',
   'conversationId',
+  'threshold',
 ]);
 
 /**
@@ -114,6 +118,17 @@ Commands:
   workflows               List defined workflows
   config validate         Validate config file and show diagnostics
   init                    Scaffold a new Fred project
+  intent test "message"   Test intent matching for a message
+                          --verbose        Show alternatives and timing
+                          --threshold <n>  Filter alternatives below confidence
+                          --json           Output structured JSON
+  route test "message"    Test routing decision for a message
+                          --verbose        Show full decision chain
+                          --json           Output structured JSON
+  mcp list                List configured MCP servers
+  mcp start <id>          Start an MCP server (use --all for all)
+  mcp stop <id>           Stop an MCP server (use --all for all)
+  mcp status <id>         Show MCP server connection health
   session                 Manage saved chat sessions
   session list             List sessions (table or --json)
   session show <id>        Show a session transcript
@@ -144,6 +159,11 @@ Examples:
   fred tools --json
   fred config validate
   fred init
+  fred intent test "What is 2+2?"
+  fred route test "Help me with billing"
+  fred mcp list
+  fred mcp start filesystem-server
+  fred mcp status filesystem-server
   fred session list
   fred session list --json
   fred session show conv_123
@@ -229,6 +249,18 @@ async function main(): Promise<void> {
 
       case 'run':
         exitCode = await handleRunCommand(commandArgs, options);
+        break;
+
+      case 'intent':
+        exitCode = await handleIntentCommand(commandArgs, options);
+        break;
+
+      case 'route':
+        exitCode = await handleRouteCommand(commandArgs, options);
+        break;
+
+      case 'mcp':
+        exitCode = await handleMcpCommand(commandArgs, options);
         break;
 
       default:
