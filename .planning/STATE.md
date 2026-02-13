@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 31 of 32 (CLI Testing & Debugging)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-13 - Completed 31-01-PLAN.md (intent and route test commands)
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-02-13 - Completed 31-02-PLAN.md (MCP server management and CLI wiring)
 
 Progress: [██████████] 100% (138/138 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14 (v0.2.1 milestone)
-- Average duration: 6.28 min
-- Total execution time: 1.47 hours
+- Total plans completed: 15 (v0.2.1 milestone)
+- Average duration: 6.06 min
+- Total execution time: 1.51 hours
 
 **By Phase:**
 
@@ -32,12 +32,12 @@ Progress: [██████████] 100% (138/138 plans complete)
 | 28 | 6 | 47.65 min | 7.94 min |
 | 29 | 4 | ~28 min | ~7.00 min |
 | 30 | 3 | 8.45 min | 2.82 min |
-| 31 | 1 | 4.56 min | 4.56 min |
+| 31 | 2 | 9.03 min | 4.52 min |
 
 **Recent Trend:**
-- Last 5 plans: 3.00 min (30-01), 2.63 min (30-02), 2.82 min (30-03), 4.56 min (31-01)
-- Trend: CLI command plans completing fast; 31-01 slightly slower due to Effect mock complexity
-- Automated plans averaging 6.28 min in current milestone window
+- Last 5 plans: 2.63 min (30-02), 2.82 min (30-03), 4.56 min (31-01), 4.47 min (31-02)
+- Trend: Phase 31 commands complete; consistently fast execution under 5 min/plan
+- Automated plans averaging 6.06 min in current milestone window
 
 **Previous Milestones:**
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
@@ -80,6 +80,9 @@ Recent decisions affecting current work:
 - Non-streaming processMessage for headless run (30-03) — predictable complete output for CI/scripting pipelines
 - DI-based stdin bypass in run command (30-03) — deps.stdin overrides TTY check for testability
 - Fred internal intentMatcher access in CLI (31-01) — access via (fred as any).intentMatcher instead of creating new instance
+- Minimal MCPServerRegistry extensions (31-02) — added only getAllConfiguredServers() and getServerConfig() methods
+- Tool count display limitation in MCP list (31-02) — show "-" for tool count in table view; status command provides detailed info
+- Graceful error handling in MCP batch operations (31-02) — continue processing all servers even if some fail in --all mode
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-13T03:53:34Z
-Stopped at: Completed 31-01-PLAN.md (intent and route test commands)
+Last session: 2026-02-13T04:01:01Z
+Stopped at: Completed 31-02-PLAN.md (MCP server management and CLI wiring)
 Resume file: None
