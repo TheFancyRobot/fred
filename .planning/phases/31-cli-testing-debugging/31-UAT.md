@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 31-cli-testing-debugging
 source: [31-01-SUMMARY.md, 31-02-SUMMARY.md, 31-03-SUMMARY.md]
 started: 2026-02-13T05:30:00Z
-updated: 2026-02-13T05:40:00Z
+updated: 2026-02-13T05:42:00Z
 ---
 
 ## Current Test
@@ -65,7 +65,14 @@ skipped: 0
   reason: "User reported: no json on error — running fred intent test \"hello\" --json outputs plain text 'Error (exit 2): No intents registered.' instead of JSON"
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Error paths in intent.ts, route.ts, and mcp.ts write plain text to stderr without checking the --json flag. Success paths correctly use conditional JSON formatting, but early-return error paths bypass this logic. intent.ts has 5 error paths (lines 60, 69, 75, 85, 184), route.ts has 5 (lines 59, 68, 78, 85, 195), and mcp.ts has 6 inconsistent paths (lines 160-163, 181, 242, 281, 388-389)."
+  artifacts:
+    - path: "packages/cli/src/commands/intent.ts"
+      issue: "5 error paths write plain text without checking --json flag"
+    - path: "packages/cli/src/commands/route.ts"
+      issue: "5 error paths write plain text without checking --json flag"
+    - path: "packages/cli/src/commands/mcp.ts"
+      issue: "6 error paths have inconsistent --json handling"
+  missing:
+    - "Wrap each error path in conditional: if --json, output { ok: false, error: msg } to stdout; else plain text to stderr"
+  debug_session: ".planning/debug/json-flag-ignored-in-errors.md"
