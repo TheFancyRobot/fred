@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 30 execution — CLI commands (listing done, validation+init done, wiring next)
+**Current focus:** Phase 30 complete — all CLI commands delivered; ready for Phase 31 planning
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 30 of 32 (CLI Commands)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-11 - Completed 30-02-PLAN.md (config validate + init commands)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-11 - Completed 30-03-PLAN.md (headless run + CLI wiring)
 
-Progress: [█████████░] 99% (136/137 plans complete)
+Progress: [██████████] 100% (137/137 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12 (v0.2.1 milestone)
-- Average duration: 6.70 min
-- Total execution time: 1.34 hours
+- Total plans completed: 13 (v0.2.1 milestone)
+- Average duration: 6.40 min
+- Total execution time: 1.39 hours
 
 **By Phase:**
 
@@ -31,12 +31,12 @@ Progress: [█████████░] 99% (136/137 plans complete)
 | 27 | 4 | 27.55 min | 6.89 min |
 | 28 | 6 | 47.65 min | 7.94 min |
 | 29 | 4 | ~28 min | ~7.00 min |
-| 30 | 2 | 5.63 min | 2.82 min |
+| 30 | 3 | 8.45 min | 2.82 min |
 
 **Recent Trend:**
-- Last 5 plans: 5.58 min (28-05), 5.15 min (28-06), ~7.00 min (29-avg), 3.00 min (30-01), 2.63 min (30-02)
+- Last 5 plans: ~7.00 min (29-avg), 3.00 min (30-01), 2.63 min (30-02), 2.82 min (30-03)
 - Trend: CLI command plans completing fast with clear patterns from prior commands
-- Automated plans averaging 6.70 min in current milestone window
+- Automated plans averaging 6.40 min in current milestone window
 
 **Previous Milestones:**
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
@@ -76,6 +76,8 @@ Recent decisions affecting current work:
 - Sidebar action row selection (29-03) — allow new-session action to be focusable without switching sessions
 - Duplicated initializeFred helper in list.ts (30-01) — defer shared extraction to 30-03 wiring plan
 - Raw config entity counting in config validate (30-02) — avoids heavyweight Fred instantiation for validation summary
+- Non-streaming processMessage for headless run (30-03) — predictable complete output for CI/scripting pipelines
+- DI-based stdin bypass in run command (30-03) — deps.stdin overrides TTY check for testability
 
 ### Pending Todos
 
@@ -94,9 +96,9 @@ Recent decisions affecting current work:
 
 **Phase dependencies:**
 - Phase 29 depends on Phase 28 (session sidebar requires TUI layout)
-- Phase 30 depends on Phase 27 only (CLI commands independent of TUI) — ✓ Phase 27 complete
-- Phase 31 depends on Phase 30 (extends CLI commands)
-- Phase 32 depends on Phase 28 + Phase 30 (plugins extend both TUI and CLI)
+- Phase 30 depends on Phase 27 only (CLI commands independent of TUI) — ✓ Phase 30 complete
+- Phase 31 depends on Phase 30 (extends CLI commands) — ✓ Phase 30 complete
+- Phase 32 depends on Phase 28 + Phase 30 (plugins extend both TUI and CLI) — ✓ Phase 30 complete
 
 ### Quick Tasks Completed
 
@@ -106,6 +108,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-11T02:33:39Z
-Stopped at: Completed 30-02-PLAN.md (config validate + init commands)
+Last session: 2026-02-11T02:41:11Z
+Stopped at: Completed 30-03-PLAN.md (headless run + CLI wiring) — Phase 30 complete
 Resume file: None
