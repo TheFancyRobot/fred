@@ -254,12 +254,19 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.focusedPane).toBe('input');
   });
 
-  test('startup hint dismisses after first key interaction', async () => {
-    await createTestApp();
-    expect(app.getState().startup.hint.visible).toBe(true);
+  test('startup chooser keeps selection required affordance while navigating options', async () => {
+    const fixture = createSessionServiceFixture();
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
 
-    app.processKey(makeKey({ name: 'h' }));
-    expect(app.getState().startup.hint.visible).toBe(false);
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
+
+    app.processKey(makeKey({ name: 'up' }));
+    expect(app.getState().startup.chooser.selected).toBe('resume-last-session');
+
+    app.processKey(makeKey({ name: 'down' }));
+    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
   });
 
   test('Enter submits and clears input', async () => {

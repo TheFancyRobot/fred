@@ -5,7 +5,6 @@ import {
   renderTranscriptContent,
   renderStatusContent,
   DEFAULT_LAYOUT,
-  STARTUP_HINT,
 } from '../../../packages/cli/src/tui/layout.js';
 import { createInitialTuiState } from '../../../packages/cli/src/tui/state.js';
 
@@ -183,30 +182,25 @@ describe('TUI Layout', () => {
     });
   });
 
-  describe('Startup hint', () => {
-    test('startup hint is concise and references shortcuts', () => {
-      expect(STARTUP_HINT).toBeTruthy();
-      expect(STARTUP_HINT.toLowerCase()).toContain('status bar');
-      expect(STARTUP_HINT.length).toBeLessThan(90);
-    });
-
+  describe('Startup chooser affordance', () => {
     test('renders compact startup chooser with start-new selected by default', () => {
       const state = createInitialTuiState();
       state.startup.chooser.isOpen = true;
       state.startup.chooser.selected = 'start-new-session';
 
       const content = renderTranscriptContent(state, true);
-      expect(content.lines[0]).toBe('[Startup]');
-      expect(content.lines.join('\n')).toContain(' Resume last session');
-      expect(content.lines.join('\n')).toContain('▸ Start new session');
+      expect(content.lines[0]).toBe('[Startup: selection required]');
+      expect(content.lines.join('\n')).toContain('   Resume last session');
+      expect(content.lines.join('\n')).toContain('>> Start new session');
+      expect(content.lines.join('\n')).toContain('Use Up/Down to choose, Enter to continue');
     });
 
-    test('startup hint hides when dismissed', () => {
+    test('chooser content never renders dismissible hint copy', () => {
       const state = createInitialTuiState();
-      state.startup.hint.visible = false;
+      state.startup.chooser.isOpen = true;
 
       const content = renderTranscriptContent(state, false);
-      expect(content.lines.join('\n')).not.toContain(STARTUP_HINT);
+      expect(content.lines.join('\n')).not.toContain('Hint:');
     });
   });
 

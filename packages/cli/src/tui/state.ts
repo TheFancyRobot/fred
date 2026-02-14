@@ -118,9 +118,6 @@ export interface StartupState {
     isOpen: boolean;
     selected: StartupChooserOption;
   };
-  hint: {
-    visible: boolean;
-  };
   warning: string | null;
 }
 
@@ -240,9 +237,6 @@ export function createInitialTuiStateWithPlugins(
         isOpen: false,
         selected: 'start-new-session',
       },
-      hint: {
-        visible: true,
-      },
       warning: null,
     },
   };
@@ -307,22 +301,6 @@ export function moveStartupChooserSelection(state: TuiState, delta: number): Tui
       chooser: {
         ...state.startup.chooser,
         selected: STARTUP_CHOOSER_OPTIONS[nextIndex],
-      },
-    },
-  };
-}
-
-export function dismissStartupHint(state: TuiState): TuiState {
-  if (!state.startup.hint.visible) {
-    return state;
-  }
-
-  return {
-    ...state,
-    startup: {
-      ...state.startup,
-      hint: {
-        visible: false,
       },
     },
   };

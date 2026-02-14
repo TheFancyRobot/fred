@@ -246,17 +246,16 @@ export function renderTranscriptContent(
   const maxWidth = options.maxWidth;
 
   if (state.startup.chooser.isOpen) {
-    const resumeMarker = state.startup.chooser.selected === 'resume-last-session' ? '▸' : ' ';
-    const startNewMarker = state.startup.chooser.selected === 'start-new-session' ? '▸' : ' ';
+    const resumeMarker = state.startup.chooser.selected === 'resume-last-session' ? '>>' : '  ';
+    const startNewMarker = state.startup.chooser.selected === 'start-new-session' ? '>>' : '  ';
     const lines = [
-      '[Startup]',
+      '[Startup: selection required]',
       ...(state.startup.warning ? [`warning: ${state.startup.warning}`] : []),
-      ...(state.startup.hint.visible ? [STARTUP_HINT] : []),
       '',
       `${resumeMarker} Resume last session`,
       `${startNewMarker} Start new session`,
       '',
-      'Enter to continue',
+      'Use Up/Down to choose, Enter to continue',
     ];
 
     return {
@@ -274,7 +273,6 @@ export function renderTranscriptContent(
       'Fred AI Framework',
       '',
       ...(state.startup.warning ? [`Startup warning: ${state.startup.warning}`] : []),
-      ...(state.startup.hint.visible ? [STARTUP_HINT] : []),
       'Type a message to begin...',
     ];
 
@@ -367,8 +365,3 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
     lines: [statusText],
   };
 }
-
-/**
- * Startup hint displayed before entering full shell
- */
-export const STARTUP_HINT = 'Hint: Enter selects startup option. Status bar shows shortcuts.';

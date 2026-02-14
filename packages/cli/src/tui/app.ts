@@ -41,7 +41,6 @@ import {
   shouldOpenStartupChooser,
   openStartupChooser,
   closeStartupChooser,
-  dismissStartupHint,
   setStartupWarning,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
@@ -445,10 +444,6 @@ export class FredTuiApp {
     }
 
     const action = mapKeyToAction(key, this.state);
-
-    if (action.type !== 'noop' && this.state.startup.hint.visible) {
-      this.state = dismissStartupHint(this.state);
-    }
 
     if (action.type === 'quit') {
       this.stop();
@@ -953,11 +948,34 @@ export class FredTuiApp {
 
     this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
       const isRoleLabel = line.endsWith(':') && (line === 'user:' || line === 'assistant:');
+      const isStartupChooserLine = this.state.startup.chooser.isOpen;
+      const isStartupHeader = isStartupChooserLine && i === 0;
+      const isStartupWarning = isStartupChooserLine && line.startsWith('warning:');
+      const isStartupSelectedOption = isStartupChooserLine && line.startsWith('>> ');
+      const isStartupInstruction = isStartupChooserLine && line.startsWith('Use Up/Down');
+
+      let fg = isRoleLabel
+        ? '#00FFFF'
+        : (this.state.focusedPane === 'transcript' ? '#FFFFFF' : '#CCCCCC');
+      let attributes = isRoleLabel ? TextAttributes.BOLD : 0;
+
+      if (isStartupHeader) {
+        fg = '#FFD166';
+        attributes = TextAttributes.BOLD;
+      } else if (isStartupSelectedOption) {
+        fg = '#7CE38B';
+        attributes = TextAttributes.BOLD;
+      } else if (isStartupWarning) {
+        fg = '#FF9E64';
+      } else if (isStartupInstruction) {
+        fg = '#FFD166';
+      }
+
       const text = new TextRenderable(r, {
         id: `transcript-line-${i}`,
         content: line,
-        fg: isRoleLabel ? '#00FFFF' : (this.state.focusedPane === 'transcript' ? '#FFFFFF' : '#CCCCCC'),
-        attributes: isRoleLabel ? TextAttributes.BOLD : 0,
+        fg,
+        attributes,
       });
       text.selectable = true;
       return text;
