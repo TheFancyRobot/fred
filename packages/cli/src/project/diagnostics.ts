@@ -5,6 +5,7 @@
  */
 
 import type { ConfigDiagnostic, DiagnosticSeverity } from './types';
+import type { PluginStartupIssue } from '../plugin/manager.js';
 
 /**
  * Format a single config diagnostic into a structured object
@@ -53,6 +54,21 @@ export function formatDiagnostics(
   configPath?: string
 ): ConfigDiagnostic[] {
   return errors.map(error => formatConfigDiagnostic(error, configPath));
+}
+
+export function formatPluginDiagnostics(
+  issues: readonly PluginStartupIssue[],
+  configPath?: string,
+): ConfigDiagnostic[] {
+  return issues.map((issue) => ({
+    code: issue.code,
+    severity: issue.severity,
+    message: `${issue.message} (plugin: ${issue.pluginId}, source: ${issue.declarationSource})`,
+    path: configPath,
+    fix: issue.fix,
+    pluginId: issue.pluginId,
+    declarationSource: issue.declarationSource,
+  }));
 }
 
 /**

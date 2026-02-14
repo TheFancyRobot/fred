@@ -192,6 +192,70 @@ describe('config validate command', () => {
     expect(payload.diagnostics[0].code).toBe('config-missing-field');
   });
 
+  test('aggregates multiple plugin diagnostics in human output', async () => {
+    const { io, errors } = createCapturingIO();
+
+    const exitCode = await handleConfigCommand(['validate'], {}, {
+      io,
+      resolveConfig: () => makeFailedResult([
+        {
+          code: 'plugin-fred-version-incompatible',
+          severity: 'error',
+          message: 'Plugin "@acme/alpha" requires Fred CLI ^9.0.0 but detected Fred CLI 0.2.0. (plugin: @acme/alpha, source: @acme/alpha)',
+          path: 'fred.config.ts',
+          pluginId: '@acme/alpha',
+          declarationSource: '@acme/alpha',
+          fix: 'Upgrade Fred CLI or install a compatible plugin version.',
+        },
+        {
+          code: 'plugin-api-deprecated',
+          severity: 'error',
+          message: 'Plugin "./plugins/legacy.ts" uses deprecated plugin API since 0.1.0. (plugin: ./plugins/legacy.ts, source: ./plugins/legacy.ts)',
+          path: 'fred.config.ts',
+          pluginId: './plugins/legacy.ts',
+          declarationSource: './plugins/legacy.ts',
+          fix: 'Update the plugin to a non-deprecated API.',
+        },
+      ], 'fred.config.ts'),
+    });
+
+    expect(exitCode).toBe(1);
+    const err = errors.join('\n');
+    expect(err).toContain('error[plugin-fred-version-incompatible]');
+    expect(err).toContain('error[plugin-api-deprecated]');
+    expect(err).toContain('@acme/alpha');
+    expect(err).toContain('./plugins/legacy.ts');
+    expect(err).toContain('Found 2 errors');
+  });
+
+  test('--json includes structured plugin diagnostic metadata', async () => {
+    const { io, output } = createCapturingIO();
+
+    const exitCode = await handleConfigCommand(['validate'], { json: true }, {
+      io,
+      resolveConfig: () => makeFailedResult([
+        {
+          code: 'plugin-fred-version-incompatible',
+          severity: 'error',
+          message: 'Plugin "@acme/alpha" requires Fred CLI ^9.0.0 but detected Fred CLI 0.2.0. (plugin: @acme/alpha, source: @acme/alpha)',
+          path: 'fred.config.ts',
+          pluginId: '@acme/alpha',
+          declarationSource: '@acme/alpha',
+          fix: 'Upgrade Fred CLI or install a compatible plugin version.',
+        },
+      ], 'fred.config.ts'),
+    });
+
+    expect(exitCode).toBe(1);
+    const payload = JSON.parse(output.join(''));
+    expect(payload.ok).toBe(false);
+    expect(payload.diagnostics).toHaveLength(1);
+    expect(payload.diagnostics[0].code).toBe('plugin-fred-version-incompatible');
+    expect(payload.diagnostics[0].severity).toBe('error');
+    expect(payload.diagnostics[0].pluginId).toBe('@acme/alpha');
+    expect(payload.diagnostics[0].fix).toContain('compatible');
+  });
+
   test('unknown subcommand returns exit code 1', async () => {
     const { io, errors } = createCapturingIO();
 

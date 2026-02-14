@@ -28,7 +28,7 @@ export class AggregatedPluginValidationError extends Error {
 export interface LoadPluginsFromConfigOptions {
   fredCliVersion?: string;
   resolveModule?: (specifier: string, fromDir: string) => string;
-  loadModule?: (importTarget: string) => Promise<unknown>;
+  loadModule?: (resolvedPath: string) => unknown;
 }
 
 export interface LoadPluginsFromConfigResult {
@@ -37,11 +37,11 @@ export interface LoadPluginsFromConfigResult {
 
 const DEFAULT_FRED_CLI_VERSION = getCliVersionFromPackageJson();
 
-export async function loadPluginsFromConfig(
+export function loadPluginsFromConfig(
   declarations: readonly PluginDeclaration[] | undefined,
   configPath: string,
   options: LoadPluginsFromConfigOptions = {},
-): Promise<LoadPluginsFromConfigResult> {
+): LoadPluginsFromConfigResult {
   const issues: PluginStartupIssue[] = [];
   const normalized = normalizeDeclarations(declarations, issues);
 
@@ -49,7 +49,7 @@ export async function loadPluginsFromConfig(
   const resolution = resolvePluginDeclarations(normalized, configPath, options.resolveModule);
   issues.push(...resolution.issues.map(mapIssue));
 
-  const discovery = await loadPluginModules(resolution.resolved, options.loadModule);
+  const discovery = loadPluginModules(resolution.resolved, options.loadModule);
   issues.push(...discovery.issues.map(mapIssue));
 
   const fredCliVersion = options.fredCliVersion ?? DEFAULT_FRED_CLI_VERSION;

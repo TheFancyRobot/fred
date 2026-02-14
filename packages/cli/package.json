@@ -25,13 +25,14 @@
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:^",
-    "@fancyrobot/fred-dev": "workspace:^",
-    "@fancyrobot/fred-openai": "workspace:^",
     "@fancyrobot/fred-anthropic": "workspace:^",
+    "@fancyrobot/fred-dev": "workspace:^",
     "@fancyrobot/fred-google": "workspace:^",
     "@fancyrobot/fred-groq": "workspace:^",
+    "@fancyrobot/fred-openai": "workspace:^",
     "@fancyrobot/fred-openrouter": "workspace:^",
-    "@opentui/core": "^0.1.77"
+    "@opentui/core": "^0.1.77",
+    "semver": "^7.7.4"
   },
   "peerDependencies": {
     "effect": "^3.19.0"

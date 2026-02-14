@@ -7,8 +7,9 @@
 
 import { loadConfig, validateConfig } from '../../../core/src/config/loader';
 import type { FrameworkConfig } from '../../../core/src/config/types';
+import { AggregatedPluginValidationError, loadPluginsFromConfig } from '../plugin/manager.js';
 import { detectProjectRoot } from './detect';
-import { formatConfigDiagnostic, formatDiagnostics } from './diagnostics';
+import { formatConfigDiagnostic, formatDiagnostics, formatPluginDiagnostics } from './diagnostics';
 import type { ConfigResolutionResult, ConfigDiagnostic } from './types';
 
 /**
@@ -68,6 +69,22 @@ export function resolveProjectConfig(
 
     if (validationErrors.length > 0) {
       diagnostics.push(...formatDiagnostics(validationErrors, detection.configPath));
+    }
+
+    // Step 4: Validate plugin declarations and compatibility through plugin manager
+    if (config.plugins && config.plugins.length > 0) {
+      try {
+        loadPluginsFromConfig(config.plugins, detection.configPath);
+      } catch (error) {
+        if (error instanceof AggregatedPluginValidationError) {
+          diagnostics.push(...formatPluginDiagnostics(error.issues, detection.configPath));
+        } else {
+          diagnostics.push(formatConfigDiagnostic(error as Error, detection.configPath));
+        }
+      }
+    }
+
+    if (diagnostics.length > 0) {
       return {
         success: false,
         configPath: detection.configPath,

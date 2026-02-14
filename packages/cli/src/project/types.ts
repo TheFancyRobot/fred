@@ -68,6 +68,10 @@ export interface ConfigDiagnostic {
   column?: number;
   /** Concrete next-step command or edit hint */
   fix?: string;
+  /** Related plugin id when diagnostic comes from plugin validation */
+  pluginId?: string;
+  /** Source declaration for plugin diagnostics */
+  declarationSource?: string;
 }
 
 /**

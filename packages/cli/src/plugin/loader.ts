@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { FredCliPlugin } from './api.js';
 import type {
   PluginResolutionIssue,
@@ -22,16 +23,18 @@ export interface LoadPluginModulesResult {
   issues: PluginLoadIssue[];
 }
 
-export async function loadPluginModules(
+const requireModule = createRequire(import.meta.url);
+
+export function loadPluginModules(
   declarations: readonly ResolvedPluginDeclaration[],
-  loadModule: (importTarget: string) => Promise<unknown> = defaultLoadModule,
-): Promise<LoadPluginModulesResult> {
+  loadModule: (resolvedPath: string) => unknown = defaultLoadModule,
+): LoadPluginModulesResult {
   const loaded: LoadedPluginDeclaration[] = [];
   const issues: PluginLoadIssue[] = [];
 
   for (const declaration of declarations) {
     try {
-      const mod = await loadModule(declaration.importTarget);
+      const mod = loadModule(declaration.resolvedPath);
       const plugin = extractPlugin(mod);
 
       if (!plugin) {
@@ -93,8 +96,8 @@ function extractPlugin(mod: unknown): FredCliPlugin | undefined {
   return plugin;
 }
 
-async function defaultLoadModule(importTarget: string): Promise<unknown> {
-  return import(importTarget);
+function defaultLoadModule(resolvedPath: string): unknown {
+  return requireModule(resolvedPath);
 }
 
 export type PluginDiscoverIssue = PluginResolutionIssue | PluginLoadIssue;
