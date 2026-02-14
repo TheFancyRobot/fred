@@ -254,10 +254,10 @@ const STARTUP_CHOOSER_OPTIONS: ReadonlyArray<StartupChooserOption> = [
 ];
 
 export function shouldOpenStartupChooser(
-  items: ReadonlyArray<SessionListItem>,
+  _items: ReadonlyArray<SessionListItem>,
   initialSessionId: string | null | undefined,
 ): boolean {
-  return items.length > 0 && !initialSessionId;
+  return !initialSessionId;
 }
 
 export function openStartupChooser(state: TuiState): TuiState {

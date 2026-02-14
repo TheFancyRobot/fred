@@ -56,8 +56,9 @@ describe('TUI App (OpenTUI integration)', () => {
     return { testSetup, app };
   }
 
-  function createSessionServiceFixture() {
-    const sessions = [
+  function createSessionServiceFixture(options: { includeExistingSessions?: boolean } = {}) {
+    const includeExistingSessions = options.includeExistingSessions ?? true;
+    const sessions = includeExistingSessions ? [
       {
         id: 's-latest',
         updatedAt: new Date('2026-02-14T12:00:00Z'),
@@ -74,7 +75,7 @@ describe('TUI App (OpenTUI integration)', () => {
         preview: 'older preview',
         agent: { id: 'default', name: 'default' },
       },
-    ];
+    ] : [];
 
     const transcripts: Record<string, Array<{ role: string; content: string }>> = {
       's-latest': [{ role: 'assistant', content: 'Welcome back latest' }],
@@ -196,6 +197,38 @@ describe('TUI App (OpenTUI integration)', () => {
     await createTestApp({}, fixture);
     await Bun.sleep(20);
 
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    const state = app.getState();
+    expect(state.startup.chooser.isOpen).toBe(false);
+    expect(state.sessions.selectedId).toBe('s-new');
+    expect(state.focusedPane).toBe('input');
+  });
+
+  test('interactive startup with empty session list still opens chooser and Enter creates session', async () => {
+    const fixture = createSessionServiceFixture({ includeExistingSessions: false });
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
+
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    const state = app.getState();
+    expect(state.startup.chooser.isOpen).toBe(false);
+    expect(state.sessions.selectedId).toBe('s-new');
+    expect(state.focusedPane).toBe('input');
+  });
+
+  test('resume chooser option falls back to creating session when none exist', async () => {
+    const fixture = createSessionServiceFixture({ includeExistingSessions: false });
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
+
+    app.processKey(makeKey({ name: 'up' }));
     app.processKey(makeKey({ name: 'enter' }));
     await Bun.sleep(20);
 

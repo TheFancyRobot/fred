@@ -290,7 +290,7 @@ describe('TUI Session State', () => {
     expect(state.startup.chooser.selected).toBe('resume-last-session');
   });
 
-  test('startup chooser should open only with existing sessions and no forced session', () => {
+  test('startup chooser opens on interactive startup unless a session id is forced', () => {
     const sessions = [
       {
         id: 's1',
@@ -304,6 +304,7 @@ describe('TUI Session State', () => {
 
     expect(shouldOpenStartupChooser(sessions, null)).toBe(true);
     expect(shouldOpenStartupChooser(sessions, 's1')).toBe(false);
-    expect(shouldOpenStartupChooser([], null)).toBe(false);
+    expect(shouldOpenStartupChooser([], null)).toBe(true);
+    expect(shouldOpenStartupChooser([], 's1')).toBe(false);
   });
 });

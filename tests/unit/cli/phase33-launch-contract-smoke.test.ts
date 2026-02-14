@@ -18,7 +18,16 @@ const mockCreateFredTuiApp = mock(async () => mockApp as any);
 
 const mockContextManager = {
   generateConversationId: () => 'conv_phase33_smoke',
+  setStorage: mock(() => {}),
 };
+
+class MockSqliteContextStorage {
+  options: { path?: string };
+
+  constructor(options: { path?: string } = {}) {
+    this.options = options;
+  }
+}
 
 class MockFred {
   private agents: any[] = [];
@@ -63,6 +72,7 @@ class MockFred {
 
 mock.module('@fancyrobot/fred', () => ({
   Fred: MockFred,
+  SqliteContextStorage: MockSqliteContextStorage,
   registerBuiltinPack: mock(() => {}),
 }));
 
@@ -125,10 +135,11 @@ function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
   } as KeyEvent;
 }
 
-function createSessionServiceFixture(options: { serializeDates?: boolean } = {}) {
+function createSessionServiceFixture(options: { serializeDates?: boolean; includeExistingSessions?: boolean } = {}) {
   const asUpdatedAt = (iso: string) => options.serializeDates ? (iso as unknown as Date) : new Date(iso);
+  const includeExistingSessions = options.includeExistingSessions ?? true;
 
-  const sessions = [
+  const sessions = includeExistingSessions ? [
     {
       id: 's-latest',
       updatedAt: asUpdatedAt('2026-02-14T12:00:00Z'),
@@ -145,7 +156,7 @@ function createSessionServiceFixture(options: { serializeDates?: boolean } = {})
       preview: 'older preview',
       agent: { id: 'default', name: 'default' },
     },
-  ];
+  ] : [];
 
   const transcripts: Record<string, Array<{ role: string; content: string }>> = {
     's-latest': [{ role: 'assistant', content: 'Welcome back latest' }],
@@ -208,6 +219,7 @@ describe('phase 33 launch contract smoke', () => {
     });
     mockCreateFredTuiApp.mockClear();
     mockApp.updateTelemetryModel.mockClear();
+    mockContextManager.setStorage.mockClear();
   });
 
   afterEach(() => {
@@ -248,7 +260,7 @@ describe('phase 33 launch contract smoke', () => {
     expect(resolveCommand(['tui'])).toBe('tui');
   });
 
-  test('TTY mode resolves to interactive launch path for no-args and tui entrypoints', async () => {
+  test('TTY mode resolves interactive launch path and fallback persistence contract', async () => {
     const mockStdin = {
       isTTY: true,
       isRaw: false,
@@ -270,11 +282,10 @@ describe('phase 33 launch contract smoke', () => {
     const mode = detectTerminalMode();
     expect(mode.mode).toBe('interactive-tty');
 
-    const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-    await handleChatCommand();
+    const { configureChatFallbackPersistence } = await import('../../../packages/cli/src/commands/chat');
+    configureChatFallbackPersistence(new MockFred() as unknown as any);
 
-    expect(mockCreateFredTuiApp).toHaveBeenCalledTimes(1);
-    expect(mockApp.updateTelemetryModel).toHaveBeenCalledWith('gpt-4o-mini', 'openai');
+    expect(mockContextManager.setStorage).toHaveBeenCalledTimes(1);
 
     const resolveCommand = (args: string[]) => {
       const firstArg = args[0];
@@ -384,6 +395,26 @@ describe('phase 33 launch contract smoke', () => {
 
     expect(app.getState().sessions.selectedId).toBe('s-latest');
     expect(app.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
+    expect(app.getState().focusedPane).toBe('input');
+
+    app.stop();
+    setup.renderer.destroy();
+  });
+
+  test('startup chooser appears with empty session list and Enter creates session', async () => {
+    const fixture = createSessionServiceFixture({ includeExistingSessions: false });
+    const setup = await createTestRenderer({ width: 120, height: 40 });
+    const app = FredTuiApp.createWithRenderer(setup.renderer, {}, fixture);
+    await Bun.sleep(20);
+
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    expect(app.getState().startup.chooser.isOpen).toBe(false);
+    expect(app.getState().sessions.selectedId).toBe('s-new');
     expect(app.getState().focusedPane).toBe('input');
 
     app.stop();

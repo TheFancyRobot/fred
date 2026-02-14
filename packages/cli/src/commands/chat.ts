@@ -3,7 +3,7 @@
  * Explicit interactive entrypoint for fred chat
  */
 
-import { Fred } from '@fancyrobot/fred';
+import { Fred, SqliteContextStorage } from '@fancyrobot/fred';
 import {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider as detectAvailableProviderFromDev,
@@ -50,6 +50,13 @@ export async function loadProviderPackage(platform: string): Promise<void> {
  */
 export function detectAvailableProvider(): { platform: string; model: string } | { platform: null; model: null } {
   return detectAvailableProviderFromDev();
+}
+
+export function configureChatFallbackPersistence(
+  fred: Pick<Fred, 'getContextManager'>,
+  sqlitePath = process.env.FRED_SQLITE_PATH || './fred.db',
+): void {
+  fred.getContextManager().setStorage(new SqliteContextStorage({ path: sqlitePath }));
 }
 
 /**
@@ -110,6 +117,8 @@ async function initializeFred(): Promise<{
   }
 
   // No config or config failed - apply shared dev-chat fallback behavior
+  configureChatFallbackPersistence(fred);
+
   const result = await ensureDefaultChatAgent(fred, {
     agentId: '__tui_agent__',
   });
