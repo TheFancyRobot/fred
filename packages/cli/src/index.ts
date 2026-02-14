@@ -17,6 +17,9 @@ import { handleRunCommand } from './commands/run';
 import { handleIntentCommand } from './commands/intent';
 import { handleRouteCommand } from './commands/route';
 import { handleMcpCommand } from './commands/mcp';
+import { resolveProjectConfig } from './project/resolve-config.js';
+import { loadPluginsFromConfig } from './plugin/manager.js';
+import { createPluginCliRuntime, type PluginCliRuntime } from './plugin/runtime.js';
 
 /**
  * Options that require a value
@@ -46,6 +49,27 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'conversation-id',
   'conversationId',
   'threshold',
+]);
+
+const BUILTIN_COMMANDS = new Set([
+  'help',
+  'chat',
+  'tui',
+  'dev',
+  'test',
+  'eval',
+  'session',
+  'agents',
+  'tools',
+  'intents',
+  'providers',
+  'workflows',
+  'config',
+  'init',
+  'run',
+  'intent',
+  'route',
+  'mcp',
 ]);
 
 /**
@@ -187,14 +211,16 @@ Get started:
  * Main CLI entry point
  */
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const pluginRuntime = initializePluginCliRuntime();
 
-  if (args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
+  if (argv.length === 0 || argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
     showHelp();
     process.exit(0);
   }
 
-  const { command, args: commandArgs, options } = parseArgs(args);
+  const { command, args: commandArgs, options } = parseArgs(argv);
+  const rawCommandArgs = argv.slice(1);
 
   try {
     let exitCode = 0;
@@ -264,15 +290,53 @@ async function main(): Promise<void> {
         break;
 
       default:
-        console.error(`Unknown command: ${command}`);
-        showHelp();
-        exitCode = 1;
+        {
+          const pluginResult = await pluginRuntime.dispatch(command, rawCommandArgs, {
+            cwd: process.cwd(),
+            stdout: (message) => console.log(message),
+            stderr: (message) => console.error(message),
+          });
+
+          if (pluginResult.handled) {
+            exitCode = pluginResult.exitCode;
+            break;
+          }
+
+          console.error(`Unknown command: ${command}`);
+          showHelp();
+          exitCode = 1;
+        }
     }
 
     process.exit(exitCode);
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : String(error));
     process.exit(1);
+  }
+}
+
+function initializePluginCliRuntime(): PluginCliRuntime {
+  const fallback = createPluginCliRuntime({
+    plugins: [],
+    builtInCommands: BUILTIN_COMMANDS,
+  });
+
+  const configResult = resolveProjectConfig();
+  if (!configResult.success || !configResult.configPath || !configResult.config?.plugins?.length) {
+    return fallback;
+  }
+
+  try {
+    const pluginLoadResult = loadPluginsFromConfig(
+      configResult.config.plugins,
+      configResult.configPath,
+    );
+    return createPluginCliRuntime({
+      plugins: pluginLoadResult.plugins,
+      builtInCommands: BUILTIN_COMMANDS,
+    });
+  } catch {
+    return fallback;
   }
 }
 

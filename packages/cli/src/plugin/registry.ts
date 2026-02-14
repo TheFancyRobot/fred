@@ -9,6 +9,12 @@ export interface RegisteredPluginContributions {
   slashCommands: PluginSlashCommandContribution[];
 }
 
+export interface RegisteredPluginCommand {
+  pluginId: string;
+  declarationSource: string;
+  command: PluginCommandContribution;
+}
+
 export function stagePluginContributions(
   declarations: readonly LoadedPluginDeclaration[],
 ): RegisteredPluginContributions[] {
@@ -19,4 +25,22 @@ export function stagePluginContributions(
     commands: declaration.plugin.commands ?? [],
     slashCommands: declaration.plugin.slashCommands ?? [],
   }));
+}
+
+export function listRegisteredPluginCommands(
+  plugins: readonly RegisteredPluginContributions[],
+): RegisteredPluginCommand[] {
+  const commands: RegisteredPluginCommand[] = [];
+
+  for (const plugin of plugins) {
+    for (const command of plugin.commands) {
+      commands.push({
+        pluginId: plugin.pluginId,
+        declarationSource: plugin.declarationSource,
+        command,
+      });
+    }
+  }
+
+  return commands;
 }
