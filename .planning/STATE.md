@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 phase execution complete — ready for milestone audit and archive flow
+**Current focus:** v0.2.1 gap-closure execution in progress — Phase 33 launch contract alignment underway
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 32 of 32 (Plugin Architecture)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-02-14 - Re-verified Phase 32 goal (23/23 must-haves passed)
+Phase: 33 of 36 (Default Launch Contract Alignment)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-14 - Completed 33-01-PLAN.md
 
-Progress: [██████████] 100% (145/145 plans complete)
+Progress: [█████████░] 99% (146/148 plans complete)
 
 ## Performance Metrics
 
@@ -94,6 +94,8 @@ Recent decisions affecting current work:
 - Shared plugin slash execution registry in TUI (32-04) — typed `/plugin:command` and palette selection dispatch through identical runtime behavior
 - Dedicated plugin startup failure exit code (32-05) — aggregated plugin validation failures now terminate CLI startup with deterministic exit code `12`
 - Startup plugin diagnostics channel safety (32-05) — text diagnostics emit to stderr while JSON diagnostics emit to stdout-only payloads
+- No-args launch dispatch parity at CLI entry (33-01) — bare `fred` now routes to the same interactive path as `fred chat`/`fred tui`
+- Shared non-interactive launch payload contract (33-01) — launch entrypoints use one JSON fallback shape and exit behavior in non-TTY mode
 
 ### Pending Todos
 
@@ -124,6 +126,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T20:51:00Z
-Stopped at: Phase 32 execution closed; verification passed
+Last session: 2026-02-14T22:28:22Z
+Stopped at: Completed 33-01-PLAN.md
 Resume file: None
