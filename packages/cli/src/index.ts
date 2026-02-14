@@ -83,7 +83,7 @@ const PLUGIN_VALIDATION_EXIT_CODE = 12;
  * Parse command line arguments
  */
 function parseArgs(args: string[]): { command: string; args: string[]; options: Record<string, any> } {
-  const command = args[0] || 'help';
+  const command = args[0] || 'chat';
   const remainingArgs: string[] = [];
   const options: Record<string, any> = {};
 
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
   const pluginRuntime = pluginRuntimeResult.runtime;
   const pluginHelpSection = renderPluginHelpSection(pluginRuntime.listCommands());
 
-  if (argv.length === 0 || argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
     showHelp(pluginHelpSection);
     process.exit(0);
   }
