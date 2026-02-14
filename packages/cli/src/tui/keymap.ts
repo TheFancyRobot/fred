@@ -29,6 +29,7 @@ import {
   closeCommandPalette,
   updateCommandPaletteQuery,
   moveCommandPaletteSelection,
+  moveSlashSearchSelection,
   selectNextSession,
   selectPreviousSession,
   selectSidebarSelection,
@@ -58,6 +59,8 @@ export type KeyAction =
   | { type: 'palette-backspace' }
   | { type: 'palette-query'; text: string }
   | { type: 'palette-submit' }
+  | { type: 'slash-next' }
+  | { type: 'slash-prev' }
   | { type: 'session-next' }
   | { type: 'session-prev' }
   | { type: 'session-select' }
@@ -190,6 +193,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
 
     if (name === 'up') {
+      if (state.input.slashSearch.isActive && !shouldUseHistory) {
+        return { type: 'slash-prev' };
+      }
       if (shouldUseHistory && hasHistory) {
         return { type: 'history-up' };
       }
@@ -199,6 +205,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
       return { type: 'cursor-left' };
     }
     if (name === 'down') {
+      if (state.input.slashSearch.isActive && !shouldUseHistory) {
+        return { type: 'slash-next' };
+      }
       if (shouldUseHistory && hasHistory) {
         return { type: 'history-down' };
       }
@@ -339,6 +348,12 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'palette-submit':
       return closeCommandPalette(state);
+
+    case 'slash-next':
+      return moveSlashSearchSelection(state, 1);
+
+    case 'slash-prev':
+      return moveSlashSearchSelection(state, -1);
 
     case 'session-next':
       return selectNextSession(state);

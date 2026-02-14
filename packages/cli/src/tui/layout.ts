@@ -103,7 +103,15 @@ export function renderInputContent(
   const composerLines = hasInput
     ? formatComposerLines(state.input.text, DEFAULT_LAYOUT.inputMaxVisibleLines)
     : [`> ${placeholder}`];
-  const lines = composerLines;
+  const slashHint = state.input.slashSearch.isActive
+    ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex]?.plugin
+    : null;
+  const slashHintLine = slashHint
+    ? `  hint: ${slashHint.usageHint}${slashHint.hasCollision ? ` [collision with ${slashHint.collisionWith.join(', ')}]` : ''}`
+    : state.input.slashSearch.isActive
+      ? '  hint: no matching slash commands'
+      : null;
+  const lines = slashHintLine ? [...composerLines, slashHintLine] : composerLines;
 
   const desiredHeight = Math.max(
     DEFAULT_LAYOUT.inputHeight,

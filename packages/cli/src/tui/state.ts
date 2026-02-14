@@ -68,12 +68,32 @@ export interface SessionTranscript {
 
 export type CommandPaletteScope = FocusablePaneId;
 
+export interface PluginSlashCommandState {
+  pluginId: string;
+  commandId: string;
+  canonicalName: string;
+  usageHint: string;
+  available: boolean;
+  hasCollision: boolean;
+  collisionWith: ReadonlyArray<string>;
+}
+
+export interface PluginSlashCommandRegistration {
+  pluginId: string;
+  commandId: string;
+  summary: string;
+  usage?: string;
+  available?: boolean;
+}
+
 export interface CommandPaletteAction {
   id: string;
   label: string;
   group: 'global' | FocusablePaneId;
   scopes: ReadonlyArray<CommandPaletteScope>;
   keywords?: ReadonlyArray<string>;
+  kind?: 'builtin' | 'plugin-slash';
+  plugin?: PluginSlashCommandState;
 }
 
 export interface CommandPaletteState {
@@ -112,6 +132,12 @@ export interface TuiState {
     text: string;
     cursorPosition: number;
     history: InputHistory;
+    slashSearch: {
+      isActive: boolean;
+      query: string;
+      selectedIndex: number;
+      filteredActions: ReadonlyArray<CommandPaletteAction>;
+    };
   };
   sessions: {
     items: SessionListItem[];
@@ -130,7 +156,13 @@ export interface TuiState {
  * Create initial TUI state with input pane focused
  */
 export function createInitialTuiState(): TuiState {
-  const commandPaletteActions = createCommandPaletteActions();
+  return createInitialTuiStateWithPlugins([]);
+}
+
+export function createInitialTuiStateWithPlugins(
+  pluginSlashCommands: ReadonlyArray<PluginSlashCommandRegistration>,
+): TuiState {
+  const commandPaletteActions = createCommandPaletteActions(pluginSlashCommands);
   const transcript = createTranscriptState([], 20, true);
 
   return {
@@ -167,6 +199,12 @@ export function createInitialTuiState(): TuiState {
         entries: [],
         currentIndex: -1,
       },
+      slashSearch: {
+        isActive: false,
+        query: '',
+        selectedIndex: 0,
+        filteredActions: [],
+      },
     },
     sessions: {
       items: [],
@@ -193,6 +231,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['tab', 'focus', 'pane', 'next'],
+    kind: 'builtin',
   },
   {
     id: 'focus-previous-pane',
@@ -200,6 +239,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['shift', 'tab', 'focus', 'pane', 'prev'],
+    kind: 'builtin',
   },
   {
     id: 'jump-input-pane',
@@ -207,6 +247,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['input', 'composer', 'focus'],
+    kind: 'builtin',
   },
   {
     id: 'jump-sidebar-pane',
@@ -214,6 +255,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['sidebar', 'sessions', 'focus'],
+    kind: 'builtin',
   },
   {
     id: 'jump-transcript-pane',
@@ -221,6 +263,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['transcript', 'chat', 'focus'],
+    kind: 'builtin',
   },
   {
     id: 'clear-input',
@@ -228,6 +271,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'input',
     scopes: ['input'],
     keywords: ['clear', 'reset', 'composer'],
+    kind: 'builtin',
   },
   {
     id: 'scroll-transcript-down',
@@ -235,6 +279,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'down', 'transcript'],
+    kind: 'builtin',
   },
   {
     id: 'scroll-transcript-up',
@@ -242,6 +287,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'up', 'transcript'],
+    kind: 'builtin',
   },
   {
     id: 'select-next-session',
@@ -249,6 +295,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'next', 'sidebar'],
+    kind: 'builtin',
   },
   {
     id: 'select-previous-session',
@@ -256,6 +303,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'previous', 'sidebar'],
+    kind: 'builtin',
   },
   {
     id: 'create-session',
@@ -263,6 +311,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'new', 'create'],
+    kind: 'builtin',
   },
   {
     id: 'delete-session',
@@ -270,6 +319,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'delete', 'remove'],
+    kind: 'builtin',
   },
   {
     id: 'submit-input',
@@ -277,11 +327,66 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
     group: 'input',
     scopes: ['input'],
     keywords: ['submit', 'send', 'input'],
+    kind: 'builtin',
   },
 ];
 
-function createCommandPaletteActions(): ReadonlyArray<CommandPaletteAction> {
-  return [...DEFAULT_COMMAND_PALETTE_ACTIONS];
+function createCommandPaletteActions(
+  pluginSlashCommands: ReadonlyArray<PluginSlashCommandRegistration>,
+): ReadonlyArray<CommandPaletteAction> {
+  const pluginActions = createPluginSlashPaletteActions(pluginSlashCommands);
+  return [...DEFAULT_COMMAND_PALETTE_ACTIONS, ...pluginActions];
+}
+
+function createPluginSlashPaletteActions(
+  pluginSlashCommands: ReadonlyArray<PluginSlashCommandRegistration>,
+): ReadonlyArray<CommandPaletteAction> {
+  if (pluginSlashCommands.length === 0) {
+    return [];
+  }
+
+  const byCommandId = new Map<string, string[]>();
+  for (const command of pluginSlashCommands) {
+    const peers = byCommandId.get(command.commandId) ?? [];
+    peers.push(command.pluginId);
+    byCommandId.set(command.commandId, peers);
+  }
+
+  return pluginSlashCommands
+    .map((command) => {
+      const canonicalName = `/${command.pluginId}:${command.commandId}`;
+      const collidingPlugins = (byCommandId.get(command.commandId) ?? [])
+        .filter((pluginId) => pluginId !== command.pluginId)
+        .sort((left, right) => left.localeCompare(right));
+      const hasCollision = collidingPlugins.length > 0;
+      const usageHint = command.usage && command.usage.trim().length > 0
+        ? command.usage.trim()
+        : canonicalName;
+
+      const collisionLabel = hasCollision
+        ? ` [collision: ${[command.pluginId, ...collidingPlugins].join(', ')}]`
+        : '';
+
+      return {
+        id: `plugin-slash:${command.pluginId}:${command.commandId}`,
+        label: `${canonicalName} - ${command.summary}${collisionLabel}`,
+        group: 'input' as const,
+        scopes: ['sidebar', 'transcript', 'input'] as const,
+        keywords: [canonicalName, command.commandId, command.pluginId],
+        kind: 'plugin-slash' as const,
+        plugin: {
+          pluginId: command.pluginId,
+          commandId: command.commandId,
+          canonicalName,
+          usageHint,
+          available: command.available ?? true,
+          hasCollision,
+          collisionWith: collidingPlugins,
+        },
+      } satisfies CommandPaletteAction;
+    })
+    .filter((action) => action.plugin?.available === true)
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function getFilteredPaletteActions(
@@ -293,8 +398,11 @@ export function getFilteredPaletteActions(
 
   const scoped = actions.filter((action) => action.scopes.includes(scope));
   const ranked = scoped.map((action, index) => {
-    const haystack = [action.label, action.id, ...(action.keywords ?? [])].join(' ').toLowerCase();
-    const startsWithScore = normalizedQuery.length > 0 && action.label.toLowerCase().startsWith(normalizedQuery) ? 2 : 0;
+    const searchTarget = action.kind === 'plugin-slash'
+      ? action.plugin?.canonicalName ?? action.label
+      : action.label;
+    const haystack = [searchTarget, action.id, ...(action.keywords ?? [])].join(' ').toLowerCase();
+    const startsWithScore = normalizedQuery.length > 0 && searchTarget.toLowerCase().startsWith(normalizedQuery) ? 2 : 0;
     const containsScore = normalizedQuery.length > 0 && haystack.includes(normalizedQuery) ? 1 : 0;
     const score = normalizedQuery.length === 0 ? 0 : startsWithScore + containsScore;
     return { action, index, score, matches: normalizedQuery.length === 0 || containsScore > 0 || startsWithScore > 0 };
@@ -307,6 +415,12 @@ export function getFilteredPaletteActions(
         return right.score - left.score;
       }
 
+      const leftRank = left.action.kind === 'plugin-slash' ? 1 : 0;
+      const rightRank = right.action.kind === 'plugin-slash' ? 1 : 0;
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+
       const nameOrder = left.action.label.localeCompare(right.action.label);
       if (nameOrder !== 0) {
         return nameOrder;
@@ -315,6 +429,67 @@ export function getFilteredPaletteActions(
       return left.index - right.index;
     })
     .map((entry) => entry.action);
+}
+
+function getSlashSearchState(state: TuiState, text: string): TuiState['input']['slashSearch'] {
+  const trimmedStart = text.trimStart();
+  if (!trimmedStart.startsWith('/')) {
+    return {
+      isActive: false,
+      query: '',
+      selectedIndex: 0,
+      filteredActions: [],
+    };
+  }
+
+  const normalizedQuery = trimmedStart.slice(1);
+  const pluginActions = state.commandPalette.actions.filter((action) => action.kind === 'plugin-slash');
+  const filteredActions = getFilteredPaletteActions(pluginActions, normalizedQuery, 'input');
+  return {
+    isActive: true,
+    query: normalizedQuery,
+    selectedIndex: 0,
+    filteredActions,
+  };
+}
+
+export function getSelectedSlashSearchAction(state: TuiState): CommandPaletteAction | null {
+  if (!state.input.slashSearch.isActive) {
+    return null;
+  }
+  return state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex] ?? null;
+}
+
+export function moveSlashSearchSelection(state: TuiState, delta: number): TuiState {
+  if (!state.input.slashSearch.isActive) {
+    return state;
+  }
+
+  const count = state.input.slashSearch.filteredActions.length;
+  if (count === 0) {
+    return {
+      ...state,
+      input: {
+        ...state.input,
+        slashSearch: {
+          ...state.input.slashSearch,
+          selectedIndex: 0,
+        },
+      },
+    };
+  }
+
+  const normalized = ((state.input.slashSearch.selectedIndex + delta) % count + count) % count;
+  return {
+    ...state,
+    input: {
+      ...state.input,
+      slashSearch: {
+        ...state.input.slashSearch,
+        selectedIndex: normalized,
+      },
+    },
+  };
 }
 
 function withCommandPaletteState(
@@ -864,6 +1039,8 @@ export function appendUserMessage(state: TuiState, content: string, nowMs = Date
  * Update input text and cursor position
  */
 export function updateInputText(state: TuiState, text: string, cursorPosition?: number): TuiState {
+  const slashSearch = getSlashSearchState(state, text);
+
   if (state.sessions.selectedId) {
     return {
       ...state,
@@ -871,6 +1048,7 @@ export function updateInputText(state: TuiState, text: string, cursorPosition?: 
         ...state.input,
         text,
         cursorPosition: cursorPosition ?? text.length,
+        slashSearch,
       },
       sessions: {
         ...state.sessions,
@@ -888,6 +1066,7 @@ export function updateInputText(state: TuiState, text: string, cursorPosition?: 
       ...state.input,
       text,
       cursorPosition: cursorPosition ?? text.length,
+      slashSearch,
     },
   };
 }
@@ -933,6 +1112,7 @@ export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'):
           ...state.input,
           text: '',
           cursorPosition: 0,
+          slashSearch: getSlashSearchState(state, ''),
           history: {
             ...history,
             currentIndex: -1,
@@ -949,6 +1129,7 @@ export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'):
       ...state.input,
       text: historyText,
       cursorPosition: historyText.length,
+      slashSearch: getSlashSearchState(state, historyText),
       history: {
         ...history,
         currentIndex: newIndex,
@@ -973,6 +1154,7 @@ export function submitInput(state: TuiState): { state: TuiState; submittedText: 
       ...state.input,
       text: '',
       cursorPosition: 0,
+      slashSearch: getSlashSearchState(state, ''),
       history: {
         entries: [...state.input.history.entries, text],
         currentIndex: -1,
@@ -1000,14 +1182,7 @@ export function backspaceAtCursor(state: TuiState): TuiState {
     return state;
   }
   const newText = text.slice(0, cursorPosition - 1) + text.slice(cursorPosition);
-  return {
-    ...state,
-    input: {
-      ...state.input,
-      text: newText,
-      cursorPosition: cursorPosition - 1,
-    },
-  };
+  return updateInputText(state, newText, cursorPosition - 1);
 }
 
 /**
@@ -1019,13 +1194,7 @@ export function deleteAtCursor(state: TuiState): TuiState {
     return state;
   }
   const newText = text.slice(0, cursorPosition) + text.slice(cursorPosition + 1);
-  return {
-    ...state,
-    input: {
-      ...state.input,
-      text: newText,
-    },
-  };
+  return updateInputText(state, newText, cursorPosition);
 }
 
 /**
@@ -1086,6 +1255,7 @@ export function applySessionList(
       ...state.input,
       text: nextInputText,
       cursorPosition: nextCursor,
+      slashSearch: getSlashSearchState(state, nextInputText),
       history: {
         ...state.input.history,
         currentIndex: -1,
@@ -1187,6 +1357,7 @@ export function applySessionDeletion(
       ...state.input,
       text: inputText,
       cursorPosition,
+      slashSearch: getSlashSearchState(state, inputText),
       history: {
         ...state.input.history,
         currentIndex: -1,
@@ -1242,6 +1413,7 @@ export function addSession(state: TuiState, item: SessionListItem, options: { se
       ...state.input,
       text: nextInputText,
       cursorPosition: nextCursor,
+      slashSearch: getSlashSearchState(state, nextInputText),
       history: shouldSelect
         ? {
             ...state.input.history,
@@ -1351,6 +1523,7 @@ export function switchSession(state: TuiState, sessionId: string | null): TuiSta
       ...state.input,
       text: nextDrafts[sessionId] ?? '',
       cursorPosition: (nextDrafts[sessionId] ?? '').length,
+      slashSearch: getSlashSearchState(state, nextDrafts[sessionId] ?? ''),
       history: {
         ...state.input.history,
         currentIndex: -1,
