@@ -45,6 +45,27 @@ export interface ProviderPackConfig {
 }
 
 // =============================================================================
+// Plugin Config Types
+// =============================================================================
+
+/**
+ * Object-form plugin declaration for fred.config.
+ */
+export interface PluginObjectDeclaration {
+  /** Human-friendly declaration id (required for object form). */
+  id: string;
+  /** Plugin source specifier (npm package or local path). */
+  source: string;
+  /** Optional plugin-specific configuration passed to the plugin. */
+  options?: Record<string, unknown>;
+}
+
+/**
+ * Plugin declarations support string shorthand and explicit object form.
+ */
+export type PluginDeclaration = string | PluginObjectDeclaration;
+
+// =============================================================================
 // MCP Server Config Types
 // =============================================================================
 
@@ -335,6 +356,8 @@ export interface FrameworkConfig {
   }>;
   /** Provider pack declarations */
   providers?: ProviderPackConfig[];
+  /** Plugin declarations (npm package, local path, or object form). */
+  plugins?: PluginDeclaration[];
   /** Persistence storage configuration */
   persistence?: PersistenceConfig;
   /** Observability configuration (tracing and logging) */
