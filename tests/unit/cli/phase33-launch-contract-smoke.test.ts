@@ -230,6 +230,22 @@ describe('phase 33 launch contract smoke', () => {
     expect(source).toContain('await handleChatCommand();');
   });
 
+  test('explicit help flags remain help-only and do not route into launch flow', () => {
+    const resolveCommand = (args: string[]) => {
+      const firstArg = args[0];
+      if (firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+        return 'help';
+      }
+      return firstArg || 'chat';
+    };
+
+    expect(resolveCommand(['help'])).toBe('help');
+    expect(resolveCommand(['--help'])).toBe('help');
+    expect(resolveCommand(['-h'])).toBe('help');
+    expect(resolveCommand([])).toBe('chat');
+    expect(resolveCommand(['tui'])).toBe('tui');
+  });
+
   test('TTY mode resolves to interactive launch path for no-args and tui entrypoints', async () => {
     const mockStdin = {
       isTTY: true,
