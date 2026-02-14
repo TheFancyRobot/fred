@@ -111,6 +111,19 @@ export interface DeleteConfirmState {
   title: string | null;
 }
 
+export type StartupChooserOption = 'resume-last-session' | 'start-new-session';
+
+export interface StartupState {
+  chooser: {
+    isOpen: boolean;
+    selected: StartupChooserOption;
+  };
+  hint: {
+    visible: boolean;
+  };
+  warning: string | null;
+}
+
 /**
  * Input history state for Up/Down navigation
  */
@@ -150,6 +163,7 @@ export interface TuiState {
     hasNewSessionAction: boolean;
   };
   deleteConfirm: DeleteConfirmState;
+  startup: StartupState;
 }
 
 /**
@@ -220,6 +234,110 @@ export function createInitialTuiStateWithPlugins(
       isOpen: false,
       sessionId: null,
       title: null,
+    },
+    startup: {
+      chooser: {
+        isOpen: false,
+        selected: 'start-new-session',
+      },
+      hint: {
+        visible: true,
+      },
+      warning: null,
+    },
+  };
+}
+
+const STARTUP_CHOOSER_OPTIONS: ReadonlyArray<StartupChooserOption> = [
+  'resume-last-session',
+  'start-new-session',
+];
+
+export function shouldOpenStartupChooser(
+  items: ReadonlyArray<SessionListItem>,
+  initialSessionId: string | null | undefined,
+): boolean {
+  return items.length > 0 && !initialSessionId;
+}
+
+export function openStartupChooser(state: TuiState): TuiState {
+  return {
+    ...state,
+    startup: {
+      ...state.startup,
+      chooser: {
+        isOpen: true,
+        selected: 'start-new-session',
+      },
+    },
+  };
+}
+
+export function closeStartupChooser(state: TuiState): TuiState {
+  if (!state.startup.chooser.isOpen) {
+    return state;
+  }
+
+  return {
+    ...state,
+    startup: {
+      ...state.startup,
+      chooser: {
+        ...state.startup.chooser,
+        isOpen: false,
+      },
+    },
+  };
+}
+
+export function moveStartupChooserSelection(state: TuiState, delta: number): TuiState {
+  if (!state.startup.chooser.isOpen) {
+    return state;
+  }
+
+  const currentIndex = STARTUP_CHOOSER_OPTIONS.indexOf(state.startup.chooser.selected);
+  const normalizedCurrent = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = ((normalizedCurrent + delta) % STARTUP_CHOOSER_OPTIONS.length + STARTUP_CHOOSER_OPTIONS.length)
+    % STARTUP_CHOOSER_OPTIONS.length;
+
+  return {
+    ...state,
+    startup: {
+      ...state.startup,
+      chooser: {
+        ...state.startup.chooser,
+        selected: STARTUP_CHOOSER_OPTIONS[nextIndex],
+      },
+    },
+  };
+}
+
+export function dismissStartupHint(state: TuiState): TuiState {
+  if (!state.startup.hint.visible) {
+    return state;
+  }
+
+  return {
+    ...state,
+    startup: {
+      ...state.startup,
+      hint: {
+        visible: false,
+      },
+    },
+  };
+}
+
+export function setStartupWarning(state: TuiState, warning: string | null): TuiState {
+  if (state.startup.warning === warning) {
+    return state;
+  }
+
+  return {
+    ...state,
+    startup: {
+      ...state.startup,
+      warning,
     },
   };
 }

@@ -10,6 +10,10 @@ import {
   scrollTranscript,
   upsertSessionTranscript,
   markSessionReadIfPinned,
+  openStartupChooser,
+  moveStartupChooserSelection,
+  closeStartupChooser,
+  shouldOpenStartupChooser,
 } from '../../../../packages/cli/src/tui/state.js';
 
 describe('TUI Session State', () => {
@@ -255,5 +259,51 @@ describe('TUI Session State', () => {
     const session = state.sessions.items.find((item) => item.id === 's1');
     expect(state.transcript.viewport.pinnedToBottom).toBe(true);
     expect(session?.unread).toBe(false);
+  });
+
+  test('startup chooser opens with start-new selected by default', () => {
+    let state = createInitialTuiState();
+    state = openStartupChooser(state);
+
+    expect(state.startup.chooser.isOpen).toBe(true);
+    expect(state.startup.chooser.selected).toBe('start-new-session');
+  });
+
+  test('startup chooser selection wraps between resume and start-new', () => {
+    let state = createInitialTuiState();
+    state = openStartupChooser(state);
+
+    state = moveStartupChooserSelection(state, -1);
+    expect(state.startup.chooser.selected).toBe('resume-last-session');
+
+    state = moveStartupChooserSelection(state, 1);
+    expect(state.startup.chooser.selected).toBe('start-new-session');
+  });
+
+  test('startup chooser close hides chooser without changing selection', () => {
+    let state = createInitialTuiState();
+    state = openStartupChooser(state);
+    state = moveStartupChooserSelection(state, -1);
+    state = closeStartupChooser(state);
+
+    expect(state.startup.chooser.isOpen).toBe(false);
+    expect(state.startup.chooser.selected).toBe('resume-last-session');
+  });
+
+  test('startup chooser should open only with existing sessions and no forced session', () => {
+    const sessions = [
+      {
+        id: 's1',
+        title: 'Session',
+        updatedAt: new Date('2026-02-08T12:00:00Z'),
+        messageCount: 1,
+        preview: 'preview',
+        unread: false,
+      },
+    ];
+
+    expect(shouldOpenStartupChooser(sessions, null)).toBe(true);
+    expect(shouldOpenStartupChooser(sessions, 's1')).toBe(false);
+    expect(shouldOpenStartupChooser([], null)).toBe(false);
   });
 });

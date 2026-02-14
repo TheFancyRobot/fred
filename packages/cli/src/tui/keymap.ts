@@ -29,6 +29,7 @@ import {
   closeCommandPalette,
   updateCommandPaletteQuery,
   moveCommandPaletteSelection,
+  moveStartupChooserSelection,
   moveSlashSearchSelection,
   selectNextSession,
   selectPreviousSession,
@@ -59,6 +60,9 @@ export type KeyAction =
   | { type: 'palette-backspace' }
   | { type: 'palette-query'; text: string }
   | { type: 'palette-submit' }
+  | { type: 'startup-chooser-next' }
+  | { type: 'startup-chooser-prev' }
+  | { type: 'startup-chooser-confirm' }
   | { type: 'slash-next' }
   | { type: 'slash-prev' }
   | { type: 'session-next' }
@@ -119,6 +123,20 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
     if (name.length === 1 && !ctrl && !meta) {
       return { type: 'palette-query', text: name };
+    }
+
+    return { type: 'noop' };
+  }
+
+  if (state.startup.chooser.isOpen) {
+    if (name === 'up' || name === 'left') {
+      return { type: 'startup-chooser-prev' };
+    }
+    if (name === 'down' || name === 'right' || name === 'tab') {
+      return { type: 'startup-chooser-next' };
+    }
+    if (name === 'enter' || name === 'return') {
+      return { type: 'startup-chooser-confirm' };
     }
 
     return { type: 'noop' };
@@ -348,6 +366,15 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'palette-submit':
       return closeCommandPalette(state);
+
+    case 'startup-chooser-next':
+      return moveStartupChooserSelection(state, 1);
+
+    case 'startup-chooser-prev':
+      return moveStartupChooserSelection(state, -1);
+
+    case 'startup-chooser-confirm':
+      return state;
 
     case 'slash-next':
       return moveSlashSearchSelection(state, 1);

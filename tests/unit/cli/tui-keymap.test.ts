@@ -10,6 +10,7 @@ import {
   nextFocusablePane,
   prevFocusablePane,
   addToInputHistory,
+  openStartupChooser,
 } from '../../../packages/cli/src/tui/state.js';
 
 /**
@@ -618,6 +619,36 @@ describe('TUI Keymap', () => {
 
       state = applyKeyAction(state, { type: 'palette-prev' });
       expect(state.commandPalette.selectedIndex).toBe(initial);
+    });
+  });
+
+  describe('Startup chooser controls', () => {
+    test('chooser consumes Up/Down and Enter before pane routing', () => {
+      let state = createInitialTuiState();
+      state = openStartupChooser(state);
+      state.focusedPane = 'input';
+
+      const downAction = mapKeyToAction(makeKey({ name: 'down' }), state);
+      expect(downAction.type).toBe('startup-chooser-next');
+
+      const upAction = mapKeyToAction(makeKey({ name: 'up' }), state);
+      expect(upAction.type).toBe('startup-chooser-prev');
+
+      const enterAction = mapKeyToAction(makeKey({ name: 'enter' }), state);
+      expect(enterAction.type).toBe('startup-chooser-confirm');
+    });
+
+    test('chooser defaults to start-new and toggles selection with arrows', () => {
+      let state = createInitialTuiState();
+      state = openStartupChooser(state);
+
+      expect(state.startup.chooser.selected).toBe('start-new-session');
+
+      state = applyKeyAction(state, { type: 'startup-chooser-prev' });
+      expect(state.startup.chooser.selected).toBe('resume-last-session');
+
+      state = applyKeyAction(state, { type: 'startup-chooser-next' });
+      expect(state.startup.chooser.selected).toBe('start-new-session');
     });
   });
 
