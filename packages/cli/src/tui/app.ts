@@ -17,7 +17,7 @@ import {
 } from '@opentui/core';
 import type { TuiState, FocusablePaneId } from './state.js';
 import {
-  createInitialTuiState,
+  createInitialTuiStateWithPlugins,
   applySessionList,
   addSession,
   submitInput,
@@ -61,6 +61,7 @@ import {
   type SessionServiceDependencies,
   deleteSession,
 } from './session.js';
+import type { PluginSlashCommandExecutionContext } from '../plugin/api.js';
 
 /**
  * TUI app configuration
@@ -71,6 +72,16 @@ export interface TuiAppConfig {
   maxRenderQueue?: number;
   sessionService?: SessionServiceDependencies;
   initialSessionId?: string | null;
+  pluginSlashCommands?: ReadonlyArray<PluginSlashCommandRuntime>;
+}
+
+export interface PluginSlashCommandRuntime {
+  pluginId: string;
+  commandId: string;
+  summary: string;
+  usage?: string;
+  available: boolean;
+  execute: (args: string, context: PluginSlashCommandExecutionContext) => Promise<string | void> | string | void;
 }
 
 /**
@@ -94,6 +105,7 @@ export class FredTuiApp {
   private running: boolean = false;
   private streamingController: StreamingController;
   private sessionService?: SessionServiceDependencies;
+  private pluginSlashRegistry = new Map<string, PluginSlashCommandRuntime>();
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
@@ -114,7 +126,15 @@ export class FredTuiApp {
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
 
   private constructor(renderer: CliRenderer, events: TuiAppEvents = {}, config: TuiAppConfig = {}) {
-    this.state = createInitialTuiState();
+    this.state = createInitialTuiStateWithPlugins(
+      (config.pluginSlashCommands ?? []).map((command) => ({
+        pluginId: command.pluginId,
+        commandId: command.commandId,
+        summary: command.summary,
+        usage: command.usage,
+        available: command.available,
+      })),
+    );
     this.renderer = renderer;
     this.events = events;
     this.config = config;
@@ -128,6 +148,9 @@ export class FredTuiApp {
       },
     });
     this.sessionService = config.sessionService;
+    for (const command of config.pluginSlashCommands ?? []) {
+      this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
+    }
   }
 
   /**
@@ -500,6 +523,15 @@ export class FredTuiApp {
     }
 
     this.state = appendUserMessage(this.state, submittedText);
+
+    const slashInvocation = this.parseSlashInvocation(submittedText);
+    if (slashInvocation) {
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      void this.executePluginSlashCommand(slashInvocation.canonicalName, slashInvocation.args);
+      return;
+    }
+
     this.state = {
       ...this.state,
       telemetry: {
@@ -538,6 +570,13 @@ export class FredTuiApp {
     if (!selectedAction) {
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
+      return;
+    }
+
+    if (selectedAction.kind === 'plugin-slash' && selectedAction.plugin) {
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      void this.executePluginSlashCommand(selectedAction.plugin.canonicalName, '');
       return;
     }
 
@@ -590,6 +629,62 @@ export class FredTuiApp {
         break;
       default:
         break;
+    }
+
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  private parseSlashInvocation(text: string): { canonicalName: string; args: string } | null {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('/')) {
+      return null;
+    }
+
+    const [commandToken] = trimmed.split(/\s+/, 1);
+    if (!commandToken.includes(':')) {
+      return null;
+    }
+
+    const args = trimmed.slice(commandToken.length).trimStart();
+    return {
+      canonicalName: commandToken,
+      args,
+    };
+  }
+
+  private async executePluginSlashCommand(canonicalName: string, args: string): Promise<void> {
+    const command = this.pluginSlashRegistry.get(canonicalName);
+    if (!command || !command.available) {
+      this.state = appendAssistant(
+        this.state,
+        `[plugin slash] unavailable command: ${canonicalName}`,
+        1,
+      );
+      this.state = recordStreamingError(this.state, `[plugin slash] unavailable command: ${canonicalName}`);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    try {
+      const output = await command.execute(args, {
+        cwd: process.cwd(),
+        sessionId: this.state.sessions.selectedId ?? undefined,
+      });
+      this.state = appendAssistant(
+        this.state,
+        typeof output === 'string' && output.length > 0
+          ? output
+          : `[plugin:${command.pluginId}] ${canonicalName} completed`,
+        1,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const formatted = `[plugin:${command.pluginId}] ${canonicalName} failed: ${message}`;
+      this.state = appendAssistant(this.state, formatted, 1);
+      this.state = recordStreamingError(this.state, formatted);
+      this.events.onError?.(error instanceof Error ? error : new Error(message));
     }
 
     this.events.onStateChange?.(this.state);

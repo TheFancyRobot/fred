@@ -11,8 +11,10 @@ import {
   ensureDefaultChatAgent,
 } from '@fancyrobot/fred-dev/chat-defaults';
 import { detectTerminalMode } from '../runtime/tty-mode.js';
-import { createFredTuiApp } from '../tui/app.js';
+import { createFredTuiApp, type PluginSlashCommandRuntime } from '../tui/app.js';
 import { resolveProjectConfig } from '../project/resolve-config.js';
+import { loadPluginsFromConfig } from '../plugin/manager.js';
+import type { RegisteredPluginContributions } from '../plugin/registry.js';
 
 /**
  * Map platform ID to its provider package name.
@@ -38,8 +40,14 @@ export function detectAvailableProvider(): { platform: string; model: string } |
  * Initialize Fred instance with config or auto-detection
  * Returns Fred instance and model/provider info
  */
-async function initializeFred(): Promise<{ fred: Fred; model: string; provider: string }> {
+async function initializeFred(): Promise<{
+  fred: Fred;
+  model: string;
+  provider: string;
+  pluginSlashCommands: PluginSlashCommandRuntime[];
+}> {
   const fred = new Fred();
+  let pluginSlashCommands: PluginSlashCommandRuntime[] = [];
 
   // Try to load project config
   const configResult = resolveProjectConfig();
@@ -47,6 +55,11 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
   if (configResult.success && configResult.config && configResult.configPath) {
     // Config found - initialize from it
     try {
+      if (configResult.config.plugins && configResult.config.plugins.length > 0) {
+        const pluginResult = loadPluginsFromConfig(configResult.config.plugins, configResult.configPath);
+        pluginSlashCommands = await buildPluginSlashRuntime(pluginResult.plugins);
+      }
+
       await fred.initializeFromConfig(configResult.configPath);
 
       const result = await ensureDefaultChatAgent(fred, {
@@ -68,6 +81,7 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
         fred,
         model: result.model,
         provider: result.provider,
+        pluginSlashCommands,
       };
     } catch (error) {
       // Config exists but failed to initialize - fall through to auto-detection
@@ -95,7 +109,38 @@ async function initializeFred(): Promise<{ fred: Fred; model: string; provider: 
     fred,
     model: result.model,
     provider: result.provider,
+    pluginSlashCommands,
   };
+}
+
+async function buildPluginSlashRuntime(
+  plugins: ReadonlyArray<RegisteredPluginContributions>,
+): Promise<PluginSlashCommandRuntime[]> {
+  const runtime: PluginSlashCommandRuntime[] = [];
+
+  for (const plugin of plugins) {
+    for (const slashCommand of plugin.slashCommands) {
+      let available = true;
+      if (slashCommand.available) {
+        try {
+          available = await slashCommand.available({ cwd: process.cwd() });
+        } catch {
+          available = false;
+        }
+      }
+
+      runtime.push({
+        pluginId: plugin.pluginId,
+        commandId: slashCommand.name,
+        summary: slashCommand.summary,
+        usage: slashCommand.usage,
+        available,
+        execute: slashCommand.execute,
+      });
+    }
+  }
+
+  return runtime;
 }
 
 /**
@@ -113,12 +158,14 @@ export async function handleChatCommand(): Promise<void> {
     let fred: Fred;
     let model: string;
     let provider: string;
+    let pluginSlashCommands: PluginSlashCommandRuntime[];
 
     try {
       const initResult = await initializeFred();
       fred = initResult.fred;
       model = initResult.model;
       provider = initResult.provider;
+      pluginSlashCommands = initResult.pluginSlashCommands;
     } catch (error) {
       console.error('Failed to initialize AI provider:');
       console.error(error instanceof Error ? error.message : String(error));
@@ -175,6 +222,7 @@ export async function handleChatCommand(): Promise<void> {
         contextManager,
       },
       initialSessionId: null,
+      pluginSlashCommands,
     });
 
     // Update telemetry with actual model info
