@@ -13,13 +13,13 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - ✅ **v0.2.0 Effect Migration + Monorepo** — Phases 1-21.1 (shipped 2026-02-01, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
-- ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-32 (phase execution complete 2026-02-14, pending milestone audit/archive)
+- 🚧 **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (gap-closure phases 33-36 added 2026-02-14)
 
 ---
 
 ## Phases
 
-### ✅ v0.2.1 CLI/TUI Developer Experience (Phase Execution Complete)
+### 🚧 v0.2.1 CLI/TUI Developer Experience (Gap Closure In Progress)
 
 **Milestone Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
@@ -29,6 +29,10 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 30: CLI Commands** - Headless operation and config validation (completed 2026-02-11)
 - [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-13)
 - [x] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels (completed 2026-02-14)
+- [ ] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance
+- [ ] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence
+- [ ] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage
+- [ ] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed)
 
 ## Phase Details
 
@@ -138,10 +142,56 @@ Plans:
 - [x] 32-04-PLAN.md — Integrate plugin slash commands into TUI palette and typed slash flow (completed 2026-02-14, 5 min)
 - [x] 32-05-PLAN.md — Add integrated plugin smoke coverage and deterministic startup failure exit codes (completed 2026-02-14, 4 min)
 
+### Phase 33: Default Launch Contract Alignment
+**Goal**: Align no-args CLI launch contract with requirement `TUI-01` so `fred` and `fred tui` both start interactive TUI behavior in TTY environments
+**Depends on**: Phase 27, Phase 28
+**Requirements**: TUI-01
+**Gap Closure**: Closes v0.2.1 audit gaps for default-launch contract drift (`gaps.requirements`, `gaps.integration`, `gaps.flows`)
+**Success Criteria** (what must be TRUE):
+  1. `fred` with no arguments enters interactive TUI in TTY environments
+  2. `fred tui` and `fred` no-args follow equivalent interactive launch behavior
+  3. Non-TTY mode still degrades gracefully and terminal cleanup semantics remain intact
+  4. Launch smoke coverage validates both default and explicit TUI entry paths
+**Plans**: 0 plans
+
+### Phase 34: Session Verification Recovery
+**Goal**: Restore formal acceptance of session management by generating complete deterministic verification evidence for Phase 29
+**Depends on**: Phase 29
+**Requirements**: SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, SESS-06, SESS-07
+**Gap Closure**: Closes v0.2.1 audit gaps for missing Phase 29 verification artifact and blocked session-flow acceptance
+**Success Criteria** (what must be TRUE):
+  1. Phase 29 has a complete `VERIFICATION.md` artifact under `.planning/phases/29-session-management/`
+  2. Verification evidence explicitly covers `SESS-01` through `SESS-07`
+  3. Session lifecycle flow is accepted by milestone audit standards after artifact recovery
+**Plans**: 0 plans
+
+### Phase 35: Cross-Phase Smoke Contract Refresh
+**Goal**: Repair cross-phase smoke harnesses to match the current session-backed runtime contract and recover end-to-end confidence
+**Depends on**: Phase 34
+**Requirements**: TUI-08, SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, SESS-06, SESS-07
+**Gap Closure**: Closes v0.2.1 audit gaps for stale mock contract (`fred.getContextManager`) and failing TUI boot smoke flow
+**Success Criteria** (what must be TRUE):
+  1. Smoke mocks are updated to current Fred runtime contract, including `getContextManager`
+  2. TUI boot + streaming smoke harness passes with refreshed contracts
+  3. Cross-phase integration checks no longer report stale-contract regressions between phases 27/28/29
+  4. Milestone smoke evidence is refreshed for audit rerun
+**Plans**: 0 plans
+
+### Phase 36: Runtime & Test Hardening
+**Goal**: Address deferred reliability debt from milestone audit to improve channel consistency and test determinism
+**Depends on**: Phase 35
+**Requirements**: CLI-01, TUI-10
+**Gap Closure**: Closes deferred audit debt around `run --json` error channels, terminal lifecycle wiring, and Bun mock isolation
+**Success Criteria** (what must be TRUE):
+  1. `fred run --json` error paths follow strict JSON-channel consistency
+  2. `withTerminalLifecycle` helper is wired into active production chat path
+  3. Smoke suites avoid Bun mock state bleed and run reliably in parallel CI settings
+**Plans**: 0 plans
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
+Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 → 34 → 35 → 36
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -151,6 +201,10 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
+| 33. Default Launch Contract Alignment | 0/0 | Pending | - |
+| 34. Session Verification Recovery | 0/0 | Pending | - |
+| 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
+| 36. Runtime & Test Hardening | 0/0 | Pending | - |
 
 ---
 
@@ -172,4 +226,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-14 - Phase 32 complete and verified (23/23 must-haves passed)*
+*Last updated: 2026-02-14 - Added v0.2.1 gap-closure phases 33-36 from milestone audit*
