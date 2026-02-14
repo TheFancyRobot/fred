@@ -11,16 +11,16 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 33 of 36 (Default Launch Contract Alignment)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-14 - Completed 33-01-PLAN.md
+Last activity: 2026-02-14 - Completed 33-02-PLAN.md
 
-Progress: [█████████░] 99% (146/148 plans complete)
+Progress: [█████████░] 99% (147/148 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26 (v0.2.1 milestone)
+- Total plans completed: 27 (v0.2.1 milestone)
 - Average duration: 5.60 min
 - Total execution time: ~2.43 hours
 
@@ -96,6 +96,8 @@ Recent decisions affecting current work:
 - Startup plugin diagnostics channel safety (32-05) — text diagnostics emit to stderr while JSON diagnostics emit to stdout-only payloads
 - No-args launch dispatch parity at CLI entry (33-01) — bare `fred` now routes to the same interactive path as `fred chat`/`fred tui`
 - Shared non-interactive launch payload contract (33-01) — launch entrypoints use one JSON fallback shape and exit behavior in non-TTY mode
+- Startup chooser defaults to start-new with Enter confirmation (33-02) — existing-session startup is now explicit and deterministic instead of implicit auto-resume
+- Interactive config init fallback shown in TUI startup (33-02) — config load failures remain in guided flow via concise startup warning
 
 ### Pending Todos
 
@@ -126,6 +128,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T22:28:22Z
-Stopped at: Completed 33-01-PLAN.md
+Last session: 2026-02-14T22:38:30Z
+Stopped at: Completed 33-02-PLAN.md
 Resume file: None
