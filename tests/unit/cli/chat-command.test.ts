@@ -1,9 +1,14 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
-import { detectAvailableProvider, loadProviderPackage, PROVIDER_PACKAGES } from '../../../packages/cli/src/commands/chat';
+import {
+  createNonInteractiveFallbackPayload,
+  detectAvailableProvider,
+  loadProviderPackage,
+  PROVIDER_PACKAGES,
+} from '../../../packages/cli/src/commands/chat';
 
 /**
- * Tests for chat command routing and help-first behavior
+ * Tests for chat command routing and launch-path behavior
  *
  * Note: We can't directly test handleChatCommand() because it calls startDevChat()
  * which uses BunRuntime.runMain and never returns. Instead, we test:
@@ -130,13 +135,13 @@ describe('Chat Command', () => {
       expect(hasConfig).toBe(true);
     });
 
-    test('empty args defaults to help', () => {
+    test('empty args defaults to chat', () => {
       // Simulate bare 'fred' command (no args)
       const args: string[] = [];
 
-      const command = args[0] || 'help';
+      const command = args[0] || 'chat';
 
-      expect(command).toBe('help');
+      expect(command).toBe('chat');
     });
 
     test('help flag triggers help', () => {
@@ -150,7 +155,7 @@ describe('Chat Command', () => {
   });
 
   describe('Non-TTY mode degradation', () => {
-    test('non-tty mode should provide structured output', () => {
+    test('non-tty mode should provide shared structured output contract', () => {
       // This test verifies the expected behavior without actually calling handleChatCommand
       // (since it never returns in interactive mode)
 
@@ -162,12 +167,7 @@ describe('Chat Command', () => {
       };
 
       // In non-TTY mode, chat command should provide structured JSON output
-      const expectedOutput = {
-        mode: 'non-interactive',
-        reason: mockMode.reason,
-        suggestion: 'Run fred chat in a terminal for interactive mode',
-        help: 'Use fred --help for other commands',
-      };
+      const expectedOutput = createNonInteractiveFallbackPayload(mockMode.reason);
 
       // Verify expected output structure
       expect(expectedOutput.mode).toBe('non-interactive');
@@ -175,15 +175,48 @@ describe('Chat Command', () => {
       expect(expectedOutput.suggestion).toContain('terminal');
       expect(expectedOutput.help).toContain('--help');
     });
+
+    test('bare fred, fred tui, and fred chat share non-interactive contract', () => {
+      const modeReason = 'stdin is not a TTY';
+
+      const resolveCommand = (args: string[]): string => {
+        const firstArg = args[0];
+        if (firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+          return 'help';
+        }
+        return firstArg || 'chat';
+      };
+
+      const entrypoints = [
+        [],
+        ['tui'],
+        ['chat'],
+      ];
+
+      for (const entrypoint of entrypoints) {
+        const command = resolveCommand(entrypoint);
+        expect(command === 'chat' || command === 'tui').toBe(true);
+
+        const payload = createNonInteractiveFallbackPayload(modeReason);
+        expect(payload).toEqual({
+          mode: 'non-interactive',
+          reason: modeReason,
+          suggestion: 'Run fred chat in a terminal for interactive mode',
+          help: 'Use fred --help for other commands',
+        });
+      }
+    });
   });
 
   describe('CLI routing behavior', () => {
-    test('bare fred command shows help', async () => {
-      // Verify that bare 'fred' (no args) is treated as help
+    test('bare fred command routes to chat launch path', async () => {
       const args: string[] = [];
-      const shouldShowHelp = args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] === '-h';
+      const firstArg = args[0];
+      const command = (firstArg === 'help' || firstArg === '--help' || firstArg === '-h')
+        ? 'help'
+        : firstArg || 'chat';
 
-      expect(shouldShowHelp).toBe(true);
+      expect(command).toBe('chat');
     });
 
     test('fred chat command routes to handleChatCommand', () => {

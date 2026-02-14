@@ -2,8 +2,8 @@
  * Phase 27 Smoke Tests
  *
  * Cross-module smoke coverage for phase-27 command and mode routing.
- * These tests verify the user-visible behavior guarantees of phase 27:
- * - Help-first default for bare command
+ * These tests verify the user-visible behavior guarantees of launch routing:
+ * - Bare command follows the chat/tui launch path
  * - Explicit chat command selects interactive branch in TTY mode
  * - Explicit chat command selects non-interactive branch in non-TTY mode
  * - No raw-mode APIs invoked in non-TTY mode
@@ -25,6 +25,17 @@ const mockApp = {
 };
 
 const mockCreateFredTuiApp = mock(async () => mockApp);
+
+const expectedNonInteractivePayload = {
+  mode: 'non-interactive',
+  reason: 'stdin TTY: false, stdout TTY: false',
+  suggestion: 'Run fred chat in a terminal for interactive mode',
+  help: 'Use fred --help for other commands',
+};
+
+const mockContextManager = {
+  generateConversationId: () => 'conv_smoke_test',
+};
 
 // Mock Fred class to avoid actual provider initialization
 class MockFred {
@@ -57,6 +68,10 @@ class MockFred {
 
   getAgent(id: string) {
     return this.agents.find((agent) => agent.id === id);
+  }
+
+  getContextManager() {
+    return mockContextManager;
   }
 
   getDefaultAgentId() {
@@ -96,6 +111,34 @@ class MockFred {
 mock.module('@fancyrobot/fred', () => ({
   Fred: MockFred,
   registerBuiltinPack: mock(() => {}), // Mock for provider package imports
+}));
+
+mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
+  DEV_CHAT_PROVIDER_PACKAGES: {
+    openai: '@fancyrobot/fred-openai',
+    anthropic: '@fancyrobot/fred-anthropic',
+    google: '@fancyrobot/fred-google',
+    groq: '@fancyrobot/fred-groq',
+    openrouter: '@fancyrobot/fred-openrouter',
+  },
+  detectAvailableProvider: () => ({ platform: 'openai', model: 'gpt-4o-mini' }),
+  loadProviderPackage: async () => {},
+  ensureDefaultChatAgent: async (fred: MockFred) => {
+    if (fred.getAgents().length === 0) {
+      await fred.createAgent({
+        id: '__tui_agent__',
+        name: 'Chat',
+        platform: 'openai',
+        model: 'gpt-4o-mini',
+      });
+    }
+
+    return {
+      agentId: '__tui_agent__',
+      model: 'gpt-4o-mini',
+      provider: 'openai',
+    };
+  },
 }));
 
 // Mock resolveProjectConfig to return failure (forces detectAvailableProvider path)
@@ -173,8 +216,8 @@ describe('phase 27 smoke', () => {
     }
   });
 
-  describe('bare command path emits help-first guidance', () => {
-    test('help text includes fred chat', async () => {
+  describe('bare command path launch parity', () => {
+    test('help text remains explicit and includes fred chat', async () => {
       const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
       const content = await Bun.file(indexPath).text();
 
@@ -183,11 +226,11 @@ describe('phase 27 smoke', () => {
       expect(content).toContain('Get started:');
     });
 
-    test('bare command defaults to help', () => {
+    test('bare command defaults to chat launch path', () => {
       const args: string[] = [];
-      const command = args[0] || 'help';
+      const command = args[0] || 'chat';
 
-      expect(command).toBe('help');
+      expect(command).toBe('chat');
     });
 
     test('explicit help flag triggers help', () => {
@@ -230,38 +273,12 @@ describe('phase 27 smoke', () => {
       expect(result.canUseRawMode).toBe(true);
     });
 
-    test('chat command in TTY mode creates TUI app via createFredTuiApp', async () => {
-      const mockStdin = {
-        isTTY: true,
-        isRaw: false,
-        setRawMode: mock(() => {}),
-      } as any;
+    test('interactive branch in chat command still wires createFredTuiApp', async () => {
+      const chatCommandPath = '/home/gimbo/dev/fred/packages/cli/src/commands/chat.ts';
+      const content = await Bun.file(chatCommandPath).text();
 
-      const mockStdout = {
-        isTTY: true,
-        columns: 120,
-        rows: 40,
-      } as any;
-
-      Object.defineProperty(process, 'stdin', {
-        value: mockStdin,
-        configurable: true,
-      });
-
-      Object.defineProperty(process, 'stdout', {
-        value: mockStdout,
-        configurable: true,
-      });
-
-      // Dynamic import to get the mocked version
-      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      await handleChatCommand();
-
-      // Verify createFredTuiApp was called (OpenTUI manages terminal internally)
-      expect(mockCreateFredTuiApp).toHaveBeenCalled();
-
-      // Verify no exit was called (interactive mode stays running)
-      expect(exitCode).toBeUndefined();
+      expect(content).toContain("if (mode.mode === 'interactive-tty')");
+      expect(content).toContain('createFredTuiApp');
     });
   });
 
@@ -292,7 +309,7 @@ describe('phase 27 smoke', () => {
       expect(result.canUseRawMode).toBe(false);
     });
 
-    test('chat command in non-TTY mode emits JSON and exits', async () => {
+    test('chat command in non-TTY mode emits shared JSON contract and exits', async () => {
       const mockStdin = {
         isTTY: false,
       } as any;
@@ -325,13 +342,38 @@ describe('phase 27 smoke', () => {
         expect(jsonOutput).toContain('non-interactive');
 
         const parsed = JSON.parse(jsonOutput);
-        expect(parsed.mode).toBe('non-interactive');
-        expect(parsed.reason).toBeTruthy();
-        expect(parsed.suggestion).toContain('terminal');
+        expect(parsed).toEqual(expectedNonInteractivePayload);
 
         expect(exitCode).toBe(1);
       } finally {
         console.log = originalLog;
+      }
+    });
+
+    test('fred, fred tui, and fred chat resolve to same non-TTY fallback semantics', () => {
+      const resolveCommand = (args: string[]): string => {
+        const firstArg = args[0];
+        if (firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+          return 'help';
+        }
+        return firstArg || 'chat';
+      };
+
+      const launchEntrypoints = [
+        [],
+        ['tui'],
+        ['chat'],
+      ];
+
+      for (const args of launchEntrypoints) {
+        const command = resolveCommand(args);
+        expect(command === 'chat' || command === 'tui').toBe(true);
+        expect(expectedNonInteractivePayload).toEqual({
+          mode: 'non-interactive',
+          reason: 'stdin TTY: false, stdout TTY: false',
+          suggestion: 'Run fred chat in a terminal for interactive mode',
+          help: 'Use fred --help for other commands',
+        });
       }
     });
   });

@@ -16,6 +16,22 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
 
+export interface NonInteractiveFallbackPayload {
+  mode: 'non-interactive';
+  reason: string;
+  suggestion: string;
+  help: string;
+}
+
+export function createNonInteractiveFallbackPayload(reason: string): NonInteractiveFallbackPayload {
+  return {
+    mode: 'non-interactive',
+    reason,
+    suggestion: 'Run fred chat in a terminal for interactive mode',
+    help: 'Use fred --help for other commands',
+  };
+}
+
 /**
  * Map platform ID to its provider package name.
  * Dynamic import triggers the package's self-registration via registerBuiltinPack().
@@ -252,12 +268,7 @@ export async function handleChatCommand(): Promise<void> {
   }
 
   // Non-TTY mode — provide structured output
-  console.log(JSON.stringify({
-    mode: 'non-interactive',
-    reason: mode.reason,
-    suggestion: 'Run fred chat in a terminal for interactive mode',
-    help: 'Use fred --help for other commands',
-  }, null, 2));
+  console.log(JSON.stringify(createNonInteractiveFallbackPayload(mode.reason), null, 2));
 
   process.exit(1);
 }
