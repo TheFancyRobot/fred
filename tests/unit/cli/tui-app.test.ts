@@ -223,7 +223,7 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.focusedPane).toBe('input');
   });
 
-  test('resume chooser option falls back to creating session when none exist', async () => {
+  test('resume chooser option routes to sidebar and can create session when none exist', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     await createTestApp({}, fixture);
     await Bun.sleep(20);
@@ -232,13 +232,18 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'enter' }));
     await Bun.sleep(20);
 
+    expect(app.getState().startup.chooser.isOpen).toBe(false);
+    expect(app.getState().focusedPane).toBe('sidebar');
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
     const state = app.getState();
-    expect(state.startup.chooser.isOpen).toBe(false);
     expect(state.sessions.selectedId).toBe('s-new');
     expect(state.focusedPane).toBe('input');
   });
 
-  test('resume option restores latest transcript and focuses input', async () => {
+  test('resume option hands off to sidebar before loading transcript', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
     await Bun.sleep(20);
@@ -247,9 +252,15 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'enter' }));
     await Bun.sleep(20);
 
+    expect(app.getState().startup.chooser.isOpen).toBe(false);
+    expect(app.getState().sessions.selectedId).toBe('s-latest');
+    expect(app.getState().focusedPane).toBe('sidebar');
+    expect(app.getState().transcript.messages).toHaveLength(0);
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
     const state = app.getState();
-    expect(state.startup.chooser.isOpen).toBe(false);
-    expect(state.sessions.selectedId).toBe('s-latest');
     expect(state.transcript.messages[0]?.content).toBe('Welcome back latest');
     expect(state.focusedPane).toBe('input');
   });

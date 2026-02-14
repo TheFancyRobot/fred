@@ -343,7 +343,7 @@ describe('phase 33 launch contract smoke', () => {
     }
   });
 
-  test('startup chooser defaults to start-new and both chooser paths land in input-focused chat state', async () => {
+  test('startup chooser defaults to start-new and resume path hands off to sidebar selection', async () => {
     const fixture = createSessionServiceFixture();
 
     const startNewSetup = await createTestRenderer({ width: 120, height: 40 });
@@ -373,6 +373,12 @@ describe('phase 33 launch contract smoke', () => {
 
     expect(resumeApp.getState().startup.chooser.isOpen).toBe(false);
     expect(resumeApp.getState().sessions.selectedId).toBe('s-latest');
+    expect(resumeApp.getState().focusedPane).toBe('sidebar');
+    expect(resumeApp.getState().transcript.messages).toHaveLength(0);
+
+    resumeApp.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
     expect(resumeApp.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
     expect(resumeApp.getState().focusedPane).toBe('input');
 
@@ -394,6 +400,12 @@ describe('phase 33 launch contract smoke', () => {
     await Bun.sleep(20);
 
     expect(app.getState().sessions.selectedId).toBe('s-latest');
+    expect(app.getState().focusedPane).toBe('sidebar');
+    expect(app.getState().transcript.messages).toHaveLength(0);
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
     expect(app.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
     expect(app.getState().focusedPane).toBe('input');
 

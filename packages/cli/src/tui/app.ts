@@ -126,6 +126,7 @@ export class FredTuiApp {
   private lastStatusRenderMs = 0;
   private lastStatusLine = '';
   private previousStreamingState = false;
+  private awaitingStartupResumeSelection = false;
 
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
@@ -234,20 +235,17 @@ export class FredTuiApp {
 
     try {
       if (selected === 'start-new-session') {
+        this.awaitingStartupResumeSelection = false;
         const item = await createSession(this.sessionService);
         this.state = addSession(this.state, item, { select: true });
         const messages = await loadSessionTranscript(this.sessionService, item.id);
         this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
       } else {
-        let selectedId = this.state.sessions.selectedId;
-        if (!selectedId) {
-          const item = await createSession(this.sessionService);
-          this.state = addSession(this.state, item, { select: true });
-          selectedId = item.id;
-        }
-
-        const messages = await loadSessionTranscript(this.sessionService, selectedId);
-        this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+        this.awaitingStartupResumeSelection = true;
+        this.state = setFocusedPane(this.state, 'sidebar');
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        return;
       }
     } catch (error) {
       this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -479,10 +477,20 @@ export class FredTuiApp {
 
     if (action.type === 'session-select') {
       if (isNewSessionActionSelected(this.state)) {
-        void this.handleCreateSession();
+        if (this.awaitingStartupResumeSelection) {
+          void this.handleCreateSession({ focusInputAfterCreate: true });
+        } else {
+          void this.handleCreateSession();
+        }
         return;
       }
       this.state = selectSidebarSelection(this.state);
+      if (this.awaitingStartupResumeSelection) {
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        void this.confirmStartupSidebarSelection();
+        return;
+      }
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
       return;
@@ -757,7 +765,7 @@ export class FredTuiApp {
     return Math.max(1, wordCount);
   }
 
-  private async handleCreateSession(): Promise<void> {
+  private async handleCreateSessionWithOptions(options: { focusInputAfterCreate: boolean }): Promise<void> {
     if (!this.sessionService) {
       return;
     }
@@ -767,11 +775,42 @@ export class FredTuiApp {
       this.state = addSession(this.state, item, { select: true });
       const messages = await loadSessionTranscript(this.sessionService, item.id);
       this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+      this.awaitingStartupResumeSelection = false;
+      if (options.focusInputAfterCreate) {
+        this.state = setFocusedPane(this.state, 'input');
+      }
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
     } catch (error) {
       this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
     }
+  }
+
+  private async handleCreateSession(options?: { focusInputAfterCreate?: boolean }): Promise<void> {
+    return this.handleCreateSessionWithOptions({ focusInputAfterCreate: options?.focusInputAfterCreate ?? false });
+  }
+
+  private async confirmStartupSidebarSelection(): Promise<void> {
+    const selectedId = this.state.sessions.selectedId;
+    this.awaitingStartupResumeSelection = false;
+
+    if (!selectedId || !this.sessionService) {
+      this.state = setFocusedPane(this.state, 'input');
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    try {
+      const messages = await loadSessionTranscript(this.sessionService, selectedId);
+      this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+
+    this.state = setFocusedPane(this.state, 'input');
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
   }
 
   private async confirmDeleteSession(): Promise<void> {

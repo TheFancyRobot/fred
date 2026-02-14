@@ -190,7 +190,7 @@ describe('TUI Layout', () => {
 
       const content = renderTranscriptContent(state, true);
       expect(content.lines[0]).toBe('[Startup: selection required]');
-      expect(content.lines.join('\n')).toContain('   Resume last session');
+      expect(content.lines.join('\n')).toContain('   Resume previous session');
       expect(content.lines.join('\n')).toContain('>> Start new session');
       expect(content.lines.join('\n')).toContain('Use Up/Down to choose, Enter to continue');
     });

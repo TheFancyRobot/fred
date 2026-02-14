@@ -252,7 +252,7 @@ export function renderTranscriptContent(
       '[Startup: selection required]',
       ...(state.startup.warning ? [`warning: ${state.startup.warning}`] : []),
       '',
-      `${resumeMarker} Resume last session`,
+      `${resumeMarker} Resume previous session`,
       `${startNewMarker} Start new session`,
       '',
       'Use Up/Down to choose, Enter to continue',
