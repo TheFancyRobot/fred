@@ -8,6 +8,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { resolveProjectConfig, resolveProjectConfigOrThrow } from '../../../packages/cli/src/project/resolve-config';
 import { formatConfigDiagnostic, formatDiagnostics, aggregateDiagnostics } from '../../../packages/cli/src/project/diagnostics';
+import { handleConfigCommand } from '../../../packages/cli/src/commands/config';
 
 describe('config diagnostics', () => {
   let testRoot: string;
@@ -299,6 +300,86 @@ describe('config diagnostics', () => {
       expect(() => {
         resolveProjectConfigOrThrow(testRoot);
       }).toThrow(/No Fred config file found/);
+    });
+  });
+
+  describe('plugin diagnostics output channels', () => {
+    function createIoHarness() {
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+
+      return {
+        stdout,
+        stderr,
+        io: {
+          stdout: (message: string) => {
+            stdout.push(message);
+          },
+          stderr: (message: string) => {
+            stderr.push(message);
+          },
+        },
+      };
+    }
+
+    const pluginDiagnostic = {
+      code: 'plugin-fred-version-incompatible',
+      severity: 'error' as const,
+      message: 'Plugin requires Fred CLI ^9.0.0 but detected 0.2.0',
+      path: '/tmp/fred.config.json',
+      fix: 'Install a compatible plugin version.',
+      pluginId: 'incompatible-plugin',
+      declarationSource: 'incompatible-plugin',
+    };
+
+    it('writes plugin diagnostics to stderr in text mode', async () => {
+      const harness = createIoHarness();
+
+      const exitCode = await handleConfigCommand(
+        ['validate'],
+        {},
+        {
+          io: harness.io,
+          resolveConfig: () => ({
+            success: false,
+            configPath: '/tmp/fred.config.json',
+            diagnostics: [pluginDiagnostic],
+          }),
+        },
+      );
+
+      expect(exitCode).toBe(1);
+      expect(harness.stdout).toHaveLength(0);
+      expect(harness.stderr.join('\n')).toContain('plugin-fred-version-incompatible');
+      expect(harness.stderr.join('\n')).toContain('Plugin requires Fred CLI ^9.0.0');
+      expect(harness.stderr.join('\n')).toContain('Found 1 error');
+    });
+
+    it('writes plugin diagnostics JSON to stdout only in json mode', async () => {
+      const harness = createIoHarness();
+
+      const exitCode = await handleConfigCommand(
+        ['validate'],
+        { json: true },
+        {
+          io: harness.io,
+          resolveConfig: () => ({
+            success: false,
+            configPath: '/tmp/fred.config.json',
+            diagnostics: [pluginDiagnostic],
+          }),
+        },
+      );
+
+      expect(exitCode).toBe(1);
+      expect(harness.stderr).toHaveLength(0);
+      expect(harness.stdout).toHaveLength(1);
+
+      const payload = JSON.parse(harness.stdout[0]);
+      expect(payload.ok).toBe(false);
+      expect(payload.diagnostics).toHaveLength(1);
+      expect(payload.diagnostics[0].pluginId).toBe('incompatible-plugin');
+      expect(payload.diagnostics[0].declarationSource).toBe('incompatible-plugin');
     });
   });
 });
