@@ -18,7 +18,11 @@ import { handleIntentCommand } from './commands/intent';
 import { handleRouteCommand } from './commands/route';
 import { handleMcpCommand } from './commands/mcp';
 import { resolveProjectConfig } from './project/resolve-config.js';
-import { loadPluginsFromConfig } from './plugin/manager.js';
+import {
+  AggregatedPluginValidationError,
+  loadPluginsFromConfig,
+  type PluginStartupIssue,
+} from './plugin/manager.js';
 import { createPluginCliRuntime, type PluginCliRuntime } from './plugin/runtime.js';
 import { renderPluginHelpSection } from './plugin/help.js';
 
@@ -72,6 +76,8 @@ const BUILTIN_COMMANDS = new Set([
   'route',
   'mcp',
 ]);
+
+const PLUGIN_VALIDATION_EXIT_CODE = 12;
 
 /**
  * Parse command line arguments
@@ -213,7 +219,18 @@ Get started:
  */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const pluginRuntime = initializePluginCliRuntime();
+  const pluginRuntimeResult = initializePluginCliRuntime();
+
+  if (pluginRuntimeResult.startupIssues) {
+    emitPluginStartupDiagnostics(
+      pluginRuntimeResult.startupIssues,
+      argv.includes('--json'),
+    );
+    process.exit(PLUGIN_VALIDATION_EXIT_CODE);
+    return;
+  }
+
+  const pluginRuntime = pluginRuntimeResult.runtime;
   const pluginHelpSection = renderPluginHelpSection(pluginRuntime.listCommands());
 
   if (argv.length === 0 || argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
@@ -295,8 +312,8 @@ async function main(): Promise<void> {
         {
           const pluginResult = await pluginRuntime.dispatch(command, rawCommandArgs, {
             cwd: process.cwd(),
-            stdout: (message) => console.log(message),
-            stderr: (message) => console.error(message),
+            stdout: (message: string) => console.log(message),
+            stderr: (message: string) => console.error(message),
           });
 
           if (pluginResult.handled) {
@@ -317,15 +334,51 @@ async function main(): Promise<void> {
   }
 }
 
-function initializePluginCliRuntime(): PluginCliRuntime {
+interface PluginCliRuntimeInitializationResult {
+  runtime: PluginCliRuntime;
+  startupIssues?: PluginStartupIssue[];
+}
+
+function initializePluginCliRuntime(): PluginCliRuntimeInitializationResult {
   const fallback = createPluginCliRuntime({
     plugins: [],
     builtInCommands: BUILTIN_COMMANDS,
   });
 
   const configResult = resolveProjectConfig();
-  if (!configResult.success || !configResult.configPath || !configResult.config?.plugins?.length) {
-    return fallback;
+  if (!configResult.success) {
+    const pluginIssues = configResult.diagnostics
+      .filter((diagnostic) =>
+        diagnostic.severity === 'error' &&
+        typeof diagnostic.pluginId === 'string' &&
+        diagnostic.pluginId.length > 0 &&
+        typeof diagnostic.declarationSource === 'string' &&
+        diagnostic.declarationSource.length > 0)
+      .map((diagnostic) => ({
+        code: diagnostic.code,
+        severity: 'error' as const,
+        pluginId: diagnostic.pluginId!,
+        declarationSource: diagnostic.declarationSource!,
+        message: diagnostic.message,
+        fix: diagnostic.fix ?? 'Run `fred config validate` to inspect plugin diagnostics.',
+      }));
+
+    if (pluginIssues.length > 0) {
+      return {
+        runtime: fallback,
+        startupIssues: pluginIssues,
+      };
+    }
+
+    return {
+      runtime: fallback,
+    };
+  }
+
+  if (!configResult.configPath || !configResult.config?.plugins?.length) {
+    return {
+      runtime: fallback,
+    };
   }
 
   try {
@@ -333,13 +386,70 @@ function initializePluginCliRuntime(): PluginCliRuntime {
       configResult.config.plugins,
       configResult.configPath,
     );
-    return createPluginCliRuntime({
-      plugins: pluginLoadResult.plugins,
-      builtInCommands: BUILTIN_COMMANDS,
-    });
-  } catch {
-    return fallback;
+    return {
+      runtime: createPluginCliRuntime({
+        plugins: pluginLoadResult.plugins,
+        builtInCommands: BUILTIN_COMMANDS,
+      }),
+    };
+  } catch (error) {
+    if (error instanceof AggregatedPluginValidationError) {
+      return {
+        runtime: fallback,
+        startupIssues: error.issues,
+      };
+    }
+
+    return {
+      runtime: fallback,
+    };
   }
+}
+
+function emitPluginStartupDiagnostics(
+  issues: readonly PluginStartupIssue[],
+  jsonMode: boolean,
+): void {
+  if (jsonMode) {
+    console.log(JSON.stringify({
+      ok: false,
+      error: {
+        code: 'plugin-startup-validation-failed',
+        exitCode: PLUGIN_VALIDATION_EXIT_CODE,
+        summary: `Plugin startup validation failed with ${issues.length} issue${issues.length === 1 ? '' : 's'}.`,
+      },
+      diagnostics: issues,
+    }, null, 2));
+    return;
+  }
+
+  const lines: string[] = [
+    `Plugin startup validation failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+  ];
+
+  const groupedIssues = new Map<string, PluginStartupIssue[]>();
+  for (const issue of issues) {
+    const key = `${issue.pluginId}|${issue.declarationSource}`;
+    const group = groupedIssues.get(key);
+    if (group) {
+      group.push(issue);
+    } else {
+      groupedIssues.set(key, [issue]);
+    }
+  }
+
+  for (const [groupKey, group] of groupedIssues.entries()) {
+    const [pluginId, declarationSource] = groupKey.split('|');
+    lines.push(`  - plugin ${pluginId} (source: ${declarationSource})`);
+
+    for (const issue of group) {
+      lines.push(`    • ${issue.code}: ${issue.message}`);
+      lines.push(`      fix: ${issue.fix}`);
+    }
+  }
+
+  lines.push("Run 'fred config validate --json' for structured diagnostics.");
+  console.error(lines.join('\n'));
 }
 
 // Run if executed directly
