@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 31 fully complete (including gap closures) — ready for Phase 32 planning
+**Current focus:** Phase 32 in progress — plugin CLI command dispatch/help integration complete through 32-03
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 31 of 32 (CLI Testing & Debugging)
-Plan: 4 of 4 in current phase
-Status: Complete
-Last activity: 2026-02-13 - Completed 31-04-PLAN.md (JSON error path consistency gap closure)
+Phase: 32 of 32 (Plugin Architecture)
+Plan: 3 of 5 in current phase
+Status: In progress
+Last activity: 2026-02-14 - Completed 32-03-PLAN.md
 
-Progress: [██████████] 100% (140/140 plans complete)
+Progress: [█████████░] 99% (143/145 plans complete)
 
 ## Performance Metrics
 
@@ -84,6 +84,11 @@ Recent decisions affecting current work:
 - Tool count display limitation in MCP list (31-02) — show "-" for tool count in table view; status command provides detailed info
 - Graceful error handling in MCP batch operations (31-02) — continue processing all servers even if some fail in --all mode
 - Exclusive output channels for --json mode (31-04) — JSON to stdout OR plain text to stderr, never both simultaneously
+- Source-derived plugin identity in normalization (32-01) — plugin source is canonical id for duplicate detection and deterministic ordering
+- Two-phase plugin startup validation gate (32-02) — discover/load/validate all plugins before registering contributions
+- Structured plugin diagnostics in config validation (32-02) — pluginId and declarationSource included for machine-readable JSON output
+- Unknown-command plugin dispatch boundary (32-03) — plugin runtime is invoked only after built-in command switch so core CLI commands always win conflicts
+- Unavailable plugin command stubs in help (32-03) — conflicted top-level plugin commands remain visible with explicit reason while namespaced form stays executable
 
 ### Pending Todos
 
@@ -114,6 +119,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-13T05:52:40Z
-Stopped at: Completed 31-04-PLAN.md (JSON error path consistency gap closure)
+Last session: 2026-02-14T20:20:30Z
+Stopped at: Completed 32-03-PLAN.md
 Resume file: None
