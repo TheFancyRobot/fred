@@ -20,6 +20,7 @@ import { handleMcpCommand } from './commands/mcp';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import { loadPluginsFromConfig } from './plugin/manager.js';
 import { createPluginCliRuntime, type PluginCliRuntime } from './plugin/runtime.js';
+import { renderPluginHelpSection } from './plugin/help.js';
 
 /**
  * Options that require a value
@@ -118,7 +119,7 @@ function parseArgs(args: string[]): { command: string; args: string[]; options: 
 /**
  * Show help message
  */
-function showHelp(): void {
+function showHelp(pluginHelpSection = ''): void {
   console.log(`
 Fred CLI
 
@@ -172,7 +173,7 @@ Commands:
   eval suite --suite <file>           Run evaluation suite manifest
                                      Outputs: pass/fail totals, latency/token metrics, intent confusion matrix
 
-Options:
+${pluginHelpSection}Options:
   --config <file>          Path to Fred config file
   --traces-dir <dir>       Directory for golden traces (default: tests/golden-traces)
 
@@ -213,9 +214,10 @@ Get started:
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const pluginRuntime = initializePluginCliRuntime();
+  const pluginHelpSection = renderPluginHelpSection(pluginRuntime.listCommands());
 
   if (argv.length === 0 || argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
-    showHelp();
+    showHelp(pluginHelpSection);
     process.exit(0);
   }
 
@@ -303,7 +305,7 @@ async function main(): Promise<void> {
           }
 
           console.error(`Unknown command: ${command}`);
-          showHelp();
+          showHelp(pluginHelpSection);
           exitCode = 1;
         }
     }
