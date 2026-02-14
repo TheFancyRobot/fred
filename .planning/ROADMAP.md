@@ -129,10 +129,14 @@ Plans:
   3. Plugins can register custom CLI commands that appear in `fred help` and are executable
   4. Plugins can register custom slash commands accessible in TUI command palette
   5. Plugin API exposes stable typed contract via `@fancyrobot/fred-cli/plugin` entry point with semantic versioning
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 32-01: TBD
+- [x] 32-01-PLAN.md — Create stable plugin contract and declaration normalization foundation (completed 2026-02-14, 3 min)
+- [x] 32-02-PLAN.md — Build plugin discovery/loading manager with aggregated validation diagnostics (completed 2026-02-14, 3 min)
+- [x] 32-03-PLAN.md — Wire plugin CLI commands into dispatch and help with conflict-safe registration (completed 2026-02-14)
+- [x] 32-04-PLAN.md — Integrate plugin slash commands into TUI palette and typed slash flow (completed 2026-02-14, 5 min)
+- [ ] 32-05-PLAN.md — Add integrated plugin smoke coverage and deterministic startup failure exit codes
 
 ## Progress
 
@@ -146,7 +150,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
-| 32. Plugin Architecture | 0/TBD | Not started | - |
+| 32. Plugin Architecture | 4/5 | In progress | - |
 
 ---
 
@@ -168,4 +172,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-13 - Phase 31 complete (all 4 plans including gap closures)*
+*Last updated: 2026-02-14 - Completed 32-04 plan (plugin slash commands in TUI palette and typed flow)*

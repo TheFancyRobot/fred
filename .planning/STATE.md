@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Phase 32 in progress — plugin CLI command dispatch/help integration complete through 32-03
+**Current focus:** Phase 32 complete — plugin architecture finalized with integrated CLI/TUI smoke coverage and startup failure exit semantics
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 32 of 32 (Plugin Architecture)
-Plan: 3 of 5 in current phase
-Status: In progress
-Last activity: 2026-02-14 - Completed 32-03-PLAN.md
+Plan: 5 of 5 in current phase
+Status: Phase complete
+Last activity: 2026-02-14 - Completed 32-05-PLAN.md
 
-Progress: [█████████░] 99% (143/145 plans complete)
+Progress: [██████████] 100% (145/145 plans complete)
 
 ## Performance Metrics
 
@@ -89,6 +89,10 @@ Recent decisions affecting current work:
 - Structured plugin diagnostics in config validation (32-02) — pluginId and declarationSource included for machine-readable JSON output
 - Unknown-command plugin dispatch boundary (32-03) — plugin runtime is invoked only after built-in command switch so core CLI commands always win conflicts
 - Unavailable plugin command stubs in help (32-03) — conflicted top-level plugin commands remain visible with explicit reason while namespaced form stays executable
+- Startup-time plugin slash availability filtering (32-04) — unavailable plugin slash commands are hidden consistently in palette and typed slash search
+- Shared plugin slash execution registry in TUI (32-04) — typed `/plugin:command` and palette selection dispatch through identical runtime behavior
+- Dedicated plugin startup failure exit code (32-05) — aggregated plugin validation failures now terminate CLI startup with deterministic exit code `12`
+- Startup plugin diagnostics channel safety (32-05) — text diagnostics emit to stderr while JSON diagnostics emit to stdout-only payloads
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T20:20:30Z
-Stopped at: Completed 32-03-PLAN.md
+Last session: 2026-02-14T20:28:43Z
+Stopped at: Completed 32-05-PLAN.md
 Resume file: None
