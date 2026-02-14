@@ -13,13 +13,13 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - ✅ **v0.2.0 Effect Migration + Monorepo** — Phases 1-21.1 (shipped 2026-02-01, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
-- 🚧 **v0.2.1 CLI/TUI Developer Experience** — Phases 27-32 (in progress)
+- ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-32 (phase execution complete 2026-02-14, pending milestone audit/archive)
 
 ---
 
 ## Phases
 
-### 🚧 v0.2.1 CLI/TUI Developer Experience (In Progress)
+### ✅ v0.2.1 CLI/TUI Developer Experience (Phase Execution Complete)
 
 **Milestone Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
@@ -28,7 +28,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 29: Session Management** - Persistent sessions with export capabilities (completed 2026-02-09)
 - [x] **Phase 30: CLI Commands** - Headless operation and config validation (completed 2026-02-11)
 - [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-13)
-- [ ] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels
+- [x] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels (completed 2026-02-14)
 
 ## Phase Details
 
@@ -136,7 +136,7 @@ Plans:
 - [x] 32-02-PLAN.md — Build plugin discovery/loading manager with aggregated validation diagnostics (completed 2026-02-14, 3 min)
 - [x] 32-03-PLAN.md — Wire plugin CLI commands into dispatch and help with conflict-safe registration (completed 2026-02-14)
 - [x] 32-04-PLAN.md — Integrate plugin slash commands into TUI palette and typed slash flow (completed 2026-02-14, 5 min)
-- [ ] 32-05-PLAN.md — Add integrated plugin smoke coverage and deterministic startup failure exit codes
+- [x] 32-05-PLAN.md — Add integrated plugin smoke coverage and deterministic startup failure exit codes (completed 2026-02-14, 4 min)
 
 ## Progress
 
@@ -150,7 +150,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32
 | 29. Session Management | 4/4 | Complete | 2026-02-09 |
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
-| 32. Plugin Architecture | 4/5 | In progress | - |
+| 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
 
 ---
 
@@ -172,4 +172,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-14 - Completed 32-04 plan (plugin slash commands in TUI palette and typed flow)*
+*Last updated: 2026-02-14 - Phase 32 complete and verified (23/23 must-haves passed)*
