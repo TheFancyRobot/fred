@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 Phase: 33 of 36 (Default Launch Contract Alignment)
 Plan: 3 of 3 in current phase
 Status: In progress (awaiting human verification)
-Last activity: 2026-02-14 - Continued 33-03-PLAN.md after human verification feedback
+Last activity: 2026-02-14 - Continued 33-03-PLAN.md with chooser-first + persistence parity fixes after repeated human feedback
 
 Progress: [█████████░] 99% (147/148 plans complete)
 
@@ -99,6 +99,8 @@ Recent decisions affecting current work:
 - Startup chooser defaults to start-new with Enter confirmation (33-02) — existing-session startup is now explicit and deterministic instead of implicit auto-resume
 - Interactive config init fallback shown in TUI startup (33-02) — config load failures remain in guided flow via concise startup warning
 - Startup chooser timestamp normalization guard (33-03) — persisted session `updatedAt` values are coerced before sorting so chooser bootstrap and resume-last remain reliable
+- Chooser-first startup invariant (33-03) — interactive launch now opens startup chooser even when there are no pre-existing sessions unless initialSessionId is forced
+- No-config sqlite chat persistence fallback (33-03) — default chat launch now binds context storage to sqlite (`FRED_SQLITE_PATH` or `./fred.db`) so resume-last works across relaunches
 
 ### Pending Todos
 
@@ -129,6 +131,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T23:13:11Z
-Stopped at: Checkpoint pending re-verification for 33-03-PLAN.md
+Last session: 2026-02-14T23:26:36Z
+Stopped at: Checkpoint pending human re-verification for 33-03-PLAN.md after continuation fix commit 1002a6d
 Resume file: None
