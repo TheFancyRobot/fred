@@ -849,7 +849,18 @@ function updateTranscriptViewport(
 }
 
 function sortSessions(items: SessionListItem[]): SessionListItem[] {
-  return [...items].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+  const getUpdatedAtMs = (item: SessionListItem): number => {
+    const updatedAt = item.updatedAt;
+    if (updatedAt instanceof Date) {
+      const value = updatedAt.getTime();
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    const parsed = new Date(updatedAt as unknown as string | number | Date).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  return [...items].sort((left, right) => getUpdatedAtMs(right) - getUpdatedAtMs(left));
 }
 
 function getSelectedSessionIndex(items: SessionListItem[], selectedId: string | null): number {

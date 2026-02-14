@@ -9,11 +9,24 @@ export interface SessionServiceDependencies {
 
 const titleFallback = (summary: SessionSummary): string | null => summary.title ?? null;
 
+function normalizeUpdatedAt(value: unknown): Date {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value;
+  }
+
+  const normalized = new Date(value as string | number | Date);
+  if (Number.isFinite(normalized.getTime())) {
+    return normalized;
+  }
+
+  return new Date(0);
+}
+
 export function toSessionListItem(summary: SessionSummary): SessionListItem {
   return {
     id: summary.id,
     title: titleFallback(summary),
-    updatedAt: summary.updatedAt,
+    updatedAt: normalizeUpdatedAt(summary.updatedAt),
     agent: summary.agent ?? undefined,
     messageCount: summary.messageCount,
     preview: summary.preview ?? null,

@@ -125,11 +125,13 @@ function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
   } as KeyEvent;
 }
 
-function createSessionServiceFixture() {
+function createSessionServiceFixture(options: { serializeDates?: boolean } = {}) {
+  const asUpdatedAt = (iso: string) => options.serializeDates ? (iso as unknown as Date) : new Date(iso);
+
   const sessions = [
     {
       id: 's-latest',
-      updatedAt: new Date('2026-02-14T12:00:00Z'),
+      updatedAt: asUpdatedAt('2026-02-14T12:00:00Z'),
       title: 'Latest',
       messageCount: 1,
       preview: 'latest preview',
@@ -137,7 +139,7 @@ function createSessionServiceFixture() {
     },
     {
       id: 's-older',
-      updatedAt: new Date('2026-02-14T10:00:00Z'),
+      updatedAt: asUpdatedAt('2026-02-14T10:00:00Z'),
       title: 'Older',
       messageCount: 1,
       preview: 'older preview',
@@ -161,7 +163,7 @@ function createSessionServiceFixture() {
         ?? (id === 's-new'
           ? {
               id: 's-new',
-              updatedAt: new Date('2026-02-14T12:30:00Z'),
+              updatedAt: asUpdatedAt('2026-02-14T12:30:00Z'),
               title: null,
               messageCount: 0,
               preview: null,
@@ -365,5 +367,26 @@ describe('phase 33 launch contract smoke', () => {
 
     resumeApp.stop();
     resumeSetup.renderer.destroy();
+  });
+
+  test('startup chooser still appears when stored sessions return serialized timestamp values', async () => {
+    const fixture = createSessionServiceFixture({ serializeDates: true });
+    const setup = await createTestRenderer({ width: 120, height: 40 });
+    const app = FredTuiApp.createWithRenderer(setup.renderer, {}, fixture);
+    await Bun.sleep(20);
+
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+    expect(app.getState().sessions.items.map((item) => item.id)).toContain('s-latest');
+
+    app.processKey(makeKey({ name: 'up' }));
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    expect(app.getState().sessions.selectedId).toBe('s-latest');
+    expect(app.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
+    expect(app.getState().focusedPane).toBe('input');
+
+    app.stop();
+    setup.renderer.destroy();
   });
 });
