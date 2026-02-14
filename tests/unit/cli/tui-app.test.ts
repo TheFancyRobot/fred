@@ -9,6 +9,7 @@ import { describe, expect, test, afterEach } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { FredTuiApp } from '../../../packages/cli/src/tui/app.js';
+import type { TuiAppConfig } from '../../../packages/cli/src/tui/app.js';
 
 /**
  * Helper to create an OpenTUI KeyEvent for testing
@@ -43,13 +44,81 @@ describe('TUI App (OpenTUI integration)', () => {
     }
   });
 
-  async function createTestApp(events: Parameters<typeof FredTuiApp.createWithRenderer>[1] = {}) {
+  async function createTestApp(
+    events: Parameters<typeof FredTuiApp.createWithRenderer>[1] = {},
+    config: TuiAppConfig = {},
+  ) {
     testSetup = await createTestRenderer({
       width: 120,
       height: 40,
     });
-    app = FredTuiApp.createWithRenderer(testSetup.renderer, events);
+    app = FredTuiApp.createWithRenderer(testSetup.renderer, events, config);
     return { testSetup, app };
+  }
+
+  function createSessionServiceFixture() {
+    const sessions = [
+      {
+        id: 's-latest',
+        updatedAt: new Date('2026-02-14T12:00:00Z'),
+        title: 'Latest',
+        messageCount: 1,
+        preview: 'latest preview',
+        agent: { id: 'default', name: 'default' },
+      },
+      {
+        id: 's-older',
+        updatedAt: new Date('2026-02-14T10:00:00Z'),
+        title: 'Older',
+        messageCount: 1,
+        preview: 'older preview',
+        agent: { id: 'default', name: 'default' },
+      },
+    ];
+
+    const transcripts: Record<string, Array<{ role: string; content: string }>> = {
+      's-latest': [{ role: 'assistant', content: 'Welcome back latest' }],
+      's-older': [{ role: 'assistant', content: 'Welcome back older' }],
+      's-new': [],
+    };
+
+    const contextManager = {
+      listSessions: async () => sessions,
+      generateConversationId: () => 's-new',
+      getContext: async (_id: string) => ({ id: _id }),
+      updateMetadata: async (_id: string, _metadata: Record<string, unknown>) => undefined,
+      getSession: async (id: string) => {
+        const summary = sessions.find((session) => session.id === id)
+          ?? (id === 's-new'
+            ? {
+                id: 's-new',
+                updatedAt: new Date('2026-02-14T12:30:00Z'),
+                title: null,
+                messageCount: 0,
+                preview: null,
+                agent: { id: 'default', name: 'default' },
+              }
+            : null);
+        if (!summary) {
+          return null;
+        }
+
+        return {
+          summary,
+          messages: (transcripts[id] ?? []).map((message) => ({
+            ...message,
+            timestamp: new Date(),
+          })),
+        };
+      },
+      deleteSession: async (_id: string) => undefined,
+    };
+
+    return {
+      sessionService: {
+        contextManager: contextManager as any,
+      },
+    };
   }
 
   test('initial render shows all panes', async () => {
@@ -110,6 +179,54 @@ describe('TUI App (OpenTUI integration)', () => {
 
     expect(app.getState().input.text).toBe('hi');
     expect(app.getState().input.cursorPosition).toBe(2);
+  });
+
+  test('existing-session launch opens chooser with start-new selected by default', async () => {
+    const fixture = createSessionServiceFixture();
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
+
+    const state = app.getState();
+    expect(state.startup.chooser.isOpen).toBe(true);
+    expect(state.startup.chooser.selected).toBe('start-new-session');
+  });
+
+  test('Enter on chooser default creates new session and keeps input focus', async () => {
+    const fixture = createSessionServiceFixture();
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
+
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    const state = app.getState();
+    expect(state.startup.chooser.isOpen).toBe(false);
+    expect(state.sessions.selectedId).toBe('s-new');
+    expect(state.focusedPane).toBe('input');
+  });
+
+  test('resume option restores latest transcript and focuses input', async () => {
+    const fixture = createSessionServiceFixture();
+    await createTestApp({}, fixture);
+    await Bun.sleep(20);
+
+    app.processKey(makeKey({ name: 'up' }));
+    app.processKey(makeKey({ name: 'enter' }));
+    await Bun.sleep(20);
+
+    const state = app.getState();
+    expect(state.startup.chooser.isOpen).toBe(false);
+    expect(state.sessions.selectedId).toBe('s-latest');
+    expect(state.transcript.messages[0]?.content).toBe('Welcome back latest');
+    expect(state.focusedPane).toBe('input');
+  });
+
+  test('startup hint dismisses after first key interaction', async () => {
+    await createTestApp();
+    expect(app.getState().startup.hint.visible).toBe(true);
+
+    app.processKey(makeKey({ name: 'h' }));
+    expect(app.getState().startup.hint.visible).toBe(false);
   });
 
   test('Enter submits and clears input', async () => {

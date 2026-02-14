@@ -245,11 +245,43 @@ export function renderTranscriptContent(
   const { messages, viewport } = state.transcript;
   const maxWidth = options.maxWidth;
 
-  if (messages.length === 0) {
+  if (state.startup.chooser.isOpen) {
+    const resumeMarker = state.startup.chooser.selected === 'resume-last-session' ? '▸' : ' ';
+    const startNewMarker = state.startup.chooser.selected === 'start-new-session' ? '▸' : ' ';
+    const lines = [
+      '[Startup]',
+      ...(state.startup.warning ? [`warning: ${state.startup.warning}`] : []),
+      ...(state.startup.hint.visible ? [STARTUP_HINT] : []),
+      '',
+      `${resumeMarker} Resume last session`,
+      `${startNewMarker} Start new session`,
+      '',
+      'Enter to continue',
+    ];
+
     return {
-      lines: ['', 'Fred AI Framework', '', 'Type a message to begin...'],
+      lines,
       focusIndicator: focused ? '>' : undefined,
-      totalLines: 4,
+      totalLines: lines.length,
+      scrollOffset: 0,
+      pinnedToBottom: true,
+    };
+  }
+
+  if (messages.length === 0) {
+    const lines = [
+      '',
+      'Fred AI Framework',
+      '',
+      ...(state.startup.warning ? [`Startup warning: ${state.startup.warning}`] : []),
+      ...(state.startup.hint.visible ? [STARTUP_HINT] : []),
+      'Type a message to begin...',
+    ];
+
+    return {
+      lines,
+      focusIndicator: focused ? '>' : undefined,
+      totalLines: lines.length,
       scrollOffset: 0,
       pinnedToBottom: true,
     };
@@ -339,4 +371,4 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
 /**
  * Startup hint displayed before entering full shell
  */
-export const STARTUP_HINT = 'Starting Fred chat... Press Tab to cycle focus, Esc to quit.';
+export const STARTUP_HINT = 'Hint: Enter selects startup option. Status bar shows shortcuts.';

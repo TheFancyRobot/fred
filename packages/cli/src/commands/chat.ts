@@ -61,9 +61,11 @@ async function initializeFred(): Promise<{
   model: string;
   provider: string;
   pluginSlashCommands: PluginSlashCommandRuntime[];
+  startupWarning: string | null;
 }> {
   const fred = new Fred();
   let pluginSlashCommands: PluginSlashCommandRuntime[] = [];
+  let startupWarning: string | null = null;
 
   // Try to load project config
   const configResult = resolveProjectConfig();
@@ -98,10 +100,12 @@ async function initializeFred(): Promise<{
         model: result.model,
         provider: result.provider,
         pluginSlashCommands,
+        startupWarning,
       };
     } catch (error) {
       // Config exists but failed to initialize - fall through to auto-detection
-      console.warn(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
+      const reason = error instanceof Error ? error.message : String(error);
+      startupWarning = `Config load failed, using defaults: ${reason}`;
     }
   }
 
@@ -126,6 +130,7 @@ async function initializeFred(): Promise<{
     model: result.model,
     provider: result.provider,
     pluginSlashCommands,
+    startupWarning,
   };
 }
 
@@ -175,6 +180,7 @@ export async function handleChatCommand(): Promise<void> {
     let model: string;
     let provider: string;
     let pluginSlashCommands: PluginSlashCommandRuntime[];
+    let startupWarning: string | null;
 
     try {
       const initResult = await initializeFred();
@@ -182,6 +188,7 @@ export async function handleChatCommand(): Promise<void> {
       model = initResult.model;
       provider = initResult.provider;
       pluginSlashCommands = initResult.pluginSlashCommands;
+      startupWarning = initResult.startupWarning;
     } catch (error) {
       console.error('Failed to initialize AI provider:');
       console.error(error instanceof Error ? error.message : String(error));
@@ -239,6 +246,7 @@ export async function handleChatCommand(): Promise<void> {
       },
       initialSessionId: null,
       pluginSlashCommands,
+      startupWarning,
     });
 
     // Update telemetry with actual model info

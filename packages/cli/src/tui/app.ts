@@ -38,6 +38,11 @@ import {
   openDeleteConfirm,
   closeDeleteConfirm,
   isNewSessionActionSelected,
+  shouldOpenStartupChooser,
+  openStartupChooser,
+  closeStartupChooser,
+  dismissStartupHint,
+  setStartupWarning,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -68,6 +73,7 @@ import type { PluginSlashCommandExecutionContext } from '../plugin/api.js';
  */
 export interface TuiAppConfig {
   showStartupHint?: boolean;
+  startupWarning?: string | null;
   streamingFrameMs?: number;
   maxRenderQueue?: number;
   sessionService?: SessionServiceDependencies;
@@ -135,6 +141,7 @@ export class FredTuiApp {
         available: command.available,
       })),
     );
+    this.state = setStartupWarning(this.state, config.startupWarning ?? null);
     this.renderer = renderer;
     this.events = events;
     this.config = config;
@@ -196,15 +203,56 @@ export class FredTuiApp {
       const items = await loadSessions(this.sessionService);
       this.state = applySessionList(this.state, items, initialSessionId);
 
+      if (shouldOpenStartupChooser(items, initialSessionId)) {
+        this.state = openStartupChooser(this.state);
+        this.state = setFocusedPane(this.state, 'input');
+        this.events.onStateChange?.(this.state);
+        return;
+      }
+
       const selectedId = this.state.sessions.selectedId;
       if (selectedId) {
         const messages = await loadSessionTranscript(this.sessionService, selectedId);
         this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
       }
+      this.state = setFocusedPane(this.state, 'input');
       this.events.onStateChange?.(this.state);
     } catch (error) {
       this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
     }
+  }
+
+  private async confirmStartupChooserSelection(): Promise<void> {
+    const selected = this.state.startup.chooser.selected;
+    this.state = closeStartupChooser(this.state);
+
+    if (!this.sessionService) {
+      this.state = setFocusedPane(this.state, 'input');
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    try {
+      if (selected === 'start-new-session') {
+        const item = await createSession(this.sessionService);
+        this.state = addSession(this.state, item, { select: true });
+        const messages = await loadSessionTranscript(this.sessionService, item.id);
+        this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+      } else {
+        const selectedId = this.state.sessions.selectedId;
+        if (selectedId) {
+          const messages = await loadSessionTranscript(this.sessionService, selectedId);
+          this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+        }
+      }
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+
+    this.state = setFocusedPane(this.state, 'input');
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
   }
 
   private async ensureSessionSelected(): Promise<void> {
@@ -394,6 +442,10 @@ export class FredTuiApp {
 
     const action = mapKeyToAction(key, this.state);
 
+    if (action.type !== 'noop' && this.state.startup.hint.visible) {
+      this.state = dismissStartupHint(this.state);
+    }
+
     if (action.type === 'quit') {
       this.stop();
       return;
@@ -434,6 +486,11 @@ export class FredTuiApp {
       this.state = selectSidebarSelection(this.state);
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
+      return;
+    }
+
+    if (action.type === 'startup-chooser-confirm') {
+      void this.confirmStartupChooserSelection();
       return;
     }
 
