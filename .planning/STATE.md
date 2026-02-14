@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 33 of 36 (Default Launch Contract Alignment)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-14 - Completed 33-02-PLAN.md
+Plan: 3 of 3 in current phase
+Status: In progress (awaiting human verification)
+Last activity: 2026-02-14 - Continued 33-03-PLAN.md after human verification feedback
 
 Progress: [█████████░] 99% (147/148 plans complete)
 
@@ -98,6 +98,7 @@ Recent decisions affecting current work:
 - Shared non-interactive launch payload contract (33-01) — launch entrypoints use one JSON fallback shape and exit behavior in non-TTY mode
 - Startup chooser defaults to start-new with Enter confirmation (33-02) — existing-session startup is now explicit and deterministic instead of implicit auto-resume
 - Interactive config init fallback shown in TUI startup (33-02) — config load failures remain in guided flow via concise startup warning
+- Startup chooser timestamp normalization guard (33-03) — persisted session `updatedAt` values are coerced before sorting so chooser bootstrap and resume-last remain reliable
 
 ### Pending Todos
 
@@ -128,6 +129,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T22:38:30Z
-Stopped at: Completed 33-02-PLAN.md
+Last session: 2026-02-14T23:13:11Z
+Stopped at: Checkpoint pending re-verification for 33-03-PLAN.md
 Resume file: None
