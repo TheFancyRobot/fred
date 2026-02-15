@@ -169,7 +169,10 @@ Plans:
   1. Phase 29 has a complete `VERIFICATION.md` artifact under `.planning/phases/29-session-management/`
   2. Verification evidence explicitly covers `SESS-01` through `SESS-07`
   3. Session lifecycle flow is accepted by milestone audit standards after artifact recovery
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 34-01-PLAN.md — Recover deterministic Phase 29 verification artifact with complete SESS-01..SESS-07 evidence mapping
 
 ### Phase 35: Cross-Phase Smoke Contract Refresh
 **Goal**: Repair cross-phase smoke harnesses to match the current session-backed runtime contract and recover end-to-end confidence
