@@ -152,7 +152,12 @@ Plans:
   2. `fred tui` and `fred` no-args follow equivalent interactive launch behavior
   3. Non-TTY mode still degrades gracefully and terminal cleanup semantics remain intact
   4. Launch smoke coverage validates both default and explicit TUI entry paths
-**Plans**: 0 plans
+**Plans**: 3 plans
+
+Plans:
+- [ ] 33-01-PLAN.md — Align no-args and `tui` command routing with shared non-TTY fallback contract
+- [ ] 33-02-PLAN.md — Implement startup chooser UX (resume/new), input-focus handoff, and concise launch guidance
+- [ ] 33-03-PLAN.md — Add dedicated Phase 33 launch smoke coverage and run blocking human parity checkpoint
 
 ### Phase 34: Session Verification Recovery
 **Goal**: Restore formal acceptance of session management by generating complete deterministic verification evidence for Phase 29
@@ -201,7 +206,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
-| 33. Default Launch Contract Alignment | 0/0 | Pending | - |
+| 33. Default Launch Contract Alignment | 0/3 | Pending | - |
 | 34. Session Verification Recovery | 0/0 | Pending | - |
 | 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |

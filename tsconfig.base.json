@@ -10,6 +10,11 @@
     "declaration": true,
     "declarationMap": true,
     "composite": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ],
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noEmit": false,
