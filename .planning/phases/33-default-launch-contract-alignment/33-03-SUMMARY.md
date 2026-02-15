@@ -7,17 +7,17 @@ tags: [cli, tui, sessions, startup-chooser, testing]
 # Dependency graph
 requires:
   - phase: 33-01
-    provides: no-args and tui/chat launch parity contract
+    provides: chat-primary launch contract with no-args and tui alias routing
   - phase: 33-02
     provides: startup chooser flow and startup warning integration
 provides:
-  - launch parity smoke harness coverage for phase 33
+  - chat-primary launch smoke harness coverage for phase 33
   - startup chooser resilience when persisted timestamps are serialized
   - chooser-first interactive startup even when no prior sessions exist
   - sqlite-backed persistence for no-config CLI chat relaunch continuity
   - stable startup chooser affordance without dismissible hint copy
   - resume-previous chooser handoff to sidebar before transcript restore
-  - human-verified launch parity contract approval for startup chooser and resume flow
+  - human-verified chat-primary launch hierarchy approval for startup chooser and resume flow
 affects: [phase-33-acceptance, cli-launch-contract, tui-session-bootstrap]
 
 # Tech tracking
@@ -76,7 +76,7 @@ completed: 2026-02-15
 - Added no-config sqlite persistence wiring so start-new sessions survive relaunch and can be resumed.
 - Replaced disappearing startup hint line with stable chooser affordances (persistent instruction line, stronger marker, header/selection emphasis).
 - Updated resume chooser flow to hand off to sidebar selection before transcript load, then focus input after sidebar confirmation.
-- Completed blocking manual parity verification with approval of final chooser UX behavior.
+- Completed blocking manual verification with approval of the chat-primary hierarchy (`fred chat` primary; `fred` and `fred tui` parity aliases).
 
 ## Task Commits
 
@@ -178,7 +178,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 - Automated parity matrix and typecheck are green after continuation fixes.
-- Human checkpoint approved: launch contract parity validated for no-args and `tui` in TTY and non-TTY modes.
+- Human checkpoint approved: launch contract hierarchy validated with `fred chat` as primary interactive entrypoint and no-args/`tui` alias parity in TTY and non-TTY modes.
 - Accepted UX contract: startup chooser defaults to Start new, Enter starts focused chat, Resume path restores via sidebar confirmation then returns focus to input.
 
 ---

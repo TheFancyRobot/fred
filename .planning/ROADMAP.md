@@ -143,15 +143,15 @@ Plans:
 - [x] 32-05-PLAN.md — Add integrated plugin smoke coverage and deterministic startup failure exit codes (completed 2026-02-14, 4 min)
 
 ### Phase 33: Default Launch Contract Alignment
-**Goal**: Align no-args CLI launch contract with requirement `TUI-01` so `fred` and `fred tui` both start interactive TUI behavior in TTY environments
+**Goal**: Align interactive launch contract with requirement `TUI-01` so `fred chat` is the primary interactive entrypoint, with `fred` no-args and `fred tui` as parity aliases of the same TTY launch path
 **Depends on**: Phase 27, Phase 28
 **Requirements**: TUI-01
 **Gap Closure**: Closes v0.2.1 audit gaps for default-launch contract drift (`gaps.requirements`, `gaps.integration`, `gaps.flows`)
 **Success Criteria** (what must be TRUE):
-  1. `fred` with no arguments enters interactive TUI in TTY environments
-  2. `fred tui` and `fred` no-args follow equivalent interactive launch behavior
-  3. Non-TTY mode still degrades gracefully and terminal cleanup semantics remain intact
-  4. Launch smoke coverage validates both default and explicit TUI entry paths
+  1. `fred chat` is the primary interactive TUI entrypoint in TTY environments
+  2. `fred` with no arguments and `fred tui` are parity aliases of the same `fred chat` interactive contract
+  3. Non-TTY mode still degrades gracefully with consistent fallback semantics across `fred`, `fred chat`, and `fred tui`
+  4. Launch smoke coverage explicitly validates canonical-entry hierarchy (`chat` primary, no-args/`tui` aliases)
 **Plans**: 3 plans
 
 Plans:
