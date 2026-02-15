@@ -30,7 +30,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-13)
 - [x] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels (completed 2026-02-14)
 - [x] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance (completed 2026-02-15)
-- [ ] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence
+- [x] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence (completed 2026-02-15)
 - [ ] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage
 - [ ] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed)
 
@@ -172,7 +172,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 34-01-PLAN.md — Recover deterministic Phase 29 verification artifact with complete SESS-01..SESS-07 evidence mapping
+- [x] 34-01-PLAN.md — Recover deterministic Phase 29 verification artifact with complete SESS-01..SESS-07 evidence mapping (completed 2026-02-15, 2 min)
 
 ### Phase 35: Cross-Phase Smoke Contract Refresh
 **Goal**: Repair cross-phase smoke harnesses to match the current session-backed runtime contract and recover end-to-end confidence
@@ -211,7 +211,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
 | 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
-| 34. Session Verification Recovery | 0/0 | Pending | - |
+| 34. Session Verification Recovery | 1/1 | Complete | 2026-02-15 |
 | 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |
 
@@ -235,4 +235,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-15 - Completed and re-verified Phase 33 launch contract alignment after chat-primary contract wording closure (plan 04)*
+*Last updated: 2026-02-15 - Completed and verified Phase 34 session verification recovery (Phase 29 acceptance artifact restored)*
