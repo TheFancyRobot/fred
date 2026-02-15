@@ -108,8 +108,17 @@ class MockFred {
   }
 }
 
+class MockSqliteContextStorage {
+  options: { path?: string };
+
+  constructor(options: { path?: string } = {}) {
+    this.options = options;
+  }
+}
+
 mock.module('@fancyrobot/fred', () => ({
   Fred: MockFred,
+  SqliteContextStorage: MockSqliteContextStorage,
   registerBuiltinPack: mock(() => {}), // Mock for provider package imports
 }));
 

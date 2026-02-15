@@ -234,14 +234,13 @@ describe('phase 33 launch contract smoke', () => {
     (process as any).exit = originalExit;
   });
 
-  test('no-args and tui entrypoints share the interactive launch handler route', async () => {
+  test('chat is the canonical interactive command and no-args/tui are aliases of the same launch handler', async () => {
     const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
     const source = await Bun.file(indexPath).text();
 
     expect(source).toContain("const command = args[0] || 'chat';");
-    expect(source).toContain("case 'chat':");
-    expect(source).toContain("case 'tui':");
-    expect(source).toContain('await handleChatCommand();');
+    expect(source).toMatch(/case 'chat':\s*case 'tui':[\s\S]*?await handleChatCommand\(\);/);
+    expect(source.match(/await handleChatCommand\(\);/g)?.length).toBe(1);
   });
 
   test('explicit help flags remain help-only and do not route into launch flow', () => {
@@ -260,7 +259,7 @@ describe('phase 33 launch contract smoke', () => {
     expect(resolveCommand(['tui'])).toBe('tui');
   });
 
-  test('TTY mode resolves interactive launch path and fallback persistence contract', async () => {
+  test('TTY mode keeps chat-primary launch semantics with no-args/tui alias behavior', async () => {
     const mockStdin = {
       isTTY: true,
       isRaw: false,
@@ -299,7 +298,7 @@ describe('phase 33 launch contract smoke', () => {
     expect(resolveCommand(['tui'])).toBe('tui');
   });
 
-  test('non-TTY guidance and exit semantics stay equivalent across no-args/tui/chat', async () => {
+  test('non-TTY fallback contract stays equivalent for chat and its no-args/tui aliases', async () => {
     const mockStdin = {
       isTTY: false,
     } as any;
@@ -334,7 +333,18 @@ describe('phase 33 launch contract smoke', () => {
       expect(parsed).toEqual(expected);
       expect(exitCode).toBe(1);
 
+      const resolveCommand = (args: string[]) => {
+        const firstArg = args[0];
+        if (firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+          return 'help';
+        }
+        return firstArg || 'chat';
+      };
+
       const entrypoints = [[], ['tui'], ['chat']];
+      const commands = entrypoints.map((entrypoint) => resolveCommand(entrypoint));
+      expect(commands).toEqual(['chat', 'tui', 'chat']);
+
       for (const _entrypoint of entrypoints) {
         expect(createNonInteractiveFallbackPayload(mode.reason)).toEqual(expected);
       }
