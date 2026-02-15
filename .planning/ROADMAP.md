@@ -152,13 +152,13 @@ Plans:
   2. `fred` with no arguments and `fred tui` are parity aliases of the same `fred chat` interactive contract
   3. Non-TTY mode still degrades gracefully with consistent fallback semantics across `fred`, `fred chat`, and `fred tui`
   4. Launch smoke coverage explicitly validates canonical-entry hierarchy (`chat` primary, no-args/`tui` aliases)
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 33-01-PLAN.md — Align no-args and `tui` command routing with shared non-TTY fallback contract (completed 2026-02-14)
 - [x] 33-02-PLAN.md — Implement startup chooser UX (resume/new), input-focus handoff, and concise launch guidance (completed 2026-02-14)
 - [x] 33-03-PLAN.md — Add dedicated Phase 33 launch smoke coverage and run blocking human parity checkpoint (completed 2026-02-15)
-- [ ] 33-04-PLAN.md — Close UAT contract-language gap by codifying `fred chat` as primary entrypoint and refreshing hierarchy smoke assertions
+- [x] 33-04-PLAN.md — Close UAT contract-language gap by codifying `fred chat` as primary entrypoint and refreshing hierarchy smoke assertions (completed 2026-02-15)
 
 ### Phase 34: Session Verification Recovery
 **Goal**: Restore formal acceptance of session management by generating complete deterministic verification evidence for Phase 29
@@ -207,7 +207,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
-| 33. Default Launch Contract Alignment | 3/3 | Complete | 2026-02-15 |
+| 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 0/0 | Pending | - |
 | 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |
@@ -232,4 +232,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-15 - Completed Phase 33 launch contract alignment (plans + verification)*
+*Last updated: 2026-02-15 - Completed Phase 33 launch contract alignment including chat-primary contract wording closure (plan 04)*
