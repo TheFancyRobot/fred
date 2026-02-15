@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 gap-closure execution in progress — Phase 33 complete and re-verified after gap closure, Phase 34 ready
+**Current focus:** v0.2.1 gap-closure execution in progress — Phase 34 verification recovery complete, Phase 35 ready
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 33 of 36 (Default Launch Contract Alignment)
-Plan: 4 of 4 in current phase
+Phase: 34 of 36 (Session Verification Recovery)
+Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-02-15 - Phase 33 verification passed after 33-04 gap closure (4/4 must-haves)
+Last activity: 2026-02-15 - Completed 34-01-PLAN.md (recovered Phase 29 verification artifact)
 
-Progress: [██████████] 100% (149/149 plans complete)
+Progress: [██████████] 100% (150/150 plans complete)
 
 ## Performance Metrics
 
@@ -106,6 +106,8 @@ Recent decisions affecting current work:
 - Human parity approval captured for launch contract (33-03) — no-args and `tui` verified equivalent across TTY/non-TTY with accepted chooser-first UX behavior
 - Phase 33 goal verification passed (33) — automated must-haves validated and human checkpoint approved for launch parity and cleanup acceptance
 - Chat-primary acceptance hierarchy codified across Phase 33 artifacts (33-04) — `fred chat` recorded as primary interactive entrypoint with `fred` no-args and `fred tui` as parity aliases in roadmap/UAT/smoke contract language
+- Conservative verification verdict routing for recovery artifacts (34-01) — `passed` only when all `SESS-01..SESS-07` have explicit deterministic proof
+- Decisive-lines evidence reporting for audit artifacts (34-01) — capture fixed command exit codes and key outcome lines, not raw log dumps
 
 ### Pending Todos
 
@@ -136,6 +138,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-15T00:43:45Z
-Stopped at: Phase 33 complete and verified after 33-04 gap closure; ready for Phase 34
+Last session: 2026-02-15T02:04:16Z
+Stopped at: Completed 34-01-PLAN.md
 Resume file: None
