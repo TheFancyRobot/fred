@@ -184,7 +184,12 @@ Plans:
   2. TUI boot + streaming smoke harness passes with refreshed contracts
   3. Cross-phase integration checks no longer report stale-contract regressions between phases 27/28/29
   4. Milestone smoke evidence is refreshed for audit rerun
-**Plans**: 0 plans
+**Plans**: 3 plans
+
+Plans:
+- [ ] 35-01-PLAN.md — Align phase smoke harnesses to a shared session-aware Fred mock contract and add explicit stale-contract guard coverage
+- [ ] 35-02-PLAN.md — Build consolidated non-fail-fast cross-phase smoke runner with machine-first JSON evidence output
+- [ ] 35-03-PLAN.md — Refresh final audit rerun evidence and cross-phase linkage proof from consolidated smoke results
 
 ### Phase 36: Runtime & Test Hardening
 **Goal**: Address deferred reliability debt from milestone audit to improve channel consistency and test determinism
@@ -212,7 +217,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
 | 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 1/1 | Complete | 2026-02-15 |
-| 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
+| 35. Cross-Phase Smoke Contract Refresh | 0/3 | Pending | - |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |
 
 ---
@@ -235,4 +240,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-15 - Completed and verified Phase 34 session verification recovery (Phase 29 acceptance artifact restored)*
+*Last updated: 2026-02-15 - Planned Phase 35 cross-phase smoke contract refresh (3 plans) after Phase 34 verification recovery*
