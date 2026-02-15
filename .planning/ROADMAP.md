@@ -31,7 +31,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels (completed 2026-02-14)
 - [x] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance (completed 2026-02-15)
 - [x] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence (completed 2026-02-15)
-- [ ] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage
+- [x] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage (completed 2026-02-15)
 - [ ] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed)
 
 ## Phase Details
@@ -187,9 +187,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 35-01-PLAN.md — Align phase smoke harnesses to a shared session-aware Fred mock contract and add explicit stale-contract guard coverage
-- [ ] 35-02-PLAN.md — Build consolidated non-fail-fast cross-phase smoke runner with machine-first JSON evidence output
-- [ ] 35-03-PLAN.md — Refresh final audit rerun evidence and cross-phase linkage proof from consolidated smoke results
+- [x] 35-01-PLAN.md — Align phase smoke harnesses to a shared session-aware Fred mock contract and add explicit stale-contract guard coverage (completed 2026-02-15, 4 min)
+- [x] 35-02-PLAN.md — Build consolidated non-fail-fast cross-phase smoke runner with machine-first JSON evidence output (completed 2026-02-15, 3 min)
+- [x] 35-03-PLAN.md — Refresh final audit rerun evidence and cross-phase linkage proof from consolidated smoke results (completed 2026-02-15, 2 min)
 
 ### Phase 36: Runtime & Test Hardening
 **Goal**: Address deferred reliability debt from milestone audit to improve channel consistency and test determinism
@@ -217,7 +217,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
 | 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 1/1 | Complete | 2026-02-15 |
-| 35. Cross-Phase Smoke Contract Refresh | 0/3 | Pending | - |
+| 35. Cross-Phase Smoke Contract Refresh | 3/3 | Complete | 2026-02-15 |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |
 
 ---
@@ -240,4 +240,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-15 - Planned Phase 35 cross-phase smoke contract refresh (3 plans) after Phase 34 verification recovery*
+*Last updated: 2026-02-15 - Completed and verified Phase 35 cross-phase smoke contract refresh (3/3 plans, 4/4 must-haves)*
