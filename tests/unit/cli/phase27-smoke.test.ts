@@ -11,6 +11,11 @@
 
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
+import {
+  createMockContextManager,
+  createMockFredClass,
+  installFredSmokeContractMock,
+} from './fixtures/fred-smoke-contract';
 
 // We mock createFredTuiApp at the module level so handleChatCommand
 // doesn't try to create a real OpenTUI renderer in TTY mode tests.
@@ -33,94 +38,14 @@ const expectedNonInteractivePayload = {
   help: 'Use fred --help for other commands',
 };
 
-const mockContextManager = {
+const mockContextManager = createMockContextManager({
   generateConversationId: () => 'conv_smoke_test',
-};
-
-// Mock Fred class to avoid actual provider initialization
-class MockFred {
-  private agents: any[] = [];
-  private providers: Map<string, any> = new Map();
-  private defaultAgentId: string | null = null;
-
-  async registerDefaultProviders() {
-    // Register fake providers
-    this.providers.set('openai', { id: 'openai' });
-    this.providers.set('anthropic', { id: 'anthropic' });
-    this.providers.set('google', { id: 'google' });
-    this.providers.set('groq', { id: 'groq' });
-    this.providers.set('openrouter', { id: 'openrouter' });
-  }
-
-  async setToolPolicies() {
-    // no-op for smoke tests
-  }
-
-  async initializeFromConfig() {
-    // Add a fake agent immediately
-    this.agents.push({ platform: 'openai', model: 'gpt-4o-mini', id: '__mock__' });
-    this.providers.set('openai', { id: 'openai' });
-  }
-
-  getAgents() {
-    return this.agents;
-  }
-
-  getAgent(id: string) {
-    return this.agents.find((agent) => agent.id === id);
-  }
-
-  getContextManager() {
-    return mockContextManager;
-  }
-
-  getDefaultAgentId() {
-    return this.defaultAgentId;
-  }
-
-  setDefaultAgent(agentId: string) {
-    this.defaultAgentId = agentId;
-  }
-
-  useProvider(platform: string) {
-    // Register provider if not already registered
-    if (!this.providers.has(platform)) {
-      this.providers.set(platform, { id: platform });
-    }
-    return Promise.resolve({ id: platform });
-  }
-
-  createAgent(config: any) {
-    // Add the agent to the list
-    this.agents.push({ ...config, id: config.id || '__test_agent__' });
-    if (!this.defaultAgentId) {
-      this.defaultAgentId = config.id || '__test_agent__';
-    }
-    return Promise.resolve(this.agents[this.agents.length - 1]);
-  }
-
-  streamMessage() {
-    return {
-      fullStream: (async function* () {
-        yield { type: 'token', delta: 'test' };
-      })(),
-    };
-  }
-}
-
-class MockSqliteContextStorage {
-  options: { path?: string };
-
-  constructor(options: { path?: string } = {}) {
-    this.options = options;
-  }
-}
-
-mock.module('@fancyrobot/fred', () => ({
-  Fred: MockFred,
-  SqliteContextStorage: MockSqliteContextStorage,
-  registerBuiltinPack: mock(() => {}), // Mock for provider package imports
-}));
+});
+const MockFred = createMockFredClass({
+  contextManager: mockContextManager,
+  defaultStreamDelta: 'test',
+});
+installFredSmokeContractMock({ FredClass: MockFred });
 
 mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
   DEV_CHAT_PROVIDER_PACKAGES: {
@@ -132,7 +57,7 @@ mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
   },
   detectAvailableProvider: () => ({ platform: 'openai', model: 'gpt-4o-mini' }),
   loadProviderPackage: async () => {},
-  ensureDefaultChatAgent: async (fred: MockFred) => {
+  ensureDefaultChatAgent: async (fred: InstanceType<typeof MockFred>) => {
     if (fred.getAgents().length === 0) {
       await fred.createAgent({
         id: '__tui_agent__',
@@ -223,6 +148,7 @@ describe('phase 27 smoke', () => {
         process.env[key] = value;
       }
     }
+
   });
 
   describe('bare command path launch parity', () => {
