@@ -29,7 +29,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 30: CLI Commands** - Headless operation and config validation (completed 2026-02-11)
 - [x] **Phase 31: CLI Testing & Debugging** - Advanced debugging and evaluation commands (completed 2026-02-13)
 - [x] **Phase 32: Plugin Architecture** - Extensible plugin system for custom commands and panels (completed 2026-02-14)
-- [ ] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance
+- [x] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance (completed 2026-02-15)
 - [ ] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence
 - [ ] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage
 - [ ] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed)
@@ -155,9 +155,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 33-01-PLAN.md — Align no-args and `tui` command routing with shared non-TTY fallback contract
-- [ ] 33-02-PLAN.md — Implement startup chooser UX (resume/new), input-focus handoff, and concise launch guidance
-- [ ] 33-03-PLAN.md — Add dedicated Phase 33 launch smoke coverage and run blocking human parity checkpoint
+- [x] 33-01-PLAN.md — Align no-args and `tui` command routing with shared non-TTY fallback contract (completed 2026-02-14)
+- [x] 33-02-PLAN.md — Implement startup chooser UX (resume/new), input-focus handoff, and concise launch guidance (completed 2026-02-14)
+- [x] 33-03-PLAN.md — Add dedicated Phase 33 launch smoke coverage and run blocking human parity checkpoint (completed 2026-02-15)
 
 ### Phase 34: Session Verification Recovery
 **Goal**: Restore formal acceptance of session management by generating complete deterministic verification evidence for Phase 29
@@ -206,7 +206,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 30. CLI Commands | 3/3 | Complete | 2026-02-11 |
 | 31. CLI Testing & Debugging | 4/4 | Complete | 2026-02-13 |
 | 32. Plugin Architecture | 5/5 | Complete | 2026-02-14 |
-| 33. Default Launch Contract Alignment | 0/3 | Pending | - |
+| 33. Default Launch Contract Alignment | 3/3 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 0/0 | Pending | - |
 | 35. Cross-Phase Smoke Contract Refresh | 0/0 | Pending | - |
 | 36. Runtime & Test Hardening | 0/0 | Pending | - |
@@ -231,4 +231,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-14 - Added v0.2.1 gap-closure phases 33-36 from milestone audit*
+*Last updated: 2026-02-15 - Completed Phase 33 launch contract alignment (plans + verification)*
