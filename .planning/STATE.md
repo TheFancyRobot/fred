@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 gap-closure execution in progress — Phase 35 plan 02 complete, plan 03 ready
+**Current focus:** v0.2.1 gap-closure execution in progress — Phase 35 complete, preparing Phase 36 hardening
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 35 of 36 (Cross-Phase Smoke Contract Refresh)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-15 - Completed 35-02-PLAN.md
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-15 - Completed 35-03-PLAN.md
 
-Progress: [█████████░] 97% (153/157 plans complete)
+Progress: [█████████░] 98% (154/157 plans complete)
 
 ## Performance Metrics
 
@@ -112,6 +112,8 @@ Recent decisions affecting current work:
 - Explicit stale-contract diagnostic channel in smoke guard coverage (35-01) — `STALE_CONTRACT` now surfaces actionable fixture remediation instead of opaque runtime errors
 - Consolidated non-fail-fast phase smoke gate (35-02) — launch/stream/session-TUI/session-CLI suites now run sequentially under one deterministic verdict
 - Machine-first cross-phase smoke evidence contract (35-02) — per-check exit codes + decisive lines + linkage are persisted for CI/audit reruns
+- Requirement-to-check evidence traceability in audit companion (35-03) — `TUI-08` and `SESS-01..SESS-07` are now mapped to concrete smoke checks and JSON paths
+- Explicit stale-contract absence reporting in rerun evidence (35-03) — audit replay now verifies `STALE_CONTRACT` status directly instead of by inference
 
 ### Pending Todos
 
@@ -142,6 +144,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-15T06:40:19Z
-Stopped at: Completed 35-02-PLAN.md
+Last session: 2026-02-15T06:43:37Z
+Stopped at: Completed 35-03-PLAN.md
 Resume file: None
