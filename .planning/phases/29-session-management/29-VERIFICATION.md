@@ -1,51 +1,83 @@
-# Phase 29 Verification Evidence Draft (Task 1 Inputs)
+---
+phase: 29-session-management
+verified: 2026-02-15T02:02:18Z
+status: passed
+score: 7/7 must-haves verified
+---
 
-## Deterministic command bundle run
+# Phase 29: Session Management Verification Report
 
-- Command: `bun test tests/unit/core/context/session.test.ts tests/unit/cli/session-commands.test.ts`
-  - Exit code: 0
+**Phase Goal:** Verify deterministic acceptance evidence for session management requirements `SESS-01` through `SESS-07` using reproducible command output and concrete implementation/test artifacts.
+**Verified:** 2026-02-15T02:02:18Z
+**Status:** passed
+
+## Goal Achievement
+
+### Observable Truths
+
+| # | Truth | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Phase 29 has a deterministic verification artifact with explicit verdict and score | ✓ VERIFIED | Frontmatter includes `status: passed` and `score: 7/7 must-haves verified`, and all required report sections are present in this artifact. |
+| 2 | `SESS-01` through `SESS-07` each have requirement-level proof mapped to tests + implementation artifacts | ✓ VERIFIED | Requirements table below provides explicit per-requirement mappings to named test files and source files. |
+| 3 | Verification evidence is reproducible via fixed commands with exit codes and decisive lines | ✓ VERIFIED | Command bundle includes two fixed `bun test` invocations; both exited `0` with decisive lines (`11 pass/0 fail`, `111 pass/0 fail`). |
+| 4 | Phase 29 verification artifact blocker is resolved | ✓ VERIFIED | `.planning/phases/29-session-management/29-VERIFICATION.md` now exists with full acceptance evidence and conservative verdict routing. |
+
+### Required Artifacts
+
+| Artifact | Expected | Status | Details |
+| --- | --- | --- | --- |
+| `.planning/phases/29-session-management/29-VERIFICATION.md` | Recovered acceptance artifact with complete SESS coverage | ✓ VERIFIED | Present and contains explicit `SESS-01`..`SESS-07`, command evidence, verdict fields, and gap semantics. |
+| `tests/unit/cli/session-commands.test.ts` | CLI proof for list/show/export/rm requirements | ✓ VERIFIED | Covers `list` table + JSON, `show`, `export`, `rm` confirmation semantics. |
+| `tests/unit/cli/tui/session-state.test.ts` | TUI proof for list/switch/create behavior | ✓ VERIFIED | Covers session selection transitions, switching behavior, and new-session state updates. |
+| `tests/unit/cli/tui/session-delete.test.ts` | Deterministic deletion lifecycle proof | ✓ VERIFIED | Covers delete confirm lifecycle and post-delete state selection behavior. |
+
+### Key Link Verification
+
+| From | To | Via | Status | Details |
+| --- | --- | --- | --- | --- |
+| `.planning/phases/29-session-management/29-VERIFICATION.md` | `tests/unit/core/context/session.test.ts` | command evidence and requirement traceability entries | WIRED | Command bundle includes core session test file and links it to `SESS-06` serializer/export guarantees. |
+| `.planning/phases/29-session-management/29-VERIFICATION.md` | `tests/unit/cli/session-commands.test.ts` | `SESS-04` through `SESS-07` command/source references | WIRED | `SESS-04..07` rows reference CLI test coverage and `packages/cli/src/commands/session.ts`. |
+| `.planning/phases/29-session-management/29-VERIFICATION.md` | `tests/unit/cli/tui/session-state.test.ts` | `SESS-01` through `SESS-03` proof linkage | WIRED | `SESS-01..03` rows reference TUI state test plus related TUI implementation files. |
+
+### Deterministic Command Evidence
+
+Environment baseline:
+- Platform: Linux
+- Bun: `bun v1.3.5`
+- Required env vars: none
+
+Command outcomes (decisive lines only):
+- `bun test tests/unit/core/context/session.test.ts tests/unit/cli/session-commands.test.ts`
+  - Exit code: `0`
   - Decisive lines: `11 pass`, `0 fail`, `Ran 11 tests across 2 files.`
-- Command: `bun test tests/unit/cli/tui/session-state.test.ts tests/unit/cli/tui/session-delete.test.ts tests/unit/cli/tui-layout.test.ts tests/unit/cli/tui-keymap.test.ts tests/unit/cli/tui-app.test.ts`
-  - Exit code: 0
+- `bun test tests/unit/cli/tui/session-state.test.ts tests/unit/cli/tui/session-delete.test.ts tests/unit/cli/tui-layout.test.ts tests/unit/cli/tui-keymap.test.ts tests/unit/cli/tui-app.test.ts`
+  - Exit code: `0`
   - Decisive lines: `111 pass`, `0 fail`, `Ran 111 tests across 5 files.`
 
-## Requirement to evidence mapping draft (SESS-01..SESS-07)
+### Requirements Coverage
 
-- `SESS-01` (TUI session list + metadata)
-  - Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-layout.test.ts`, `tests/unit/cli/tui-app.test.ts`
-  - Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/layout.ts`, `packages/cli/src/tui/app.ts`
-  - Notes: Sidebar rendering and metadata fields covered by deterministic unit/integration assertions.
+| Requirement | Status | Evidence Notes |
+| --- | --- | --- |
+| `SESS-01`: view session list in TUI sidebar with metadata | ✓ SATISFIED | Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-layout.test.ts`, `tests/unit/cli/tui-app.test.ts`; Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/layout.ts`, `packages/cli/src/tui/app.ts`. |
+| `SESS-02`: switch sessions in TUI sidebar | ✓ SATISFIED | Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-app.test.ts`; Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/session.ts`, `packages/cli/src/tui/keymap.ts`. |
+| `SESS-03`: create a new session from TUI | ✓ SATISFIED | Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-layout.test.ts`, `tests/unit/cli/tui-app.test.ts`; Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/layout.ts`, `packages/cli/src/tui/app.ts`. |
+| `SESS-04`: `fred session list` table + `--json` output | ✓ SATISFIED | Tests: `tests/unit/cli/session-commands.test.ts`; Artifacts: `packages/cli/src/commands/session.ts`; assertions include table headers and JSON payload structure. |
+| `SESS-05`: `fred session show <id>` transcript output | ✓ SATISFIED | Tests: `tests/unit/cli/session-commands.test.ts`; Artifacts: `packages/cli/src/commands/session.ts`; assertion verifies markdown transcript output. |
+| `SESS-06`: `fred session export <id>` JSON + markdown formats | ✓ SATISFIED | Tests: `tests/unit/cli/session-commands.test.ts`, `tests/unit/core/context/session.test.ts`; Artifacts: `packages/cli/src/commands/session.ts`, `packages/core/src/context/session.ts`, `packages/core/src/context/manager.ts`. |
+| `SESS-07`: `fred session rm <id>` delete behavior | ✓ SATISFIED | Tests: `tests/unit/cli/session-commands.test.ts`, `tests/unit/cli/tui/session-delete.test.ts`; Artifacts: `packages/cli/src/commands/session.ts`, `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/app.ts`. |
 
-- `SESS-02` (switch sessions in TUI sidebar)
-  - Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-app.test.ts`
-  - Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/session.ts`, `packages/cli/src/tui/keymap.ts`
-  - Notes: Selection and session switching behavior has state-level and app-level coverage.
+Conservative verdict routing applied:
+- `passed` only if all seven requirements are clearly evidenced.
+- `gaps_found` if any requirement is missing or ambiguous.
+- `human_needed` only for intermittent/flaky evidence paths.
 
-- `SESS-03` (create new session from TUI)
-  - Tests: `tests/unit/cli/tui/session-state.test.ts`, `tests/unit/cli/tui-layout.test.ts`, `tests/unit/cli/tui-app.test.ts`
-  - Artifacts: `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/layout.ts`, `packages/cli/src/tui/app.ts`
-  - Notes: New-session action and chooser flows are covered deterministically.
+Result: all seven requirements have deterministic command-backed and artifact-backed coverage, so `status: passed`.
 
-- `SESS-04` (`fred session list` table + `--json`)
-  - Tests: `tests/unit/cli/session-commands.test.ts`
-  - Artifacts: `packages/cli/src/commands/session.ts`
-  - Notes: Table and JSON output paths are validated.
+### Gaps Summary
 
-- `SESS-05` (`fred session show <id>` transcript view)
-  - Tests: `tests/unit/cli/session-commands.test.ts`
-  - Artifacts: `packages/cli/src/commands/session.ts`
-  - Notes: Show command markdown transcript output is validated.
+None. No missing or ambiguous requirement evidence was found for `SESS-01` through `SESS-07`.
 
-- `SESS-06` (`fred session export <id>` JSON + markdown)
-  - Tests: `tests/unit/cli/session-commands.test.ts`, `tests/unit/core/context/session.test.ts`
-  - Artifacts: `packages/cli/src/commands/session.ts`, `packages/core/src/context/session.ts`, `packages/core/src/context/manager.ts`
-  - Notes: Export command wiring and serializer/formatter behavior are both covered.
+---
 
-- `SESS-07` (`fred session rm <id>`)
-  - Tests: `tests/unit/cli/session-commands.test.ts`, `tests/unit/cli/tui/session-delete.test.ts`
-  - Artifacts: `packages/cli/src/commands/session.ts`, `packages/cli/src/tui/state.ts`, `packages/cli/src/tui/app.ts`
-  - Notes: CLI confirmation path and TUI deletion lifecycle are both covered.
-
-## Gap candidates discovered in Task 1
-
-- None identified from deterministic test bundle output and current requirement-artifact mapping draft.
+_Verified: 2026-02-15T02:02:18Z_
+_Verifier: Claude (gsd plan executor)_
