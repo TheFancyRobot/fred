@@ -99,7 +99,7 @@ Plans:
   2. User can list registered agents, tools, intents, providers, and workflows via `fred list <type>` commands
   3. User can validate config via `fred config validate` with clear error messages showing file path, line number, and fix suggestions
   4. User can scaffold new Fred project via `fred init` with starter config and example agent
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 30-01-PLAN.md — Entity listing commands (agents, tools, intents, providers, workflows) (completed 2026-02-11, 3.00 min)
@@ -158,6 +158,7 @@ Plans:
 - [x] 33-01-PLAN.md — Align no-args and `tui` command routing with shared non-TTY fallback contract (completed 2026-02-14)
 - [x] 33-02-PLAN.md — Implement startup chooser UX (resume/new), input-focus handoff, and concise launch guidance (completed 2026-02-14)
 - [x] 33-03-PLAN.md — Add dedicated Phase 33 launch smoke coverage and run blocking human parity checkpoint (completed 2026-02-15)
+- [ ] 33-04-PLAN.md — Close UAT contract-language gap by codifying `fred chat` as primary entrypoint and refreshing hierarchy smoke assertions
 
 ### Phase 34: Session Verification Recovery
 **Goal**: Restore formal acceptance of session management by generating complete deterministic verification evidence for Phase 29
