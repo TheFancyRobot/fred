@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 gap-closure execution in progress — Phase 33 launch contract alignment underway
+**Current focus:** v0.2.1 gap-closure execution in progress — Phase 33 launch contract alignment complete
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 33 of 36 (Default Launch Contract Alignment)
 Plan: 3 of 3 in current phase
-Status: In progress (awaiting human verification)
-Last activity: 2026-02-14 - Continued 33-03-PLAN.md with chooser-first + persistence parity fixes after repeated human feedback
+Status: Phase complete
+Last activity: 2026-02-15 - Completed 33-03-PLAN.md after human verification approval
 
-Progress: [█████████░] 99% (147/148 plans complete)
+Progress: [██████████] 100% (148/148 plans complete)
 
 ## Performance Metrics
 
@@ -101,6 +101,9 @@ Recent decisions affecting current work:
 - Startup chooser timestamp normalization guard (33-03) — persisted session `updatedAt` values are coerced before sorting so chooser bootstrap and resume-last remain reliable
 - Chooser-first startup invariant (33-03) — interactive launch now opens startup chooser even when there are no pre-existing sessions unless initialSessionId is forced
 - No-config sqlite chat persistence fallback (33-03) — default chat launch now binds context storage to sqlite (`FRED_SQLITE_PATH` or `./fred.db`) so resume-last works across relaunches
+- Stable startup chooser affordance contract (33-03) — chooser guidance is now persistent via marker/emphasis/instruction and no longer depends on dismissible hint copy
+- Resume-previous sidebar confirmation flow (33-03) — selecting resume now focuses sidebar first and only restores transcript after explicit sidebar confirmation
+- Human parity approval captured for launch contract (33-03) — no-args and `tui` verified equivalent across TTY/non-TTY with accepted chooser-first UX behavior
 
 ### Pending Todos
 
@@ -131,6 +134,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-14T23:26:36Z
-Stopped at: Checkpoint pending human re-verification for 33-03-PLAN.md after continuation fix commit 1002a6d
+Last session: 2026-02-15T00:04:02Z
+Stopped at: Completed 33-03-PLAN.md
 Resume file: None
