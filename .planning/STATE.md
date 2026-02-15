@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 gap-closure execution in progress — Phase 34 verification recovery complete, Phase 35 ready
+**Current focus:** v0.2.1 gap-closure execution in progress — Phase 35 plan 01 complete, plan 02 ready
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 34 of 36 (Session Verification Recovery)
-Plan: 1 of 1 in current phase
-Status: Phase verified
-Last activity: 2026-02-15 - Phase 34 verification passed (4/4 must-haves) after 34-01 artifact recovery
+Phase: 35 of 36 (Cross-Phase Smoke Contract Refresh)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-15 - Completed 35-01-PLAN.md
 
-Progress: [██████████] 100% (150/150 plans complete)
+Progress: [█████████░] 97% (152/157 plans complete)
 
 ## Performance Metrics
 
@@ -108,6 +108,8 @@ Recent decisions affecting current work:
 - Chat-primary acceptance hierarchy codified across Phase 33 artifacts (33-04) — `fred chat` recorded as primary interactive entrypoint with `fred` no-args and `fred tui` as parity aliases in roadmap/UAT/smoke contract language
 - Conservative verification verdict routing for recovery artifacts (34-01) — `passed` only when all `SESS-01..SESS-07` have explicit deterministic proof
 - Decisive-lines evidence reporting for audit artifacts (34-01) — capture fixed command exit codes and key outcome lines, not raw log dumps
+- Canonical Fred smoke contract fixture for launch/stream suites (35-01) — phase 27/28/33 smoke harnesses now share one session-aware mock shape
+- Explicit stale-contract diagnostic channel in smoke guard coverage (35-01) — `STALE_CONTRACT` now surfaces actionable fixture remediation instead of opaque runtime errors
 
 ### Pending Todos
 
@@ -138,6 +140,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-15T02:07:02Z
-Stopped at: Phase 34 complete and verified; ready for Phase 35
+Last session: 2026-02-15T06:34:46Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None
