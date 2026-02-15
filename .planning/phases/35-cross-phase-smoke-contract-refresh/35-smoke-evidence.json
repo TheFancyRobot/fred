@@ -74,7 +74,7 @@
       "decisiveLines": [
         "0 fail",
         "7 pass",
-        "Ran 7 tests across 1 file. [648.00ms]"
+        "Ran 7 tests across 1 file. [606.00ms]"
       ],
       "channel": "OK"
     },
@@ -86,7 +86,7 @@
       "decisiveLines": [
         "0 fail",
         "12 pass",
-        "Ran 12 tests across 1 file. [37.00ms]"
+        "Ran 12 tests across 1 file. [41.00ms]"
       ],
       "channel": "OK"
     },
@@ -98,7 +98,7 @@
       "decisiveLines": [
         "0 fail",
         "5 pass",
-        "Ran 5 tests across 1 file. [607.00ms]"
+        "Ran 5 tests across 1 file. [567.00ms]"
       ],
       "channel": "OK"
     },
@@ -110,7 +110,7 @@
       "decisiveLines": [
         "0 fail",
         "40 pass",
-        "Ran 40 tests across 5 files. [1364.00ms]"
+        "Ran 40 tests across 5 files. [1256.00ms]"
       ],
       "channel": "OK"
     }
