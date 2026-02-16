@@ -129,6 +129,12 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   }
 
   if (state.startup.chooser.isOpen) {
+    if (name === 'escape') {
+      return { type: 'quit' };
+    }
+    if (ctrl && !shift && name === 'c') {
+      return { type: 'quit' };
+    }
     if (name === 'up' || name === 'left') {
       return { type: 'startup-chooser-prev' };
     }
