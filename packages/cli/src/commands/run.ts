@@ -3,6 +3,10 @@
  *
  * Headless agent execution for CI/scripting use cases.
  * Sends a single message to an agent and prints the response to stdout.
+ *
+ * In JSON mode (--json), ALL output is routed through RunJsonChannel
+ * to guarantee exactly one parser-safe JSON document on stdout and
+ * zero bytes on stderr.
  */
 
 import { Fred } from '@fancyrobot/fred';
@@ -10,6 +14,7 @@ import {
   ensureDefaultChatAgent,
 } from '@fancyrobot/fred-dev/chat-defaults';
 import { resolveProjectConfig } from '../project/resolve-config.js';
+import { RunJsonChannel } from '../runtime/json-channel.js';
 
 export interface RunCommandIO {
   stdout: (msg: string) => void;
@@ -41,7 +46,7 @@ async function readStdin(): Promise<string> {
 /**
  * Initialize Fred instance with config and provider bootstrap.
  */
-async function initializeFred(agentId: string, io: RunCommandIO): Promise<Fred> {
+async function initializeFred(agentId: string, channel: RunJsonChannel): Promise<Fred> {
   const fred = new Fred();
   const configResult = resolveProjectConfig();
 
@@ -49,7 +54,7 @@ async function initializeFred(agentId: string, io: RunCommandIO): Promise<Fred> 
     try {
       await fred.initializeFromConfig(configResult.configPath);
     } catch (error) {
-      io.stderr(`Warning: Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
+      channel.warn(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -65,6 +70,10 @@ async function initializeFred(agentId: string, io: RunCommandIO): Promise<Fred> 
  * Sends a single message to an agent and prints the response.
  * Uses non-streaming processMessage API for predictable headless output.
  *
+ * All output is routed through RunJsonChannel. In JSON mode this guarantees
+ * exactly one JSON document on stdout and zero bytes on stderr.
+ * In text mode the channel delegates to io directly (unchanged behavior).
+ *
  * @returns exit code: 0 on success, 1 on error
  */
 export async function handleRunCommand(
@@ -73,12 +82,13 @@ export async function handleRunCommand(
   deps: RunCommandDependencies = {},
 ): Promise<number> {
   const io = deps.io ?? DEFAULT_IO;
+  const jsonMode = options.json === true;
+  const channel = new RunJsonChannel(io, jsonMode);
 
   // --- Validate --agent ---
   const agentId = options.agent as string | undefined;
   if (!agentId) {
-    io.stderr('Error: --agent <name> is required.');
-    return 1;
+    return channel.emitError('--agent <name> is required.', 1);
   }
 
   // --- Resolve input ---
@@ -98,17 +108,18 @@ export async function handleRunCommand(
   }
 
   if (!input || input.length === 0) {
-    io.stderr("Error: No input provided. Use --input 'message' or pipe via stdin.");
-    return 1;
+    return channel.emitError("No input provided. Use --input 'message' or pipe via stdin.", 1);
   }
 
   // --- Initialize Fred ---
   let fred: Fred;
   try {
-    fred = deps.fred ?? await initializeFred(agentId, io);
+    fred = deps.fred ?? await initializeFred(agentId, channel);
   } catch (error) {
-    io.stderr(`Error: Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
+    return channel.emitError(
+      `Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`,
+      1,
+    );
   }
 
   // --- Verify agent exists ---
@@ -116,8 +127,7 @@ export async function handleRunCommand(
   if (!agent) {
     const agents = fred.getAgents().map((a) => a.id);
     const available = agents.length > 0 ? ` Available agents: ${agents.join(', ')}` : '';
-    io.stderr(`Error: Agent "${agentId}" not found.${available}`);
-    return 1;
+    return channel.emitError(`Agent "${agentId}" not found.${available}`, 1);
   }
 
   // --- Process message ---
@@ -127,32 +137,40 @@ export async function handleRunCommand(
     const response = await fred.processMessage(input, { conversationId });
 
     if (!response) {
-      io.stderr('No response from agent.');
-      return 1;
+      return channel.emitError('No response from agent.', 1);
     }
 
-    // Verbose: show tool calls on stderr (so stdout stays clean for piping)
+    // Verbose: route tool-call diagnostics through the channel
     if (options.verbose === true && response.toolCalls && response.toolCalls.length > 0) {
       for (const tc of response.toolCalls) {
-        io.stderr(`[tool: ${tc.toolId}] ${JSON.stringify(tc.args)} → ${tc.result !== undefined ? JSON.stringify(tc.result) : '(no result)'}`);
+        channel.diagnostic(
+          `[tool: ${tc.toolId}] ${JSON.stringify(tc.args)} → ${tc.result !== undefined ? JSON.stringify(tc.result) : '(no result)'}`,
+        );
       }
     }
 
-    // Output response
-    if (options.json === true) {
-      io.stdout(JSON.stringify({
-        ok: true,
-        agent: agentId,
-        content: response.content,
-        toolCalls: response.toolCalls ?? [],
-      }, null, 2));
-    } else {
-      io.stdout(response.content);
+    // Build verbose tool-call data for JSON payload
+    let verboseData: Record<string, unknown> | undefined;
+    if (options.verbose === true && response.toolCalls && response.toolCalls.length > 0) {
+      verboseData = {
+        toolCalls: response.toolCalls.map((tc) => ({
+          toolId: tc.toolId,
+          args: tc.args,
+          result: tc.result,
+        })),
+      };
     }
 
-    return 0;
+    return channel.emitSuccess({
+      agent: agentId,
+      content: response.content,
+      toolCalls: response.toolCalls,
+      verbose: verboseData,
+    });
   } catch (error) {
-    io.stderr(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
+    return channel.emitError(
+      error instanceof Error ? error.message : String(error),
+      1,
+    );
   }
 }
