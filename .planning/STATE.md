@@ -5,43 +5,27 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 milestone complete — all 159 plans across 36 phases executed
-**Milestone:** v0.2.1 CLI/TUI Developer Experience
+**Current focus:** v0.2.2 milestone — TUI Visual Polish
+**Milestone:** v0.2.2 TUI Visual Polish
 
 ## Current Position
 
-Phase: 36 of 36 (Runtime & Test Hardening)
-Plan: 5 of 5 in current phase
-Status: Phase complete — v0.2.1 milestone complete
-Last activity: 2026-02-16 - Completed 36-05-PLAN.md (Groq retry/backoff & structured diagnostics gap closure)
+Phase: 37 of 40 (Theme System & Contrast Layout)
+Plan: 0 of ? in current phase (research not yet started)
+Status: Milestone setup complete — ready for Phase 37 research
+Last activity: 2026-02-16 - v0.2.2 milestone created with 4 phases (37-40)
 
-Progress: [██████████] 100% (159/159 plans complete)
+Progress: [░░░░░░░░░░] 0% (0/? plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 31 (v0.2.1 milestone)
-- Average duration: 5.32 min
-- Total execution time: ~2.75 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 27 | 4 | 27.55 min | 6.89 min |
-| 28 | 6 | 47.65 min | 7.94 min |
-| 29 | 4 | ~28 min | ~7.00 min |
-| 30 | 3 | 8.45 min | 2.82 min |
-| 31 | 4 | 15.27 min | 3.82 min |
-| 32 | 5 | 19.00 min | 3.80 min |
-| 36 | 5 | ~23 min | ~4.60 min |
-
-**Recent Trend:**
-- Last 5 plans: 3.00 min (36-02), 9.00 min (36-03), 1.00 min (36-04), 7.00 min (36-05)
-- Trend: Phase 36 closed with Groq retry/backoff gap-closure and structured error diagnostics
-- v0.2.1 milestone complete: 31 plans, ~5.32 min/plan average
+- Total plans completed: 0 (v0.2.2 milestone)
+- Average duration: N/A
+- Total execution time: 0
 
 **Previous Milestones:**
+- v0.2.1: 31 plans, ~5.32 min/plan
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
 - v0.2.0: 86 plans, ~3.9 min/plan (13 days)
 
@@ -49,81 +33,24 @@ Progress: [██████████] 100% (159/159 plans complete)
 
 ## Accumulated Context
 
+### Discoveries (from TUI exploration)
+
+- **Current TUI uses `@opentui/core` v0.1.77** — Yoga-based flexbox layout with `BoxRenderable`, `TextRenderable`, `ScrollBoxRenderable`
+- **Borders are explicit box-drawing characters** — sidebar and transcript use `borderStyle: 'rounded'` (╭╮╰╯│─), input uses `borderStyle: 'single'` (┌┐└┘│─). Must be replaced with contrast-based separation.
+- **No centralized theme/palette system exists** — all colors are inline hex strings scattered through `app.ts`'s `syncStateToUI()`
+- **Current color inventory**: `#00FFFF` (cyan sidebar title), `#888888`/`#CCCCCC`/`#666666` (grays), `#FFFFFF` (white), `#444444` (status bar bg), `#7aa2f7` (blue, defined but unused), `#ff6b6b`/`#5dade2`/`#7bd88f` (status colors), `#FFD166`/`#7CE38B`/`#FF9E64` (startup chooser)
+- **`updateBorderFocus()` method exists but can't dynamically change border colors** on BoxRenderable after creation — focus is indicated through content text color changes
+- **Layout constants** are in `layout.ts`: sidebar width 30, input height 3-6, status height 1
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Full ANSI rendering loop in TUI app (27-04) — Human checkpoint revealed missing rendering; rewrote app.ts
-- Framework-agnostic TUI implementation (27-03) — OpenTUI not yet available; clean abstraction allows future swap-in
-- History navigation continuation (27-03) — Allow Up/Down to continue navigating after first selection matches shell UX
-- Effect.acquireUseRelease for terminal lifecycle (27-02) — Guarantees cleanup on success/error/interruption
-- fred chat as explicit interactive entrypoint (27-02) — Help-first default, chat is opt-in
-- Bounded sliding queue for render signals (28-01) — Coalesces update pressure without losing token content
-- Streaming lifecycle as pure state transitions (28-01) — Deterministic metrics/error handling for status bar integration
-- Shift+Enter multiline composer semantics (28-02) — Enter submits, Shift+Enter inserts newline, whitespace payloads ignored
-- Bounded rich input bar rendering (28-02) — Stable placeholder selection and four-line auto-grow with keyboard affordances
-- Global Ctrl+K/Cmd+K palette semantics (28-03) — Sidebar-scoped search/actions without disrupting existing focus cycling
-- Throttled telemetry status transitions (28-03) — 100ms streaming cadence with immediate refresh at stream start/stop/error
-- Total-first token telemetry (28-04) — Status now prioritizes combined token count with in/out as secondary detail
-- Minimal composer chrome (28-04) — Removed persistent input shortcut hint to reduce distraction
-- Fire-and-forget streaming pattern (28-05) — onSubmit callback streams async without blocking TUI event loop
-- Provider priority cascade (28-05) — OpenAI > Anthropic > Google > Groq > OpenRouter based on ecosystem maturity
-- Config-first with auto-detection fallback (28-05) — Respects explicit config, convenient env-based setup otherwise
-- Telemetry defaults to '--' (28-05) — Avoids misleading users before provider actually connects
-- Provider packages as CLI workspace dependencies (28-06) — Enables dynamic import resolution from CLI context
-- Dynamic provider import before registration (28-06) — Triggers side-effect self-registration before useProvider call
-- Milestone label normalization mapping (quick-001-01) — Standardized planning references to v0.1.0/v0.2.0/v0.2.1 without renaming archive files
-- Storage-level session summaries (29-01) — Session lists computed via SQL for counts and preview payloads
-- Default session exports to markdown (29-02) — Export filenames derived from title + date
-- Sidebar action row selection (29-03) — allow new-session action to be focusable without switching sessions
-- Duplicated initializeFred helper in list.ts (30-01) — defer shared extraction to 30-03 wiring plan
-- Raw config entity counting in config validate (30-02) — avoids heavyweight Fred instantiation for validation summary
-- Non-streaming processMessage for headless run (30-03) — predictable complete output for CI/scripting pipelines
-- DI-based stdin bypass in run command (30-03) — deps.stdin overrides TTY check for testability
-- Fred internal intentMatcher access in CLI (31-01) — access via (fred as any).intentMatcher instead of creating new instance
-- Minimal MCPServerRegistry extensions (31-02) — added only getAllConfiguredServers() and getServerConfig() methods
-- Tool count display limitation in MCP list (31-02) — show "-" for tool count in table view; status command provides detailed info
-- Graceful error handling in MCP batch operations (31-02) — continue processing all servers even if some fail in --all mode
-- Exclusive output channels for --json mode (31-04) — JSON to stdout OR plain text to stderr, never both simultaneously
-- Source-derived plugin identity in normalization (32-01) — plugin source is canonical id for duplicate detection and deterministic ordering
-- Two-phase plugin startup validation gate (32-02) — discover/load/validate all plugins before registering contributions
-- Structured plugin diagnostics in config validation (32-02) — pluginId and declarationSource included for machine-readable JSON output
-- Unknown-command plugin dispatch boundary (32-03) — plugin runtime is invoked only after built-in command switch so core CLI commands always win conflicts
-- Unavailable plugin command stubs in help (32-03) — conflicted top-level plugin commands remain visible with explicit reason while namespaced form stays executable
-- Startup-time plugin slash availability filtering (32-04) — unavailable plugin slash commands are hidden consistently in palette and typed slash search
-- Shared plugin slash execution registry in TUI (32-04) — typed `/plugin:command` and palette selection dispatch through identical runtime behavior
-- Dedicated plugin startup failure exit code (32-05) — aggregated plugin validation failures now terminate CLI startup with deterministic exit code `12`
-- Startup plugin diagnostics channel safety (32-05) — text diagnostics emit to stderr while JSON diagnostics emit to stdout-only payloads
-- No-args launch dispatch parity at CLI entry (33-01) — bare `fred` now routes to the same interactive path as `fred chat`/`fred tui`
-- Shared non-interactive launch payload contract (33-01) — launch entrypoints use one JSON fallback shape and exit behavior in non-TTY mode
-- Startup chooser defaults to start-new with Enter confirmation (33-02) — existing-session startup is now explicit and deterministic instead of implicit auto-resume
-- Interactive config init fallback shown in TUI startup (33-02) — config load failures remain in guided flow via concise startup warning
-- Startup chooser timestamp normalization guard (33-03) — persisted session `updatedAt` values are coerced before sorting so chooser bootstrap and resume-last remain reliable
-- Chooser-first startup invariant (33-03) — interactive launch now opens startup chooser even when there are no pre-existing sessions unless initialSessionId is forced
-- No-config sqlite chat persistence fallback (33-03) — default chat launch now binds context storage to sqlite (`FRED_SQLITE_PATH` or `./fred.db`) so resume-last works across relaunches
-- Stable startup chooser affordance contract (33-03) — chooser guidance is now persistent via marker/emphasis/instruction and no longer depends on dismissible hint copy
-- Resume-previous sidebar confirmation flow (33-03) — selecting resume now focuses sidebar first and only restores transcript after explicit sidebar confirmation
-- Human parity approval captured for launch contract (33-03) — no-args and `tui` verified equivalent across TTY/non-TTY with accepted chooser-first UX behavior
-- Phase 33 goal verification passed (33) — automated must-haves validated and human checkpoint approved for launch parity and cleanup acceptance
-- Chat-primary acceptance hierarchy codified across Phase 33 artifacts (33-04) — `fred chat` recorded as primary interactive entrypoint with `fred` no-args and `fred tui` as parity aliases in roadmap/UAT/smoke contract language
-- Conservative verification verdict routing for recovery artifacts (34-01) — `passed` only when all `SESS-01..SESS-07` have explicit deterministic proof
-- Decisive-lines evidence reporting for audit artifacts (34-01) — capture fixed command exit codes and key outcome lines, not raw log dumps
-- Canonical Fred smoke contract fixture for launch/stream suites (35-01) — phase 27/28/33 smoke harnesses now share one session-aware mock shape
-- Explicit stale-contract diagnostic channel in smoke guard coverage (35-01) — `STALE_CONTRACT` now surfaces actionable fixture remediation instead of opaque runtime errors
-- Consolidated non-fail-fast phase smoke gate (35-02) — launch/stream/session-TUI/session-CLI suites now run sequentially under one deterministic verdict
-- Machine-first cross-phase smoke evidence contract (35-02) — per-check exit codes + decisive lines + linkage are persisted for CI/audit reruns
-- Requirement-to-check evidence traceability in audit companion (35-03) — `TUI-08` and `SESS-01..SESS-07` are now mapped to concrete smoke checks and JSON paths
-- Explicit stale-contract absence reporting in rerun evidence (35-03) — audit replay now verifies `STALE_CONTRACT` status directly instead of by inference
-- RunJsonChannel one-document contract with violation exit code 78 (36-01) — centralized output channel enforces zero-stderr guarantee for fred run --json
-- Effect.never for long-lived TUI scope retention (36-02) — interactive chat lifecycle stays armed for cleanup during indefinite TUI session
-- Removed ad-hoc process handlers in favor of lifecycle wrapper (36-02) — withTerminalLifecycle's installExitHandler handles SIGINT/SIGTERM/exit
-- Full-API stdin/stdout doubles for concurrent test isolation (36-03) — createStdinDouble/createStdoutDouble with pause/resume/on/off/setRawMode prevent concurrent crash
-- Default-deny retry allowlist in smoke runner (36-03) — 5 transient signatures eligible for max-1-retry, all other failures fail-hard immediately
-- Per-attempt evidence provenance in smoke JSON (36-03) — attemptCount, retryReason, and attempts[] preserved for CI/audit traceability
-- Startup chooser interrupt passthrough (36-04) — chooser-open Ctrl+C/Escape now route through shared app quit action path
-- Bounded retry/backoff for Groq provider (36-05) — 3 retries with exponential backoff for transient 5xx/429 failures; fail-fast on non-retryable 4xx
-- Structured retry diagnostics in fred run --json (36-05) — meta.details includes retryDiagnostics, category, and actionable suggestion
+- (Carried from v0.2.1) Full ANSI rendering loop in TUI app (27-04)
+- (Carried from v0.2.1) Framework-agnostic TUI implementation (27-03)
+- (Carried from v0.2.1) Bounded rich input bar rendering (28-02)
+- (Carried from v0.2.1) Minimal composer chrome (28-04)
 
 ### Pending Todos
 
@@ -131,20 +58,8 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-**Research-flagged phases:**
-- ~~Phase 32 (Plugin Architecture): Needs research for plugin API contract (security model, semver policy, compatibility testing, deprecation strategy)~~ ✓ Completed and verified
-
-**Technical risks identified in research:**
-- ~~Bun TTY compatibility must be validated in Phase 27 before architectural commitment~~ ✓ Validated in 27-02 (detectTerminalMode tests setRawMode capability)
-- ~~Effect fiber interruption cleanup pattern critical for Phase 27 (terminal state corruption)~~ ✓ Implemented in 27-02 (Effect.acquireUseRelease guarantees cleanup)
-- Stream backpressure handling required in Phase 28 (memory bloat prevention) — Core mitigation validated by 28-04 smoke/performance guards; live upstream-response verification still environment-dependent
-- SQLite WAL file locking for multi-instance CLI usage (Phase 29)
-
-**Phase dependencies:**
-- Phase 29 depends on Phase 28 (session sidebar requires TUI layout)
-- Phase 30 depends on Phase 27 only (CLI commands independent of TUI) — ✓ Phase 30 complete
-- Phase 31 depends on Phase 30 (extends CLI commands) — ✓ Phase 30 complete
-- Phase 32 depends on Phase 28 + Phase 30 (plugins extend both TUI and CLI) — ✓ Phase 30 complete
+- **OpenTUI BoxRenderable border removal** — Need to verify that `borderStyle` can be set to `'none'` or omitted entirely; if not, padding-only layout may require container restructuring
+- **Background color support in OpenTUI** — Must confirm `backgroundColor` property works on `BoxRenderable` for contrast-based separation
 
 ### Quick Tasks Completed
 
@@ -154,6 +69,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-16T20:34:00Z
-Stopped at: Completed 36-05-PLAN.md (Groq retry/backoff & structured diagnostics gap closure) — v0.2.1 milestone complete
+Last session: 2026-02-16T21:00:00Z
+Stopped at: v0.2.2 milestone setup complete — ready for Phase 37 research
 Resume file: None

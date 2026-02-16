@@ -92,3 +92,8 @@ fred.config.local.json
 
 # Fred local runtime/eval artifacts
 .fred/
+
+# SQLite runtime files
+fred.db
+fred.db-shm
+fred.db-wal

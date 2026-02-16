@@ -61,7 +61,12 @@
       "decisiveLines": [
         "0 fail",
         "13 pass",
-        "Ran 13 tests across 1 file. [311.00ms]"
+        "tests/unit/cli/phase27-smoke.test.ts:",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [4.00ms]",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > chat command in non-TTY mode emits shared JSON contract and exits [12.00ms]",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > fred, fred tui, and fred chat resolve to same non-TTY fallback semantics [1.00ms]"
       ],
       "channel": "OK",
       "attemptCount": 1,
@@ -73,7 +78,12 @@
           "decisiveLines": [
             "0 fail",
             "13 pass",
-            "Ran 13 tests across 1 file. [311.00ms]"
+            "tests/unit/cli/phase27-smoke.test.ts:",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [4.00ms]",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > chat command in non-TTY mode emits shared JSON contract and exits [12.00ms]",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > fred, fred tui, and fred chat resolve to same non-TTY fallback semantics [1.00ms]"
           ],
           "channel": "OK"
         }
@@ -87,6 +97,7 @@
       "decisiveLines": [
         "0 fail",
         "3 pass",
+        "tests/unit/cli/phase28-streaming-smoke.test.ts:",
         "Ran 3 tests across 1 file. [694.00ms]"
       ],
       "channel": "OK",
@@ -99,6 +110,7 @@
           "decisiveLines": [
             "0 fail",
             "3 pass",
+            "tests/unit/cli/phase28-streaming-smoke.test.ts:",
             "Ran 3 tests across 1 file. [694.00ms]"
           ],
           "channel": "OK"
@@ -113,7 +125,8 @@
       "decisiveLines": [
         "0 fail",
         "7 pass",
-        "Ran 7 tests across 1 file. [593.00ms]"
+        "tests/unit/cli/phase33-launch-contract-smoke.test.ts:",
+        "Ran 7 tests across 1 file. [586.00ms]"
       ],
       "channel": "OK",
       "attemptCount": 1,
@@ -125,7 +138,8 @@
           "decisiveLines": [
             "0 fail",
             "7 pass",
-            "Ran 7 tests across 1 file. [593.00ms]"
+            "tests/unit/cli/phase33-launch-contract-smoke.test.ts:",
+            "Ran 7 tests across 1 file. [586.00ms]"
           ],
           "channel": "OK"
         }
@@ -139,7 +153,11 @@
       "decisiveLines": [
         "0 fail",
         "12 pass",
-        "Ran 12 tests across 1 file. [36.00ms]"
+        "tests/unit/cli/tui/session-state.test.ts:",
+        "(pass) TUI Session State > upsertSessionTranscript updates message counts and preview [1.00ms]",
+        "(pass) TUI Session State > switchSession pins transcript to bottom and clears unread",
+        "(pass) TUI Session State > scrollTranscript clears unread when reaching bottom",
+        "Ran 12 tests across 1 file. [42.00ms]"
       ],
       "channel": "OK",
       "attemptCount": 1,
@@ -151,7 +169,11 @@
           "decisiveLines": [
             "0 fail",
             "12 pass",
-            "Ran 12 tests across 1 file. [36.00ms]"
+            "tests/unit/cli/tui/session-state.test.ts:",
+            "(pass) TUI Session State > upsertSessionTranscript updates message counts and preview [1.00ms]",
+            "(pass) TUI Session State > switchSession pins transcript to bottom and clears unread",
+            "(pass) TUI Session State > scrollTranscript clears unread when reaching bottom",
+            "Ran 12 tests across 1 file. [42.00ms]"
           ],
           "channel": "OK"
         }
@@ -165,7 +187,9 @@
       "decisiveLines": [
         "0 fail",
         "5 pass",
-        "Ran 5 tests across 1 file. [567.00ms]"
+        "tests/unit/cli/session-commands.test.ts:",
+        "(pass) session commands > show prints markdown transcript",
+        "Ran 5 tests across 1 file. [510.00ms]"
       ],
       "channel": "OK",
       "attemptCount": 1,
@@ -177,7 +201,9 @@
           "decisiveLines": [
             "0 fail",
             "5 pass",
-            "Ran 5 tests across 1 file. [567.00ms]"
+            "tests/unit/cli/session-commands.test.ts:",
+            "(pass) session commands > show prints markdown transcript",
+            "Ran 5 tests across 1 file. [510.00ms]"
           ],
           "channel": "OK"
         }
@@ -191,7 +217,12 @@
       "decisiveLines": [
         "0 fail",
         "40 pass",
-        "Ran 40 tests across 5 files. [1354.00ms]"
+        "tests/unit/cli/session-commands.test.ts:",
+        "(pass) session commands > show prints markdown transcript [1.00ms]",
+        "tests/unit/cli/phase27-smoke.test.ts:",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [1.00ms]",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin"
       ],
       "channel": "OK",
       "attemptCount": 1,
@@ -203,7 +234,12 @@
           "decisiveLines": [
             "0 fail",
             "40 pass",
-            "Ran 40 tests across 5 files. [1354.00ms]"
+            "tests/unit/cli/session-commands.test.ts:",
+            "(pass) session commands > show prints markdown transcript [1.00ms]",
+            "tests/unit/cli/phase27-smoke.test.ts:",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [1.00ms]",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin"
           ],
           "channel": "OK"
         }
