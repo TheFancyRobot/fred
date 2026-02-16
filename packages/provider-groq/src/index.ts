@@ -1,8 +1,9 @@
-import { Effect, Layer, Stream, Option } from 'effect';
+import { Effect, Layer, Stream, Option, Schedule } from 'effect';
 import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import * as HttpBody from '@effect/platform/HttpBody';
+import * as HttpClientError from '@effect/platform/HttpClientError';
 import { FetchHttpClient } from '@effect/platform';
 import * as AiError from '@effect/ai/AiError';
 import * as AiModel from '@effect/ai/Model';
@@ -80,6 +81,71 @@ interface ChatCompletionStreamChunk {
 }
 
 /**
+ * Retry configuration for transient Groq API failures.
+ * Max 3 retries with exponential backoff: 500ms → 1s → 2s.
+ */
+const GROQ_RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 500,
+} as const;
+
+/**
+ * HTTP status codes that are non-retryable (client errors indicating
+ * configuration or request issues, not transient failures).
+ */
+const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
+
+/**
+ * Retry diagnostics attached to errors when all retries are exhausted.
+ */
+export interface GroqRetryDiagnostics {
+  readonly provider: 'groq';
+  readonly retryable: boolean;
+  readonly attempts: number;
+  readonly maxRetries: number;
+  readonly lastStatusCode?: number;
+  readonly failureCategory: 'transient' | 'rate-limit' | 'non-retryable';
+}
+
+/**
+ * Classify an HTTP error as retryable or not based on status code.
+ * - 429 (rate limit), 5xx (server errors): retryable (transient)
+ * - 400, 401, 403, 404, 422 (client errors): non-retryable
+ * - Network/connection errors (no status): retryable (transient)
+ */
+function classifyHttpError(error: unknown): { retryable: boolean; statusCode?: number; category: GroqRetryDiagnostics['failureCategory'] } {
+  // Check for @effect/platform ResponseError (from filterStatusOk)
+  if (error && typeof error === 'object' && 'response' in error && 'reason' in error) {
+    const responseError = error as HttpClientError.ResponseError;
+    const status = responseError.response?.status;
+    if (typeof status === 'number') {
+      if (status === 429) {
+        return { retryable: true, statusCode: status, category: 'rate-limit' };
+      }
+      if (NON_RETRYABLE_STATUS_CODES.has(status)) {
+        return { retryable: false, statusCode: status, category: 'non-retryable' };
+      }
+      if (status >= 500) {
+        return { retryable: true, statusCode: status, category: 'transient' };
+      }
+    }
+  }
+  // Network errors / connection failures → retryable
+  return { retryable: true, category: 'transient' };
+}
+
+/**
+ * Build a retry schedule for transient errors.
+ * Exponential backoff: baseDelay * 2^attempt, capped at maxRetries.
+ */
+function buildRetrySchedule() {
+  return Schedule.intersect(
+    Schedule.exponential(Duration.millis(GROQ_RETRY_CONFIG.baseDelayMs)),
+    Schedule.recurs(GROQ_RETRY_CONFIG.maxRetries)
+  );
+}
+
+/**
  * Create a Groq-compatible LanguageModel using the Chat Completions API.
  * This is necessary because @effect/ai-openai v0.30+ uses OpenAI's Responses API
  * which is not supported by Groq.
@@ -130,16 +196,54 @@ function createGroqLanguageModel(
             body: HttpBody.unsafeJson(requestBody),
           }).pipe(HttpClientRequest.setHeader('Accept', 'text/event-stream'));
 
-          const response = yield* clientWithBaseUrlOk.execute(request).pipe(
-            Effect.catchAll((error) =>
-              Effect.fail(new AiError.UnknownError({
-                module: 'GroqProvider',
-                method: 'generateText',
-                description: 'HTTP request failed',
-                cause: error
-              }))
+          // Wrap HTTP call with retry/backoff for transient errors
+          let attemptCount = 0;
+          let lastClassification: ReturnType<typeof classifyHttpError> | undefined;
+
+          const httpEffect = clientWithBaseUrlOk.execute(request).pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                attemptCount++;
+                lastClassification = classifyHttpError(error);
+              })
             )
           );
+
+          const retriedHttpEffect = httpEffect.pipe(
+            Effect.retry(
+              buildRetrySchedule().pipe(
+                Schedule.whileInput((error: unknown) => {
+                  const classification = classifyHttpError(error);
+                  return classification.retryable;
+                })
+              )
+            ),
+            Effect.catchAll((error) => {
+              attemptCount++; // Count the final failed attempt
+              const classification = lastClassification ?? classifyHttpError(error);
+              const diagnostics: GroqRetryDiagnostics = {
+                provider: 'groq',
+                retryable: classification.retryable,
+                attempts: attemptCount,
+                maxRetries: GROQ_RETRY_CONFIG.maxRetries,
+                lastStatusCode: classification.statusCode,
+                failureCategory: classification.category,
+              };
+              const aiError = new AiError.UnknownError({
+                module: 'GroqProvider',
+                method: 'generateText',
+                description: classification.retryable
+                  ? `HTTP request failed after ${attemptCount} attempt(s) (${classification.category})`
+                  : `HTTP request failed: non-retryable ${classification.statusCode} error`,
+                cause: error
+              });
+              // Attach diagnostics to the error for upstream consumers
+              (aiError as any)._retryDiagnostics = diagnostics;
+              return Effect.fail(aiError);
+            })
+          );
+
+          const response = yield* retriedHttpEffect;
 
           const json = (yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
             Effect.catchAll((error) =>
@@ -605,4 +709,5 @@ export const GroqProviderFactory: EffectProviderFactory = {
 registerBuiltinPack(GroqProviderFactory);
 
 export { GroqProviderFactory as groqPack };
+export { classifyHttpError, GROQ_RETRY_CONFIG, NON_RETRYABLE_STATUS_CODES };
 export default GroqProviderFactory;
