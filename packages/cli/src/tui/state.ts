@@ -61,11 +61,6 @@ export interface SessionTelemetry {
   outputTokenCount: number;
 }
 
-export interface SessionTranscript {
-  viewport: TranscriptViewport;
-  messages: Array<{ role: string; content: string }>;
-}
-
 export type CommandPaletteScope = FocusablePaneId;
 
 export interface PluginSlashCommandState {

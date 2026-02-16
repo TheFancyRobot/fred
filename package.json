@@ -61,6 +61,13 @@
   "type": "module",
   "workspaces": ["packages/*"],
   "dependencies": {
-    "@fancyrobot/fred-groq": "workspace:*"
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-anthropic": "workspace:*",
+    "@fancyrobot/fred-cli": "workspace:*",
+    "@fancyrobot/fred-dev": "workspace:*",
+    "@fancyrobot/fred-google": "workspace:*",
+    "@fancyrobot/fred-groq": "workspace:*",
+    "@fancyrobot/fred-openai": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*"
   }
 }

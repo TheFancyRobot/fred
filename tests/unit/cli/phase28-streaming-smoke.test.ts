@@ -3,6 +3,9 @@
  *
  * End-to-end CLI/TUI checks for streaming chat flow, command palette,
  * multiline input, smart-scroll behavior, and status telemetry updates.
+ *
+ * All Fred/provider/TUI dependencies are injected via ChatDependencies DI
+ * instead of mock.module(), preventing global module pollution.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -12,10 +15,9 @@ import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
   createMockFredClass,
+  createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
-  installCommonSmokeModuleMocks,
-  installFredSmokeContractMock,
   restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
@@ -38,28 +40,14 @@ const MockFred = createMockFredClass({
   contextManager: mockContextManager,
   defaultStreamDelta: 'test',
 });
-installFredSmokeContractMock({ FredClass: MockFred });
 
-// Mock resolveProjectConfig to return failure (forces detectAvailableProvider path)
-mock.module('../../../packages/cli/src/project/resolve-config', () => ({
-  resolveProjectConfig: () => ({
-    success: false,
-    diagnostics: [],
-  }),
-}));
-
-// Mock provider package imports to avoid peer dependency issues in tests
-mock.module('@fancyrobot/fred-openai', () => ({}));
-mock.module('@fancyrobot/fred-anthropic', () => ({}));
-mock.module('@fancyrobot/fred-google', () => ({}));
-mock.module('@fancyrobot/fred-groq', () => ({}));
-mock.module('@fancyrobot/fred-openrouter', () => ({}));
-
-mock.module('../../../packages/cli/src/tui/app', () => ({
-  createFredTuiApp: mockCreateFredTuiApp,
-  FredTuiApp,
-}));
-
+/** Build DI deps for tests that exercise handleChatCommand */
+function buildDeps() {
+  return createSmokeTestDeps({
+    FredClass: MockFred,
+    createFredTuiApp: mockCreateFredTuiApp,
+  });
+}
 
 function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
   return {
@@ -97,9 +85,6 @@ describe('Phase 28 streaming smoke', () => {
     // Set a fake key to satisfy detectAvailableProvider
     process.env.OPENAI_API_KEY = 'sk-test-key-for-smoke-tests';
 
-    // Deterministically reinstall module mocks
-    installFredSmokeContractMock({ FredClass: MockFred });
-    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
     mockApp.pushAssistantToken.mockClear();
     mockApp.completeAssistantStream.mockClear();
@@ -143,7 +128,7 @@ describe('Phase 28 streaming smoke', () => {
 
     // handleChatCommand runs Effect.never in interactive mode (keeps lifecycle
     // scope open until process.exit). Fire-and-forget and poll for the mock call.
-    const chatPromise = handleChatCommand().catch(() => {});
+    const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
 
     // Wait for createFredTuiApp to be called (up to 2s)
     const deadline = Date.now() + 2000;
@@ -269,7 +254,7 @@ describe('Phase 28 streaming smoke', () => {
 
       // handleChatCommand runs Effect.never in interactive mode. Fire-and-forget
       // and poll for the mock call so we can exercise the onSubmit callback.
-      const chatPromise = handleChatCommand().catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {

@@ -7,6 +7,10 @@
  * - Explicit chat command selects interactive branch in TTY mode
  * - Explicit chat command selects non-interactive branch in non-TTY mode
  * - No raw-mode APIs invoked in non-TTY mode
+ *
+ * All Fred/provider/TUI dependencies are injected via ChatDependencies DI
+ * instead of mock.module(), preventing global module pollution that caused
+ * 50+ unrelated test failures when running the full suite.
  */
 
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
@@ -14,17 +18,11 @@ import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
   createMockContextManager,
   createMockFredClass,
+  createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
-  installCommonSmokeModuleMocks,
-  installFredSmokeContractMock,
   restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
-
-// We mock createFredTuiApp at the module level so handleChatCommand
-// doesn't try to create a real OpenTUI renderer in TTY mode tests.
-// Import the real FredTuiApp so other tests can still use it.
-import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 
 const mockApp = {
   stop: mock(() => {}),
@@ -49,57 +47,14 @@ const MockFred = createMockFredClass({
   contextManager: mockContextManager,
   defaultStreamDelta: 'test',
 });
-installFredSmokeContractMock({ FredClass: MockFred });
 
-mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
-  DEV_CHAT_PROVIDER_PACKAGES: {
-    openai: '@fancyrobot/fred-openai',
-    anthropic: '@fancyrobot/fred-anthropic',
-    google: '@fancyrobot/fred-google',
-    groq: '@fancyrobot/fred-groq',
-    openrouter: '@fancyrobot/fred-openrouter',
-  },
-  detectAvailableProvider: () => ({ platform: 'openai', model: 'gpt-4o-mini' }),
-  loadProviderPackage: async () => {},
-  ensureDefaultChatAgent: async (fred: InstanceType<typeof MockFred>) => {
-    if (fred.getAgents().length === 0) {
-      await fred.createAgent({
-        id: '__tui_agent__',
-        name: 'Chat',
-        platform: 'openai',
-        model: 'gpt-4o-mini',
-      });
-    }
-
-    return {
-      agentId: '__tui_agent__',
-      model: 'gpt-4o-mini',
-      provider: 'openai',
-    };
-  },
-}));
-
-// Mock resolveProjectConfig to return failure (forces detectAvailableProvider path)
-mock.module('../../../packages/cli/src/project/resolve-config', () => ({
-  resolveProjectConfig: () => ({
-    success: false,
-    diagnostics: [],
-  }),
-}));
-
-// Mock provider package imports to avoid peer dependency issues in tests
-mock.module('@fancyrobot/fred-openai', () => ({}));
-mock.module('@fancyrobot/fred-anthropic', () => ({}));
-mock.module('@fancyrobot/fred-google', () => ({}));
-mock.module('@fancyrobot/fred-groq', () => ({}));
-mock.module('@fancyrobot/fred-openrouter', () => ({}));
-
-// Use mock.module to intercept only createFredTuiApp, preserve FredTuiApp
-mock.module('../../../packages/cli/src/tui/app', () => ({
-  createFredTuiApp: mockCreateFredTuiApp,
-  FredTuiApp,
-}));
-
+/** Build DI deps for tests that exercise handleChatCommand */
+function buildDeps() {
+  return createSmokeTestDeps({
+    FredClass: MockFred,
+    createFredTuiApp: mockCreateFredTuiApp,
+  });
+}
 
 describe('phase 27 smoke', () => {
   let originalStdin: typeof process.stdin;
@@ -130,9 +85,6 @@ describe('phase 27 smoke', () => {
       exitCode = code ?? 0;
     });
 
-    // Deterministically reinstall module mocks (defensive against mock.restore())
-    installFredSmokeContractMock({ FredClass: MockFred });
-    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
   });
 
@@ -263,7 +215,7 @@ describe('phase 27 smoke', () => {
 
       try {
         const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-        await handleChatCommand();
+        await handleChatCommand(buildDeps());
 
         const jsonOutput = logs.join('\n');
         expect(jsonOutput).toContain('non-interactive');
@@ -333,7 +285,7 @@ describe('phase 27 smoke', () => {
 
       try {
         const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-        await handleChatCommand();
+        await handleChatCommand(buildDeps());
 
         expect(setRawModeSpy).not.toHaveBeenCalled();
       } finally {

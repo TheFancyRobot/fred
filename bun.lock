@@ -5,7 +5,14 @@
     "": {
       "name": "fred",
       "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-anthropic": "workspace:*",
+        "@fancyrobot/fred-cli": "workspace:*",
+        "@fancyrobot/fred-dev": "workspace:*",
+        "@fancyrobot/fred-google": "workspace:*",
         "@fancyrobot/fred-groq": "workspace:*",
+        "@fancyrobot/fred-openai": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
       },
       "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
@@ -38,7 +45,7 @@
     },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "bin": {
         "fred": "./src/index.ts",
       },
@@ -63,7 +70,7 @@
     },
     "packages/core": {
       "name": "@fancyrobot/fred",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "graphology": "^0.26.0",
         "graphology-dag": "^0.4.1",
@@ -83,7 +90,7 @@
     },
     "packages/dev": {
       "name": "@fancyrobot/fred-dev",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@fancyrobot/fred": "workspace:^",
         "chokidar": "^5.0.0",
@@ -100,7 +107,7 @@
     },
     "packages/provider-anthropic": {
       "name": "@fancyrobot/fred-anthropic",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@effect/ai": "^0.33.2",
         "@effect/ai-anthropic": "^0.23.0",
@@ -116,7 +123,7 @@
     },
     "packages/provider-google": {
       "name": "@fancyrobot/fred-google",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@effect/ai": "^0.33.2",
         "@effect/ai-google": "^0.12.1",
@@ -134,7 +141,7 @@
     },
     "packages/provider-groq": {
       "name": "@fancyrobot/fred-groq",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@effect/ai": "^0.33.2",
         "@effect/platform": "^0.94.2",
@@ -150,7 +157,7 @@
     },
     "packages/provider-openai": {
       "name": "@fancyrobot/fred-openai",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@effect/ai": "^0.33.2",
         "@effect/ai-openai": "^0.37.2",
@@ -166,7 +173,7 @@
     },
     "packages/provider-openrouter": {
       "name": "@fancyrobot/fred-openrouter",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@effect/ai": "^0.33.2",
         "@effect/ai-openai": "^0.37.2",

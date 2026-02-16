@@ -18,6 +18,32 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
 
+/**
+ * Injectable dependencies for the chat command.
+ * Production code uses the defaults; tests can supply mocks
+ * without polluting the global module registry.
+ */
+export interface ChatDependencies {
+  /** Factory that creates a Fred instance. */
+  createFred: () => Fred | PromiseLike<Fred>;
+  /** Storage factory for fallback persistence. */
+  createStorage: (opts: { path: string }) => unknown;
+  /** Resolve project config. */
+  resolveProjectConfig: typeof resolveProjectConfig;
+  /** Ensure a default chat agent exists. */
+  ensureDefaultChatAgent: typeof ensureDefaultChatAgent;
+  /** Create the TUI app. */
+  createFredTuiApp: typeof createFredTuiApp;
+}
+
+const DEFAULT_DEPS: ChatDependencies = {
+  createFred: () => new Fred(),
+  createStorage: (opts) => new SqliteContextStorage(opts),
+  resolveProjectConfig,
+  ensureDefaultChatAgent,
+  createFredTuiApp,
+};
+
 export interface NonInteractiveFallbackPayload {
   mode: 'non-interactive';
   reason: string;
@@ -57,27 +83,28 @@ export function detectAvailableProvider(): { platform: string; model: string } |
 export function configureChatFallbackPersistence(
   fred: Pick<Fred, 'getContextManager'>,
   sqlitePath = process.env.FRED_SQLITE_PATH || './fred.db',
+  createStorage: ChatDependencies['createStorage'] = DEFAULT_DEPS.createStorage,
 ): void {
-  fred.getContextManager().setStorage(new SqliteContextStorage({ path: sqlitePath }));
+  fred.getContextManager().setStorage(createStorage({ path: sqlitePath }) as any);
 }
 
 /**
  * Initialize Fred instance with config or auto-detection
  * Returns Fred instance and model/provider info
  */
-async function initializeFred(): Promise<{
+async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
   fred: Fred;
   model: string;
   provider: string;
   pluginSlashCommands: PluginSlashCommandRuntime[];
   startupWarning: string | null;
 }> {
-  const fred = new Fred();
+  const fred = await deps.createFred();
   let pluginSlashCommands: PluginSlashCommandRuntime[] = [];
   let startupWarning: string | null = null;
 
   // Try to load project config
-  const configResult = resolveProjectConfig();
+  const configResult = deps.resolveProjectConfig();
 
   if (configResult.success && configResult.config && configResult.configPath) {
     // Config found - initialize from it
@@ -89,7 +116,7 @@ async function initializeFred(): Promise<{
 
       await fred.initializeFromConfig(configResult.configPath);
 
-      const result = await ensureDefaultChatAgent(fred, {
+      const result = await deps.ensureDefaultChatAgent(fred, {
         agentId: '__tui_agent__',
       });
 
@@ -119,9 +146,9 @@ async function initializeFred(): Promise<{
   }
 
   // No config or config failed - apply shared dev-chat fallback behavior
-  configureChatFallbackPersistence(fred);
+  configureChatFallbackPersistence(fred, undefined, deps.createStorage);
 
-  const result = await ensureDefaultChatAgent(fred, {
+  const result = await deps.ensureDefaultChatAgent(fred, {
     agentId: '__tui_agent__',
   });
 
@@ -190,7 +217,8 @@ export const TERMINAL_RECOVERY_GUIDANCE =
  * In interactive mode, terminal lifecycle is managed by Effect acquire/use/release
  * via withTerminalLifecycle, guaranteeing cleanup on success, error, and interruption.
  */
-export async function handleChatCommand(): Promise<void> {
+export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): Promise<void> {
+  const resolvedDeps: ChatDependencies = { ...DEFAULT_DEPS, ...deps };
   const mode = detectTerminalMode();
 
   // Interactive TTY mode — launch TUI shell with Effect-scoped lifecycle
@@ -199,7 +227,7 @@ export async function handleChatCommand(): Promise<void> {
     const interactiveProgram = Effect.gen(function* () {
       // Initialize Fred
       const initResult = yield* Effect.tryPromise({
-        try: () => initializeFred(),
+        try: () => initializeFred(resolvedDeps),
         catch: (error) =>
           new Error(
             `Failed to initialize AI provider: ${error instanceof Error ? error.message : String(error)}`
@@ -212,7 +240,7 @@ export async function handleChatCommand(): Promise<void> {
       // Create TUI app — resolves a long-lived app that runs until quit
       const app = yield* Effect.tryPromise({
         try: () =>
-          createFredTuiApp(
+          resolvedDeps.createFredTuiApp(
             {
               onSubmit: (text: string, sessionId: string | null) => {
                 const activeSessionId = sessionId ?? contextManager.generateConversationId();

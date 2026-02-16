@@ -1,4 +1,49 @@
 import { mock } from 'bun:test';
+import type { ChatDependencies } from '../../../../packages/cli/src/commands/chat';
+
+/**
+ * Create a `ChatDependencies` object for smoke tests.
+ *
+ * This replaces `installFredSmokeContractMock` + `installCommonSmokeModuleMocks`
+ * by injecting mocks through the DI interface rather than replacing global modules
+ * with `mock.module()`.  Using DI avoids polluting the module registry for the
+ * entire Bun test process, which previously caused 50+ unrelated test failures.
+ */
+export function createSmokeTestDeps(options: {
+  FredClass?: ReturnType<typeof createMockFredClass>;
+  createFredTuiApp?: (...args: any[]) => any;
+} = {}): ChatDependencies {
+  const FredClass = options.FredClass ?? createMockFredClass();
+  const createFredTuiApp = options.createFredTuiApp ?? mock(async () => ({
+    stop: mock(() => {}),
+    isRunning: () => true,
+    getState: () => ({}),
+    updateTelemetryModel: mock(() => {}),
+  }));
+
+  return {
+    createFred: () => new FredClass() as any,
+    createStorage: (opts) => new MockSqliteContextStorage(opts),
+    resolveProjectConfig: () => ({ success: false, diagnostics: [] }) as any,
+    ensureDefaultChatAgent: async (fred: any) => {
+      if (fred.getAgents().length === 0) {
+        await fred.createAgent({
+          id: '__tui_agent__',
+          name: 'Chat',
+          platform: 'openai',
+          model: 'gpt-4o-mini',
+        });
+      }
+      return {
+        agentId: '__tui_agent__',
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        created: fred.getAgents().length === 1,
+      };
+    },
+    createFredTuiApp: createFredTuiApp as any,
+  };
+}
 
 type SessionSummary = {
   id: string;
@@ -203,36 +248,4 @@ export function createMockFredClass(options: MockFredClassOptions = {}) {
   };
 }
 
-export function installFredSmokeContractMock(options: {
-  FredClass?: ReturnType<typeof createMockFredClass>;
-  registerBuiltinPack?: ReturnType<typeof mock>;
-} = {}): void {
-  const FredClass = options.FredClass ?? createMockFredClass();
-  const registerBuiltinPack = options.registerBuiltinPack ?? mock(() => {});
 
-  mock.module('@fancyrobot/fred', () => ({
-    Fred: FredClass,
-    SqliteContextStorage: MockSqliteContextStorage,
-    registerBuiltinPack,
-  }));
-}
-
-/**
- * Install the common set of provider and project-config module mocks shared
- * across all smoke suites. Call in beforeEach after mock.restore() to
- * deterministically reinstall module overrides that mock.restore() clears.
- *
- * NOTE: mock.restore() does NOT undo mock.module() overrides in current Bun
- * versions, but calling this in beforeEach is a defensive measure against
- * future behavior changes and ensures a known-clean baseline per test.
- */
-export function installCommonSmokeModuleMocks(): void {
-  mock.module('../../../packages/cli/src/project/resolve-config', () => ({
-    resolveProjectConfig: () => ({ success: false, diagnostics: [] }),
-  }));
-  mock.module('@fancyrobot/fred-openai', () => ({}));
-  mock.module('@fancyrobot/fred-anthropic', () => ({}));
-  mock.module('@fancyrobot/fred-google', () => ({}));
-  mock.module('@fancyrobot/fred-groq', () => ({}));
-  mock.module('@fancyrobot/fred-openrouter', () => ({}));
-}

@@ -1,3 +1,13 @@
+/**
+ * Phase 33 launch contract smoke tests
+ *
+ * Verifies canonical command routing, TTY mode semantics, startup chooser,
+ * and session resume flows.
+ *
+ * All Fred/provider/TUI dependencies are injected via ChatDependencies DI
+ * instead of mock.module(), preventing global module pollution.
+ */
+
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
@@ -6,10 +16,9 @@ import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
   createMockFredClass,
+  createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
-  installCommonSmokeModuleMocks,
-  installFredSmokeContractMock,
   restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
@@ -33,53 +42,14 @@ const MockFred = createMockFredClass({
   contextManager: mockContextManager,
   defaultStreamDelta: 'test',
 });
-installFredSmokeContractMock({ FredClass: MockFred });
 
-mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
-  DEV_CHAT_PROVIDER_PACKAGES: {
-    openai: '@fancyrobot/fred-openai',
-    anthropic: '@fancyrobot/fred-anthropic',
-    google: '@fancyrobot/fred-google',
-    groq: '@fancyrobot/fred-groq',
-    openrouter: '@fancyrobot/fred-openrouter',
-  },
-  detectAvailableProvider: () => ({ platform: 'openai', model: 'gpt-4o-mini' }),
-  loadProviderPackage: async () => {},
-  ensureDefaultChatAgent: async (fred: InstanceType<typeof MockFred>) => {
-    if (fred.getAgents().length === 0) {
-      await fred.createAgent({
-        id: '__tui_agent__',
-        name: 'Chat',
-        platform: 'openai',
-        model: 'gpt-4o-mini',
-      });
-    }
-
-    return {
-      agentId: '__tui_agent__',
-      model: 'gpt-4o-mini',
-      provider: 'openai',
-    };
-  },
-}));
-
-mock.module('../../../packages/cli/src/project/resolve-config', () => ({
-  resolveProjectConfig: () => ({
-    success: false,
-    diagnostics: [],
-  }),
-}));
-
-mock.module('@fancyrobot/fred-openai', () => ({}));
-mock.module('@fancyrobot/fred-anthropic', () => ({}));
-mock.module('@fancyrobot/fred-google', () => ({}));
-mock.module('@fancyrobot/fred-groq', () => ({}));
-mock.module('@fancyrobot/fred-openrouter', () => ({}));
-
-mock.module('../../../packages/cli/src/tui/app', () => ({
-  createFredTuiApp: mockCreateFredTuiApp,
-  FredTuiApp,
-}));
+/** Build DI deps for tests that exercise handleChatCommand */
+function buildDeps() {
+  return createSmokeTestDeps({
+    FredClass: MockFred,
+    createFredTuiApp: mockCreateFredTuiApp,
+  });
+}
 
 function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
   return {
@@ -177,9 +147,6 @@ describe('phase 33 launch contract smoke', () => {
       exitCode = code ?? 0;
     });
 
-    // Deterministically reinstall module mocks
-    installFredSmokeContractMock({ FredClass: MockFred });
-    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
     mockApp.updateTelemetryModel.mockClear();
     mockContextManager.setStorage.mockClear();
@@ -279,7 +246,7 @@ describe('phase 33 launch contract smoke', () => {
       expect(mode.mode).toBe('non-tty');
 
       const { handleChatCommand, createNonInteractiveFallbackPayload } = await import('../../../packages/cli/src/commands/chat');
-      await handleChatCommand();
+      await handleChatCommand(buildDeps());
 
       const parsed = JSON.parse(logs.join('\n'));
       const expected = createNonInteractiveFallbackPayload(mode.reason);

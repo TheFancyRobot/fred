@@ -1,11 +1,21 @@
+/**
+ * Phase 35 cross-phase smoke contract guard
+ *
+ * Validates that the shared smoke-test fixture contract stays aligned
+ * with the runtime-facing API surface. Includes a stale-contract test
+ * that deliberately uses an incomplete mock to verify error diagnostics.
+ *
+ * All Fred/provider/TUI dependencies are injected via ChatDependencies DI
+ * instead of mock.module(), preventing global module pollution.
+ */
+
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
   createMockContextManager,
   createMockFredClass,
+  createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
-  installCommonSmokeModuleMocks,
-  installFredSmokeContractMock,
   MockSqliteContextStorage,
   restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
@@ -67,45 +77,6 @@ const CanonicalMockFred = createMockFredClass({
   contextManager: mockContextManager,
   defaultStreamDelta: 'test',
 });
-installFredSmokeContractMock({ FredClass: CanonicalMockFred });
-
-mock.module('@fancyrobot/fred-dev/chat-defaults', () => ({
-  DEV_CHAT_PROVIDER_PACKAGES: {
-    openai: '@fancyrobot/fred-openai',
-    anthropic: '@fancyrobot/fred-anthropic',
-    google: '@fancyrobot/fred-google',
-    groq: '@fancyrobot/fred-groq',
-    openrouter: '@fancyrobot/fred-openrouter',
-  },
-  detectAvailableProvider: () => ({ platform: 'openai', model: 'gpt-4o-mini' }),
-  loadProviderPackage: async () => {},
-  ensureDefaultChatAgent: async (fred: InstanceType<typeof CanonicalMockFred>) => {
-    if (fred.getAgents().length === 0) {
-      await fred.createAgent({
-        id: '__tui_agent__',
-        name: 'Chat',
-        platform: 'openai',
-        model: 'gpt-4o-mini',
-      });
-    }
-
-    return {
-      agentId: '__tui_agent__',
-      model: 'gpt-4o-mini',
-      provider: 'openai',
-    };
-  },
-}));
-
-mock.module('../../../packages/cli/src/project/resolve-config', () => ({
-  resolveProjectConfig: () => ({ success: false, diagnostics: [] }),
-}));
-
-mock.module('@fancyrobot/fred-openai', () => ({}));
-mock.module('@fancyrobot/fred-anthropic', () => ({}));
-mock.module('@fancyrobot/fred-google', () => ({}));
-mock.module('@fancyrobot/fred-groq', () => ({}));
-mock.module('@fancyrobot/fred-openrouter', () => ({}));
 
 describe('phase 35 cross-phase smoke contract guard', () => {
   let originalStdin: typeof process.stdin;
@@ -117,9 +88,6 @@ describe('phase 35 cross-phase smoke contract guard', () => {
     originalStdout = process.stdout;
     originalExit = process.exit;
 
-    // Deterministically reinstall module mocks
-    installFredSmokeContractMock({ FredClass: CanonicalMockFred });
-    installCommonSmokeModuleMocks();
     mockContextManager.setStorage.mockClear();
   });
 
@@ -156,6 +124,7 @@ describe('phase 35 cross-phase smoke contract guard', () => {
   });
 
   test('handleChatCommand integration reports STALE_CONTRACT context for stale mocks', async () => {
+    // Create a deliberately incomplete mock Fred that lacks getContextManager
     class StaleMockFred {
       async initializeFromConfig() {}
       async setToolPolicies() {}
@@ -174,10 +143,9 @@ describe('phase 35 cross-phase smoke contract guard', () => {
       }
     }
 
-    mock.module('@fancyrobot/fred', () => ({
-      Fred: StaleMockFred,
-      registerBuiltinPack: mock(() => {}),
-    }));
+    // Inject the stale mock via DI instead of mock.module
+    const staleDeps = createSmokeTestDeps({ FredClass: CanonicalMockFred });
+    staleDeps.createFred = () => new StaleMockFred() as any;
 
     const mockStdin = createStdinDouble({
       isTTY: true,
@@ -210,7 +178,7 @@ describe('phase 35 cross-phase smoke contract guard', () => {
 
       const run = async () => {
         try {
-          await handleChatCommand();
+          await handleChatCommand(staleDeps);
         } catch (cause) {
           throw createStaleContractError(['getContextManager', 'SqliteContextStorage'], cause);
         }
@@ -224,7 +192,6 @@ describe('phase 35 cross-phase smoke contract guard', () => {
       });
     } finally {
       console.error = originalError;
-      installFredSmokeContractMock({ FredClass: CanonicalMockFred });
     }
   });
 });
