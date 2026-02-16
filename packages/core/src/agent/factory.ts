@@ -918,7 +918,33 @@ export class AgentFactory {
           program as Effect.Effect<any, any, any>,
           fullLayer as any
         ) as Effect.Effect<any, any, never>;
-        const result = await Effect.runPromise(providedProgram);
+
+        // Retry boundary: providers (e.g. Groq) attach _retryDiagnostics to errors
+        // after exhausting their internal retries. The factory normalizes this metadata
+        // so downstream consumers (CLI --json) can emit structured diagnostics.
+        let result: any;
+        try {
+          result = await Effect.runPromise(providedProgram);
+        } catch (providerError: any) {
+          // Effect.runPromise wraps errors in FiberFailure - extract original error
+          const fiberCauseSymbol = Symbol.for('effect/Runtime/FiberFailure/Cause');
+          const fiberCause = providerError?.[fiberCauseSymbol];
+          const originalError = fiberCause?._tag === 'Fail' ? fiberCause.error : providerError;
+
+          const diagnostics = originalError?._retryDiagnostics
+            ?? originalError?.cause?._retryDiagnostics
+            ?? providerError?._retryDiagnostics;
+
+          if (diagnostics) {
+            // Attach normalized retry metadata for CLI structured error payloads
+            const enrichedError = providerError instanceof Error
+              ? providerError
+              : new Error(String(providerError));
+            (enrichedError as any)._retryDiagnostics = diagnostics;
+            throw enrichedError;
+          }
+          throw providerError;
+        }
 
         // Extract tool calls from result
         const allToolCalls = (result.toolCalls ?? []).map((tc: any) => {
