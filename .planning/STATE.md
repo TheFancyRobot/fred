@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 gap-closure execution in progress — Phase 35 verified, Phase 36 ready
+**Current focus:** v0.2.1 milestone complete — all 158 plans across 36 phases executed
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
-Phase: 35 of 36 (Cross-Phase Smoke Contract Refresh)
-Plan: 3 of 3 in current phase
-Status: Phase verified
-Last activity: 2026-02-15 - Phase 35 verification passed (4/4 must-haves)
+Phase: 36 of 36 (Runtime & Test Hardening)
+Plan: 4 of 4 in current phase
+Status: Phase complete — v0.2.1 milestone complete
+Last activity: 2026-02-16 - Completed 36-04-PLAN.md (startup chooser Ctrl+C/Escape quit gap closure)
 
-Progress: [█████████░] 98% (154/157 plans complete)
+Progress: [██████████] 100% (158/158 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28 (v0.2.1 milestone)
-- Average duration: 5.60 min
-- Total execution time: ~2.43 hours
+- Total plans completed: 30 (v0.2.1 milestone)
+- Average duration: 5.41 min
+- Total execution time: ~2.70 hours
 
 **By Phase:**
 
@@ -34,11 +34,12 @@ Progress: [█████████░] 98% (154/157 plans complete)
 | 30 | 3 | 8.45 min | 2.82 min |
 | 31 | 4 | 15.27 min | 3.82 min |
 | 32 | 5 | 19.00 min | 3.80 min |
+| 36 | 4 | ~16 min | ~4.00 min |
 
 **Recent Trend:**
-- Last 5 plans: 3.00 min (32-01), 3.00 min (32-02), 4.00 min (32-03), 5.00 min (32-04), 4.00 min (32-05)
-- Trend: Phase 32 completed cleanly with stable 3-5 min plan execution cadence
-- Automated plans averaging 5.60 min in current milestone window
+- Last 5 plans: 3.00 min (36-01), 3.00 min (36-02), 9.00 min (36-03), 1.00 min (36-04)
+- Trend: Phase 36 closed with targeted chooser-time quit gap fix and regression coverage
+- v0.2.1 milestone complete: 30 plans, ~5.41 min/plan average
 
 **Previous Milestones:**
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
@@ -114,6 +115,13 @@ Recent decisions affecting current work:
 - Machine-first cross-phase smoke evidence contract (35-02) — per-check exit codes + decisive lines + linkage are persisted for CI/audit reruns
 - Requirement-to-check evidence traceability in audit companion (35-03) — `TUI-08` and `SESS-01..SESS-07` are now mapped to concrete smoke checks and JSON paths
 - Explicit stale-contract absence reporting in rerun evidence (35-03) — audit replay now verifies `STALE_CONTRACT` status directly instead of by inference
+- RunJsonChannel one-document contract with violation exit code 78 (36-01) — centralized output channel enforces zero-stderr guarantee for fred run --json
+- Effect.never for long-lived TUI scope retention (36-02) — interactive chat lifecycle stays armed for cleanup during indefinite TUI session
+- Removed ad-hoc process handlers in favor of lifecycle wrapper (36-02) — withTerminalLifecycle's installExitHandler handles SIGINT/SIGTERM/exit
+- Full-API stdin/stdout doubles for concurrent test isolation (36-03) — createStdinDouble/createStdoutDouble with pause/resume/on/off/setRawMode prevent concurrent crash
+- Default-deny retry allowlist in smoke runner (36-03) — 5 transient signatures eligible for max-1-retry, all other failures fail-hard immediately
+- Per-attempt evidence provenance in smoke JSON (36-03) — attemptCount, retryReason, and attempts[] preserved for CI/audit traceability
+- Startup chooser interrupt passthrough (36-04) — chooser-open Ctrl+C/Escape now route through shared app quit action path
 
 ### Pending Todos
 
@@ -144,6 +152,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-15T06:46:39Z
-Stopped at: Phase 35 verification passed; ready for Phase 36
+Last session: 2026-02-16T19:39:25Z
+Stopped at: Completed 36-04-PLAN.md (startup chooser Ctrl+C/Escape quit gap closure) — v0.2.1 milestone complete
 Resume file: None

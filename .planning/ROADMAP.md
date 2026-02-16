@@ -13,13 +13,13 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - ✅ **v0.2.0 Effect Migration + Monorepo** — Phases 1-21.1 (shipped 2026-02-01, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
-- 🚧 **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (gap-closure phases 33-36 added 2026-02-14)
+- ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 
 ---
 
 ## Phases
 
-### 🚧 v0.2.1 CLI/TUI Developer Experience (Gap Closure In Progress)
+### ✅ v0.2.1 CLI/TUI Developer Experience (Shipped 2026-02-16)
 
 **Milestone Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
 
@@ -32,7 +32,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 33: Default Launch Contract Alignment** - Align `fred` no-args launch behavior with TUI requirement and flow acceptance (completed 2026-02-15)
 - [x] **Phase 34: Session Verification Recovery** - Restore Phase 29 acceptance by producing missing verification artifact and evidence (completed 2026-02-15)
 - [x] **Phase 35: Cross-Phase Smoke Contract Refresh** - Update stale mocks and recover milestone smoke flow coverage (completed 2026-02-15)
-- [ ] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed)
+- [x] **Phase 36: Runtime & Test Hardening** - Close deferred reliability debt from audit (JSON error channels, lifecycle wiring, Bun mock bleed) (completed 2026-02-16)
 
 ## Phase Details
 
@@ -184,7 +184,7 @@ Plans:
   2. TUI boot + streaming smoke harness passes with refreshed contracts
   3. Cross-phase integration checks no longer report stale-contract regressions between phases 27/28/29
   4. Milestone smoke evidence is refreshed for audit rerun
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 35-01-PLAN.md — Align phase smoke harnesses to a shared session-aware Fred mock contract and add explicit stale-contract guard coverage (completed 2026-02-15, 4 min)
@@ -200,7 +200,13 @@ Plans:
   1. `fred run --json` error paths follow strict JSON-channel consistency
   2. `withTerminalLifecycle` helper is wired into active production chat path
   3. Smoke suites avoid Bun mock state bleed and run reliably in parallel CI settings
-**Plans**: 0 plans
+**Plans**: 3 plans
+
+Plans:
+- [x] 36-01-PLAN.md — Enforce strict `fred run --json` channel contract with shared runtime utility and deterministic error semantics (completed 2026-02-16, 4 min)
+- [x] 36-02-PLAN.md — Wire `withTerminalLifecycle` into production interactive chat startup and validate fallback parity (completed 2026-02-16, 3 min)
+- [x] 36-03-PLAN.md — Eliminate smoke mock bleed under concurrent Bun tests and harden retry/evidence determinism (completed 2026-02-16, 9 min)
+- [x] 36-04-PLAN.md — Restore startup chooser Ctrl+C/Escape quit path and lock regression coverage for immediate chooser-time exit (completed 2026-02-16, 1 min, gap closure)
 
 ## Progress
 
@@ -218,7 +224,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 1/1 | Complete | 2026-02-15 |
 | 35. Cross-Phase Smoke Contract Refresh | 3/3 | Complete | 2026-02-15 |
-| 36. Runtime & Test Hardening | 0/0 | Pending | - |
+| 36. Runtime & Test Hardening | 4/4 | Complete | 2026-02-16 |
 
 ---
 
@@ -240,4 +246,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-15 - Completed and verified Phase 35 cross-phase smoke contract refresh (3/3 plans, 4/4 must-haves)*
+*Last updated: 2026-02-16 - Completed and verified Phase 36 runtime & test hardening (4/4 plans, including chooser-time Ctrl+C gap closure) — v0.2.1 milestone complete*
