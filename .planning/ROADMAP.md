@@ -200,7 +200,7 @@ Plans:
   1. `fred run --json` error paths follow strict JSON-channel consistency
   2. `withTerminalLifecycle` helper is wired into active production chat path
   3. Smoke suites avoid Bun mock state bleed and run reliably in parallel CI settings
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 36-01-PLAN.md — Enforce strict `fred run --json` channel contract with shared runtime utility and deterministic error semantics (completed 2026-02-16, 4 min)
