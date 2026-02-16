@@ -5,6 +5,17 @@
   "channels": [
     "OK"
   ],
+  "retryPolicy": {
+    "maxRetries": 1,
+    "allowlist": [
+      "TRANSIENT_TIMEOUT",
+      "TRANSIENT_ECONNRESET",
+      "TRANSIENT_ECONNREFUSED",
+      "TRANSIENT_SEGFAULT",
+      "TRANSIENT_OOM"
+    ],
+    "semantics": "fail-hard"
+  },
   "linkage": {
     "phase27": {
       "suite": "tests/unit/cli/phase27-smoke.test.ts",
@@ -50,9 +61,23 @@
       "decisiveLines": [
         "0 fail",
         "13 pass",
-        "Ran 13 tests across 1 file. [329.00ms]"
+        "Ran 13 tests across 1 file. [311.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "13 pass",
+            "Ran 13 tests across 1 file. [311.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     },
     {
       "id": "phase28-streaming-smoke",
@@ -62,9 +87,23 @@
       "decisiveLines": [
         "0 fail",
         "3 pass",
-        "Ran 3 tests across 1 file. [653.00ms]"
+        "Ran 3 tests across 1 file. [694.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "3 pass",
+            "Ran 3 tests across 1 file. [694.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     },
     {
       "id": "phase33-launch-contract-smoke",
@@ -74,9 +113,23 @@
       "decisiveLines": [
         "0 fail",
         "7 pass",
-        "Ran 7 tests across 1 file. [603.00ms]"
+        "Ran 7 tests across 1 file. [593.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "7 pass",
+            "Ran 7 tests across 1 file. [593.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     },
     {
       "id": "session-state",
@@ -86,9 +139,23 @@
       "decisiveLines": [
         "0 fail",
         "12 pass",
-        "Ran 12 tests across 1 file. [46.00ms]"
+        "Ran 12 tests across 1 file. [36.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "12 pass",
+            "Ran 12 tests across 1 file. [36.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     },
     {
       "id": "session-commands",
@@ -98,9 +165,23 @@
       "decisiveLines": [
         "0 fail",
         "5 pass",
-        "Ran 5 tests across 1 file. [543.00ms]"
+        "Ran 5 tests across 1 file. [567.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "5 pass",
+            "Ran 5 tests across 1 file. [567.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     },
     {
       "id": "phase35-rollup",
@@ -110,9 +191,23 @@
       "decisiveLines": [
         "0 fail",
         "40 pass",
-        "Ran 40 tests across 5 files. [1242.00ms]"
+        "Ran 40 tests across 5 files. [1354.00ms]"
       ],
-      "channel": "OK"
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "40 pass",
+            "Ran 40 tests across 5 files. [1354.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
     }
   ]
 }
