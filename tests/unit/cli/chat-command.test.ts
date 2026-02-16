@@ -5,6 +5,7 @@ import {
   detectAvailableProvider,
   loadProviderPackage,
   PROVIDER_PACKAGES,
+  TERMINAL_RECOVERY_GUIDANCE,
 } from '../../../packages/cli/src/commands/chat';
 
 /**
@@ -15,6 +16,8 @@ import {
  * 1. Terminal mode detection (which drives routing)
  * 2. CLI help text includes chat command
  * 3. Command parsing handles chat case
+ * 4. Lifecycle wiring verification (source-level)
+ * 5. Recovery guidance contract
  */
 describe('Chat Command', () => {
   let originalStdin: typeof process.stdin;
@@ -371,6 +374,113 @@ describe('Chat Command', () => {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toContain('Supported: openai, anthropic, google, groq, openrouter');
       }
+    });
+  });
+
+  describe('Lifecycle wiring verification', () => {
+    test('chat.ts imports withTerminalLifecycle from terminal-lifecycle', async () => {
+      // Source-level assertion: verify the production file contains lifecycle import
+      const chatSource = await Bun.file(
+        'packages/cli/src/commands/chat.ts'
+      ).text();
+
+      expect(chatSource).toContain(
+        "import { withTerminalLifecycle } from '../runtime/terminal-lifecycle.js'"
+      );
+    });
+
+    test('interactive path uses withTerminalLifecycle wrapping', async () => {
+      // Source-level assertion: verify lifecycle is used in the interactive branch
+      const chatSource = await Bun.file(
+        'packages/cli/src/commands/chat.ts'
+      ).text();
+
+      // Lifecycle wrapper must be called in the interactive-tty branch
+      expect(chatSource).toContain('withTerminalLifecycle(interactiveProgram');
+
+      // The old ad-hoc process handlers should be removed
+      expect(chatSource).not.toContain("process.on('uncaughtException'");
+      expect(chatSource).not.toContain("process.on('unhandledRejection'");
+      expect(chatSource).not.toContain("process.on('SIGINT'");
+    });
+
+    test('interactive path uses Effect.gen for program composition', async () => {
+      const chatSource = await Bun.file(
+        'packages/cli/src/commands/chat.ts'
+      ).text();
+
+      // Interactive program built as Effect generator
+      expect(chatSource).toContain('Effect.gen(function*');
+
+      // Uses Effect.tryPromise for async operations within Effect context
+      expect(chatSource).toContain('Effect.tryPromise');
+
+      // Uses Effect.never to keep scope alive for long-running TUI
+      expect(chatSource).toContain('Effect.never');
+    });
+
+    test('non-interactive path does not use lifecycle wrapper', async () => {
+      const chatSource = await Bun.file(
+        'packages/cli/src/commands/chat.ts'
+      ).text();
+
+      // The lifecycle wrapper should only appear within the interactive-tty branch.
+      // Verify the non-interactive path still uses createNonInteractiveFallbackPayload directly.
+      expect(chatSource).toContain('createNonInteractiveFallbackPayload(mode.reason)');
+    });
+  });
+
+  describe('Terminal recovery guidance', () => {
+    test('TERMINAL_RECOVERY_GUIDANCE is exported and non-empty', () => {
+      expect(TERMINAL_RECOVERY_GUIDANCE).toBeTruthy();
+      expect(typeof TERMINAL_RECOVERY_GUIDANCE).toBe('string');
+      expect(TERMINAL_RECOVERY_GUIDANCE.length).toBeGreaterThan(0);
+    });
+
+    test('recovery guidance contains actionable terminal restore commands', () => {
+      // Must suggest at least one well-known terminal restore command
+      expect(TERMINAL_RECOVERY_GUIDANCE).toContain('reset');
+      expect(TERMINAL_RECOVERY_GUIDANCE).toContain('stty sane');
+    });
+
+    test('recovery guidance is used in lifecycle error handling path', async () => {
+      const chatSource = await Bun.file(
+        'packages/cli/src/commands/chat.ts'
+      ).text();
+
+      // Recovery guidance must appear in the catch block of lifecycle execution
+      expect(chatSource).toContain('TERMINAL_RECOVERY_GUIDANCE');
+      expect(chatSource).toContain('console.error(TERMINAL_RECOVERY_GUIDANCE)');
+    });
+  });
+
+  describe('Non-interactive fallback payload stability', () => {
+    test('fallback payload has exactly 4 required fields', () => {
+      const payload = createNonInteractiveFallbackPayload('test reason');
+      const keys = Object.keys(payload).sort();
+
+      expect(keys).toEqual(['help', 'mode', 'reason', 'suggestion']);
+    });
+
+    test('fallback payload mode is always "non-interactive"', () => {
+      const payload = createNonInteractiveFallbackPayload('any reason');
+
+      expect(payload.mode).toBe('non-interactive');
+    });
+
+    test('fallback payload passes through reason verbatim', () => {
+      const reason = 'stdin is not a TTY';
+      const payload = createNonInteractiveFallbackPayload(reason);
+
+      expect(payload.reason).toBe(reason);
+    });
+
+    test('fallback payload is JSON-serializable round-trip stable', () => {
+      const payload = createNonInteractiveFallbackPayload('stdin is not a TTY');
+      const serialized = JSON.stringify(payload, null, 2);
+      const deserialized = JSON.parse(serialized);
+
+      expect(deserialized).toEqual(payload);
     });
   });
 });

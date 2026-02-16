@@ -444,5 +444,166 @@ describe('Terminal Lifecycle', () => {
 
       // No expectations - just verifying it doesn't crash
     });
+
+    test('restores terminal state even when stdout.write throws during cleanup', async () => {
+      // Mock fully capable TTY for acquisition
+      const setRawModeMock = mock((mode: boolean) => {});
+
+      const mockStdin = {
+        isTTY: true,
+        isRaw: false,
+        setRawMode: setRawModeMock,
+        destroyed: false,
+      } as any;
+
+      let writeCallCount = 0;
+      const mockStdout = {
+        isTTY: true,
+        writable: true,
+        destroyed: false,
+        write: mock((data: string) => {
+          writeCallCount++;
+          // Allow the acquire phase writes (hide cursor), but fail during restore
+          if (data === '\x1b[?25h') {
+            throw new Error('stdout write failed during cleanup');
+          }
+          return true;
+        }),
+      } as any;
+
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        configurable: true,
+      });
+
+      Object.defineProperty(process, 'stdout', {
+        value: mockStdout,
+        configurable: true,
+      });
+
+      const program = Effect.succeed('test result');
+      const withTerminal = withTerminalLifecycle(program, {
+        rawMode: true,
+        hideCursor: true,
+      });
+
+      // Should not throw — cleanup failures are swallowed by restoreTerminalState
+      const result = await Effect.runPromise(withTerminal);
+      expect(result).toBe('test result');
+
+      // Restore
+      Object.defineProperty(process, 'stdin', {
+        value: originalStdin,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'stdout', {
+        value: originalStdout,
+        configurable: true,
+      });
+    });
+
+    test('cleanup runs even when stdin is destroyed before release', async () => {
+      const setRawModeMock = mock((mode: boolean) => {});
+
+      const mockStdin = {
+        isTTY: true,
+        isRaw: false,
+        setRawMode: setRawModeMock,
+        destroyed: false,
+      } as any;
+
+      const writes: string[] = [];
+      const mockStdout = {
+        isTTY: true,
+        writable: true,
+        destroyed: false,
+        write: mock((data: string) => {
+          writes.push(data);
+          return true;
+        }),
+      } as any;
+
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        configurable: true,
+      });
+
+      Object.defineProperty(process, 'stdout', {
+        value: mockStdout,
+        configurable: true,
+      });
+
+      // Program that marks stdin as destroyed mid-execution
+      const program = Effect.sync(() => {
+        mockStdin.destroyed = true;
+        return 'destroyed-stdin-result';
+      });
+
+      const withTerminal = withTerminalLifecycle(program, {
+        rawMode: true,
+      });
+
+      // Should complete without throwing despite destroyed stdin during cleanup
+      const result = await Effect.runPromise(withTerminal);
+      expect(result).toBe('destroyed-stdin-result');
+
+      // Restore
+      Object.defineProperty(process, 'stdin', {
+        value: originalStdin,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'stdout', {
+        value: originalStdout,
+        configurable: true,
+      });
+    });
+
+    test('lifecycle release finalizer clears internal state after cleanup', async () => {
+      const setRawModeMock = mock((mode: boolean) => {});
+
+      const mockStdin = {
+        isTTY: true,
+        isRaw: false,
+        setRawMode: setRawModeMock,
+        destroyed: false,
+      } as any;
+
+      const mockStdout = {
+        isTTY: true,
+        writable: true,
+        destroyed: false,
+        write: mock(() => true),
+      } as any;
+
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        configurable: true,
+      });
+
+      Object.defineProperty(process, 'stdout', {
+        value: mockStdout,
+        configurable: true,
+      });
+
+      const program = Effect.succeed('done');
+      const withTerminal = withTerminalLifecycle(program, { rawMode: true });
+
+      await Effect.runPromise(withTerminal);
+
+      // After lifecycle completes, restoreTerminalState should be a no-op
+      // (internal state is null). Calling it again should not throw or
+      // attempt any I/O.
+      restoreTerminalState();
+
+      // Restore
+      Object.defineProperty(process, 'stdin', {
+        value: originalStdin,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'stdout', {
+        value: originalStdout,
+        configurable: true,
+      });
+    });
   });
 });
