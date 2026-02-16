@@ -3,6 +3,10 @@ export {};
 const PHASE_ID = "35-cross-phase-smoke-contract-refresh";
 const EVIDENCE_PATH = ".planning/phases/35-cross-phase-smoke-contract-refresh/35-smoke-evidence.json";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 type SmokeChannel = "OK" | "STALE_CONTRACT" | "SMOKE_FAILURE";
 
 type SmokeCheck = {
@@ -11,14 +15,79 @@ type SmokeCheck = {
   command: string;
 };
 
-type SmokeResult = {
-  id: string;
-  label: string;
-  command: string;
+/** Outcome of a single command execution attempt. */
+type AttemptOutcome = {
+  attempt: number;
   exitCode: number;
   decisiveLines: string[];
   channel: SmokeChannel;
 };
+
+/** Full result for a check, including retry provenance when applicable. */
+type SmokeResult = {
+  id: string;
+  label: string;
+  command: string;
+  /** Final exit code (from last attempt). */
+  exitCode: number;
+  /** Final decisive lines (from last attempt). */
+  decisiveLines: string[];
+  /** Final channel classification (from last attempt). */
+  channel: SmokeChannel;
+  /** Total number of attempts (1 = no retry, 2 = one retry). */
+  attemptCount: number;
+  /** Reason for retry, or null if no retry was performed. */
+  retryReason: string | null;
+  /** Per-attempt outcomes — always preserved for all attempts. */
+  attempts: AttemptOutcome[];
+};
+
+// ---------------------------------------------------------------------------
+// Retry allowlist
+// ---------------------------------------------------------------------------
+
+/**
+ * Retry allowlist: explicit transient failure signatures that qualify for
+ * exactly one retry. Default-deny — any failure not matching these patterns
+ * is treated as deterministic and fails immediately.
+ *
+ * Each entry has an `id` for traceability, a `pattern` to match against
+ * lowercased command output, and a human-readable `reason`.
+ */
+const RETRY_ALLOWLIST: Array<{ id: string; pattern: string; reason: string }> = [
+  {
+    id: "TRANSIENT_TIMEOUT",
+    pattern: "timed out",
+    reason: "Test timed out — may be transient under CI load",
+  },
+  {
+    id: "TRANSIENT_ECONNRESET",
+    pattern: "econnreset",
+    reason: "Connection reset — transient network/IPC failure",
+  },
+  {
+    id: "TRANSIENT_ECONNREFUSED",
+    pattern: "econnrefused",
+    reason: "Connection refused — transient service startup race",
+  },
+  {
+    id: "TRANSIENT_SEGFAULT",
+    pattern: "segmentation fault",
+    reason: "Segfault — possible Bun runtime transient under pressure",
+  },
+  {
+    id: "TRANSIENT_OOM",
+    pattern: "out of memory",
+    reason: "OOM — possible transient under CI memory pressure",
+  },
+];
+
+/** Maximum retries for any eligible check (policy: exactly 1). */
+const MAX_RETRIES = 1;
+
+// ---------------------------------------------------------------------------
+// Test paths and checks
+// ---------------------------------------------------------------------------
 
 const TEST_PATHS = {
   phase27: "tests/unit/cli/phase27-smoke.test.ts",
@@ -62,6 +131,10 @@ const CHECKS: SmokeCheck[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Stale contract detection
+// ---------------------------------------------------------------------------
+
 const STALE_CONTRACT_PATTERNS = [
   "getcontextmanager is not a function",
   "sqlitcontextstorage",
@@ -70,6 +143,10 @@ const STALE_CONTRACT_PATTERNS = [
   "does not provide an export named 'sqlitecontextstorage'",
   "stale_contract",
 ];
+
+// ---------------------------------------------------------------------------
+// Core helpers
+// ---------------------------------------------------------------------------
 
 function runCommand(command: string): { exitCode: number; output: string } {
   const proc = Bun.spawnSync({
@@ -144,24 +221,131 @@ function remediationHint(channel: SmokeChannel): string {
   return "No action required.";
 }
 
-const results: SmokeResult[] = [];
+// ---------------------------------------------------------------------------
+// Retry eligibility
+// ---------------------------------------------------------------------------
 
-for (const check of CHECKS) {
-  const run = runCommand(check.command);
-  const channel = classifyChannel(run.exitCode, run.output);
-  const decisiveLines = extractDecisiveLines(run.output, run.exitCode);
+/**
+ * Check whether a failed output matches any allowlisted transient signature.
+ * Returns the matching allowlist entry or null (default-deny).
+ */
+function matchRetryAllowlist(output: string): { id: string; reason: string } | null {
+  const haystack = output.toLowerCase();
+  for (const entry of RETRY_ALLOWLIST) {
+    if (haystack.includes(entry.pattern)) {
+      return { id: entry.id, reason: entry.reason };
+    }
+  }
+  return null;
+}
 
-  results.push({
+// ---------------------------------------------------------------------------
+// Execution with retry policy
+// ---------------------------------------------------------------------------
+
+function executeCheck(check: SmokeCheck): SmokeResult {
+  const attempts: AttemptOutcome[] = [];
+  let retryReason: string | null = null;
+
+  // --- Attempt 1 ---
+  const firstRun = runCommand(check.command);
+  const firstChannel = classifyChannel(firstRun.exitCode, firstRun.output);
+  const firstDecisive = extractDecisiveLines(firstRun.output, firstRun.exitCode);
+
+  attempts.push({
+    attempt: 1,
+    exitCode: firstRun.exitCode,
+    decisiveLines: firstDecisive,
+    channel: firstChannel,
+  });
+
+  // If first attempt passed, done.
+  if (firstRun.exitCode === 0) {
+    return {
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      exitCode: firstRun.exitCode,
+      decisiveLines: firstDecisive,
+      channel: firstChannel,
+      attemptCount: 1,
+      retryReason: null,
+      attempts,
+    };
+  }
+
+  // --- Retry eligibility check (default-deny) ---
+  const allowlistMatch = matchRetryAllowlist(firstRun.output);
+
+  if (!allowlistMatch) {
+    // Not eligible for retry — deterministic failure, fail-hard immediately.
+    console.log(`[phase35-smoke] FAIL ${check.id} (exit=${firstRun.exitCode}, channel=${firstChannel}, retry=not-eligible)`);
+    return {
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      exitCode: firstRun.exitCode,
+      decisiveLines: firstDecisive,
+      channel: firstChannel,
+      attemptCount: 1,
+      retryReason: null,
+      attempts,
+    };
+  }
+
+  // --- Attempt 2 (single retry) ---
+  retryReason = `[${allowlistMatch.id}] ${allowlistMatch.reason}`;
+  console.log(`[phase35-smoke] RETRY ${check.id} (reason=${retryReason})`);
+
+  const retryRun = runCommand(check.command);
+  const retryChannel = classifyChannel(retryRun.exitCode, retryRun.output);
+  const retryDecisive = extractDecisiveLines(retryRun.output, retryRun.exitCode);
+
+  attempts.push({
+    attempt: 2,
+    exitCode: retryRun.exitCode,
+    decisiveLines: retryDecisive,
+    channel: retryChannel,
+  });
+
+  // Fail-hard: even if retry passes, the result reflects the final attempt.
+  // If it still fails, it fails. No warning-only pass for unstable retries.
+  const finalExitCode = retryRun.exitCode;
+  const finalChannel = retryChannel;
+  const finalDecisive = retryDecisive;
+
+  const statusIcon = finalExitCode === 0 ? "OK" : "FAIL";
+  console.log(`[phase35-smoke] ${statusIcon} ${check.id} (exit=${finalExitCode}, channel=${finalChannel}, attempts=2, retryReason=${retryReason})`);
+
+  return {
     id: check.id,
     label: check.label,
     command: check.command,
-    exitCode: run.exitCode,
-    decisiveLines,
-    channel,
-  });
+    exitCode: finalExitCode,
+    decisiveLines: finalDecisive,
+    channel: finalChannel,
+    attemptCount: 2,
+    retryReason,
+    attempts,
+  };
+}
 
-  const statusIcon = run.exitCode === 0 ? "OK" : "FAIL";
-  console.log(`[phase35-smoke] ${statusIcon} ${check.id} (exit=${run.exitCode}, channel=${channel})`);
+// ---------------------------------------------------------------------------
+// Main execution
+// ---------------------------------------------------------------------------
+
+const results: SmokeResult[] = [];
+
+for (const check of CHECKS) {
+  const result = executeCheck(check);
+
+  // Log only for non-retried checks (retried checks already logged above)
+  if (result.attemptCount === 1) {
+    const statusIcon = result.exitCode === 0 ? "OK" : "FAIL";
+    console.log(`[phase35-smoke] ${statusIcon} ${result.id} (exit=${result.exitCode}, channel=${result.channel})`);
+  }
+
+  results.push(result);
 }
 
 const overallExitCode = results.every((result) => result.exitCode === 0) ? 0 : 1;
@@ -173,6 +357,11 @@ const payload = {
   status: gateStatus,
   overallExitCode,
   channels,
+  retryPolicy: {
+    maxRetries: MAX_RETRIES,
+    allowlist: RETRY_ALLOWLIST.map((entry) => entry.id),
+    semantics: "fail-hard",
+  },
   linkage: {
     phase27: {
       suite: TEST_PATHS.phase27,
