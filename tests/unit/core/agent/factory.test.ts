@@ -633,6 +633,7 @@ describe('AgentFactory', () => {
     });
   });
 
+
   describe('Tool Gate Integration', () => {
     test('filters tools by intent context before model invocation', async () => {
       toolRegistry.registerTool({

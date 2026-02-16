@@ -308,6 +308,7 @@ async function main(): Promise<void> {
         exitCode = await handleMcpCommand(commandArgs, options);
         break;
 
+
       default:
         {
           const pluginResult = await pluginRuntime.dispatch(command, rawCommandArgs, {
