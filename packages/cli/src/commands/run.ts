@@ -168,9 +168,21 @@ export async function handleRunCommand(
       verbose: verboseData,
     });
   } catch (error) {
-    return channel.emitError(
-      error instanceof Error ? error.message : String(error),
-      1,
-    );
+    const message = error instanceof Error ? error.message : String(error);
+
+    // Extract retry diagnostics from provider errors (e.g. Groq transient failures)
+    // These are attached by the provider → factory retry boundary chain.
+    const retryDiagnostics = (error as any)?._retryDiagnostics;
+    const details = retryDiagnostics
+      ? {
+          retryDiagnostics,
+          category: retryDiagnostics.retryable ? 'transient' : 'configuration',
+          suggestion: retryDiagnostics.retryable
+            ? `Transient ${retryDiagnostics.failureCategory} failure after ${retryDiagnostics.attempts} attempt(s). Retry the request.`
+            : `Non-retryable error (HTTP ${retryDiagnostics.lastStatusCode}). Check API key and provider configuration.`,
+        }
+      : undefined;
+
+    return channel.emitError(message, 1, details);
   }
 }

@@ -519,3 +519,168 @@ describe('run command --json channel contract', () => {
     expect(captured.errors[0]).toContain('[tool: calculator]');
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  Structured Retry Diagnostics Tests                                */
+/* ------------------------------------------------------------------ */
+
+describe('run command --json retry diagnostics', () => {
+  function parseOneJsonDoc(output: string[]): Record<string, unknown> {
+    expect(output).toHaveLength(1);
+    const doc = JSON.parse(output[0]!);
+    expect(typeof doc).toBe('object');
+    return doc;
+  }
+
+  test('JSON error: transient provider failure includes retryDiagnostics in meta.details', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([
+      { id: 'assistant', response: { content: 'ok' } },
+    ]);
+
+    const diagnostics = {
+      provider: 'groq',
+      retryable: true,
+      attempts: 4,
+      maxRetries: 3,
+      lastStatusCode: 503,
+      failureCategory: 'transient',
+    };
+    const error = new Error('HTTP request failed after 4 attempt(s) (transient)');
+    (error as any)._retryDiagnostics = diagnostics;
+    (fred as any).processMessage = async () => { throw error; };
+
+    const exitCode = await handleRunCommand(
+      [],
+      { agent: 'assistant', input: 'hello', json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(captured.errors).toHaveLength(0);
+    const doc = parseOneJsonDoc(captured.output);
+    expect(doc.ok).toBe(false);
+    expect(doc.error).toContain('HTTP request failed after 4 attempt(s)');
+
+    const meta = doc.meta as any;
+    expect(meta).toBeDefined();
+    expect(meta.details).toBeDefined();
+    expect(meta.details.retryDiagnostics).toEqual(diagnostics);
+    expect(meta.details.category).toBe('transient');
+    expect(meta.details.suggestion).toContain('Retry the request');
+  });
+
+  test('JSON error: non-retryable 401 includes configuration diagnostics', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([
+      { id: 'assistant', response: { content: 'ok' } },
+    ]);
+
+    const diagnostics = {
+      provider: 'groq',
+      retryable: false,
+      attempts: 1,
+      maxRetries: 3,
+      lastStatusCode: 401,
+      failureCategory: 'non-retryable',
+    };
+    const error = new Error('HTTP request failed: non-retryable 401 error');
+    (error as any)._retryDiagnostics = diagnostics;
+    (fred as any).processMessage = async () => { throw error; };
+
+    const exitCode = await handleRunCommand(
+      [],
+      { agent: 'assistant', input: 'hello', json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(1);
+    const doc = parseOneJsonDoc(captured.output);
+    const meta = doc.meta as any;
+    expect(meta.details.retryDiagnostics.retryable).toBe(false);
+    expect(meta.details.retryDiagnostics.lastStatusCode).toBe(401);
+    expect(meta.details.category).toBe('configuration');
+    expect(meta.details.suggestion).toContain('Check API key');
+  });
+
+  test('JSON error: plain error without diagnostics has no meta.details', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([
+      { id: 'assistant', response: { content: 'ok' } },
+    ]);
+
+    (fred as any).processMessage = async () => { throw new Error('Generic failure'); };
+
+    const exitCode = await handleRunCommand(
+      [],
+      { agent: 'assistant', input: 'hello', json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(1);
+    const doc = parseOneJsonDoc(captured.output);
+    expect(doc.ok).toBe(false);
+    expect(doc.error).toContain('Generic failure');
+    expect(doc.meta).toBeUndefined();
+  });
+
+  test('JSON error: rate-limit 429 includes transient diagnostics', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([
+      { id: 'assistant', response: { content: 'ok' } },
+    ]);
+
+    const diagnostics = {
+      provider: 'groq',
+      retryable: true,
+      attempts: 4,
+      maxRetries: 3,
+      lastStatusCode: 429,
+      failureCategory: 'rate-limit',
+    };
+    const error = new Error('Rate limited');
+    (error as any)._retryDiagnostics = diagnostics;
+    (fred as any).processMessage = async () => { throw error; };
+
+    const exitCode = await handleRunCommand(
+      [],
+      { agent: 'assistant', input: 'hello', json: true },
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(1);
+    const doc = parseOneJsonDoc(captured.output);
+    const meta = doc.meta as any;
+    expect(meta.details.retryDiagnostics.failureCategory).toBe('rate-limit');
+    expect(meta.details.category).toBe('transient');
+    expect(meta.details.suggestion).toContain('rate-limit');
+  });
+
+  test('text mode: error with diagnostics still outputs plain error', async () => {
+    const captured = createCapturingIO();
+    const fred = createMockFred([
+      { id: 'assistant', response: { content: 'ok' } },
+    ]);
+
+    const diagnostics = {
+      provider: 'groq',
+      retryable: true,
+      attempts: 4,
+      maxRetries: 3,
+      failureCategory: 'transient',
+    };
+    const error = new Error('HTTP request failed after 4 attempt(s)');
+    (error as any)._retryDiagnostics = diagnostics;
+    (fred as any).processMessage = async () => { throw error; };
+
+    const exitCode = await handleRunCommand(
+      [],
+      { agent: 'assistant', input: 'hello' }, // no --json
+      { fred, io: captured.io },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(captured.output).toHaveLength(0);
+    expect(captured.errors[0]).toContain('HTTP request failed');
+  });
+});
