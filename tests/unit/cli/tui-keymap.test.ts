@@ -650,6 +650,18 @@ describe('TUI Keymap', () => {
       state = applyKeyAction(state, { type: 'startup-chooser-next' });
       expect(state.startup.chooser.selected).toBe('start-new-session');
     });
+
+    test('chooser preserves navigation mappings for directional keys and tab', () => {
+      let state = createInitialTuiState();
+      state = openStartupChooser(state);
+
+      expect(mapKeyToAction(makeKey({ name: 'up' }), state).type).toBe('startup-chooser-prev');
+      expect(mapKeyToAction(makeKey({ name: 'left' }), state).type).toBe('startup-chooser-prev');
+      expect(mapKeyToAction(makeKey({ name: 'down' }), state).type).toBe('startup-chooser-next');
+      expect(mapKeyToAction(makeKey({ name: 'right' }), state).type).toBe('startup-chooser-next');
+      expect(mapKeyToAction(makeKey({ name: 'tab' }), state).type).toBe('startup-chooser-next');
+      expect(mapKeyToAction(makeKey({ name: 'enter' }), state).type).toBe('startup-chooser-confirm');
+    });
   });
 
   describe('Quit handling', () => {
@@ -674,6 +686,22 @@ describe('TUI Keymap', () => {
       const state = createInitialTuiState();
       const event = makeKey({ name: 'c', ctrl: true });
       const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('quit');
+    });
+
+    test('Ctrl+C triggers quit while startup chooser is open', () => {
+      let state = createInitialTuiState();
+      state = openStartupChooser(state);
+
+      const action = mapKeyToAction(makeKey({ name: 'c', ctrl: true }), state);
+      expect(action.type).toBe('quit');
+    });
+
+    test('Esc triggers quit while startup chooser is open', () => {
+      let state = createInitialTuiState();
+      state = openStartupChooser(state);
+
+      const action = mapKeyToAction(makeKey({ name: 'escape' }), state);
       expect(action.type).toBe('quit');
     });
   });
