@@ -8,6 +8,7 @@
 import { existsSync as nodeExistsSync } from 'fs';
 import { writeFile as nodeWriteFile } from 'fs/promises';
 import { join, basename } from 'path';
+import { sanitizeErrorForCli } from './error-sanitize.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -160,7 +161,7 @@ export async function handleInitCommand(
       io.stdout(`${statusLabel('create')} ${displayName}`);
       created++;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = sanitizeErrorForCli(error);
       io.stderr(`  error  ${displayName}: ${message}`);
       return 1;
     }

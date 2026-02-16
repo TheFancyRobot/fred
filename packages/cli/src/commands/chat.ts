@@ -17,6 +17,7 @@ import { createFredTuiApp, type PluginSlashCommandRuntime } from '../tui/app.js'
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
+import { sanitizeErrorForCli } from './error-sanitize.js';
 
 /**
  * Injectable dependencies for the chat command.
@@ -140,7 +141,7 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
       };
     } catch (error) {
       // Config exists but failed to initialize - fall through to auto-detection
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = sanitizeErrorForCli(error);
       startupWarning = `Config load failed, using defaults: ${reason}`;
     }
   }
@@ -230,7 +231,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
         try: () => initializeFred(resolvedDeps),
         catch: (error) =>
           new Error(
-            `Failed to initialize AI provider: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to initialize AI provider: ${sanitizeErrorForCli(error)}`
           ),
       });
 
@@ -285,7 +286,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
           ),
         catch: (error) =>
           new Error(
-            `Failed to create TUI app: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to create TUI app: ${sanitizeErrorForCli(error)}`
           ),
       });
 
@@ -309,7 +310,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
     } catch (error) {
       // Lifecycle or program failure — emit actionable recovery guidance
       console.error(
-        error instanceof Error ? error.message : String(error)
+        sanitizeErrorForCli(error)
       );
       console.error(TERMINAL_RECOVERY_GUIDANCE);
       process.exit(1);
