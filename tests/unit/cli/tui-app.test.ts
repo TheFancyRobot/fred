@@ -280,6 +280,30 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().startup.chooser.selected).toBe('start-new-session');
   });
 
+  test('Ctrl+C exits immediately while startup chooser is open', async () => {
+    let quitFired = false;
+    const fixture = createSessionServiceFixture();
+    await createTestApp(
+      {
+        onQuit: () => {
+          quitFired = true;
+        },
+      },
+      fixture,
+    );
+    await Bun.sleep(20);
+
+    const selectedBeforeQuit = app.getState().sessions.selectedId;
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+
+    app.processKey(makeKey({ name: 'c', ctrl: true }));
+
+    expect(app.isRunning()).toBe(false);
+    expect(quitFired).toBe(true);
+    expect(app.getState().startup.chooser.isOpen).toBe(true);
+    expect(app.getState().sessions.selectedId).toBe(selectedBeforeQuit);
+  });
+
   test('Enter submits and clears input', async () => {
     let submitted = '';
     await createTestApp({
