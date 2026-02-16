@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** v0.2.1 milestone complete — all 158 plans across 36 phases executed
+**Current focus:** v0.2.1 milestone complete — all 159 plans across 36 phases executed
 **Milestone:** v0.2.1 CLI/TUI Developer Experience
 
 ## Current Position
 
 Phase: 36 of 36 (Runtime & Test Hardening)
-Plan: 4 of 4 in current phase
+Plan: 5 of 5 in current phase
 Status: Phase complete — v0.2.1 milestone complete
-Last activity: 2026-02-16 - Completed 36-04-PLAN.md (startup chooser Ctrl+C/Escape quit gap closure)
+Last activity: 2026-02-16 - Completed 36-05-PLAN.md (Groq retry/backoff & structured diagnostics gap closure)
 
-Progress: [██████████] 100% (158/158 plans complete)
+Progress: [██████████] 100% (159/159 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 30 (v0.2.1 milestone)
-- Average duration: 5.41 min
-- Total execution time: ~2.70 hours
+- Total plans completed: 31 (v0.2.1 milestone)
+- Average duration: 5.32 min
+- Total execution time: ~2.75 hours
 
 **By Phase:**
 
@@ -34,12 +34,12 @@ Progress: [██████████] 100% (158/158 plans complete)
 | 30 | 3 | 8.45 min | 2.82 min |
 | 31 | 4 | 15.27 min | 3.82 min |
 | 32 | 5 | 19.00 min | 3.80 min |
-| 36 | 4 | ~16 min | ~4.00 min |
+| 36 | 5 | ~23 min | ~4.60 min |
 
 **Recent Trend:**
-- Last 5 plans: 3.00 min (36-01), 3.00 min (36-02), 9.00 min (36-03), 1.00 min (36-04)
-- Trend: Phase 36 closed with targeted chooser-time quit gap fix and regression coverage
-- v0.2.1 milestone complete: 30 plans, ~5.41 min/plan average
+- Last 5 plans: 3.00 min (36-02), 9.00 min (36-03), 1.00 min (36-04), 7.00 min (36-05)
+- Trend: Phase 36 closed with Groq retry/backoff gap-closure and structured error diagnostics
+- v0.2.1 milestone complete: 31 plans, ~5.32 min/plan average
 
 **Previous Milestones:**
 - v0.2.0: 32 plans, ~4.2 min/plan (2 days)
@@ -122,6 +122,8 @@ Recent decisions affecting current work:
 - Default-deny retry allowlist in smoke runner (36-03) — 5 transient signatures eligible for max-1-retry, all other failures fail-hard immediately
 - Per-attempt evidence provenance in smoke JSON (36-03) — attemptCount, retryReason, and attempts[] preserved for CI/audit traceability
 - Startup chooser interrupt passthrough (36-04) — chooser-open Ctrl+C/Escape now route through shared app quit action path
+- Bounded retry/backoff for Groq provider (36-05) — 3 retries with exponential backoff for transient 5xx/429 failures; fail-fast on non-retryable 4xx
+- Structured retry diagnostics in fred run --json (36-05) — meta.details includes retryDiagnostics, category, and actionable suggestion
 
 ### Pending Todos
 
@@ -152,6 +154,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-16T19:39:25Z
-Stopped at: Completed 36-04-PLAN.md (startup chooser Ctrl+C/Escape quit gap closure) — v0.2.1 milestone complete
+Last session: 2026-02-16T20:34:00Z
+Stopped at: Completed 36-05-PLAN.md (Groq retry/backoff & structured diagnostics gap closure) — v0.2.1 milestone complete
 Resume file: None

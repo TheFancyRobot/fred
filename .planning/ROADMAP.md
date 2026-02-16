@@ -200,13 +200,14 @@ Plans:
   1. `fred run --json` error paths follow strict JSON-channel consistency
   2. `withTerminalLifecycle` helper is wired into active production chat path
   3. Smoke suites avoid Bun mock state bleed and run reliably in parallel CI settings
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 - [x] 36-01-PLAN.md — Enforce strict `fred run --json` channel contract with shared runtime utility and deterministic error semantics (completed 2026-02-16, 4 min)
 - [x] 36-02-PLAN.md — Wire `withTerminalLifecycle` into production interactive chat startup and validate fallback parity (completed 2026-02-16, 3 min)
 - [x] 36-03-PLAN.md — Eliminate smoke mock bleed under concurrent Bun tests and harden retry/evidence determinism (completed 2026-02-16, 9 min)
 - [x] 36-04-PLAN.md — Restore startup chooser Ctrl+C/Escape quit path and lock regression coverage for immediate chooser-time exit (completed 2026-02-16, 1 min, gap closure)
+- [x] 36-05-PLAN.md — Add bounded Groq retry/backoff, AgentFactory retry boundary, and structured JSON diagnostics for transient-vs-config failure classification (completed 2026-02-16, 7 min, gap closure)
 
 ## Progress
 
@@ -224,7 +225,7 @@ Phases execute in numeric order: 27 → 28 → 29 → 30 → 31 → 32 → 33 �
 | 33. Default Launch Contract Alignment | 4/4 | Complete | 2026-02-15 |
 | 34. Session Verification Recovery | 1/1 | Complete | 2026-02-15 |
 | 35. Cross-Phase Smoke Contract Refresh | 3/3 | Complete | 2026-02-15 |
-| 36. Runtime & Test Hardening | 4/4 | Complete | 2026-02-16 |
+| 36. Runtime & Test Hardening | 5/5 | Complete | 2026-02-16 |
 
 ---
 
@@ -246,4 +247,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-16 - Completed and verified Phase 36 runtime & test hardening (4/4 plans, including chooser-time Ctrl+C gap closure) — v0.2.1 milestone complete*
+*Last updated: 2026-02-16 - Completed and verified Phase 36 runtime & test hardening (5/5 plans, including Groq retry/diagnostics gap closure) — v0.2.1 milestone complete*
