@@ -3,6 +3,7 @@
  * Explicit interactive entrypoint for fred chat
  */
 
+import { Effect } from 'effect';
 import { Fred, SqliteContextStorage } from '@fancyrobot/fred';
 import {
   DEV_CHAT_PROVIDER_PACKAGES,
@@ -11,6 +12,7 @@ import {
   ensureDefaultChatAgent,
 } from '@fancyrobot/fred-dev/chat-defaults';
 import { detectTerminalMode } from '../runtime/tty-mode.js';
+import { withTerminalLifecycle } from '../runtime/terminal-lifecycle.js';
 import { createFredTuiApp, type PluginSlashCommandRuntime } from '../tui/app.js';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
@@ -174,112 +176,116 @@ async function buildPluginSlashRuntime(
 }
 
 /**
+ * Actionable recovery guidance emitted when terminal restoration fails.
+ * Helps users restore their terminal if cleanup couldn't complete.
+ */
+export const TERMINAL_RECOVERY_GUIDANCE =
+  'Terminal may be in an inconsistent state. ' +
+  'Run `reset` or `stty sane` to restore normal terminal behavior.';
+
+/**
  * Handle chat command
  *
  * Routes to interactive TUI when TTY is available, or non-interactive mode otherwise.
- * In interactive mode, OpenTUI manages the terminal lifecycle (alternate screen, raw mode, cleanup).
+ * In interactive mode, terminal lifecycle is managed by Effect acquire/use/release
+ * via withTerminalLifecycle, guaranteeing cleanup on success, error, and interruption.
  */
 export async function handleChatCommand(): Promise<void> {
   const mode = detectTerminalMode();
 
-  // Interactive TTY mode — launch TUI shell
+  // Interactive TTY mode — launch TUI shell with Effect-scoped lifecycle
   if (mode.mode === 'interactive-tty') {
-    // Initialize Fred before creating TUI
-    let fred: Fred;
-    let model: string;
-    let provider: string;
-    let pluginSlashCommands: PluginSlashCommandRuntime[];
-    let startupWarning: string | null;
+    // Build the interactive TUI program as an Effect
+    const interactiveProgram = Effect.gen(function* () {
+      // Initialize Fred
+      const initResult = yield* Effect.tryPromise({
+        try: () => initializeFred(),
+        catch: (error) =>
+          new Error(
+            `Failed to initialize AI provider: ${error instanceof Error ? error.message : String(error)}`
+          ),
+      });
+
+      const { fred, model, provider, pluginSlashCommands, startupWarning } = initResult;
+      const contextManager = fred.getContextManager();
+
+      // Create TUI app — resolves a long-lived app that runs until quit
+      const app = yield* Effect.tryPromise({
+        try: () =>
+          createFredTuiApp(
+            {
+              onSubmit: (text: string, sessionId: string | null) => {
+                const activeSessionId = sessionId ?? contextManager.generateConversationId();
+                // Fire-and-forget async streaming (don't await to avoid blocking TUI)
+                (async () => {
+                  try {
+                    const streamResult = fred.streamMessage(text, {
+                      conversationId: activeSessionId,
+                    });
+
+                    for await (const event of streamResult.fullStream) {
+                      if (event.type === 'token' && event.delta) {
+                        app.pushAssistantToken(event.delta, 1);
+                      }
+                    }
+
+                    app.completeAssistantStream();
+                  } catch (error) {
+                    app.failAssistantStream(error);
+                  }
+                })().catch((error) => {
+                  app.stop();
+                  console.error('Fatal streaming error:', error);
+                  process.exit(1);
+                });
+              },
+              onQuit: () => {
+                console.log('Exiting Fred chat...');
+                process.exit(0);
+              },
+              onError: (_error) => {
+                // Streaming errors are displayed in the TUI status bar.
+                // Don't exit — let the user see the error and retry or quit manually.
+              },
+            },
+            {
+              sessionService: { contextManager },
+              initialSessionId: null,
+              pluginSlashCommands,
+              startupWarning,
+            }
+          ),
+        catch: (error) =>
+          new Error(
+            `Failed to create TUI app: ${error instanceof Error ? error.message : String(error)}`
+          ),
+      });
+
+      // Update telemetry with actual model info
+      app.updateTelemetryModel(model, provider);
+
+      // Keep the Effect alive until the app is stopped.
+      // The app runs until onQuit fires (which calls process.exit).
+      // This await-forever keeps the lifecycle scope open so the
+      // release finalizer remains armed for cleanup.
+      return yield* Effect.never;
+    });
+
+    // Wrap interactive program with terminal lifecycle guarantees
+    const lifecycleProgram = withTerminalLifecycle(interactiveProgram, {
+      rawMode: true,
+    });
 
     try {
-      const initResult = await initializeFred();
-      fred = initResult.fred;
-      model = initResult.model;
-      provider = initResult.provider;
-      pluginSlashCommands = initResult.pluginSlashCommands;
-      startupWarning = initResult.startupWarning;
+      await Effect.runPromise(lifecycleProgram);
     } catch (error) {
-      console.error('Failed to initialize AI provider:');
-      console.error(error instanceof Error ? error.message : String(error));
+      // Lifecycle or program failure — emit actionable recovery guidance
+      console.error(
+        error instanceof Error ? error.message : String(error)
+      );
+      console.error(TERMINAL_RECOVERY_GUIDANCE);
       process.exit(1);
     }
-
-    const contextManager = fred.getContextManager();
-
-    const app = await createFredTuiApp({
-      onSubmit: (text: string, sessionId: string | null) => {
-        const activeSessionId = sessionId ?? contextManager.generateConversationId();
-        // Fire-and-forget async streaming (don't await to avoid blocking TUI)
-        (async () => {
-          try {
-            const streamResult = fred.streamMessage(text, { conversationId: activeSessionId });
-
-            // Iterate over the full stream to get all events
-            for await (const event of streamResult.fullStream) {
-              // Process token events
-              if (event.type === 'token' && event.delta) {
-                app.pushAssistantToken(event.delta, 1);
-              }
-
-              // Optionally handle usage events for more accurate token counts
-              if (event.type === 'usage' && event.usage) {
-                // Could update token counts here if needed
-                // For now, the app estimates tokens automatically
-              }
-            }
-
-            // Stream completed successfully
-            app.completeAssistantStream();
-          } catch (error) {
-            // Stream failed — display error in TUI status bar, don't crash
-            app.failAssistantStream(error);
-          }
-        })().catch((error) => {
-          // Safety net: if failAssistantStream itself throws, clean up terminal
-          app.stop();
-          console.error('Fatal streaming error:', error);
-          process.exit(1);
-        });
-      },
-      onQuit: () => {
-        console.log('Exiting Fred chat...');
-        process.exit(0);
-      },
-      onError: (_error) => {
-        // Streaming errors are displayed in the TUI status bar via recordStreamingError.
-        // Don't exit — let the user see the error and retry or quit manually.
-      },
-    }, {
-      sessionService: {
-        contextManager,
-      },
-      initialSessionId: null,
-      pluginSlashCommands,
-      startupWarning,
-    });
-
-    // Update telemetry with actual model info
-    app.updateTelemetryModel(model, provider);
-
-    // Ensure terminal cleanup on unexpected crashes
-    const emergencyCleanup = () => {
-      if (app.isRunning()) app.stop();
-    };
-    process.on('uncaughtException', (error) => {
-      emergencyCleanup();
-      console.error('Uncaught exception:', error);
-      process.exit(1);
-    });
-    process.on('unhandledRejection', (reason) => {
-      emergencyCleanup();
-      console.error('Unhandled rejection:', reason);
-      process.exit(1);
-    });
-
-    // Handle SIGINT as backup (app also handles Ctrl+C via keymap)
-    process.on('SIGINT', () => {
-      app.stop();
-    });
 
     return;
   }
