@@ -6,7 +6,10 @@
  */
 
 import { Fred } from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
+import { sanitizeErrorForCli } from './error-sanitize.js';
+import { ConfigInitError, FredInitError } from './errors.js';
 
 export interface ListCommandIO {
   stdout: (message: string) => void;
@@ -56,20 +59,30 @@ function truncate(value: string, maxLength: number): string {
   return value.slice(0, maxLength - 3) + '...';
 }
 
-async function initializeFred(io: ListCommandIO): Promise<Fred> {
-  const fred = new Fred();
-  const configResult = resolveProjectConfig();
+/**
+ * Initialize Fred instance with config, wrapped in Effect.
+ */
+const initializeFredEffect = (io: ListCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+  Effect.gen(function* () {
+    const fred = new Fred();
+    const configResult = resolveProjectConfig();
 
-  if (configResult.success && configResult.configPath) {
-    try {
-      await fred.initializeFromConfig(configResult.configPath);
-    } catch (error) {
-      io.stderr(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
+    if (configResult.success && configResult.configPath) {
+      yield* Effect.tryPromise({
+        try: () => fred.initializeFromConfig(configResult.configPath!),
+        catch: (error) =>
+          new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
+      }).pipe(
+        Effect.catchTag('ConfigInitError', (error) =>
+          Effect.sync(() => {
+            io.stderr(error.message);
+          }),
+        ),
+      );
     }
-  }
 
-  return fred;
-}
+    return fred;
+  });
 
 function listAgents(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
   const agents = fred.getAgents();
@@ -202,24 +215,25 @@ function listWorkflows(fred: Fred, options: Record<string, unknown>, io: ListCom
 }
 
 /**
- * Handle a list command for a given entity type.
- *
- * @param entityType - Entity to list: agents, tools, intents, providers, workflows
- * @param args - Positional arguments (unused for list commands)
- * @param options - CLI options (supports --json)
- * @param deps - Optional injected dependencies for testing
- * @returns Exit code (0 = success, 1 = error)
+ * Internal Effect program for the list command.
  */
-export async function handleListCommand(
+const listCommandEffect = (
   entityType: string,
-  args: string[],
+  _args: string[],
   options: Record<string, unknown>,
-  deps: ListCommandDependencies = {},
-): Promise<number> {
-  const io = deps.io ?? DEFAULT_IO;
-  const fred = deps.fred ?? await initializeFred(io);
+  deps: ListCommandDependencies,
+): Effect.Effect<number, FredInitError> =>
+  Effect.gen(function* () {
+    const io = deps.io ?? DEFAULT_IO;
 
-  try {
+    const fred = deps.fred
+      ? deps.fred
+      : yield* initializeFredEffect(io).pipe(
+          Effect.catchTag('ConfigInitError', () =>
+            Effect.fail(new FredInitError({ message: 'Failed to initialize Fred' })),
+          ),
+        );
+
     switch (entityType as EntityType) {
       case 'agents':
         return listAgents(fred, options, io);
@@ -235,8 +249,33 @@ export async function handleListCommand(
         io.stderr(`Unknown entity type: ${entityType}. Available: ${ENTITY_TYPES.join(', ')}`);
         return 1;
     }
-  } catch (error) {
-    io.stderr(error instanceof Error ? error.message : String(error));
-    return 1;
-  }
+  });
+
+/**
+ * Handle a list command for a given entity type.
+ *
+ * @param entityType - Entity to list: agents, tools, intents, providers, workflows
+ * @param args - Positional arguments (unused for list commands)
+ * @param options - CLI options (supports --json)
+ * @param deps - Optional injected dependencies for testing
+ * @returns Exit code (0 = success, 1 = error)
+ */
+export async function handleListCommand(
+  entityType: string,
+  args: string[],
+  options: Record<string, unknown>,
+  deps: ListCommandDependencies = {},
+): Promise<number> {
+  const io = deps.io ?? DEFAULT_IO;
+
+  return Effect.runPromise(
+    listCommandEffect(entityType, args, options, deps).pipe(
+      Effect.catchTag('FredInitError', (error) =>
+        Effect.sync(() => {
+          io.stderr(sanitizeErrorForCli(error));
+          return 1;
+        }),
+      ),
+    ),
+  );
 }

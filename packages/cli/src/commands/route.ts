@@ -6,8 +6,16 @@
  */
 
 import { Fred } from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { createColors } from './color.js';
+import { sanitizeErrorForCli } from './error-sanitize.js';
+import {
+  ConfigInitError,
+  FredInitError,
+  InvalidArgumentError,
+  RoutingError,
+} from './errors.js';
 
 export interface RouteCommandIO {
   stdout: (message: string) => void;
@@ -25,170 +33,169 @@ const DEFAULT_IO: RouteCommandIO = {
 };
 
 /**
- * Initialize Fred instance with config.
+ * Initialize Fred instance with config, wrapped in Effect.
  */
-async function initializeFred(io: RouteCommandIO): Promise<Fred> {
-  const fred = new Fred();
-  const configResult = resolveProjectConfig();
+const initializeFredEffect = (io: RouteCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+  Effect.gen(function* () {
+    const fred = new Fred();
+    const configResult = resolveProjectConfig();
 
-  if (configResult.success && configResult.configPath) {
-    try {
-      await fred.initializeFromConfig(configResult.configPath);
-    } catch (error) {
-      io.stderr(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
+    if (configResult.success && configResult.configPath) {
+      yield* Effect.tryPromise({
+        try: () => fred.initializeFromConfig(configResult.configPath!),
+        catch: (error) =>
+          new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
+      }).pipe(
+        Effect.catchTag('ConfigInitError', (error) =>
+          Effect.sync(() => {
+            io.stderr(error.message);
+          }),
+        ),
+      );
     }
-  }
 
-  return fred;
-}
+    return fred;
+  });
 
 /**
- * Handle route test subcommand.
+ * Internal Effect program for the route test subcommand.
  */
-async function handleRouteTest(
+const routeTestEffect = (
   args: string[],
   options: Record<string, unknown>,
   deps: RouteCommandDependencies,
-): Promise<number> {
-  const io = deps.io ?? DEFAULT_IO;
-  const colors = createColors();
+): Effect.Effect<
+  number,
+  FredInitError | InvalidArgumentError | RoutingError
+> =>
+  Effect.gen(function* () {
+    const io = deps.io ?? DEFAULT_IO;
+    const colors = createColors();
 
-  // Validate message argument
-  const message = args[1];
-  if (!message) {
-    if (options.json === true) {
-      io.stdout(JSON.stringify({ ok: false, error: 'Message required. Usage: fred route test "message"' }, null, 2));
-    } else {
-      io.stderr('Error (exit 2): Message required. Usage: fred route test "message"');
+    // Validate message argument
+    const message = args[1];
+    if (!message) {
+      return yield* Effect.fail(
+        new InvalidArgumentError({ message: 'Message required. Usage: fred route test "message"' }),
+      );
     }
-    return 2;
-  }
 
-  // Initialize Fred
-  let fred: Fred;
-  try {
-    fred = deps.fred ?? await initializeFred(io);
-  } catch (error) {
-    const errorMessage = `Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`;
-    if (options.json === true) {
-      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
-    } else {
-      io.stderr(`Error (exit 2): ${errorMessage}`);
+    // Initialize Fred
+    const fred = deps.fred
+      ? deps.fred
+      : yield* initializeFredEffect(io).pipe(
+          Effect.mapError((error) =>
+            new FredInitError({ message: `Failed to initialize Fred: ${error.message}` }),
+          ),
+        );
+
+    // Test route
+    const startTime = Date.now();
+    const decision = yield* Effect.tryPromise({
+      try: () => fred.testRoute(message, {}),
+      catch: (error) =>
+        new RoutingError({ message: `Routing failed: ${sanitizeErrorForCli(error)}` }),
+    });
+    const durationMs = Date.now() - startTime;
+
+    // Routing not configured
+    if (!decision) {
+      return yield* Effect.fail(
+        new RoutingError({ message: 'Routing not configured.' }),
+      );
     }
-    return 2;
-  }
 
-  // Test route
-  const startTime = Date.now();
-  let decision;
-  try {
-    decision = await fred.testRoute(message, {});
-  } catch (error) {
-    const errorMessage = `Routing failed: ${error instanceof Error ? error.message : String(error)}`;
+    const { agent, fallback, explanation } = decision;
+
+    // JSON output
     if (options.json === true) {
-      io.stdout(JSON.stringify({ ok: false, error: errorMessage }, null, 2));
-    } else {
-      io.stderr(`Error (exit 2): ${errorMessage}`);
-    }
-    return 2;
-  }
-  const durationMs = Date.now() - startTime;
-
-  // Routing not configured
-  if (!decision) {
-    if (options.json === true) {
-      io.stdout(JSON.stringify({ ok: false, error: 'Routing not configured.' }, null, 2));
-    } else {
-      io.stderr('Error (exit 2): Routing not configured.');
-    }
-    return 2;
-  }
-
-  const { agent, fallback, explanation } = decision;
-
-  // JSON output
-  if (options.json === true) {
-    const result: any = {
-      ok: true,
-      agent,
-      fallback,
-    };
-
-    if (options.verbose === true && explanation) {
-      result.explanation = {
-        narrative: explanation.narrative,
-        alternatives: explanation.alternatives,
-        matchType: explanation.matchType,
-        confidence: explanation.confidence,
-        concerns: explanation.concerns,
+      const result: any = {
+        ok: true,
+        agent,
+        fallback,
       };
-      result.durationMs = durationMs;
-      const configResult = resolveProjectConfig();
-      if (configResult.configPath) {
-        result.configPath = configResult.configPath;
+
+      if (options.verbose === true && explanation) {
+        result.explanation = {
+          narrative: explanation.narrative,
+          alternatives: explanation.alternatives,
+          matchType: explanation.matchType,
+          confidence: explanation.confidence,
+          concerns: explanation.concerns,
+        };
+        result.durationMs = durationMs;
       }
+
+      io.stdout(JSON.stringify(result, null, 2));
+      return fallback ? 1 : 0;
     }
 
-    io.stdout(JSON.stringify(result, null, 2));
+    // Default output - final result only
+    if (fallback) {
+      io.stdout(`${colors.yellow('->')} ${colors.bold(agent)} ${colors.gray('(fallback)')}`);
+    } else {
+      io.stdout(`${colors.green('->')} ${colors.bold(agent)}`);
+    }
+
+    // Verbose output - full decision chain
+    if (options.verbose === true && explanation) {
+      io.stdout('');
+
+      // Narrative
+      if (explanation.narrative) {
+        io.stdout(colors.bold('Decision:'));
+        io.stdout(explanation.narrative);
+        io.stdout('');
+      }
+
+      // Match details
+      io.stdout(colors.bold('Match details:'));
+      io.stdout(`  Type: ${explanation.matchType}`);
+      io.stdout(`  Confidence: ${explanation.confidence.toFixed(2)}`);
+      io.stdout('');
+
+      // Alternatives
+      if (explanation.alternatives && explanation.alternatives.length > 0) {
+        io.stdout(colors.bold('Alternatives:'));
+        for (const alt of explanation.alternatives) {
+          const altConfStr = alt.confidence.toFixed(2);
+          io.stdout(`  ${alt.targetId} (${altConfStr})`);
+        }
+        io.stdout('');
+      }
+
+      // Concerns
+      if (explanation.concerns && explanation.concerns.length > 0) {
+        io.stdout(colors.bold('Concerns:'));
+        for (const concern of explanation.concerns) {
+          const severityColor = concern.severity === 'error' ? colors.red : colors.yellow;
+          io.stdout(`  ${severityColor(`[${concern.severity}]`)} ${concern.message}`);
+        }
+        io.stdout('');
+      }
+
+      // Timing
+      io.stdout(`Duration: ${durationMs}ms`);
+    }
+
     return fallback ? 1 : 0;
-  }
+  });
 
-  // Default output - final result only
-  if (fallback) {
-    io.stdout(`${colors.yellow('->')} ${colors.bold(agent)} ${colors.gray('(fallback)')}`);
+/**
+ * Render a CLI error to the appropriate output based on options.
+ */
+const renderError = (
+  message: string,
+  options: Record<string, unknown>,
+  io: RouteCommandIO,
+): number => {
+  if (options.json === true) {
+    io.stdout(JSON.stringify({ ok: false, error: message }, null, 2));
   } else {
-    io.stdout(`${colors.green('->')} ${colors.bold(agent)}`);
+    io.stderr(`Error (exit 2): ${message}`);
   }
-
-  // Verbose output - full decision chain
-  if (options.verbose === true && explanation) {
-    io.stdout('');
-
-    // Narrative
-    if (explanation.narrative) {
-      io.stdout(colors.bold('Decision:'));
-      io.stdout(explanation.narrative);
-      io.stdout('');
-    }
-
-    // Match details
-    io.stdout(colors.bold('Match details:'));
-    io.stdout(`  Type: ${explanation.matchType}`);
-    io.stdout(`  Confidence: ${explanation.confidence.toFixed(2)}`);
-    io.stdout('');
-
-    // Alternatives
-    if (explanation.alternatives && explanation.alternatives.length > 0) {
-      io.stdout(colors.bold('Alternatives:'));
-      for (const alt of explanation.alternatives) {
-        const altConfStr = alt.confidence.toFixed(2);
-        io.stdout(`  ${alt.targetId} (${altConfStr})`);
-      }
-      io.stdout('');
-    }
-
-    // Concerns
-    if (explanation.concerns && explanation.concerns.length > 0) {
-      io.stdout(colors.bold('Concerns:'));
-      for (const concern of explanation.concerns) {
-        const severityColor = concern.severity === 'error' ? colors.red : colors.yellow;
-        io.stdout(`  ${severityColor(`[${concern.severity}]`)} ${concern.message}`);
-      }
-      io.stdout('');
-    }
-
-    // Timing
-    io.stdout(`Duration: ${durationMs}ms`);
-
-    // Config path
-    const configResult = resolveProjectConfig();
-    if (configResult.configPath) {
-      io.stdout(`Config: ${configResult.configPath}`);
-    }
-  }
-
-  return fallback ? 1 : 0;
-}
+  return 2;
+};
 
 /**
  * Handle the `fred route` command.
@@ -207,7 +214,18 @@ export async function handleRouteCommand(
   const subcommand = args[0];
 
   if (subcommand === 'test') {
-    return handleRouteTest(args, options, deps);
+    return Effect.runPromise(
+      routeTestEffect(args, options, deps).pipe(
+        Effect.catchTags({
+          FredInitError: (error) =>
+            Effect.succeed(renderError(error.message, options, io)),
+          InvalidArgumentError: (error) =>
+            Effect.succeed(renderError(error.message, options, io)),
+          RoutingError: (error) =>
+            Effect.succeed(renderError(error.message, options, io)),
+        }),
+      ),
+    );
   }
 
   if (options.json === true) {

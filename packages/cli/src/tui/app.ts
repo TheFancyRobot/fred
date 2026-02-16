@@ -66,6 +66,7 @@ import {
   deleteSession,
 } from './session.js';
 import type { PluginSlashCommandExecutionContext } from '../plugin/api.js';
+import { sanitizeErrorForCli } from '../commands/error-sanitize.js';
 
 /**
  * TUI app configuration
@@ -737,14 +738,12 @@ export class FredTuiApp {
         1,
       );
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      // Sanitize: take only the first line and cap length to avoid leaking stack traces or internal paths
-      const sanitized = rawMessage.split('\n')[0].slice(0, 200);
+      const sanitized = sanitizeErrorForCli(error);
       const userFacing = `[plugin:${command.pluginId}] ${canonicalName} failed: ${sanitized}`;
       this.state = appendAssistant(this.state, userFacing, 1);
       this.state = recordStreamingError(this.state, userFacing);
       // Full error details forwarded to onError for internal logging/debugging
-      this.events.onError?.(error instanceof Error ? error : new Error(rawMessage));
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
     }
 
     this.events.onStateChange?.(this.state);

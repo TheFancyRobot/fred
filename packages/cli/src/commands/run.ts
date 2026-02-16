@@ -13,8 +13,17 @@ import { Fred } from '@fancyrobot/fred';
 import {
   ensureDefaultChatAgent,
 } from '@fancyrobot/fred-dev/chat-defaults';
+import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { RunJsonChannel } from '../runtime/json-channel.js';
+import { sanitizeErrorForCli } from './error-sanitize.js';
+import {
+  AgentNotFoundError,
+  ConfigInitError,
+  FredInitError,
+  InvalidArgumentError,
+  MessageProcessError,
+} from './errors.js';
 
 export interface RunCommandIO {
   stdout: (msg: string) => void;
@@ -44,100 +53,118 @@ async function readStdin(): Promise<string> {
 }
 
 /**
- * Initialize Fred instance with config and provider bootstrap.
+ * Initialize Fred instance with config and provider bootstrap, wrapped in Effect.
  */
-async function initializeFred(agentId: string, channel: RunJsonChannel): Promise<Fred> {
-  const fred = new Fred();
-  const configResult = resolveProjectConfig();
+const initializeFredEffect = (
+  agentId: string,
+  channel: RunJsonChannel,
+): Effect.Effect<Fred, FredInitError> =>
+  Effect.gen(function* () {
+    const fred = new Fred();
+    const configResult = resolveProjectConfig();
 
-  if (configResult.success && configResult.config && configResult.configPath) {
-    try {
-      await fred.initializeFromConfig(configResult.configPath);
-    } catch (error) {
-      channel.warn(`Failed to initialize from config: ${error instanceof Error ? error.message : String(error)}`);
+    if (configResult.success && configResult.config && configResult.configPath) {
+      yield* Effect.tryPromise({
+        try: () => fred.initializeFromConfig(configResult.configPath!),
+        catch: (error) =>
+          new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
+      }).pipe(
+        Effect.catchTag('ConfigInitError', (error) =>
+          Effect.sync(() => {
+            channel.warn(error.message);
+          }),
+        ),
+      );
     }
-  }
 
-  // Bootstrap provider (auto-detection when config doesn't fully specify)
-  await ensureDefaultChatAgent(fred, { agentId });
+    // Bootstrap provider (auto-detection when config doesn't fully specify)
+    yield* Effect.tryPromise({
+      try: () => ensureDefaultChatAgent(fred, { agentId }),
+      catch: (error) =>
+        new FredInitError({ message: `Failed to bootstrap provider: ${sanitizeErrorForCli(error)}` }),
+    });
 
-  return fred;
-}
+    return fred;
+  });
 
 /**
- * Handle the `fred run` command.
- *
- * Sends a single message to an agent and prints the response.
- * Uses non-streaming processMessage API for predictable headless output.
- *
- * All output is routed through RunJsonChannel. In JSON mode this guarantees
- * exactly one JSON document on stdout and zero bytes on stderr.
- * In text mode the channel delegates to io directly (unchanged behavior).
- *
- * @returns exit code: 0 on success, 1 on error
+ * Internal Effect program for the run command.
  */
-export async function handleRunCommand(
-  args: string[],
+const runCommandEffect = (
+  _args: string[],
   options: Record<string, unknown>,
-  deps: RunCommandDependencies = {},
-): Promise<number> {
-  const io = deps.io ?? DEFAULT_IO;
-  const jsonMode = options.json === true;
-  const channel = new RunJsonChannel(io, jsonMode);
+  deps: RunCommandDependencies,
+  channel: RunJsonChannel,
+): Effect.Effect<
+  number,
+  InvalidArgumentError | FredInitError | AgentNotFoundError | MessageProcessError
+> =>
+  Effect.gen(function* () {
+    // --- Validate --agent ---
+    const agentId = options.agent as string | undefined;
+    if (!agentId) {
+      return yield* Effect.fail(
+        new InvalidArgumentError({ message: '--agent <name> is required.' }),
+      );
+    }
 
-  // --- Validate --agent ---
-  const agentId = options.agent as string | undefined;
-  if (!agentId) {
-    return channel.emitError('--agent <name> is required.', 1);
-  }
+    // --- Resolve input ---
+    let input: string | undefined = options.input as string | undefined;
 
-  // --- Resolve input ---
-  let input: string | undefined = options.input as string | undefined;
-
-  if (!input) {
-    // Try stdin: use injected stdin (for testing) or real stdin if not a TTY
-    const isTTY = process.stdin.isTTY ?? false;
-    if (deps.stdin || !isTTY) {
-      try {
-        const stdinFn = deps.stdin ?? readStdin;
-        input = await stdinFn();
-      } catch {
-        // stdin read failed — fall through to error
+    if (!input) {
+      // Try stdin: use injected stdin (for testing) or real stdin if not a TTY
+      const isTTY = process.stdin.isTTY ?? false;
+      if (deps.stdin || !isTTY) {
+        const stdinResult = yield* Effect.tryPromise({
+          try: () => (deps.stdin ?? readStdin)(),
+          catch: () => new InvalidArgumentError({ message: 'Failed to read stdin.' }),
+        }).pipe(
+          Effect.catchTag('InvalidArgumentError', () => Effect.succeed(undefined)),
+        );
+        if (stdinResult) input = stdinResult;
       }
     }
-  }
 
-  if (!input || input.length === 0) {
-    return channel.emitError("No input provided. Use --input 'message' or pipe via stdin.", 1);
-  }
+    if (!input || input.length === 0) {
+      return yield* Effect.fail(
+        new InvalidArgumentError({ message: "No input provided. Use --input 'message' or pipe via stdin." }),
+      );
+    }
 
-  // --- Initialize Fred ---
-  let fred: Fred;
-  try {
-    fred = deps.fred ?? await initializeFred(agentId, channel);
-  } catch (error) {
-    return channel.emitError(
-      `Failed to initialize Fred: ${error instanceof Error ? error.message : String(error)}`,
-      1,
-    );
-  }
+    // --- Initialize Fred ---
+    const fred = deps.fred
+      ? deps.fred
+      : yield* initializeFredEffect(agentId, channel);
 
-  // --- Verify agent exists ---
-  const agent = fred.getAgent(agentId);
-  if (!agent) {
-    const agents = fred.getAgents().map((a) => a.id);
-    const available = agents.length > 0 ? ` Available agents: ${agents.join(', ')}` : '';
-    return channel.emitError(`Agent "${agentId}" not found.${available}`, 1);
-  }
+    // --- Verify agent exists ---
+    const agent = fred.getAgent(agentId);
+    if (!agent) {
+      const agents = fred.getAgents().map((a) => a.id);
+      const available = agents.length > 0 ? ` Available agents: ${agents.join(', ')}` : '';
+      return yield* Effect.fail(
+        new AgentNotFoundError({
+          agentId,
+          message: `Agent "${agentId}" not found.${available}`,
+        }),
+      );
+    }
 
-  // --- Process message ---
-  const conversationId = (options['conversation-id'] ?? options.conversationId) as string | undefined;
+    // --- Process message ---
+    const conversationId = (options['conversation-id'] ?? options.conversationId) as string | undefined;
 
-  try {
-    const response = await fred.processMessage(input, { conversationId });
+    const response = yield* Effect.tryPromise({
+      try: () => fred.processMessage(input!, { conversationId }),
+      catch: (error) =>
+        new MessageProcessError({
+          message: sanitizeErrorForCli(error),
+          retryDiagnostics: (error as any)?._retryDiagnostics,
+        }),
+    });
 
     if (!response) {
-      return channel.emitError('No response from agent.', 1);
+      return yield* Effect.fail(
+        new MessageProcessError({ message: 'No response from agent.' }),
+      );
     }
 
     // Verbose: route tool-call diagnostics through the channel
@@ -167,22 +194,54 @@ export async function handleRunCommand(
       toolCalls: response.toolCalls,
       verbose: verboseData,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  });
 
-    // Extract retry diagnostics from provider errors (e.g. Groq transient failures)
-    // These are attached by the provider → factory retry boundary chain.
-    const retryDiagnostics = (error as any)?._retryDiagnostics;
-    const details = retryDiagnostics
-      ? {
-          retryDiagnostics,
-          category: retryDiagnostics.retryable ? 'transient' : 'configuration',
-          suggestion: retryDiagnostics.retryable
-            ? `Transient ${retryDiagnostics.failureCategory} failure after ${retryDiagnostics.attempts} attempt(s). Retry the request.`
-            : `Non-retryable error (HTTP ${retryDiagnostics.lastStatusCode}). Check API key and provider configuration.`,
-        }
-      : undefined;
+/**
+ * Handle the `fred run` command.
+ *
+ * Sends a single message to an agent and prints the response.
+ * Uses non-streaming processMessage API for predictable headless output.
+ *
+ * All output is routed through RunJsonChannel. In JSON mode this guarantees
+ * exactly one JSON document on stdout and zero bytes on stderr.
+ * In text mode the channel delegates to io directly (unchanged behavior).
+ *
+ * @returns exit code: 0 on success, 1 on error
+ */
+export async function handleRunCommand(
+  args: string[],
+  options: Record<string, unknown>,
+  deps: RunCommandDependencies = {},
+): Promise<number> {
+  const io = deps.io ?? DEFAULT_IO;
+  const jsonMode = options.json === true;
+  const channel = new RunJsonChannel(io, jsonMode);
 
-    return channel.emitError(message, 1, details);
-  }
+  return Effect.runPromise(
+    runCommandEffect(args, options, deps, channel).pipe(
+      Effect.catchTags({
+        InvalidArgumentError: (error) =>
+          Effect.succeed(channel.emitError(error.message, 1)),
+        FredInitError: (error) =>
+          Effect.succeed(channel.emitError(`Failed to initialize Fred: ${error.message}`, 1)),
+        AgentNotFoundError: (error) =>
+          Effect.succeed(channel.emitError(error.message, 1)),
+        MessageProcessError: (error) => {
+          // Extract retry diagnostics for structured error details
+          const retryDiagnostics = error.retryDiagnostics as any;
+          const details = retryDiagnostics
+            ? {
+                retryDiagnostics,
+                category: retryDiagnostics.retryable ? 'transient' : 'configuration',
+                suggestion: retryDiagnostics.retryable
+                  ? `Transient ${retryDiagnostics.failureCategory} failure after ${retryDiagnostics.attempts} attempt(s). Retry the request.`
+                  : `Non-retryable error (HTTP ${retryDiagnostics.lastStatusCode}). Check API key and provider configuration.`,
+              }
+            : undefined;
+
+          return Effect.succeed(channel.emitError(error.message, 1, details));
+        },
+      }),
+    ),
+  );
 }
