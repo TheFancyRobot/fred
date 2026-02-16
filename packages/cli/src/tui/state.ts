@@ -993,6 +993,11 @@ export function appendAssistant(
       transcript,
       streaming: {
         ...state.streaming,
+        firstTokenLatencyMs: state.streaming.firstTokenLatencyMs ?? (
+          state.streaming.streamStartMs !== null
+            ? Math.max(0, nowMs - state.streaming.streamStartMs)
+            : null
+        ),
         outputTokenCount: state.streaming.outputTokenCount + Math.max(0, tokenCount),
         tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount + Math.max(0, tokenCount), nowMs),
       },
@@ -1177,7 +1182,7 @@ export function updateInputText(state: TuiState, text: string, cursorPosition?: 
  * Navigate input history (Up/Down when input is empty or already navigating history)
  */
 export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'): TuiState {
-  const { history, text, cursorPosition } = state.input;
+  const { history, text } = state.input;
 
   if (history.entries.length === 0) {
     return state;
@@ -1188,9 +1193,8 @@ export function navigateInputHistory(state: TuiState, direction: 'up' | 'down'):
   // 2. We're already navigating history (currentIndex !== -1)
   const isNavigatingHistory = history.currentIndex !== -1;
   const textIsEmpty = text.length === 0;
-  const cursorAtStart = cursorPosition === 0;
 
-  if (!isNavigatingHistory && (!textIsEmpty || !cursorAtStart)) {
+  if (!isNavigatingHistory && !textIsEmpty) {
     return state;
   }
 

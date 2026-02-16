@@ -265,17 +265,10 @@ export class FredTuiApp {
     }
 
     try {
-    const item = await createSession(this.sessionService);
-    this.state = addSession(this.state, item, { select: true });
-    const messages = await loadSessionTranscript(this.sessionService, item.id);
-    this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
-    this.state = {
-      ...this.state,
-      sessions: {
-        ...this.state.sessions,
-        items: [item, ...this.state.sessions.items.filter((existing) => existing.id !== item.id)],
-      },
-    };
+      const item = await createSession(this.sessionService);
+      this.state = addSession(this.state, item, { select: true });
+      const messages = await loadSessionTranscript(this.sessionService, item.id);
+      this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
       this.events.onStateChange?.(this.state);
     } catch (error) {
       this.events.onError?.(error instanceof Error ? error : new Error(String(error)));

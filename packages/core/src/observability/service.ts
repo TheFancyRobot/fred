@@ -270,8 +270,12 @@ export const ObservabilityServiceLive = Layer.effect(
   Effect.gen(function* () {
     // Get config from environment or use defaults
     const config: ObservabilityServiceConfig = {
-      successSampleRate: Number(process.env.FRED_SAMPLE_RATE) || 0.01,
-      slowThresholdMs: Number(process.env.FRED_SLOW_THRESHOLD_MS) || 5000,
+      successSampleRate: process.env.FRED_SAMPLE_RATE !== undefined
+        ? Number(process.env.FRED_SAMPLE_RATE)
+        : 0.01,
+      slowThresholdMs: process.env.FRED_SLOW_THRESHOLD_MS !== undefined
+        ? Number(process.env.FRED_SLOW_THRESHOLD_MS)
+        : 5000,
       debugMode: process.env.FRED_DEBUG === 'true',
       hashPayloads: process.env.FRED_HASH_PAYLOADS !== 'false',
       serviceMetadata: {
@@ -293,8 +297,11 @@ export const ObservabilityServiceLive = Layer.effect(
       description: 'Model cost by provider and model',
     });
 
-    // In-memory run store
+    // In-memory run store with LRU-like eviction to prevent unbounded growth
     const runStore = new Map<string, RunRecord>();
+    const RUN_STORE_MAX_SIZE = process.env.FRED_RUN_STORE_MAX_SIZE !== undefined
+      ? Number(process.env.FRED_RUN_STORE_MAX_SIZE)
+      : 1000;
 
     // Global metrics aggregation for export
     const globalMetrics = {
@@ -445,6 +452,13 @@ export const ObservabilityServiceLive = Layer.effect(
         Effect.gen(function* () {
           const ctx = yield* getCorrelationContext;
           const spanIds = yield* getSpanIds;
+          // Evict oldest entry if at capacity
+          if (runStore.size >= RUN_STORE_MAX_SIZE && !runStore.has(runId)) {
+            const oldestKey = runStore.keys().next().value;
+            if (oldestKey !== undefined) {
+              runStore.delete(oldestKey);
+            }
+          }
           runStore.set(runId, {
             runId,
             traceId: spanIds.traceId,
@@ -614,9 +628,11 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_tokens_usage_total Total token usage by provider and model');
           lines.push('# TYPE fred_tokens_usage_total counter');
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const [provider, model] = key.split(':');
-            const escapedProvider = escapePrometheusLabelValue(provider ?? '');
-            const escapedModel = escapePrometheusLabelValue(model ?? '');
+            const separatorIndex = key.indexOf(':');
+            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
+            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
+            const escapedProvider = escapePrometheusLabelValue(provider);
+            const escapedModel = escapePrometheusLabelValue(model);
             lines.push(
               `fred_tokens_usage_total{provider="${escapedProvider}",model="${escapedModel}",type="input"} ${usage.input}`
             );
@@ -629,9 +645,11 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_model_cost_total Total model cost by provider and model');
           lines.push('# TYPE fred_model_cost_total counter');
           for (const [key, cost] of globalMetrics.modelCost.entries()) {
-            const [provider, model] = key.split(':');
+            const separatorIndex = key.indexOf(':');
+            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
+            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
             lines.push(
-              `fred_model_cost_total{provider="${escapePrometheusLabelValue(provider ?? '')}",model="${escapePrometheusLabelValue(model ?? '')}"} ${cost}`
+              `fred_model_cost_total{provider="${escapePrometheusLabelValue(provider)}",model="${escapePrometheusLabelValue(model)}"} ${cost}`
             );
           }
 
@@ -671,7 +689,9 @@ export const ObservabilityServiceLive = Layer.effect(
             timeUnixNano: string;
           }> = [];
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const [provider, model] = key.split(':');
+            const separatorIndex = key.indexOf(':');
+            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
+            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
             tokenDataPoints.push({
               attributes: { provider, model, type: 'input' },
               value: usage.input,
@@ -697,7 +717,9 @@ export const ObservabilityServiceLive = Layer.effect(
 
           // Model cost metrics
           const costDataPoints = Array.from(globalMetrics.modelCost.entries()).map(([key, cost]) => {
-            const [provider, model] = key.split(':');
+            const separatorIndex = key.indexOf(':');
+            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
+            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
             return {
               attributes: { provider, model },
               value: cost,
