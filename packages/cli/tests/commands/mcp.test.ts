@@ -189,7 +189,7 @@ describe('mcp list', () => {
     );
 
     expect(exitCode).toBe(0);
-    // Both servers should show "-" for tool count in table view (async limitation)
+    // Connected servers now show actual tool count; unconnected show "-"
     expect(captured.output[0]).toContain('filesystem');
     expect(captured.output[0]).toContain('lazy-server');
   });

@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import path from 'node:path';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
@@ -161,7 +162,7 @@ describe('phase 33 launch contract smoke', () => {
   });
 
   test('chat is the canonical interactive command and no-args/tui are aliases of the same launch handler', async () => {
-    const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
+    const indexPath = path.resolve(import.meta.dir, '../../../packages/cli/src/index.ts');
     const source = await Bun.file(indexPath).text();
 
     expect(source).toContain("const command = args[0] || 'chat';");

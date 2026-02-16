@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import path from 'node:path';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
   createMockContextManager,
@@ -107,7 +108,7 @@ describe('phase 27 smoke', () => {
 
   describe('bare command path launch parity', () => {
     test('help text remains explicit and includes fred chat', async () => {
-      const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
+      const indexPath = path.resolve(import.meta.dir, '../../../packages/cli/src/index.ts');
       const content = await Bun.file(indexPath).text();
 
       expect(content).toContain('fred chat');
@@ -163,7 +164,7 @@ describe('phase 27 smoke', () => {
     });
 
     test('interactive branch in chat command still wires createFredTuiApp', async () => {
-      const chatCommandPath = '/home/gimbo/dev/fred/packages/cli/src/commands/chat.ts';
+      const chatCommandPath = path.resolve(import.meta.dir, '../../../packages/cli/src/commands/chat.ts');
       const content = await Bun.file(chatCommandPath).text();
 
       expect(content).toContain("if (mode.mode === 'interactive-tty')");
@@ -316,7 +317,7 @@ describe('phase 27 smoke', () => {
 
   describe('command and mode routing integration', () => {
     test('chat command routing logic exists in CLI index', async () => {
-      const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
+      const indexPath = path.resolve(import.meta.dir, '../../../packages/cli/src/index.ts');
       const content = await Bun.file(indexPath).text();
 
       expect(content).toContain("case 'chat':");

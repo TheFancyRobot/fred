@@ -1,5 +1,8 @@
 export {};
 
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
 const PHASE_ID = "35-cross-phase-smoke-contract-refresh";
 const EVIDENCE_PATH = ".planning/phases/35-cross-phase-smoke-contract-refresh/35-smoke-evidence.json";
 
@@ -149,21 +152,28 @@ const STALE_CONTRACT_PATTERNS = [
 // ---------------------------------------------------------------------------
 
 function runCommand(command: string): { exitCode: number; output: string } {
-  const proc = Bun.spawnSync({
-    cmd: ["bash", "-lc", command],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  try {
+    const proc = Bun.spawnSync({
+      cmd: ["bash", "-lc", command],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
 
-  const decoder = new TextDecoder();
-  const stdout = decoder.decode(proc.stdout);
-  const stderr = decoder.decode(proc.stderr);
-  const exitCode = proc.exitCode ?? 1;
+    const decoder = new TextDecoder();
+    const stdout = decoder.decode(proc.stdout);
+    const stderr = decoder.decode(proc.stderr);
+    const exitCode = proc.exitCode ?? 1;
 
-  return {
-    exitCode,
-    output: `${stdout}${stderr}`,
-  };
+    return {
+      exitCode,
+      output: `${stdout}${stderr}`,
+    };
+  } catch (error) {
+    return {
+      exitCode: 1,
+      output: `spawnSync failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 function isStaleContract(output: string): boolean {
@@ -246,85 +256,54 @@ function matchRetryAllowlist(output: string): { id: string; reason: string } | n
 function executeCheck(check: SmokeCheck): SmokeResult {
   const attempts: AttemptOutcome[] = [];
   let retryReason: string | null = null;
-
-  // --- Attempt 1 ---
-  const firstRun = runCommand(check.command);
-  const firstChannel = classifyChannel(firstRun.exitCode, firstRun.output);
-  const firstDecisive = extractDecisiveLines(firstRun.output, firstRun.exitCode);
+  let lastRun = runCommand(check.command);
+  let lastChannel = classifyChannel(lastRun.exitCode, lastRun.output);
+  let lastDecisive = extractDecisiveLines(lastRun.output, lastRun.exitCode);
 
   attempts.push({
     attempt: 1,
-    exitCode: firstRun.exitCode,
-    decisiveLines: firstDecisive,
-    channel: firstChannel,
+    exitCode: lastRun.exitCode,
+    decisiveLines: lastDecisive,
+    channel: lastChannel,
   });
 
-  // If first attempt passed, done.
-  if (firstRun.exitCode === 0) {
-    return {
-      id: check.id,
-      label: check.label,
-      command: check.command,
-      exitCode: firstRun.exitCode,
-      decisiveLines: firstDecisive,
-      channel: firstChannel,
-      attemptCount: 1,
-      retryReason: null,
-      attempts,
-    };
+  // Retry loop — up to MAX_RETRIES additional attempts for eligible failures
+  for (let retry = 0; retry < MAX_RETRIES && lastRun.exitCode !== 0; retry++) {
+    const allowlistMatch = matchRetryAllowlist(lastRun.output);
+    if (!allowlistMatch) {
+      // Not eligible for retry — deterministic failure, fail-hard immediately.
+      console.log(`[phase35-smoke] FAIL ${check.id} (exit=${lastRun.exitCode}, channel=${lastChannel}, retry=not-eligible)`);
+      break;
+    }
+
+    retryReason = `[${allowlistMatch.id}] ${allowlistMatch.reason}`;
+    console.log(`[phase35-smoke] RETRY ${check.id} (reason=${retryReason})`);
+
+    lastRun = runCommand(check.command);
+    lastChannel = classifyChannel(lastRun.exitCode, lastRun.output);
+    lastDecisive = extractDecisiveLines(lastRun.output, lastRun.exitCode);
+
+    attempts.push({
+      attempt: retry + 2,
+      exitCode: lastRun.exitCode,
+      decisiveLines: lastDecisive,
+      channel: lastChannel,
+    });
   }
 
-  // --- Retry eligibility check (default-deny) ---
-  const allowlistMatch = matchRetryAllowlist(firstRun.output);
-
-  if (!allowlistMatch) {
-    // Not eligible for retry — deterministic failure, fail-hard immediately.
-    console.log(`[phase35-smoke] FAIL ${check.id} (exit=${firstRun.exitCode}, channel=${firstChannel}, retry=not-eligible)`);
-    return {
-      id: check.id,
-      label: check.label,
-      command: check.command,
-      exitCode: firstRun.exitCode,
-      decisiveLines: firstDecisive,
-      channel: firstChannel,
-      attemptCount: 1,
-      retryReason: null,
-      attempts,
-    };
+  if (attempts.length > 1) {
+    const statusIcon = lastRun.exitCode === 0 ? "OK" : "FAIL";
+    console.log(`[phase35-smoke] ${statusIcon} ${check.id} (exit=${lastRun.exitCode}, channel=${lastChannel}, attempts=${attempts.length}, retryReason=${retryReason})`);
   }
-
-  // --- Attempt 2 (single retry) ---
-  retryReason = `[${allowlistMatch.id}] ${allowlistMatch.reason}`;
-  console.log(`[phase35-smoke] RETRY ${check.id} (reason=${retryReason})`);
-
-  const retryRun = runCommand(check.command);
-  const retryChannel = classifyChannel(retryRun.exitCode, retryRun.output);
-  const retryDecisive = extractDecisiveLines(retryRun.output, retryRun.exitCode);
-
-  attempts.push({
-    attempt: 2,
-    exitCode: retryRun.exitCode,
-    decisiveLines: retryDecisive,
-    channel: retryChannel,
-  });
-
-  // Fail-hard: even if retry passes, the result reflects the final attempt.
-  // If it still fails, it fails. No warning-only pass for unstable retries.
-  const finalExitCode = retryRun.exitCode;
-  const finalChannel = retryChannel;
-  const finalDecisive = retryDecisive;
-
-  const statusIcon = finalExitCode === 0 ? "OK" : "FAIL";
-  console.log(`[phase35-smoke] ${statusIcon} ${check.id} (exit=${finalExitCode}, channel=${finalChannel}, attempts=2, retryReason=${retryReason})`);
 
   return {
     id: check.id,
     label: check.label,
     command: check.command,
-    exitCode: finalExitCode,
-    decisiveLines: finalDecisive,
-    channel: finalChannel,
-    attemptCount: 2,
+    exitCode: lastRun.exitCode,
+    decisiveLines: lastDecisive,
+    channel: lastChannel,
+    attemptCount: attempts.length,
     retryReason,
     attempts,
   };
@@ -392,6 +371,7 @@ const payload = {
   checks: results,
 };
 
+mkdirSync(dirname(EVIDENCE_PATH), { recursive: true });
 await Bun.write(EVIDENCE_PATH, `${JSON.stringify(payload, null, 2)}\n`);
 
 if (overallExitCode === 0) {

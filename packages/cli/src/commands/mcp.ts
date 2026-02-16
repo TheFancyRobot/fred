@@ -90,24 +90,30 @@ const mcpListEffect = (
     const allServers = registry.getAllConfiguredServers();
 
     if (options.json === true) {
-      const servers = allServers.map((id) => {
-        const status = registry.getServerStatus(id) ?? 'stopped';
-        const config = registry.getServerConfig(id);
-        const transport = config?.transport ?? 'unknown';
+      const servers = yield* Effect.forEach(allServers, (id) =>
+        Effect.gen(function* () {
+          const status = registry.getServerStatus(id) ?? 'stopped';
+          const config = registry.getServerConfig(id);
+          const transport = config?.transport ?? 'unknown';
 
-        const client = registry.getClient(id);
-        let tools: number | undefined;
-        if (client && client.isConnected()) {
-          tools = undefined;
-        }
+          const client = registry.getClient(id);
+          let toolCount: number | undefined;
+          if (client && client.isConnected()) {
+            const toolList: Array<unknown> = yield* Effect.tryPromise({
+              try: () => client.listTools() as Promise<Array<unknown>>,
+              catch: () => new McpOperationError({ serverId: id, message: 'Failed to list tools' }),
+            }).pipe(Effect.orElseSucceed(() => []));
+            toolCount = toolList.length;
+          }
 
-        return {
-          id,
-          status,
-          transport,
-          ...(tools !== undefined ? { toolCount: tools } : {}),
-        };
-      });
+          return {
+            id,
+            status,
+            transport,
+            ...(toolCount !== undefined ? { toolCount } : {}),
+          };
+        }),
+      );
 
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-list', servers }, null, 2));
       return 0;
@@ -119,19 +125,25 @@ const mcpListEffect = (
     }
 
     const headers = ['ID', 'Status', 'Transport', 'Tools'];
-    const rows = allServers.map((id) => {
-      const status = registry.getServerStatus(id) ?? 'stopped';
-      const config = registry.getServerConfig(id);
-      const transport = config?.transport ?? 'unknown';
+    const rows = yield* Effect.forEach(allServers, (id) =>
+      Effect.gen(function* () {
+        const status = registry.getServerStatus(id) ?? 'stopped';
+        const config = registry.getServerConfig(id);
+        const transport = config?.transport ?? 'unknown';
 
-      const client = registry.getClient(id);
-      let toolCount = '-';
-      if (client && client.isConnected()) {
-        toolCount = '-';
-      }
+        const client = registry.getClient(id);
+        let toolCount = '-';
+        if (client && client.isConnected()) {
+          const toolList: Array<unknown> = yield* Effect.tryPromise({
+            try: () => client.listTools() as Promise<Array<unknown>>,
+            catch: () => new McpOperationError({ serverId: id, message: 'Failed to list tools' }),
+          }).pipe(Effect.orElseSucceed(() => []));
+          toolCount = String(toolList.length);
+        }
 
-      return [id, status, transport, toolCount];
-    });
+        return [id, status, transport, toolCount];
+      }),
+    );
 
     io.stdout(formatTable(headers, rows));
     return 0;
@@ -299,10 +311,11 @@ const mcpStatusEffect = (
 
     const client = registry.getClient(serverId);
     const isConnected = client?.isConnected() ?? false;
-    const transport = config.transport;
+    const transport = config.transport ?? 'unknown';
 
     // Try to discover tools if connected
     let tools: any[] = [];
+    let toolDiscoveryFailed = false;
     if (isConnected && client) {
       const result = yield* Effect.either(
         Effect.tryPromise({
@@ -315,7 +328,11 @@ const mcpStatusEffect = (
         const innerResult = result.right;
         if (innerResult._tag === 'Right') {
           tools = innerResult.right;
+        } else {
+          toolDiscoveryFailed = true;
         }
+      } else {
+        toolDiscoveryFailed = true;
       }
     }
 
@@ -328,7 +345,8 @@ const mcpStatusEffect = (
           status: status ?? 'stopped',
           transport,
           connected: isConnected,
-          toolCount: tools.length,
+          toolCount: toolDiscoveryFailed ? null : tools.length,
+          ...(toolDiscoveryFailed ? { toolDiscoveryFailed: true } : {}),
         },
       };
 
@@ -351,7 +369,7 @@ const mcpStatusEffect = (
     io.stdout(`Connected: ${isConnected ? 'yes' : 'no'}`);
     io.stdout(`Uptime: N/A`);
     io.stdout(`Last error: none`);
-    io.stdout(`Tool count: ${tools.length}`);
+    io.stdout(`Tool count: ${toolDiscoveryFailed ? 'discovery failed' : tools.length}`);
 
     if (options.verbose === true && tools.length > 0) {
       io.stdout('\nTools:');

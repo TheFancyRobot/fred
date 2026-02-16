@@ -243,7 +243,7 @@ const STARTUP_CHOOSER_OPTIONS: ReadonlyArray<StartupChooserOption> = [
 ];
 
 export function shouldOpenStartupChooser(
-  _items: ReadonlyArray<SessionListItem>,
+  items: ReadonlyArray<SessionListItem>,
   initialSessionId: string | null | undefined,
 ): boolean {
   return !initialSessionId;
@@ -991,16 +991,18 @@ export function appendAssistant(
     return {
       ...state,
       transcript,
-      streaming: {
-        ...state.streaming,
-        firstTokenLatencyMs: state.streaming.firstTokenLatencyMs ?? (
-          state.streaming.streamStartMs !== null
-            ? Math.max(0, nowMs - state.streaming.streamStartMs)
-            : null
-        ),
-        outputTokenCount: state.streaming.outputTokenCount + Math.max(0, tokenCount),
-        tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount + Math.max(0, tokenCount), nowMs),
-      },
+      streaming: state.streaming.isStreaming
+        ? {
+            ...state.streaming,
+            firstTokenLatencyMs: state.streaming.firstTokenLatencyMs ?? (
+              state.streaming.streamStartMs !== null
+                ? Math.max(0, nowMs - state.streaming.streamStartMs)
+                : null
+            ),
+            outputTokenCount: state.streaming.outputTokenCount + Math.max(0, tokenCount),
+            tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount + Math.max(0, tokenCount), nowMs),
+          }
+        : state.streaming,
     };
   }
 
@@ -1032,12 +1034,16 @@ export function appendAssistant(
     ? nextTranscript
     : state.transcript;
 
-  const nextOutputTokenCount = state.streaming.outputTokenCount + Math.max(0, tokenCount);
-  const firstTokenLatencyMs = state.streaming.firstTokenLatencyMs ?? (
-    state.streaming.streamStartMs !== null
-      ? Math.max(0, nowMs - state.streaming.streamStartMs)
-      : null
-  );
+  const nextOutputTokenCount = state.streaming.isStreaming
+    ? state.streaming.outputTokenCount + Math.max(0, tokenCount)
+    : state.streaming.outputTokenCount;
+  const firstTokenLatencyMs = state.streaming.isStreaming
+    ? (state.streaming.firstTokenLatencyMs ?? (
+        state.streaming.streamStartMs !== null
+          ? Math.max(0, nowMs - state.streaming.streamStartMs)
+          : null
+      ))
+    : state.streaming.firstTokenLatencyMs;
 
   const unread = sessionId !== state.sessions.selectedId || !nextTranscript.viewport.pinnedToBottom;
   const nextState = updateSessionFromTranscript(
@@ -1048,14 +1054,19 @@ export function appendAssistant(
         ...state.sessions,
         transcripts: updatedTranscripts,
       },
-      streaming: {
-        ...state.streaming,
-        isStreaming: state.streaming.isStreaming,
-        firstTokenLatencyMs,
-        outputTokenCount: nextOutputTokenCount,
-        tokensPerSecond: getStreamRate(state.streaming.streamStartMs, nextOutputTokenCount, nowMs),
-        sessionId,
-      },
+      streaming: state.streaming.isStreaming
+        ? {
+            ...state.streaming,
+            isStreaming: true,
+            firstTokenLatencyMs,
+            outputTokenCount: nextOutputTokenCount,
+            tokensPerSecond: getStreamRate(state.streaming.streamStartMs, nextOutputTokenCount, nowMs),
+            sessionId,
+          }
+        : {
+            ...state.streaming,
+            sessionId,
+          },
     },
     sessionId,
     nextTranscript,

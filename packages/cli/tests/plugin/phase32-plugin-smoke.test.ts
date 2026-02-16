@@ -235,7 +235,9 @@ describe('phase 32 plugin CLI smoke', () => {
 
   test('emits one aggregated startup report and exits with code 12 for plugin validation failures', () => {
     const projectRoot = createInvalidPluginProject();
-    const result = runCli(['help'], projectRoot);
+    // Use a non-help command so plugin validation runs before dispatch.
+    // `fred help` intentionally skips plugin validation so it always succeeds.
+    const result = runCli(['agents'], projectRoot);
 
     expect(result.status).toBe(12);
     expect(result.stdout).toBe('');

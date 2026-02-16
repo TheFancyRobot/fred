@@ -258,11 +258,6 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
   }
 
-  // Delete session shortcut (outside input/palette/prompt)
-  if (name === 'delete' || name === 'backspace') {
-    return { type: 'delete-session' };
-  }
-
   // Sidebar pane: session navigation
   if (focusedPane === 'sidebar') {
     if (name === 'delete' || name === 'backspace') {

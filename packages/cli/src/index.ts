@@ -219,6 +219,18 @@ Get started:
  */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+
+  // Check for help flags BEFORE plugin initialization so --help always works
+  // even if plugins have validation issues.
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+    const helpPluginResult = initializePluginCliRuntime();
+    const helpPluginSection = helpPluginResult.runtime
+      ? renderPluginHelpSection(helpPluginResult.runtime.listCommands())
+      : '';
+    showHelp(helpPluginSection);
+    process.exit(0);
+  }
+
   const pluginRuntimeResult = initializePluginCliRuntime();
 
   if (pluginRuntimeResult.startupIssues) {
@@ -232,11 +244,6 @@ async function main(): Promise<void> {
 
   const pluginRuntime = pluginRuntimeResult.runtime;
   const pluginHelpSection = renderPluginHelpSection(pluginRuntime.listCommands());
-
-  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
-    showHelp(pluginHelpSection);
-    process.exit(0);
-  }
 
   const { command, args: commandArgs, options } = parseArgs(argv);
   const rawCommandArgs = argv.slice(1);

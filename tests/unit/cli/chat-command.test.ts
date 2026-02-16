@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import path from 'node:path';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
   createNonInteractiveFallbackPayload,
@@ -104,7 +105,7 @@ describe('Chat Command', () => {
   describe('Help text includes chat command', () => {
     test('help text mentions fred chat', async () => {
       // Import the CLI module to check help text
-      const indexPath = '/home/gimbo/dev/fred/packages/cli/src/index.ts';
+      const indexPath = path.resolve(import.meta.dir, '../../../packages/cli/src/index.ts');
 
       // Read the file content to verify help text
       const content = await Bun.file(indexPath).text();
