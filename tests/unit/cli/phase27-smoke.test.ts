@@ -14,7 +14,11 @@ import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
   createMockContextManager,
   createMockFredClass,
+  createStdinDouble,
+  createStdoutDouble,
+  installCommonSmokeModuleMocks,
   installFredSmokeContractMock,
+  restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
 // We mock createFredTuiApp at the module level so handleChatCommand
@@ -126,19 +130,15 @@ describe('phase 27 smoke', () => {
       exitCode = code ?? 0;
     });
 
+    // Deterministically reinstall module mocks (defensive against mock.restore())
+    installFredSmokeContractMock({ FredClass: MockFred });
+    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      configurable: true,
-    });
-    Object.defineProperty(process, 'stdout', {
-      value: originalStdout,
-      configurable: true,
-    });
-    (process as any).exit = originalExit;
+    // Restore process globals first (before mock cleanup)
+    restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
     // Restore env vars
     for (const [key, value] of Object.entries(savedEnvVars)) {
@@ -149,6 +149,8 @@ describe('phase 27 smoke', () => {
       }
     }
 
+    // Reset all mock call history and restore spies
+    mock.restore();
   });
 
   describe('bare command path launch parity', () => {
@@ -179,17 +181,17 @@ describe('phase 27 smoke', () => {
   describe('chat command selects interactive branch in TTY mode', () => {
     test('detectTerminalMode returns interactive-tty for full TTY capabilities', () => {
       let rawMode = false;
-      const mockStdin = {
+      const mockStdin = createStdinDouble({
         isTTY: true,
         isRaw: false,
         setRawMode: mock((mode: boolean) => {
           rawMode = mode;
         }),
-      } as any;
+      });
 
-      const mockStdout = {
+      const mockStdout = createStdoutDouble({
         isTTY: true,
-      } as any;
+      });
 
       Object.defineProperty(process, 'stdin', {
         value: mockStdin,
@@ -219,13 +221,8 @@ describe('phase 27 smoke', () => {
 
   describe('chat command selects non-interactive branch in non-TTY mode', () => {
     test('detectTerminalMode returns non-tty for piped stdin', () => {
-      const mockStdin = {
-        isTTY: false,
-      } as any;
-
-      const mockStdout = {
-        isTTY: true,
-      } as any;
+      const mockStdin = createStdinDouble({ isTTY: false });
+      const mockStdout = createStdoutDouble({ isTTY: true });
 
       Object.defineProperty(process, 'stdin', {
         value: mockStdin,
@@ -245,13 +242,8 @@ describe('phase 27 smoke', () => {
     });
 
     test('chat command in non-TTY mode emits shared JSON contract and exits', async () => {
-      const mockStdin = {
-        isTTY: false,
-      } as any;
-
-      const mockStdout = {
-        isTTY: false,
-      } as any;
+      const mockStdin = createStdinDouble({ isTTY: false });
+      const mockStdout = createStdoutDouble({ isTTY: false });
 
       Object.defineProperty(process, 'stdin', {
         value: mockStdin,
@@ -319,14 +311,12 @@ describe('phase 27 smoke', () => {
         throw new Error('setRawMode should not be called in non-TTY mode');
       });
 
-      const mockStdin = {
+      const mockStdin = createStdinDouble({
         isTTY: false,
         setRawMode: setRawModeSpy,
-      } as any;
+      });
 
-      const mockStdout = {
-        isTTY: false,
-      } as any;
+      const mockStdout = createStdoutDouble({ isTTY: false });
 
       Object.defineProperty(process, 'stdin', {
         value: mockStdin,
@@ -352,13 +342,8 @@ describe('phase 27 smoke', () => {
     });
 
     test('terminal lifecycle safety in non-TTY mode', () => {
-      const mockStdin = {
-        isTTY: false,
-      } as any;
-
-      const mockStdout = {
-        isTTY: false,
-      } as any;
+      const mockStdin = createStdinDouble({ isTTY: false });
+      const mockStdout = createStdoutDouble({ isTTY: false });
 
       Object.defineProperty(process, 'stdin', {
         value: mockStdin,
@@ -398,17 +383,15 @@ describe('phase 27 smoke', () => {
 
     test('mode detection drives routing decision', () => {
       let rawMode = false;
-      const ttyMockStdin = {
+      const ttyMockStdin = createStdinDouble({
         isTTY: true,
         isRaw: false,
         setRawMode: mock((mode: boolean) => {
           rawMode = mode;
         }),
-      } as any;
+      });
 
-      const ttyMockStdout = {
-        isTTY: true,
-      } as any;
+      const ttyMockStdout = createStdoutDouble({ isTTY: true });
 
       Object.defineProperty(process, 'stdin', {
         value: ttyMockStdin,
@@ -423,9 +406,7 @@ describe('phase 27 smoke', () => {
       const ttyMode = detectTerminalMode();
       expect(ttyMode.mode).toBe('interactive-tty');
 
-      const nonTtyMockStdin = {
-        isTTY: false,
-      } as any;
+      const nonTtyMockStdin = createStdinDouble({ isTTY: false });
 
       Object.defineProperty(process, 'stdin', {
         value: nonTtyMockStdin,

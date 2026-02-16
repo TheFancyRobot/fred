@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
   createMockContextManager,
   createMockFredClass,
+  createStdinDouble,
+  createStdoutDouble,
+  installCommonSmokeModuleMocks,
   installFredSmokeContractMock,
   MockSqliteContextStorage,
+  restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
 const STALE_CONTRACT = 'STALE_CONTRACT';
@@ -112,19 +116,19 @@ describe('phase 35 cross-phase smoke contract guard', () => {
     originalStdin = process.stdin;
     originalStdout = process.stdout;
     originalExit = process.exit;
+
+    // Deterministically reinstall module mocks
+    installFredSmokeContractMock({ FredClass: CanonicalMockFred });
+    installCommonSmokeModuleMocks();
     mockContextManager.setStorage.mockClear();
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      configurable: true,
-    });
-    Object.defineProperty(process, 'stdout', {
-      value: originalStdout,
-      configurable: true,
-    });
-    (process as any).exit = originalExit;
+    // Restore process globals first
+    restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
+
+    // Reset all mock call history and restore spies
+    mock.restore();
   });
 
   test('shared fixture exposes required runtime-facing contract members', () => {
@@ -175,16 +179,16 @@ describe('phase 35 cross-phase smoke contract guard', () => {
       registerBuiltinPack: mock(() => {}),
     }));
 
-    const mockStdin = {
+    const mockStdin = createStdinDouble({
       isTTY: true,
       isRaw: false,
       setRawMode: mock(() => {}),
-    } as any;
-    const mockStdout = {
+    });
+    const mockStdout = createStdoutDouble({
       isTTY: true,
       columns: 120,
       rows: 40,
-    } as any;
+    });
 
     Object.defineProperty(process, 'stdin', {
       value: mockStdin,

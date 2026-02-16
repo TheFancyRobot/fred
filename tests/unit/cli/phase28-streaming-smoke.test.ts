@@ -12,7 +12,11 @@ import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
   createMockFredClass,
+  createStdinDouble,
+  createStdoutDouble,
+  installCommonSmokeModuleMocks,
   installFredSmokeContractMock,
+  restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
 const mockApp = {
@@ -93,6 +97,9 @@ describe('Phase 28 streaming smoke', () => {
     // Set a fake key to satisfy detectAvailableProvider
     process.env.OPENAI_API_KEY = 'sk-test-key-for-smoke-tests';
 
+    // Deterministically reinstall module mocks
+    installFredSmokeContractMock({ FredClass: MockFred });
+    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
     mockApp.pushAssistantToken.mockClear();
     mockApp.completeAssistantStream.mockClear();
@@ -100,15 +107,8 @@ describe('Phase 28 streaming smoke', () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      configurable: true,
-    });
-    Object.defineProperty(process, 'stdout', {
-      value: originalStdout,
-      configurable: true,
-    });
-    (process as any).exit = originalExit;
+    // Restore process globals first
+    restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
     // Restore env vars
     for (const [key, value] of Object.entries(savedEnvVars)) {
@@ -119,26 +119,37 @@ describe('Phase 28 streaming smoke', () => {
       }
     }
 
+    // Reset all mock call history and restore spies
+    mock.restore();
   });
 
   test('launches interactive TTY mode via handleChatCommand', async () => {
-    const mockStdin = {
+    const mockStdin = createStdinDouble({
       isTTY: true,
       isRaw: false,
       setRawMode: mock(() => {}),
-    } as any;
-    const mockStdout = {
+    });
+    const mockStdout = createStdoutDouble({
       isTTY: true,
       columns: 120,
       rows: 40,
-    } as any;
+    });
 
     Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
     const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-    await handleChatCommand();
+
+    // handleChatCommand runs Effect.never in interactive mode (keeps lifecycle
+    // scope open until process.exit). Fire-and-forget and poll for the mock call.
+    const chatPromise = handleChatCommand().catch(() => {});
+
+    // Wait for createFredTuiApp to be called (up to 2s)
+    const deadline = Date.now() + 2000;
+    while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+      await Bun.sleep(20);
+    }
 
     expect(mockCreateFredTuiApp).toHaveBeenCalledTimes(1);
   });
@@ -238,16 +249,16 @@ describe('Phase 28 streaming smoke', () => {
       };
     };
 
-    const mockStdin = {
+    const mockStdin = createStdinDouble({
       isTTY: true,
       isRaw: false,
       setRawMode: mock(() => {}),
-    } as any;
-    const mockStdout = {
+    });
+    const mockStdout = createStdoutDouble({
       isTTY: true,
       columns: 120,
       rows: 40,
-    } as any;
+    });
 
     Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
@@ -255,7 +266,15 @@ describe('Phase 28 streaming smoke', () => {
 
     try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      await handleChatCommand();
+
+      // handleChatCommand runs Effect.never in interactive mode. Fire-and-forget
+      // and poll for the mock call so we can exercise the onSubmit callback.
+      const chatPromise = handleChatCommand().catch(() => {});
+
+      const deadline = Date.now() + 2000;
+      while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
 
       const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
       const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);

@@ -6,7 +6,11 @@ import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
   createMockFredClass,
+  createStdinDouble,
+  createStdoutDouble,
+  installCommonSmokeModuleMocks,
   installFredSmokeContractMock,
+  restoreProcessDoubles,
 } from './fixtures/fred-smoke-contract';
 
 const mockApp = {
@@ -172,21 +176,21 @@ describe('phase 33 launch contract smoke', () => {
     (process as any).exit = mock((code?: number) => {
       exitCode = code ?? 0;
     });
+
+    // Deterministically reinstall module mocks
+    installFredSmokeContractMock({ FredClass: MockFred });
+    installCommonSmokeModuleMocks();
     mockCreateFredTuiApp.mockClear();
     mockApp.updateTelemetryModel.mockClear();
     mockContextManager.setStorage.mockClear();
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      configurable: true,
-    });
-    Object.defineProperty(process, 'stdout', {
-      value: originalStdout,
-      configurable: true,
-    });
-    (process as any).exit = originalExit;
+    // Restore process globals first
+    restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
+
+    // Reset all mock call history and restore spies
+    mock.restore();
   });
 
   test('chat is the canonical interactive command and no-args/tui are aliases of the same launch handler', async () => {
@@ -215,14 +219,12 @@ describe('phase 33 launch contract smoke', () => {
   });
 
   test('TTY mode keeps chat-primary launch semantics with no-args/tui alias behavior', async () => {
-    const mockStdin = {
+    const mockStdin = createStdinDouble({
       isTTY: true,
       isRaw: false,
       setRawMode: mock(() => {}),
-    } as any;
-    const mockStdout = {
-      isTTY: true,
-    } as any;
+    });
+    const mockStdout = createStdoutDouble({ isTTY: true });
 
     Object.defineProperty(process, 'stdin', {
       value: mockStdin,
@@ -254,12 +256,8 @@ describe('phase 33 launch contract smoke', () => {
   });
 
   test('non-TTY fallback contract stays equivalent for chat and its no-args/tui aliases', async () => {
-    const mockStdin = {
-      isTTY: false,
-    } as any;
-    const mockStdout = {
-      isTTY: false,
-    } as any;
+    const mockStdin = createStdinDouble({ isTTY: false });
+    const mockStdout = createStdoutDouble({ isTTY: false });
 
     Object.defineProperty(process, 'stdin', {
       value: mockStdin,

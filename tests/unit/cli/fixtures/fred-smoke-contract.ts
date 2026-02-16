@@ -9,6 +9,93 @@ type SessionSummary = {
   agent: { id: string; name: string };
 };
 
+// ---------------------------------------------------------------------------
+// Process double helpers — concurrency-safe stdin/stdout/exit doubles
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a complete process.stdin double with all APIs that OpenTUI renderer
+ * and the CLI runtime exercise (pause, resume, on, off, setRawMode, etc.).
+ *
+ * Partial doubles that omit `pause`/`resume` cause `TypeError: process.stdin.pause
+ * is not a function` when OpenTUI's renderer tears down during concurrent tests.
+ */
+export function createStdinDouble(overrides: Record<string, unknown> = {}): any {
+  const listeners = new Map<string, Function[]>();
+  return {
+    isTTY: false,
+    isRaw: false,
+    setRawMode: mock((mode: boolean) => { /* no-op for tests */ }),
+    pause: mock(() => {}),
+    resume: mock(() => {}),
+    on: mock((event: string, fn: Function) => { listeners.set(event, [...(listeners.get(event) ?? []), fn]); }),
+    off: mock((event: string, fn: Function) => {
+      const fns = listeners.get(event) ?? [];
+      listeners.set(event, fns.filter(f => f !== fn));
+    }),
+    once: mock((event: string, fn: Function) => { listeners.set(event, [...(listeners.get(event) ?? []), fn]); }),
+    removeListener: mock((event: string, fn: Function) => {
+      const fns = listeners.get(event) ?? [];
+      listeners.set(event, fns.filter(f => f !== fn));
+    }),
+    removeAllListeners: mock((event?: string) => {
+      if (event) listeners.delete(event); else listeners.clear();
+    }),
+    addListener: mock((event: string, fn: Function) => { listeners.set(event, [...(listeners.get(event) ?? []), fn]); }),
+    emit: mock(() => false),
+    destroyed: false,
+    readable: true,
+    ref: mock(() => {}),
+    unref: mock(() => {}),
+    ...overrides,
+  };
+}
+
+/**
+ * Create a complete process.stdout double with APIs exercised by OpenTUI renderer
+ * and the CLI runtime (write, columns, rows, on, etc.).
+ */
+export function createStdoutDouble(overrides: Record<string, unknown> = {}): any {
+  return {
+    isTTY: false,
+    columns: 120,
+    rows: 40,
+    write: mock(() => true),
+    on: mock(() => {}),
+    off: mock(() => {}),
+    once: mock(() => {}),
+    removeListener: mock(() => {}),
+    removeAllListeners: mock(() => {}),
+    addListener: mock(() => {}),
+    emit: mock(() => false),
+    destroyed: false,
+    writable: true,
+    ...overrides,
+  };
+}
+
+/**
+ * Deterministic global process state cleanup for use in afterEach.
+ *
+ * Restores process.stdin, process.stdout, and process.exit to their saved
+ * originals. Call this AFTER mock.restore() / mock.clearAllMocks().
+ */
+export function restoreProcessDoubles(originals: {
+  stdin: typeof process.stdin;
+  stdout: typeof process.stdout;
+  exit: typeof process.exit;
+}): void {
+  Object.defineProperty(process, 'stdin', {
+    value: originals.stdin,
+    configurable: true,
+  });
+  Object.defineProperty(process, 'stdout', {
+    value: originals.stdout,
+    configurable: true,
+  });
+  (process as any).exit = originals.exit;
+}
+
 export type MockContextManager = {
   setStorage: ReturnType<typeof mock>;
   generateConversationId: () => string;
@@ -128,4 +215,24 @@ export function installFredSmokeContractMock(options: {
     SqliteContextStorage: MockSqliteContextStorage,
     registerBuiltinPack,
   }));
+}
+
+/**
+ * Install the common set of provider and project-config module mocks shared
+ * across all smoke suites. Call in beforeEach after mock.restore() to
+ * deterministically reinstall module overrides that mock.restore() clears.
+ *
+ * NOTE: mock.restore() does NOT undo mock.module() overrides in current Bun
+ * versions, but calling this in beforeEach is a defensive measure against
+ * future behavior changes and ensures a known-clean baseline per test.
+ */
+export function installCommonSmokeModuleMocks(): void {
+  mock.module('../../../packages/cli/src/project/resolve-config', () => ({
+    resolveProjectConfig: () => ({ success: false, diagnostics: [] }),
+  }));
+  mock.module('@fancyrobot/fred-openai', () => ({}));
+  mock.module('@fancyrobot/fred-anthropic', () => ({}));
+  mock.module('@fancyrobot/fred-google', () => ({}));
+  mock.module('@fancyrobot/fred-groq', () => ({}));
+  mock.module('@fancyrobot/fred-openrouter', () => ({}));
 }
