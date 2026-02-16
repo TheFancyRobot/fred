@@ -659,7 +659,6 @@ export class Fred implements FredLike {
           }
         : undefined;
 
-
       // Convert MCPGlobalServerConfig to MCPServerConfig format
       const serverConfig = {
         id: config.id,
