@@ -651,6 +651,10 @@ export class Fred implements FredLike {
     configs: Array<MCPGlobalServerConfig & { id: string }>
   ): Promise<void> {
     for (const config of configs) {
+      // Map MCPGlobalServerConfig retry fields to internal MCPServerConfig format:
+      //   maxRetries   -> maxAttempts
+      //   backoffMs    -> initialDelayMs
+      //   maxBackoffMs -> maxDelayMs
       const retry = config.retry
         ? {
             maxAttempts: config.retry.maxRetries,
