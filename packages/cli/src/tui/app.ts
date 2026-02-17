@@ -53,6 +53,7 @@ import {
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
+import { DEFAULT_TUI_THEME } from './theme.js';
 import {
   createStreamingController,
   type StreamingController,
@@ -294,21 +295,21 @@ export class FredTuiApp {
   /**
    * Build the OpenTUI component tree
    *
-   * root (Box, column, 100%x100%)
-   * +-- mainArea (Box, row, flexGrow: 1)
-   * |   +-- sidebar (Box, width: 30, border: rounded)
+   * root (Box, column, 100%x100%, bg: base, padding: outerPadding, gap: regionGap)
+   * +-- mainArea (Box, row, flexGrow: 1, gap: regionGap)
+   * |   +-- sidebar (Box, width: 30, bg: elevated, padding: 1)
    * |   |   +-- sidebarTitle (Text, "[Sessions]")
    * |   |   +-- sidebarItems (ScrollBox, flexGrow: 1)
-   * |   +-- transcript (Box, flexGrow: 1, border: rounded)
+   * |   +-- transcript (Box, flexGrow: 1, bg: surface, padding: 1)
    * |       +-- transcriptContent (ScrollBox, flexGrow: 1)
-   * +-- inputBar (Box, height: 3, border: single)
-   * |   +-- prompt (Text, "> ")
+   * +-- inputBar (Box, height: 3, bg: elevated, padding: 1)
    * |   +-- inputText (Text, flexGrow: 1)
-   * +-- statusBar (Box, height: 1, inverse bg)
+   * +-- statusBar (Box, height: 1, bg: status)
    *     +-- statusText (Text)
    */
   private buildComponentTree(): void {
     const r = this.renderer;
+    const theme = DEFAULT_TUI_THEME;
 
     // Root container
     const root = new BoxRenderable(r, {
@@ -316,6 +317,9 @@ export class FredTuiApp {
       width: '100%',
       height: '100%',
       flexDirection: 'column',
+      backgroundColor: theme.bg.base,
+      padding: DEFAULT_LAYOUT.outerPadding,
+      gap: DEFAULT_LAYOUT.regionGap,
     });
 
     // Main area (sidebar + transcript)
@@ -323,22 +327,23 @@ export class FredTuiApp {
       id: 'main-area',
       flexDirection: 'row',
       flexGrow: 1,
+      gap: DEFAULT_LAYOUT.regionGap,
     });
 
     // Sidebar
     this.sidebarBox = new BoxRenderable(r, {
       id: 'sidebar',
       width: DEFAULT_LAYOUT.sidebarWidth,
-      border: true,
-      borderStyle: 'rounded',
       flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
     });
 
     this.sidebarTitle = new TextRenderable(r, {
       id: 'sidebar-title',
       content: '[Sessions]',
       attributes: TextAttributes.BOLD,
-      fg: '#00FFFF',
+      fg: theme.accent.primary,
     });
 
     this.sidebarItems = new ScrollBoxRenderable(r, {
@@ -356,9 +361,9 @@ export class FredTuiApp {
     this.transcriptBox = new BoxRenderable(r, {
       id: 'transcript',
       flexGrow: 1,
-      border: true,
-      borderStyle: 'rounded',
       flexDirection: 'column',
+      backgroundColor: theme.bg.surface,
+      padding: 1,
       onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
     });
 
@@ -380,9 +385,9 @@ export class FredTuiApp {
     this.inputBar = new BoxRenderable(r, {
       id: 'input-bar',
       height: DEFAULT_LAYOUT.inputHeight,
-      border: true,
-      borderStyle: 'single',
       flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
     });
 
     this.inputText = new TextRenderable(r, {
@@ -398,7 +403,7 @@ export class FredTuiApp {
     const statusBar = new BoxRenderable(r, {
       id: 'status-bar',
       height: DEFAULT_LAYOUT.statusHeight,
-      backgroundColor: '#444444',
+      backgroundColor: theme.bg.status,
     });
 
     this.statusText = new TextRenderable(r, {
@@ -913,6 +918,7 @@ export class FredTuiApp {
    */
   private syncStateToUI(): void {
     const r = this.renderer;
+    const theme = DEFAULT_TUI_THEME;
 
     // Input text (calculate first so transcript viewport can account for dynamic composer height)
     const inputData = renderInputContent(
@@ -925,7 +931,8 @@ export class FredTuiApp {
     const rendererHeight = this.getRendererHeight();
     const transcriptVisibleLines = Math.max(
       3,
-      rendererHeight - inputData.height - DEFAULT_LAYOUT.statusHeight - 2,
+      rendererHeight - inputData.height - DEFAULT_LAYOUT.statusHeight
+        - (DEFAULT_LAYOUT.outerPadding * 2) - (DEFAULT_LAYOUT.regionGap * 2),
     );
     if (this.state.transcript.viewport.visibleLines !== transcriptVisibleLines) {
       this.state = {
@@ -952,7 +959,7 @@ export class FredTuiApp {
       const text = new TextRenderable(r, {
         id: `sidebar-item-${i}`,
         content: line,
-        fg: this.state.focusedPane === 'sidebar' ? '#FFFFFF' : '#888888',
+        fg: this.state.focusedPane === 'sidebar' ? theme.fg.primary : theme.fg.dim,
       });
       text.selectable = false;
       return text;
@@ -963,7 +970,7 @@ export class FredTuiApp {
       this.sidebarTitle,
       'sidebar-title',
       sidebarHeader,
-      this.state.focusedPane === 'sidebar' ? '#00FFFF' : '#888888',
+      this.state.focusedPane === 'sidebar' ? theme.accent.primary : theme.fg.dim,
       TextAttributes.BOLD,
     );
 
@@ -972,7 +979,14 @@ export class FredTuiApp {
       this.state,
       this.state.focusedPane === 'transcript',
       {
-        maxWidth: Math.max(20, this.getRendererWidth() - DEFAULT_LAYOUT.sidebarWidth - 8),
+        maxWidth: Math.max(
+          20,
+          this.getRendererWidth()
+            - DEFAULT_LAYOUT.sidebarWidth
+            - DEFAULT_LAYOUT.regionGap
+            - (DEFAULT_LAYOUT.outerPadding * 2)
+            - 4, // transcript inner padding (1 each side) + small margin
+        ),
       },
     );
 
@@ -1004,20 +1018,20 @@ export class FredTuiApp {
       const isStartupInstruction = isStartupChooserLine && line.startsWith('Use Up/Down');
 
       let fg = isRoleLabel
-        ? '#00FFFF'
-        : (this.state.focusedPane === 'transcript' ? '#FFFFFF' : '#CCCCCC');
+        ? theme.accent.primary
+        : (this.state.focusedPane === 'transcript' ? theme.fg.primary : theme.fg.secondary);
       let attributes = isRoleLabel ? TextAttributes.BOLD : 0;
 
       if (isStartupHeader) {
-        fg = '#FFD166';
+        fg = theme.accent.primary;
         attributes = TextAttributes.BOLD;
       } else if (isStartupSelectedOption) {
-        fg = '#7CE38B';
+        fg = theme.status.success;
         attributes = TextAttributes.BOLD;
       } else if (isStartupWarning) {
-        fg = '#FF9E64';
+        fg = theme.status.warn;
       } else if (isStartupInstruction) {
-        fg = '#FFD166';
+        fg = theme.fg.secondary;
       }
 
       const text = new TextRenderable(r, {
@@ -1035,7 +1049,7 @@ export class FredTuiApp {
       id: 'input-text',
       content: inputData.lines.join('\n'),
       flexGrow: 1,
-      fg: this.state.input.text ? '#FFFFFF' : '#666666',
+      fg: this.state.input.text ? theme.fg.primary : theme.fg.dim,
     });
     this.inputText.selectable = false;
     this.inputBar.add(this.inputText);
@@ -1070,10 +1084,10 @@ export class FredTuiApp {
     this.previousStreamingState = this.state.streaming.isStreaming;
 
     const statusFg = this.state.streaming.lastError
-      ? '#ff6b6b'
+      ? theme.status.error
       : this.state.streaming.isStreaming
-        ? '#5dade2'
-        : '#7bd88f';
+        ? theme.status.info
+        : theme.status.success;
 
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
@@ -1151,15 +1165,16 @@ export class FredTuiApp {
   }
 
   /**
-   * Update border colors to indicate focus
+   * Update visual focus indication
+   *
+   * With borderless layout, focus is conveyed through content text color
+   * changes (accent for focused, dim for unfocused) applied in syncStateToUI.
    */
   private updateBorderFocus(): void {
-    const focusColor = '#7aa2f7';
-    const dimColor = '#444444';
-
-    // We can't dynamically change border color on BoxRenderable after creation
-    // without rebuilding, so we rely on the content styling to indicate focus.
-    // The title/text color changes above provide visual focus indication.
+    // Focus indication handled by content styling in syncStateToUI.
+    // Sidebar title: accent.primary (focused) vs fg.dim (unfocused)
+    // Sidebar items: fg.primary (focused) vs fg.dim (unfocused)
+    // Transcript text: fg.primary (focused) vs fg.secondary (unfocused)
   }
 
   /**

@@ -53,6 +53,8 @@ export const DEFAULT_LAYOUT = {
   inputMaxHeight: 6,
   inputMaxVisibleLines: 4,
   statusHeight: 1,
+  outerPadding: 1,
+  regionGap: 1,
 };
 
 export const INPUT_PLACEHOLDERS = [
