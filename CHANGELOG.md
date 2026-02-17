@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration
 
-See [Migration Guide](docs/migration/v0.2.0.md) for detailed before/after examples.
+See [Migration Guide](docs/migration/v0.2.5.md) for detailed before/after examples.
 
 ## [0.2.4] - Previous Release
 
