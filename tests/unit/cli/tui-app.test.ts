@@ -145,7 +145,7 @@ describe('TUI App (OpenTUI integration)', () => {
     const frame = testSetup.captureCharFrame();
 
     // Should contain sidebar title
-    expect(frame).toContain('[Sessions]');
+    expect(frame).toContain('▼ Sessions');
 
     // Should contain welcome message
     expect(frame).toContain('Fred AI Framework');
@@ -349,6 +349,26 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().input.cursorPosition).toBe(0);
     expect(submitted).toBe('hi');
     expect(app.getState().streaming.isStreaming).toBe(true);
+  });
+
+  test('typing /sidebar toggles visibility without starting stream', async () => {
+    await createTestApp();
+
+    const initialVisible = app.getState().sidebar.isVisible;
+
+    app.processKey(makeKey({ name: '/' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'd' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'b' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    const state = app.getState();
+    expect(state.sidebar.isVisible).toBe(!initialVisible);
+    expect(state.streaming.isStreaming).toBe(false);
   });
 
   test('Shift+Enter creates multiline input and Enter submits full payload', async () => {

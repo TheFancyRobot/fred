@@ -42,6 +42,7 @@ import {
   openStartupChooser,
   closeStartupChooser,
   setStartupWarning,
+  toggleSidebarVisibility,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -602,6 +603,14 @@ export class FredTuiApp {
 
     this.state = appendUserMessage(this.state, submittedText);
 
+    const sidebarInvocation = this.parseSidebarSlashCommand(submittedText);
+    if (sidebarInvocation) {
+      this.state = toggleSidebarVisibility(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
     const slashInvocation = this.parseSlashInvocation(submittedText);
     if (slashInvocation) {
       this.events.onStateChange?.(this.state);
@@ -735,6 +744,15 @@ export class FredTuiApp {
       canonicalName: commandToken,
       args,
     };
+  }
+
+  private parseSidebarSlashCommand(text: string): boolean {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('/')) {
+      return false;
+    }
+
+    return trimmed === '/sidebar' || trimmed === '/sb';
   }
 
   private async executePluginSlashCommand(canonicalName: string, args: string): Promise<void> {
@@ -926,6 +944,8 @@ export class FredTuiApp {
     const r = this.renderer;
     const theme = DEFAULT_TUI_THEME;
 
+    this.sidebarBox.visible = this.state.sidebar.isVisible;
+
     // Input text (calculate first so transcript viewport can account for dynamic composer height)
     const inputData = renderInputContent(
       this.state,
@@ -999,8 +1019,7 @@ export class FredTuiApp {
         maxWidth: Math.max(
           20,
           this.getRendererWidth()
-            - DEFAULT_LAYOUT.sidebarWidth
-            - DEFAULT_LAYOUT.regionGap
+            - (this.state.sidebar.isVisible ? (DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.regionGap) : 0)
             - (DEFAULT_LAYOUT.outerPadding * 2)
             - 4, // transcript inner padding (1 each side) + small margin
         ),
