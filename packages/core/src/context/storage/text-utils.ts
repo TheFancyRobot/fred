@@ -35,16 +35,17 @@ export const toSafeString = (value: unknown): string => {
 };
 
 /** Extract readable text from a single message content part. */
-export const extractTextFromPart = (part: any): string => {
+export const extractTextFromPart = (part: unknown): string => {
   if (!part || typeof part !== 'object') return '';
-  if (part.type === 'text') {
-    return typeof part.text === 'string' ? part.text : '';
+  const record = part as Record<string, unknown>;
+  if (record.type === 'text') {
+    return typeof record.text === 'string' ? record.text : '';
   }
-  if (part.type === 'tool-call') {
-    return `Tool Call: ${part.name ?? 'tool'}`;
+  if (record.type === 'tool-call') {
+    return `Tool Call: ${typeof record.name === 'string' ? record.name : 'tool'}`;
   }
-  if (part.type === 'tool-result') {
-    return `Tool Result: ${part.name ?? 'tool'}`;
+  if (record.type === 'tool-result') {
+    return `Tool Result: ${typeof record.name === 'string' ? record.name : 'tool'}`;
   }
   return toSafeString(part);
 };
