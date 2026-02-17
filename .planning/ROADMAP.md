@@ -55,7 +55,11 @@ Plans:
   3. A keyboard hotkey toggles sidebar visibility (show/hide)
   4. A `/sidebar` slash command toggles sidebar visibility
   5. Sidebar visibility state persists within the session (not reset on re-render)
-**Plans**: TBD (research required)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 38-01-PLAN.md — Add sidebar visibility + collapse state and keymap actions
+- [ ] 38-02-PLAN.md — Render collapsible sidebar + wire layout visibility
 
 ### Phase 39: Transcript & Message Rendering
 **Goal**: Polish transcript rendering with distinct user/assistant styling, inline expandable tool blocks, and streaming accent color
