@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from 'effect';
+import { Cause, Effect, Layer, Option, Runtime, Stream } from 'effect';
 import * as Schema from 'effect/Schema';
 import * as AST from 'effect/SchemaAST';
 import { Tool as EffectTool, Toolkit, LanguageModel, Prompt } from '@effect/ai';
@@ -926,10 +926,15 @@ export class AgentFactory {
         try {
           result = await Effect.runPromise(providedProgram);
         } catch (providerError: any) {
-          // Effect.runPromise wraps errors in FiberFailure - extract original error
-          const fiberCauseSymbol = Symbol.for('effect/Runtime/FiberFailure/Cause');
-          const fiberCause = providerError?.[fiberCauseSymbol];
-          const originalError = fiberCause?._tag === 'Fail' ? fiberCause.error : providerError;
+          // Extract original error from FiberFailure using Effect's public Cause API
+          let originalError: any = providerError;
+          if (Runtime.isFiberFailure(providerError)) {
+            const cause = providerError[Runtime.FiberFailureCauseId];
+            const failureOpt = Cause.failureOption(cause);
+            if (Option.isSome(failureOpt)) {
+              originalError = failureOpt.value;
+            }
+          }
 
           const diagnostics = originalError?._retryDiagnostics
             ?? originalError?.cause?._retryDiagnostics

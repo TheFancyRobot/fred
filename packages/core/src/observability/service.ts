@@ -263,18 +263,33 @@ function isDeterministicallySampled(runId: string, sampleRate: number): boolean 
 }
 
 /**
+ * Split a composite metric key (e.g. "openai:gpt-4") into provider and model parts.
+ * Keys without a separator treat the entire string as the provider with an empty model.
+ */
+function splitMetricKey(key: string): { provider: string; model: string } {
+  const separatorIndex = key.indexOf(':');
+  return {
+    provider: separatorIndex === -1 ? key : key.substring(0, separatorIndex),
+    model: separatorIndex === -1 ? '' : key.substring(separatorIndex + 1),
+  };
+}
+
+/**
  * Create ObservabilityService live implementation.
  */
 export const ObservabilityServiceLive = Layer.effect(
   ObservabilityService,
   Effect.gen(function* () {
-    // Get config from environment or use defaults
+    // Get config from environment or use defaults.
+    // Guard against NaN from invalid env values by falling back to defaults.
+    const parsedSampleRate = Number(process.env.FRED_SAMPLE_RATE);
+    const parsedSlowThreshold = Number(process.env.FRED_SLOW_THRESHOLD_MS);
     const config: ObservabilityServiceConfig = {
-      successSampleRate: process.env.FRED_SAMPLE_RATE !== undefined
-        ? Number(process.env.FRED_SAMPLE_RATE)
+      successSampleRate: !Number.isNaN(parsedSampleRate) && process.env.FRED_SAMPLE_RATE !== undefined
+        ? parsedSampleRate
         : 0.01,
-      slowThresholdMs: process.env.FRED_SLOW_THRESHOLD_MS !== undefined
-        ? Number(process.env.FRED_SLOW_THRESHOLD_MS)
+      slowThresholdMs: !Number.isNaN(parsedSlowThreshold) && process.env.FRED_SLOW_THRESHOLD_MS !== undefined
+        ? parsedSlowThreshold
         : 5000,
       debugMode: process.env.FRED_DEBUG === 'true',
       hashPayloads: process.env.FRED_HASH_PAYLOADS !== 'false',
@@ -628,9 +643,7 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_tokens_usage_total Total token usage by provider and model');
           lines.push('# TYPE fred_tokens_usage_total counter');
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const separatorIndex = key.indexOf(':');
-            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
-            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
+            const { provider, model } = splitMetricKey(key);
             const escapedProvider = escapePrometheusLabelValue(provider);
             const escapedModel = escapePrometheusLabelValue(model);
             lines.push(
@@ -645,9 +658,7 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_model_cost_total Total model cost by provider and model');
           lines.push('# TYPE fred_model_cost_total counter');
           for (const [key, cost] of globalMetrics.modelCost.entries()) {
-            const separatorIndex = key.indexOf(':');
-            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
-            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
+            const { provider, model } = splitMetricKey(key);
             lines.push(
               `fred_model_cost_total{provider="${escapePrometheusLabelValue(provider)}",model="${escapePrometheusLabelValue(model)}"} ${cost}`
             );
@@ -689,9 +700,7 @@ export const ObservabilityServiceLive = Layer.effect(
             timeUnixNano: string;
           }> = [];
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const separatorIndex = key.indexOf(':');
-            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
-            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
+            const { provider, model } = splitMetricKey(key);
             tokenDataPoints.push({
               attributes: { provider, model, type: 'input' },
               value: usage.input,
@@ -717,9 +726,7 @@ export const ObservabilityServiceLive = Layer.effect(
 
           // Model cost metrics
           const costDataPoints = Array.from(globalMetrics.modelCost.entries()).map(([key, cost]) => {
-            const separatorIndex = key.indexOf(':');
-            const provider = separatorIndex === -1 ? key : key.substring(0, separatorIndex);
-            const model = separatorIndex === -1 ? '' : key.substring(separatorIndex + 1);
+            const { provider, model } = splitMetricKey(key);
             return {
               attributes: { provider, model },
               value: cost,

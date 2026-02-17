@@ -6,7 +6,6 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import type { Prompt } from '@effect/ai';
 import type {
   ContextStorage,
   ConversationContext,
@@ -21,6 +20,7 @@ import {
   serializeMetadata,
   deserializeMetadata,
 } from './serialization';
+import { extractMessagePreviewText } from './text-utils';
 
 interface SessionRow {
   id: string;
@@ -30,55 +30,6 @@ interface SessionRow {
   message_count: string | number | null;
   last_payload: object | null;
 }
-
-const PREVIEW_MAX_LENGTH = 120;
-
-const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
-
-const truncateText = (value: string, maxLength: number): string => {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-};
-
-const toSafeString = (value: unknown): string => {
-  if (typeof value === 'string') return value;
-  if (value == null) return '';
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const extractTextFromPart = (part: any): string => {
-  if (!part || typeof part !== 'object') return '';
-  if (part.type === 'text') {
-    return typeof part.text === 'string' ? part.text : '';
-  }
-  if (part.type === 'tool-call') {
-    return `Tool Call: ${part.name ?? 'tool'}`;
-  }
-  if (part.type === 'tool-result') {
-    return `Tool Result: ${part.name ?? 'tool'}`;
-  }
-  return toSafeString(part);
-};
-
-const extractMessageText = (message: Prompt.MessageEncoded): string => {
-  const content = message.content as unknown;
-  if (typeof content === 'string') return content;
-  if (content == null) return '';
-  if (Array.isArray(content)) {
-    return content.map(extractTextFromPart).filter(Boolean).join('\n');
-  }
-  return toSafeString(content);
-};
-
-const extractMessagePreviewText = (message: Prompt.MessageEncoded): string | undefined => {
-  const text = normalizeWhitespace(extractMessageText(message));
-  if (!text) return undefined;
-  return truncateText(text, PREVIEW_MAX_LENGTH);
-};
 
 const extractAgentMetadata = (
   metadata: ConversationMetadata
