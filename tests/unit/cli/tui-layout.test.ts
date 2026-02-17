@@ -28,7 +28,8 @@ describe('TUI Layout', () => {
       const state = createInitialTuiState();
       const content = renderSidebarContent(state, false);
 
-      expect(content.lines).toContain('[Sessions]');
+      expect(content.lines).toContain('▼ Sessions');
+      expect(content.lines).toContain('▼ Metadata');
       expect(content.lines).toContain('(empty)');
       expect(content.lines).toContain('▸ + New Session (Enter)');
     });
@@ -58,11 +59,13 @@ describe('TUI Layout', () => {
 
       const content = renderSidebarContent(state, false);
 
-      expect(content.lines).toContain('[Sessions]');
+      expect(content.lines).toContain('▼ Sessions');
+      expect(content.lines).toContain('▼ Metadata');
       expect(content.lines).toContain('  + New Session (Enter)');
       expect(content.lines.join('\n')).toContain('▸ Session 1');
-      expect(content.lines.join('\n')).toContain('Session 1');
-      expect(content.lines.join('\n')).toContain('Session 2');
+      expect(content.lines.join('\n')).toContain('  12:00');
+      expect(content.lines.join('\n')).toContain('  11:00');
+      expect(content.lines.join('\n')).toContain('Sessions: 2');
     });
 
     test('highlights new session action when selected', () => {

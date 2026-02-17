@@ -58,7 +58,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 38-01-PLAN.md — Add sidebar visibility + collapse state and keymap actions
+- [x] 38-01-PLAN.md — Add sidebar visibility + collapse state and keymap actions
 - [ ] 38-02-PLAN.md — Render collapsible sidebar + wire layout visibility
 
 ### Phase 39: Transcript & Message Rendering
@@ -89,7 +89,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
-| 38. Sidebar Redesign & Toggle | 0/? | Pending | - |
+| 38. Sidebar Redesign & Toggle | 1/2 | In progress | - |
 | 39. Transcript & Message Rendering | 0/? | Pending | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 

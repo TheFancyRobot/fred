@@ -174,6 +174,10 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
   const newSessionLineDisplay = newSessionSelected
     ? `▸ ${newSessionLine}`
     : `  ${newSessionLine}`;
+  const sessionsCollapsed = state.sidebar.sections.sessionsCollapsed;
+  const metadataCollapsed = state.sidebar.sections.metadataCollapsed;
+  const sessionsHeader = `${sessionsCollapsed ? '▶' : '▼'} Sessions`;
+  const metadataHeader = `${metadataCollapsed ? '▶' : '▼'} Metadata`;
 
   const items = state.sessions.items;
   const selectedSessionIndex = state.sidebar.hasNewSessionAction
@@ -189,23 +193,33 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
     ? items.flatMap((item, index) => {
         const isSelected = index === selectedSessionIndex;
         const marker = isSelected ? '▸' : ' ';
-        const unread = item.unread ? ' •' : '';
         const title = item.title ?? '(untitled)';
-        const agentName = item.agent?.name ?? item.agent?.id ?? 'default';
         const updated = formatUpdatedTime(item.updatedAt);
-        const meta = `${updated} · ${agentName} · ${item.messageCount} msg`;
-        const preview = item.preview ?? '(no messages)';
 
         return [
-          truncate(`${marker} ${title}${unread}`),
-          truncate(`  ${meta}`),
-          truncate(`  ${preview}`),
+          truncate(`${marker} ${title}`),
+          truncate(`  ${updated}`),
           '',
         ];
       })
-    : ['(empty)'];
+    : [truncate('(empty)')];
 
-  const lines = ['[Sessions]', newSessionLineDisplay, '', ...sessionLines];
+  const outputTokenCount = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
+  const metadataLines = [
+    `Sessions: ${items.length}`,
+    `Model: ${state.telemetry.model || '--'}`,
+    `Tokens: in ${state.telemetry.inputTokenCount} / out ${outputTokenCount}`,
+  ].map(truncate);
+
+  const lines = [sessionsHeader];
+  if (!sessionsCollapsed) {
+    lines.push(newSessionLineDisplay, '', ...sessionLines);
+  }
+  lines.push('');
+  lines.push(metadataHeader);
+  if (!metadataCollapsed) {
+    lines.push(...metadataLines);
+  }
 
   return {
     lines,

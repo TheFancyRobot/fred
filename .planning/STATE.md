@@ -11,12 +11,12 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 37 of 40 (Theme System & Contrast Layout) — COMPLETE
-Plan: 1 of 1 in current phase (all plans complete)
-Status: Phase 37 verified and complete — ready for Phase 38
-Last activity: 2026-02-17 - Completed Phase 37: centralized TuiTheme + borderless contrast layout
+Phase: 38 of 40 (Sidebar Redesign & Toggle)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-17 - Completed 38-01-PLAN.md
 
-Progress: [██████████] 100% (1/1 plans complete)
+Progress: [██████████] 97% (160/165 plans complete)
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Recent decisions affecting current work:
 - (Phase 37) Muted cool palette with 3-step background contrast: base → surface → elevated
 - (Phase 37) Teal primary accent (#5ec2c7) for selected items, focused titles, role labels
 - (Phase 37) All color values consumed from centralized theme tokens — zero inline hex in app.ts
+- (Phase 38) Focus cycle skips hidden sidebar via focus helpers with includeSidebar option
 - (Carried from v0.2.1) Full ANSI rendering loop in TUI app (27-04)
 - (Carried from v0.2.1) Framework-agnostic TUI implementation (27-03)
 - (Carried from v0.2.1) Bounded rich input bar rendering (28-02)
@@ -73,8 +74,8 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-17T12:00:00Z
-Stopped at: Phase 37 complete — ready for Phase 38 research
+Last session: 2026-02-17T18:19:24Z
+Stopped at: Completed 38-01-PLAN.md
 Resume file: None
 
 ---
