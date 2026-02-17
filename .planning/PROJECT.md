@@ -35,12 +35,19 @@ Route any message to the right agent and execute multi-step pipelines with share
 - ✓ **INTG-01**: MCP server integration for external tool discovery — v0.2.0
 - ✓ **ROUT-04**: Routing explainability metadata (match scores, rationale) — v0.2.0
 
-### Active (v0.2.1)
+- ✓ **DX-02**: CLI/TUI-first developer workflow for Fred projects — v0.2.1
+- ✓ **DX-03**: Project auto-detection and config validation in CLI startup — v0.2.1
+- ✓ **DX-04**: Command parity between TUI and non-interactive CLI mode — v0.2.1
+- ✓ **DX-05**: Extensible CLI plugin architecture for project-specific tooling — v0.2.1
 
-- [ ] **DX-02**: CLI/TUI-first developer workflow for Fred projects
-- [ ] **DX-03**: Project auto-detection and config validation in CLI startup
-- [ ] **DX-04**: Command parity between TUI and non-interactive CLI mode
-- [ ] **DX-05**: Extensible CLI plugin architecture for project-specific tooling
+### Active (v0.2.2)
+
+- [ ] **VISUAL-01**: Centralized theme/palette system
+- [ ] **VISUAL-02**: Semantic color tokens
+- [ ] **VISUAL-03**: All TUI components use theme system
+- [ ] **VISUAL-04**: Contrast-based region separation (no box-drawing borders)
+- [ ] **VISUAL-05**: Background shade differentiation for sidebar/transcript/input
+- [ ] **VISUAL-06**: Borderless aesthetic with padding-based spacing
 
 ### Out of Scope
 
@@ -56,12 +63,11 @@ Route any message to the right agent and execute multi-step pipelines with share
 
 ## Current State
 
-**Shipped:** v0.2.0 (2026-02-07)
-- 35/35 v0.2.0 requirements complete
-- 5 phases delivered (22-26)
-- 34 plans executed
-- 111 files changed in milestone range
-- 1,277/1,307 tests passing at audit time (pre-existing 30 failures outside milestone scope)
+**Shipped:** v0.2.1 (2026-02-16)
+- 39/39 v0.2.1 requirements complete (31 initial + 8 gap-closure across phases 33-36)
+- 10 phases delivered (27-36), 31 plans executed
+- Key artifacts: `packages/cli/src/tui/app.ts`, `packages/cli/src/tui/state.ts`
+- ~5.32 min/plan average, ~2.75 hours total execution
 
 **Architecture:**
 - Monorepo with Bun workspaces
@@ -70,12 +76,15 @@ Route any message to the right agent and execute multi-step pipelines with share
 - SQL persistence (Postgres/SQLite)
 - Checkpoint/resume with human-in-the-loop
 - OTel-compatible observability
+- Production-grade CLI (`fred run`, `fred init`, `fred list`, `fred config validate`)
+- OpenTUI-based TUI with streaming, session management, and plugin architecture
 
-**Next Milestone Goals (v0.2.1):**
-- TUI-first experience with OpenCode-style interface
-- CLI command parity for scripting and automation
-- Project auto-detection and config validation
-- Plugin architecture for extensibility
+**Next Milestone Goals (v0.2.2):**
+- Centralized theme/palette system replacing inline hex colors
+- Contrast-based region separation (borderless aesthetic)
+- Information-dense collapsible sidebar
+- Muted assistant styling with inline tool blocks
+- Minimal input chrome and compact status bar badges
 
 ## Context
 
@@ -84,7 +93,7 @@ Route any message to the right agent and execute multi-step pipelines with share
 - ~50,000 LOC TypeScript across packages
 - Bun runtime with TypeScript project references
 - CI/CD with automatic npm publishing via GitHub Actions
-- v0.2.0 adds observability services, deterministic evaluation/replay, tool policy gating, MCP integration, and routing explainability APIs
+- v0.2.1 adds production-grade CLI/TUI with session management, plugin architecture, and comprehensive test hardening
 
 ## Constraints
 
@@ -93,19 +102,33 @@ Route any message to the right agent and execute multi-step pipelines with share
 - **AI SDK**: Full Effect replacement — no Vercel AI SDK dependencies
 - **Persistence**: In-memory by default; SQL optional — no persistence without explicit adapter
 
-## Current Milestone: v0.2.1 CLI/TUI Developer Experience
+## Current Milestone: v0.2.2 TUI Visual Polish
 
-**Goal:** Transform `@fancyrobot/fred-cli` into a production-grade CLI + TUI that any Fred project can install and instantly use.
+**Goal:** Redesign the Fred TUI appearance to use contrast-based region separation, muted color palette, information-dense sidebar, and minimal chrome — inspired by modern terminal UIs like OpenCode.
 
 **Target features:**
-- OpenCode-style TUI with sidebar, streaming transcript, inspector panel, and keyboard-first interaction
-- Full CLI command parity (`fred run`, `fred init`, `fred dev`, `fred providers`, `fred tools`, `fred sessions`, `fred export`)
-- Project auto-detection with `fred.config.ts`/`.json` support and high-quality validation errors
-- Extensible plugin architecture for commands, TUI panels, config schemas, and runtime hooks
-- Effect Layers throughout (ConfigService, ProjectRootService, ProviderRegistry, SessionStore, Runner, UIAdapter)
-- Persistent sessions with export to Markdown/JSON
+- Centralized theme/palette system with semantic color tokens
+- Borderless contrast-based region separation (no box-drawing characters)
+- Information-dense collapsible sidebar with hotkey/slash command toggle
+- Muted assistant styling with inline expandable tool blocks and streaming accent
+- Minimal input chrome and compact status bar badges
 
-## Previous Milestone: v0.2.0 Observability & Safety
+## Previous Milestone: v0.2.1 CLI/TUI Developer Experience
+
+**Status:** ✅ Shipped 2026-02-16
+**Archive:** `.planning/milestones/v0.2.1-ROADMAP.md`, `.planning/milestones/v0.2.1-REQUIREMENTS.md`
+
+**Delivered:**
+- Terminal foundation with Effect-based lifecycle management, TTY detection, graceful degradation
+- High-performance streaming TUI with multi-pane layout, command palette, real-time telemetry
+- Persistent session management with sidebar navigation, CLI list/show/export/delete, startup chooser
+- Full CLI command suite: headless `fred run`, entity listing, config validation, init scaffolding
+- Debugging commands for intent testing, route analysis, MCP server management
+- Extensible plugin architecture with typed contract, CLI commands, TUI slash commands
+- Runtime hardening: JSON channel consistency, terminal lifecycle wiring, Bun mock isolation
+
+<details>
+<summary>Previous: v0.2.0 Observability & Safety</summary>
 
 **Status:** ✅ Shipped 2026-02-07
 **Archive:** `.planning/milestones/v0.2.0-ROADMAP.md`, `.planning/milestones/v0.2.0-REQUIREMENTS.md`
@@ -116,6 +139,8 @@ Route any message to the right agent and execute multi-step pipelines with share
 - Intent-aware tool gating with audit hooks and HITL approvals
 - MCP server lifecycle + tool/resource integration under safety policies
 - Routing explainability with confidence alternatives and `fred.routing.explain()`
+
+</details>
 
 ## Key Decisions
 
@@ -129,7 +154,9 @@ Route any message to the right agent and execute multi-step pipelines with share
 | Dual API (Promise + Effect) | Maintain Promise ease, offer Effect power | ✓ Good — Smooth migration path |
 | Independent versioning | Separate package evolution | ✓ Good — Flexible releases |
 | Monorepo with Changesets | Version management and changelogs | ✓ Good — Automated publishing |
-| OpenTUI for TUI framework | User preference; TypeScript-native terminal UI | — Pending |
+| OpenTUI for TUI framework | User preference; TypeScript-native terminal UI | ✓ Good — Full TUI shipped with @opentui/core |
+| fred chat as primary interactive entry | Cleaner semantics; `fred` and `fred tui` as aliases | ✓ Good — Consistent launch contract |
+| Plugin typed contract via entry point | Stable API surface for third-party extensions | ✓ Good — npm-compatible plugin loading |
 
 ---
-*Last updated: 2026-02-07 after v0.2.1 milestone start*
+*Last updated: 2026-02-16 after v0.2.1 milestone*
