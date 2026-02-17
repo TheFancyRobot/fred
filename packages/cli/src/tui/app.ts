@@ -266,10 +266,25 @@ export class FredTuiApp {
     }
 
     try {
+      // Capture existing transcript messages before session creation so
+      // messages from an in-flight stream are not discarded.
+      const existingMessages = [...this.state.transcript.messages];
       const item = await createSession(this.sessionService);
       this.state = addSession(this.state, item, { select: true });
-      const messages = await loadSessionTranscript(this.sessionService, item.id);
-      this.state = upsertSessionTranscript(this.state, item.id, messages, { pinnedToBottom: true });
+
+      // Bind an active stream (started before the session existed) to the new session
+      if (this.state.streaming.isStreaming && this.state.streaming.sessionId === null) {
+        this.state = {
+          ...this.state,
+          streaming: { ...this.state.streaming, sessionId: item.id },
+        };
+      }
+
+      const storedMessages = await loadSessionTranscript(this.sessionService, item.id);
+      // Merge: stored messages (empty for a brand-new session) + existing
+      // transcript messages that were accumulated before the session existed.
+      const merged = storedMessages.length > 0 ? storedMessages : existingMessages;
+      this.state = upsertSessionTranscript(this.state, item.id, merged, { pinnedToBottom: true });
       this.events.onStateChange?.(this.state);
     } catch (error) {
       this.events.onError?.(error instanceof Error ? error : new Error(String(error)));

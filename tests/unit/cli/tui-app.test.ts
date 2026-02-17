@@ -12,6 +12,23 @@ import { FredTuiApp } from '../../../packages/cli/src/tui/app.js';
 import type { TuiAppConfig } from '../../../packages/cli/src/tui/app.js';
 
 /**
+ * Poll until a condition is met, avoiding timing-based flakiness.
+ * Throws if the condition is not met within the timeout.
+ */
+async function waitFor(
+  condition: () => boolean,
+  { timeout = 2000, interval = 5 }: { timeout?: number; interval?: number } = {},
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      throw new Error(`waitFor timed out after ${timeout}ms`);
+    }
+    await Bun.sleep(interval);
+  }
+}
+
+/**
  * Helper to create an OpenTUI KeyEvent for testing
  */
 function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
@@ -185,7 +202,7 @@ describe('TUI App (OpenTUI integration)', () => {
   test('existing-session launch opens chooser with start-new selected by default', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     const state = app.getState();
     expect(state.startup.chooser.isOpen).toBe(true);
@@ -195,10 +212,10 @@ describe('TUI App (OpenTUI integration)', () => {
   test('Enter on chooser default creates new session and keeps input focus', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().sessions.selectedId === 's-new');
 
     const state = app.getState();
     expect(state.startup.chooser.isOpen).toBe(false);
@@ -209,13 +226,13 @@ describe('TUI App (OpenTUI integration)', () => {
   test('interactive startup with empty session list still opens chooser and Enter creates session', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     expect(app.getState().startup.chooser.isOpen).toBe(true);
     expect(app.getState().startup.chooser.selected).toBe('start-new-session');
 
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().sessions.selectedId === 's-new');
 
     const state = app.getState();
     expect(state.startup.chooser.isOpen).toBe(false);
@@ -226,17 +243,17 @@ describe('TUI App (OpenTUI integration)', () => {
   test('resume chooser option routes to sidebar and can create session when none exist', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     app.processKey(makeKey({ name: 'up' }));
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => !app.getState().startup.chooser.isOpen);
 
     expect(app.getState().startup.chooser.isOpen).toBe(false);
     expect(app.getState().focusedPane).toBe('sidebar');
 
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().sessions.selectedId === 's-new');
 
     const state = app.getState();
     expect(state.sessions.selectedId).toBe('s-new');
@@ -246,11 +263,11 @@ describe('TUI App (OpenTUI integration)', () => {
   test('resume option hands off to sidebar before loading transcript', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     app.processKey(makeKey({ name: 'up' }));
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => !app.getState().startup.chooser.isOpen);
 
     expect(app.getState().startup.chooser.isOpen).toBe(false);
     expect(app.getState().sessions.selectedId).toBe('s-latest');
@@ -258,7 +275,7 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().transcript.messages).toHaveLength(0);
 
     app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().transcript.messages.length > 0);
 
     const state = app.getState();
     expect(state.transcript.messages[0]?.content).toBe('Welcome back latest');
@@ -268,7 +285,7 @@ describe('TUI App (OpenTUI integration)', () => {
   test('startup chooser keeps selection required affordance while navigating options', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     expect(app.getState().startup.chooser.isOpen).toBe(true);
     expect(app.getState().startup.chooser.selected).toBe('start-new-session');
@@ -291,7 +308,7 @@ describe('TUI App (OpenTUI integration)', () => {
       },
       fixture,
     );
-    await Bun.sleep(20);
+    await waitFor(() => app.getState().startup.chooser.isOpen);
 
     const selectedBeforeQuit = app.getState().sessions.selectedId;
     expect(app.getState().startup.chooser.isOpen).toBe(true);
@@ -447,7 +464,7 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'enter' }));
     app.startAssistantStream();
     app.pushAssistantToken('hello world');
-    await Bun.sleep(30);
+    await waitFor(() => app.getState().transcript.messages.some(m => m.content?.includes('hello world')));
 
     app.processKey(makeKey({ name: 'c', ctrl: true, shift: true }));
 
@@ -582,7 +599,7 @@ describe('TUI App (OpenTUI integration)', () => {
       app.pushAssistantToken(token);
     }
 
-    await Bun.sleep(90);
+    await waitFor(() => app.getState().streaming.outputTokenCount === 150);
     app.completeAssistantStream();
 
     const state = app.getState();
@@ -605,9 +622,9 @@ describe('TUI App (OpenTUI integration)', () => {
     app.startAssistantStream();
     app.pushAssistantToken('hello ');
     app.pushAssistantToken('world');
-    await Bun.sleep(40);
+    await waitFor(() => app.getState().streaming.outputTokenCount === 2);
     app.failAssistantStream(new Error('provider disconnected'));
-    await Bun.sleep(40);
+    await waitFor(() => !app.getState().streaming.isStreaming);
 
     const state = app.getState();
     expect(state.streaming.isStreaming).toBe(false);
@@ -637,7 +654,7 @@ describe('TUI App (OpenTUI integration)', () => {
 
     await Bun.sleep(120);
     app.pushAssistantToken('c');
-    await Bun.sleep(40);
+    await waitFor(() => getStatusContent() !== firstStreamingLine);
     const thirdStreamingLine = getStatusContent();
     expect(thirdStreamingLine).not.toBe(firstStreamingLine);
 
