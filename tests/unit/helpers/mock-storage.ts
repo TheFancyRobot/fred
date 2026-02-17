@@ -1,4 +1,9 @@
-import { ContextStorage, ConversationContext } from '../../../packages/core/src/context/context';
+import type {
+  ContextStorage,
+  ConversationContext,
+  SessionSummary,
+} from '../../../packages/core/src/context/context';
+import { buildSessionSummary } from '../../../packages/core/src/context/session';
 
 /**
  * Create a mock in-memory context storage for testing
@@ -13,6 +18,12 @@ export function createMockStorage(): ContextStorage {
 
     async set(id: string, context: ConversationContext): Promise<void> {
       contexts.set(id, context);
+    },
+
+    async listSessions(): Promise<SessionSummary[]> {
+      const entries = Array.from(contexts.values());
+      entries.sort((a, b) => b.metadata.updatedAt.getTime() - a.metadata.updatedAt.getTime());
+      return entries.map((context) => buildSessionSummary(context));
     },
 
     async delete(id: string): Promise<void> {
@@ -34,6 +45,9 @@ export function createMockStorageWithError(error: Error): ContextStorage {
       throw error;
     },
     async set(): Promise<void> {
+      throw error;
+    },
+    async listSessions(): Promise<SessionSummary[]> {
       throw error;
     },
     async delete(): Promise<void> {

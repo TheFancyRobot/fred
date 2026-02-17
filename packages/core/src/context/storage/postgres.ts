@@ -10,14 +10,26 @@ import type {
   ContextStorage,
   ConversationContext,
   ConversationMetadata,
+  SessionSummary,
 } from '../context';
 import { POSTGRES_SCHEMA_DDL } from './schema';
 import {
   serializeMessage,
   deserializeMessage,
+  tryDeserializeMessage,
   serializeMetadata,
   deserializeMetadata,
 } from './serialization';
+import { extractAgentMetadata, extractMessagePreviewText } from './text-utils';
+
+interface SessionRow {
+  id: string;
+  created_at: string | Date;
+  updated_at: string | Date;
+  metadata: object;
+  message_count: string | number | null;
+  last_payload: object | null;
+}
 
 /**
  * Configuration options for PostgresContextStorage.
@@ -206,6 +218,86 @@ export class PostgresContextStorage implements ContextStorage {
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * List session summaries ordered by updated_at DESC.
+   */
+  async listSessions(): Promise<SessionSummary[]> {
+    await this.ensureInitialized();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+          c.id,
+          c.created_at,
+          c.updated_at,
+          c.metadata,
+          COUNT(m.sequence) as message_count,
+          (
+            SELECT m2.payload
+            FROM messages m2
+            WHERE m2.conversation_id = c.id
+              AND (
+                m2.payload->>'role' IN ('user', 'assistant')
+                OR m2.payload->>'_tag' IN ('UserMessage', 'AssistantMessage')
+              )
+            ORDER BY m2.sequence DESC
+            LIMIT 1
+          ) as last_payload
+        FROM conversations c
+        LEFT JOIN messages m ON m.conversation_id = c.id
+        GROUP BY c.id
+        ORDER BY c.updated_at DESC`
+      );
+
+      return result.rows.map((row: SessionRow) => {
+        let metadata: ConversationMetadata;
+        try {
+          metadata = deserializeMetadata(
+            row.created_at,
+            row.updated_at,
+            row.metadata
+          );
+        } catch (err) {
+          console.warn(
+            `[PostgresContextStorage] Warning: Failed to deserialize metadata for conversation ${row.id}:`,
+            err instanceof Error ? err.message : String(err)
+          );
+          metadata = {
+            createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+            updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at),
+          };
+        }
+
+        let preview: string | undefined;
+        if (row.last_payload) {
+          const message = tryDeserializeMessage(row.last_payload);
+          if (message) {
+            preview = extractMessagePreviewText(message);
+          }
+        }
+
+        const title = typeof metadata.title === 'string'
+          ? metadata.title
+          : typeof (metadata as { sessionTitle?: unknown }).sessionTitle === 'string'
+            ? (metadata as { sessionTitle?: string }).sessionTitle
+            : undefined;
+
+        return {
+          id: row.id,
+          title,
+          preview,
+          createdAt: metadata.createdAt,
+          updatedAt: metadata.updatedAt,
+          messageCount: Number(row.message_count ?? 0),
+          agent: extractAgentMetadata(metadata),
+        } satisfies SessionSummary;
+      });
     } finally {
       client.release();
     }

@@ -142,6 +142,20 @@ export function deserializeMessage(input: string | object): Prompt.MessageEncode
   return deepTransform(parsed, jsonReviver) as Prompt.MessageEncoded;
 }
 
+/**
+ * Best-effort deserialize for Prompt messages.
+ * Returns null if parsing fails.
+ */
+export function tryDeserializeMessage(
+  input: string | object
+): Prompt.MessageEncoded | null {
+  try {
+    return deserializeMessage(input);
+  } catch {
+    return null;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Metadata Serialization
 // -----------------------------------------------------------------------------

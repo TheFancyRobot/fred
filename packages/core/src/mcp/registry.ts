@@ -88,6 +88,40 @@ export class MCPServerRegistry {
   }
 
   /**
+   * Get list of all configured server IDs (both connected and lazy).
+   *
+   * Returns the union of connected server IDs and lazy config IDs (deduplicated).
+   * This is useful for showing all servers that have been configured, including
+   * those that have never been started.
+   *
+   * @returns Array of all configured server IDs
+   */
+  getAllConfiguredServers(): string[] {
+    const connectedIds = Array.from(this.servers.keys());
+    const lazyIds = Array.from(this.lazyConfigs.keys());
+    // Deduplicate in case a server is in both maps (shouldn't happen but be safe)
+    return Array.from(new Set([...connectedIds, ...lazyIds]));
+  }
+
+  /**
+   * Get server configuration by ID.
+   *
+   * Checks both the active servers map and lazy configs map.
+   *
+   * @param id - Server identifier
+   * @returns Server configuration or undefined if not found
+   */
+  getServerConfig(id: string): MCPServerConfig | undefined {
+    // Check active servers first
+    const entry = this.servers.get(id);
+    if (entry) {
+      return entry.config;
+    }
+    // Check lazy configs
+    return this.lazyConfigs.get(id);
+  }
+
+  /**
    * Get status of a registered server.
    *
    * @param id - Server identifier

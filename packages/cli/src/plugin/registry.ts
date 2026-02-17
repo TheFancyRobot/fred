@@ -1,0 +1,46 @@
+import type { PluginCommandContribution, PluginSlashCommandContribution } from './api.js';
+import type { LoadedPluginDeclaration } from './loader.js';
+
+export interface RegisteredPluginContributions {
+  pluginId: string;
+  declarationSource: string;
+  manifest: LoadedPluginDeclaration['plugin']['manifest'];
+  commands: PluginCommandContribution[];
+  slashCommands: PluginSlashCommandContribution[];
+}
+
+export interface RegisteredPluginCommand {
+  pluginId: string;
+  declarationSource: string;
+  command: PluginCommandContribution;
+}
+
+export function stagePluginContributions(
+  declarations: readonly LoadedPluginDeclaration[],
+): RegisteredPluginContributions[] {
+  return declarations.map((declaration) => ({
+    pluginId: declaration.id,
+    declarationSource: declaration.declarationSource,
+    manifest: declaration.plugin.manifest,
+    commands: declaration.plugin.commands ?? [],
+    slashCommands: declaration.plugin.slashCommands ?? [],
+  }));
+}
+
+export function listRegisteredPluginCommands(
+  plugins: readonly RegisteredPluginContributions[],
+): RegisteredPluginCommand[] {
+  const commands: RegisteredPluginCommand[] = [];
+
+  for (const plugin of plugins) {
+    for (const command of plugin.commands) {
+      commands.push({
+        pluginId: plugin.pluginId,
+        declarationSource: plugin.declarationSource,
+        command,
+      });
+    }
+  }
+
+  return commands;
+}

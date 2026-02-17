@@ -1,6 +1,34 @@
 # Fred Project Milestones
 
-## v0.3.0 Observability & Safety (Shipped: 2026-02-07)
+## v0.2.1 CLI/TUI Developer Experience (Shipped: 2026-02-16)
+
+**Delivered:** Production-grade CLI and TUI for Fred projects with terminal lifecycle management, streaming token rendering, session persistence, headless commands, plugin architecture, and comprehensive test hardening.
+
+**Phases completed:** 27-36 (31 plans total)
+
+**Key accomplishments:**
+
+1. Built terminal foundation with Effect-based lifecycle management, TTY detection, and graceful degradation.
+2. Delivered high-performance streaming TUI with multi-pane layout, command palette, and real-time telemetry.
+3. Implemented persistent session management with sidebar navigation, CLI list/show/export/delete, and startup chooser.
+4. Created full CLI command suite: headless `fred run`, entity listing, config validation, init scaffolding.
+5. Added debugging commands for intent testing, route analysis, and MCP server management.
+6. Shipped extensible plugin architecture with typed contract, CLI commands, and TUI slash commands.
+7. Hardened runtime with JSON channel consistency, terminal lifecycle wiring, and Bun mock isolation.
+
+**Stats:**
+
+- 10 phases, 31 plans, ~5.32 min/plan average
+- ~2.75 hours total execution time
+- Key files: `packages/cli/src/tui/app.ts` (1197 lines), `packages/cli/src/tui/state.ts` (1703 lines)
+
+**Git range:** Phase 27 → Phase 36
+
+**What's next:** v0.2.2 TUI Visual Polish (`/gsd/new-milestone`)
+
+---
+
+## v0.2.0 Observability & Safety (Shipped: 2026-02-07)
 
 **Delivered:** Production-grade observability, deterministic evaluation/replay, tool safety policies, MCP integration, and routing explainability across Fred core and CLI surfaces.
 
@@ -19,11 +47,11 @@
 - 111 files changed
 - 19,456 insertions and 664 deletions in milestone commit range
 - 5 phases, 34 plans, ~71 tracked tasks from summary metadata
-- ~16h 19m from first v0.3.0 feat commit to final v0.3.0 feat commit
+- ~16h 19m from first v0.2.0 feat commit to final v0.2.0 feat commit
 
 **Git range:** `feat(22-01)` -> `feat(26-03)`
 
-**What's next:** v0.3.1 CLI/TUI Developer Experience (`/gsd/new-milestone`)
+**What's next:** v0.2.1 CLI/TUI Developer Experience (`/gsd/new-milestone`)
 
 ---
 
@@ -53,7 +81,7 @@
 
 **Git range:** Initial roadmap commit → v0.2.0 milestone completion
 
-**What's next:** v0.3.0 Observability & Safety — structured hooks, evaluation tooling, tool gating, MCP integration
+**What's next:** v0.2.0 Observability & Safety — structured hooks, evaluation tooling, tool gating, MCP integration
 
 ---
 

@@ -21,6 +21,7 @@ export { IntentMatcher } from './intent/matcher';
 export { IntentRouter } from './intent/router';
 export { ContextManager } from './context/manager';
 export * from './context/context';
+export * from './context/session';
 export { SqliteContextStorage } from './context/storage/sqlite';
 export { PostgresContextStorage } from './context/storage/postgres';
 

@@ -394,4 +394,92 @@ describe('SqliteContextStorage', () => {
       }
     });
   });
+
+  describe('listSessions', () => {
+    test('returns session summaries ordered by updatedAt desc', async () => {
+      const contexts: ConversationContext[] = [
+        {
+          id: 'thread-1',
+          messages: [createUserMessage([createTextPart('First message')]) as any],
+          metadata: {
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+            updatedAt: new Date('2024-01-01T10:01:00Z'),
+            agentId: 'agent-a',
+            agentName: 'Alpha',
+            title: 'First Session',
+          },
+        },
+        {
+          id: 'thread-2',
+          messages: [
+            createUserMessage([createTextPart('Most recent session')]) as any,
+            createAssistantMessage([createTextPart('Response')]) as any,
+          ],
+          metadata: {
+            createdAt: new Date('2024-01-02T08:00:00Z'),
+            updatedAt: new Date('2024-01-03T09:00:00Z'),
+            agent: { id: 'agent-b', name: 'Beta' },
+            sessionTitle: 'Latest Session',
+          },
+        },
+        {
+          id: 'thread-3',
+          messages: [
+            createUserMessage([createTextPart('Old one')]) as any,
+            createAssistantMessage([createTextPart('Assistant')]) as any,
+            createUserMessage([createTextPart('Last user')]) as any,
+          ],
+          metadata: {
+            createdAt: new Date('2023-12-31T12:00:00Z'),
+            updatedAt: new Date('2024-01-01T09:00:00Z'),
+          },
+        },
+      ];
+
+      for (const context of contexts) {
+        await storage.set(context.id, context);
+      }
+
+      const sessions = await storage.listSessions();
+
+      expect(sessions).toHaveLength(3);
+      expect(sessions[0].id).toBe('thread-2');
+      expect(sessions[1].id).toBe('thread-1');
+      expect(sessions[2].id).toBe('thread-3');
+
+      const latest = sessions[0];
+      expect(latest.messageCount).toBe(2);
+      expect(latest.title).toBe('Latest Session');
+      expect(latest.preview).toBe('Response');
+      expect(latest.agent).toEqual({ id: 'agent-b', name: 'Beta' });
+
+      const first = sessions[1];
+      expect(first.messageCount).toBe(1);
+      expect(first.title).toBe('First Session');
+      expect(first.preview).toBe('First message');
+      expect(first.agent).toEqual({ id: 'agent-a', name: 'Alpha' });
+
+      const oldest = sessions[2];
+      expect(oldest.messageCount).toBe(3);
+      expect(oldest.preview).toBe('Last user');
+    });
+
+    test('handles sessions with no messages', async () => {
+      const context: ConversationContext = {
+        id: 'thread-empty',
+        messages: [],
+        metadata: {
+          createdAt: new Date('2024-01-05T10:00:00Z'),
+          updatedAt: new Date('2024-01-05T11:00:00Z'),
+        },
+      };
+
+      await storage.set('thread-empty', context);
+
+      const sessions = await storage.listSessions();
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].messageCount).toBe(0);
+      expect(sessions[0].preview).toBeUndefined();
+    });
+  });
 });

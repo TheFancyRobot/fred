@@ -1,0 +1,249 @@
+{
+  "phase": "35-cross-phase-smoke-contract-refresh",
+  "status": "passed",
+  "overallExitCode": 0,
+  "channels": [
+    "OK"
+  ],
+  "retryPolicy": {
+    "maxRetries": 1,
+    "allowlist": [
+      "TRANSIENT_TIMEOUT",
+      "TRANSIENT_ECONNRESET",
+      "TRANSIENT_ECONNREFUSED",
+      "TRANSIENT_SEGFAULT",
+      "TRANSIENT_OOM"
+    ],
+    "semantics": "fail-hard"
+  },
+  "linkage": {
+    "phase27": {
+      "suite": "tests/unit/cli/phase27-smoke.test.ts",
+      "check": "phase27-smoke"
+    },
+    "phase28": {
+      "suite": "tests/unit/cli/phase28-streaming-smoke.test.ts",
+      "check": "phase28-streaming-smoke"
+    },
+    "phase29_tui": {
+      "suite": "tests/unit/cli/tui/session-state.test.ts",
+      "check": "session-state",
+      "covers": [
+        "SESS-01",
+        "SESS-02",
+        "SESS-03"
+      ]
+    },
+    "phase29_cli": {
+      "suite": "tests/unit/cli/session-commands.test.ts",
+      "check": "session-commands",
+      "covers": [
+        "SESS-04",
+        "SESS-05",
+        "SESS-06",
+        "SESS-07"
+      ]
+    },
+    "phase33": {
+      "suite": "tests/unit/cli/phase33-launch-contract-smoke.test.ts",
+      "check": "phase33-launch-contract-smoke"
+    },
+    "rollup": {
+      "check": "phase35-rollup"
+    }
+  },
+  "checks": [
+    {
+      "id": "phase27-smoke",
+      "label": "Phase 27 launch parity smoke",
+      "command": "bun test tests/unit/cli/phase27-smoke.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "13 pass",
+        "tests/unit/cli/phase27-smoke.test.ts:",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [4.00ms]",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > chat command in non-TTY mode emits shared JSON contract and exits [12.00ms]",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > fred, fred tui, and fred chat resolve to same non-TTY fallback semantics [1.00ms]"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "13 pass",
+            "tests/unit/cli/phase27-smoke.test.ts:",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [4.00ms]",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > chat command in non-TTY mode emits shared JSON contract and exits [12.00ms]",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > fred, fred tui, and fred chat resolve to same non-TTY fallback semantics [1.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
+    },
+    {
+      "id": "phase28-streaming-smoke",
+      "label": "Phase 28 streaming smoke",
+      "command": "bun test tests/unit/cli/phase28-streaming-smoke.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "3 pass",
+        "tests/unit/cli/phase28-streaming-smoke.test.ts:",
+        "Ran 3 tests across 1 file. [694.00ms]"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "3 pass",
+            "tests/unit/cli/phase28-streaming-smoke.test.ts:",
+            "Ran 3 tests across 1 file. [694.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
+    },
+    {
+      "id": "phase33-launch-contract-smoke",
+      "label": "Phase 33 launch contract smoke",
+      "command": "bun test tests/unit/cli/phase33-launch-contract-smoke.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "7 pass",
+        "tests/unit/cli/phase33-launch-contract-smoke.test.ts:",
+        "Ran 7 tests across 1 file. [586.00ms]"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "7 pass",
+            "tests/unit/cli/phase33-launch-contract-smoke.test.ts:",
+            "Ran 7 tests across 1 file. [586.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
+    },
+    {
+      "id": "session-state",
+      "label": "Phase 29 TUI session state smoke",
+      "command": "bun test tests/unit/cli/tui/session-state.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "12 pass",
+        "tests/unit/cli/tui/session-state.test.ts:",
+        "(pass) TUI Session State > upsertSessionTranscript updates message counts and preview [1.00ms]",
+        "(pass) TUI Session State > switchSession pins transcript to bottom and clears unread",
+        "(pass) TUI Session State > scrollTranscript clears unread when reaching bottom",
+        "Ran 12 tests across 1 file. [42.00ms]"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "12 pass",
+            "tests/unit/cli/tui/session-state.test.ts:",
+            "(pass) TUI Session State > upsertSessionTranscript updates message counts and preview [1.00ms]",
+            "(pass) TUI Session State > switchSession pins transcript to bottom and clears unread",
+            "(pass) TUI Session State > scrollTranscript clears unread when reaching bottom",
+            "Ran 12 tests across 1 file. [42.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
+    },
+    {
+      "id": "session-commands",
+      "label": "Phase 29 session CLI smoke",
+      "command": "bun test tests/unit/cli/session-commands.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "5 pass",
+        "tests/unit/cli/session-commands.test.ts:",
+        "(pass) session commands > show prints markdown transcript",
+        "Ran 5 tests across 1 file. [510.00ms]"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "5 pass",
+            "tests/unit/cli/session-commands.test.ts:",
+            "(pass) session commands > show prints markdown transcript",
+            "Ran 5 tests across 1 file. [510.00ms]"
+          ],
+          "channel": "OK"
+        }
+      ]
+    },
+    {
+      "id": "phase35-rollup",
+      "label": "Integrated cross-phase rollup",
+      "command": "bun test tests/unit/cli/phase27-smoke.test.ts tests/unit/cli/phase28-streaming-smoke.test.ts tests/unit/cli/phase33-launch-contract-smoke.test.ts tests/unit/cli/tui/session-state.test.ts tests/unit/cli/session-commands.test.ts",
+      "exitCode": 0,
+      "decisiveLines": [
+        "0 fail",
+        "40 pass",
+        "tests/unit/cli/session-commands.test.ts:",
+        "(pass) session commands > show prints markdown transcript [1.00ms]",
+        "tests/unit/cli/phase27-smoke.test.ts:",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [1.00ms]",
+        "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+        "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin"
+      ],
+      "channel": "OK",
+      "attemptCount": 1,
+      "retryReason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "exitCode": 0,
+          "decisiveLines": [
+            "0 fail",
+            "40 pass",
+            "tests/unit/cli/session-commands.test.ts:",
+            "(pass) session commands > show prints markdown transcript [1.00ms]",
+            "tests/unit/cli/phase27-smoke.test.ts:",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > detectTerminalMode returns interactive-tty for full TTY capabilities [1.00ms]",
+            "(pass) phase 27 smoke > chat command selects interactive branch in TTY mode > interactive branch in chat command still wires createFredTuiApp",
+            "(pass) phase 27 smoke > chat command selects non-interactive branch in non-TTY mode > detectTerminalMode returns non-tty for piped stdin"
+          ],
+          "channel": "OK"
+        }
+      ]
+    }
+  ]
+}

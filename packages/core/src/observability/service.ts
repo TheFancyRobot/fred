@@ -263,15 +263,38 @@ function isDeterministicallySampled(runId: string, sampleRate: number): boolean 
 }
 
 /**
+ * Split a composite metric key (e.g. "openai:gpt-4") into provider and model parts.
+ * Keys without a separator treat the entire string as the provider with an empty model.
+ */
+function splitMetricKey(key: string): { provider: string; model: string } {
+  const separatorIndex = key.indexOf(':');
+  return {
+    provider: separatorIndex === -1 ? key : key.substring(0, separatorIndex),
+    model: separatorIndex === -1 ? '' : key.substring(separatorIndex + 1),
+  };
+}
+
+/**
  * Create ObservabilityService live implementation.
  */
+/**
+ * Parse a numeric environment variable, returning the fallback if the variable
+ * is unset or its value is not a valid number.
+ */
+const parseNumericEnv = (envKey: string, fallback: number): number => {
+  const raw = process.env[envKey];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
 export const ObservabilityServiceLive = Layer.effect(
   ObservabilityService,
   Effect.gen(function* () {
-    // Get config from environment or use defaults
+    // Get config from environment or use defaults.
     const config: ObservabilityServiceConfig = {
-      successSampleRate: Number(process.env.FRED_SAMPLE_RATE) || 0.01,
-      slowThresholdMs: Number(process.env.FRED_SLOW_THRESHOLD_MS) || 5000,
+      successSampleRate: parseNumericEnv('FRED_SAMPLE_RATE', 0.01),
+      slowThresholdMs: parseNumericEnv('FRED_SLOW_THRESHOLD_MS', 5000),
       debugMode: process.env.FRED_DEBUG === 'true',
       hashPayloads: process.env.FRED_HASH_PAYLOADS !== 'false',
       serviceMetadata: {
@@ -293,8 +316,11 @@ export const ObservabilityServiceLive = Layer.effect(
       description: 'Model cost by provider and model',
     });
 
-    // In-memory run store
+    // In-memory run store with LRU-like eviction to prevent unbounded growth
     const runStore = new Map<string, RunRecord>();
+    const RUN_STORE_MAX_SIZE = process.env.FRED_RUN_STORE_MAX_SIZE !== undefined
+      ? Number(process.env.FRED_RUN_STORE_MAX_SIZE)
+      : 1000;
 
     // Global metrics aggregation for export
     const globalMetrics = {
@@ -445,6 +471,13 @@ export const ObservabilityServiceLive = Layer.effect(
         Effect.gen(function* () {
           const ctx = yield* getCorrelationContext;
           const spanIds = yield* getSpanIds;
+          // Evict oldest entry if at capacity
+          if (runStore.size >= RUN_STORE_MAX_SIZE && !runStore.has(runId)) {
+            const oldestKey = runStore.keys().next().value;
+            if (oldestKey !== undefined) {
+              runStore.delete(oldestKey);
+            }
+          }
           runStore.set(runId, {
             runId,
             traceId: spanIds.traceId,
@@ -614,9 +647,9 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_tokens_usage_total Total token usage by provider and model');
           lines.push('# TYPE fred_tokens_usage_total counter');
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const [provider, model] = key.split(':');
-            const escapedProvider = escapePrometheusLabelValue(provider ?? '');
-            const escapedModel = escapePrometheusLabelValue(model ?? '');
+            const { provider, model } = splitMetricKey(key);
+            const escapedProvider = escapePrometheusLabelValue(provider);
+            const escapedModel = escapePrometheusLabelValue(model);
             lines.push(
               `fred_tokens_usage_total{provider="${escapedProvider}",model="${escapedModel}",type="input"} ${usage.input}`
             );
@@ -629,9 +662,9 @@ export const ObservabilityServiceLive = Layer.effect(
           lines.push('# HELP fred_model_cost_total Total model cost by provider and model');
           lines.push('# TYPE fred_model_cost_total counter');
           for (const [key, cost] of globalMetrics.modelCost.entries()) {
-            const [provider, model] = key.split(':');
+            const { provider, model } = splitMetricKey(key);
             lines.push(
-              `fred_model_cost_total{provider="${escapePrometheusLabelValue(provider ?? '')}",model="${escapePrometheusLabelValue(model ?? '')}"} ${cost}`
+              `fred_model_cost_total{provider="${escapePrometheusLabelValue(provider)}",model="${escapePrometheusLabelValue(model)}"} ${cost}`
             );
           }
 
@@ -671,7 +704,7 @@ export const ObservabilityServiceLive = Layer.effect(
             timeUnixNano: string;
           }> = [];
           for (const [key, usage] of globalMetrics.tokenUsage.entries()) {
-            const [provider, model] = key.split(':');
+            const { provider, model } = splitMetricKey(key);
             tokenDataPoints.push({
               attributes: { provider, model, type: 'input' },
               value: usage.input,
@@ -697,7 +730,7 @@ export const ObservabilityServiceLive = Layer.effect(
 
           // Model cost metrics
           const costDataPoints = Array.from(globalMetrics.modelCost.entries()).map(([key, cost]) => {
-            const [provider, model] = key.split(':');
+            const { provider, model } = splitMetricKey(key);
             return {
               attributes: { provider, model },
               value: cost,

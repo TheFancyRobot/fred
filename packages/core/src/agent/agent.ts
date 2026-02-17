@@ -68,6 +68,43 @@ export interface ToolRetryPolicy {
 }
 
 /**
+ * Retry diagnostics attached to provider errors after exhausting retries.
+ *
+ * Providers (e.g. Groq) attach this metadata to errors so the factory
+ * can propagate structured retry information to CLI consumers.
+ */
+export interface RetryDiagnostics {
+  readonly provider: string;
+  readonly retryable: boolean;
+  readonly attempts: number;
+  readonly maxRetries: number;
+  readonly lastStatusCode?: number;
+  readonly failureCategory: string;
+}
+
+/**
+ * Error with retry diagnostics attached.
+ *
+ * Used as a branded intersection so consumers can access diagnostics
+ * without unsafe `as any` casts.
+ */
+export interface ErrorWithRetryDiagnostics extends Error {
+  readonly _retryDiagnostics: RetryDiagnostics;
+}
+
+/**
+ * Type guard for errors carrying retry diagnostics metadata.
+ */
+export function hasRetryDiagnostics(error: unknown): error is ErrorWithRetryDiagnostics {
+  return (
+    error instanceof Error &&
+    '_retryDiagnostics' in error &&
+    typeof (error as any)._retryDiagnostics === 'object' &&
+    (error as any)._retryDiagnostics !== null
+  );
+}
+
+/**
  * Agent instance (created from config)
  */
 export interface AgentInstance {

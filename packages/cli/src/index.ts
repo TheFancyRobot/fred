@@ -8,6 +8,23 @@
 import { handleTestCommand } from './test';
 import { handleDevCommand } from './dev';
 import { handleEvalCommand } from './eval';
+import { handleChatCommand } from './commands/chat';
+import { handleSessionCommand } from './commands/session';
+import { handleListCommand } from './commands/list';
+import { handleConfigCommand } from './commands/config';
+import { handleInitCommand } from './commands/init';
+import { handleRunCommand } from './commands/run';
+import { handleIntentCommand } from './commands/intent';
+import { handleRouteCommand } from './commands/route';
+import { handleMcpCommand } from './commands/mcp';
+import { resolveProjectConfig } from './project/resolve-config.js';
+import {
+  AggregatedPluginValidationError,
+  loadPluginsFromConfig,
+  type PluginStartupIssue,
+} from './plugin/manager.js';
+import { createPluginCliRuntime, type PluginCliRuntime } from './plugin/runtime.js';
+import { renderPluginHelpSection } from './plugin/help.js';
 
 /**
  * Options that require a value
@@ -30,13 +47,43 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'baseline',
   'candidate',
   'mode',
+  'format',
+  'agent',
+  'input',
+  'workflow',
+  'conversation-id',
+  'conversationId',
+  'threshold',
 ]);
+
+const BUILTIN_COMMANDS = new Set([
+  'help',
+  'chat',
+  'tui',
+  'dev',
+  'test',
+  'eval',
+  'session',
+  'agents',
+  'tools',
+  'intents',
+  'providers',
+  'workflows',
+  'config',
+  'init',
+  'run',
+  'intent',
+  'route',
+  'mcp',
+]);
+
+const PLUGIN_VALIDATION_EXIT_CODE = 12;
 
 /**
  * Parse command line arguments
  */
 function parseArgs(args: string[]): { command: string; args: string[]; options: Record<string, any> } {
-  const command = args[0] || 'help';
+  const command = args[0] || 'chat';
   const remainingArgs: string[] = [];
   const options: Record<string, any> = {};
 
@@ -78,7 +125,7 @@ function parseArgs(args: string[]): { command: string; args: string[]; options: 
 /**
  * Show help message
  */
-function showHelp(): void {
+function showHelp(pluginHelpSection = ''): void {
   console.log(`
 Fred CLI
 
@@ -86,7 +133,39 @@ Usage:
   fred <command> [options]
 
 Commands:
-  dev                     Start development chat interface with hot reload
+  chat, tui               Start interactive chat interface
+                          - Full-screen TUI with streaming output
+                          - If your project exports setup(fred) from src/index.(ts|js) or index.(ts|js), it will be executed before chat starts
+  run                     Run agent headlessly (for CI/scripting)
+                          --agent <name>   Agent to use (required)
+                          --input <msg>    Message to send (or pipe via stdin)
+                          --json           Output structured JSON response
+                          --verbose        Show tool calls inline
+                          --conversation-id <id>  Continue a conversation
+  agents                  List registered agents
+  tools                   List registered tools
+  intents                 List registered intents
+  providers               List configured providers
+  workflows               List defined workflows
+  config validate         Validate config file and show diagnostics
+  init                    Scaffold a new Fred project
+  intent test "message"   Test intent matching for a message
+                          --verbose        Show alternatives and timing
+                          --threshold <n>  Filter alternatives below confidence
+                          --json           Output structured JSON
+  route test "message"    Test routing decision for a message
+                          --verbose        Show full decision chain
+                          --json           Output structured JSON
+  mcp list                List configured MCP servers
+  mcp start <id>          Start an MCP server (use --all for all)
+  mcp stop <id>           Stop an MCP server (use --all for all)
+  mcp status <id>         Show MCP server connection health
+  session                 Manage saved chat sessions
+  session list             List sessions (table or --json)
+  session show <id>        Show a session transcript
+  session export <id>      Export a session transcript (use --format json|markdown)
+  session rm <id...>       Delete one or more sessions (confirmation required)
+  dev                     Start development chat interface with hot reload (deprecated - use 'chat')
                           - If your project exports setup(fred) from src/index.(ts|js) or index.(ts|js), it will be executed before chat starts
   test                    Run golden trace tests
   test --record <message>  Record a new golden trace
@@ -98,14 +177,29 @@ Commands:
                                     Optional: --from-step <n> --mode retry|skip|restart --config <file>
   eval compare --baseline <id> --candidate <id>  Compare two evaluation traces
   eval suite --suite <file>           Run evaluation suite manifest
-                                    Outputs: pass/fail totals, latency/token metrics, intent confusion matrix
+                                     Outputs: pass/fail totals, latency/token metrics, intent confusion matrix
 
-Options:
+${pluginHelpSection}Options:
   --config <file>          Path to Fred config file
   --traces-dir <dir>       Directory for golden traces (default: tests/golden-traces)
 
 Examples:
-  fred dev
+  fred chat
+  fred run --agent assistant --input "What is 2+2?"
+  fred agents
+  fred tools --json
+  fred config validate
+  fred init
+  fred intent test "What is 2+2?"
+  fred route test "Help me with billing"
+  fred mcp list
+  fred mcp start filesystem-server
+  fred mcp status filesystem-server
+  fred session list
+  fred session list --json
+  fred session show conv_123
+  fred session export conv_123 --format markdown
+  fred session rm conv_123 conv_456
   fred test
   fred test --record "Hello, world!"
   fred test --update
@@ -114,6 +208,9 @@ Examples:
   fred eval replay --trace-id trace-abc --from-step 2
   fred eval compare --baseline trace-a --candidate trace-b
   fred eval suite --suite ./eval/suite.yaml --output json
+
+Get started:
+  Run 'fred chat' to start an interactive session with your AI agents.
   `);
 }
 
@@ -121,19 +218,46 @@ Examples:
  * Main CLI entry point
  */
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+  const argv = process.argv.slice(2);
 
-  if (args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
-    showHelp();
+  // Check for help flags BEFORE plugin initialization so --help always works
+  // even if plugins have validation issues.
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+    const helpPluginResult = initializePluginCliRuntime();
+    const helpPluginSection = helpPluginResult.runtime
+      ? renderPluginHelpSection(helpPluginResult.runtime.listCommands())
+      : '';
+    showHelp(helpPluginSection);
     process.exit(0);
   }
 
-  const { command, args: commandArgs, options } = parseArgs(args);
+  const pluginRuntimeResult = initializePluginCliRuntime();
+
+  if (pluginRuntimeResult.startupIssues) {
+    emitPluginStartupDiagnostics(
+      pluginRuntimeResult.startupIssues,
+      argv.includes('--json'),
+    );
+    process.exit(PLUGIN_VALIDATION_EXIT_CODE);
+    return;
+  }
+
+  const pluginRuntime = pluginRuntimeResult.runtime;
+  const pluginHelpSection = renderPluginHelpSection(pluginRuntime.listCommands());
+
+  const { command, args: commandArgs, options } = parseArgs(argv);
+  const rawCommandArgs = argv.slice(1);
 
   try {
     let exitCode = 0;
 
     switch (command) {
+      case 'chat':
+      case 'tui':
+        // handleChatCommand is async — OpenTUI manages terminal lifecycle
+        await handleChatCommand();
+        return;
+
       case 'dev':
         // handleDevCommand uses BunRuntime.runMain internally and never returns
         // It handles signals and cleanup, and exits the process
@@ -155,10 +279,60 @@ async function main(): Promise<void> {
         exitCode = await handleEvalCommand(commandArgs, options);
         break;
 
+      case 'session':
+        exitCode = await handleSessionCommand(commandArgs, options);
+        break;
+
+      case 'agents':
+      case 'tools':
+      case 'intents':
+      case 'providers':
+      case 'workflows':
+        exitCode = await handleListCommand(command, commandArgs, options);
+        break;
+
+      case 'config':
+        exitCode = await handleConfigCommand(commandArgs, options);
+        break;
+
+      case 'init':
+        exitCode = await handleInitCommand(commandArgs, options);
+        break;
+
+      case 'run':
+        exitCode = await handleRunCommand(commandArgs, options);
+        break;
+
+      case 'intent':
+        exitCode = await handleIntentCommand(commandArgs, options);
+        break;
+
+      case 'route':
+        exitCode = await handleRouteCommand(commandArgs, options);
+        break;
+
+      case 'mcp':
+        exitCode = await handleMcpCommand(commandArgs, options);
+        break;
+
+
       default:
-        console.error(`Unknown command: ${command}`);
-        showHelp();
-        exitCode = 1;
+        {
+          const pluginResult = await pluginRuntime.dispatch(command, rawCommandArgs, {
+            cwd: process.cwd(),
+            stdout: (message: string) => console.log(message),
+            stderr: (message: string) => console.error(message),
+          });
+
+          if (pluginResult.handled) {
+            exitCode = pluginResult.exitCode;
+            break;
+          }
+
+          console.error(`Unknown command: ${command}`);
+          showHelp(pluginHelpSection);
+          exitCode = 1;
+        }
     }
 
     process.exit(exitCode);
@@ -166,6 +340,124 @@ async function main(): Promise<void> {
     console.error('Error:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
+}
+
+interface PluginCliRuntimeInitializationResult {
+  runtime: PluginCliRuntime;
+  startupIssues?: PluginStartupIssue[];
+}
+
+function initializePluginCliRuntime(): PluginCliRuntimeInitializationResult {
+  const fallback = createPluginCliRuntime({
+    plugins: [],
+    builtInCommands: BUILTIN_COMMANDS,
+  });
+
+  const configResult = resolveProjectConfig();
+  if (!configResult.success) {
+    const pluginIssues = configResult.diagnostics
+      .filter((diagnostic) =>
+        diagnostic.severity === 'error' &&
+        typeof diagnostic.pluginId === 'string' &&
+        diagnostic.pluginId.length > 0 &&
+        typeof diagnostic.declarationSource === 'string' &&
+        diagnostic.declarationSource.length > 0)
+      .map((diagnostic) => ({
+        code: diagnostic.code,
+        severity: 'error' as const,
+        pluginId: diagnostic.pluginId!,
+        declarationSource: diagnostic.declarationSource!,
+        message: diagnostic.message,
+        fix: diagnostic.fix ?? 'Run `fred config validate` to inspect plugin diagnostics.',
+      }));
+
+    if (pluginIssues.length > 0) {
+      return {
+        runtime: fallback,
+        startupIssues: pluginIssues,
+      };
+    }
+
+    return {
+      runtime: fallback,
+    };
+  }
+
+  if (!configResult.configPath || !configResult.config?.plugins?.length) {
+    return {
+      runtime: fallback,
+    };
+  }
+
+  try {
+    const pluginLoadResult = loadPluginsFromConfig(
+      configResult.config.plugins,
+      configResult.configPath,
+    );
+    return {
+      runtime: createPluginCliRuntime({
+        plugins: pluginLoadResult.plugins,
+        builtInCommands: BUILTIN_COMMANDS,
+      }),
+    };
+  } catch (error) {
+    if (error instanceof AggregatedPluginValidationError) {
+      return {
+        runtime: fallback,
+        startupIssues: error.issues,
+      };
+    }
+
+    return {
+      runtime: fallback,
+    };
+  }
+}
+
+function emitPluginStartupDiagnostics(
+  issues: readonly PluginStartupIssue[],
+  jsonMode: boolean,
+): void {
+  if (jsonMode) {
+    console.log(JSON.stringify({
+      ok: false,
+      error: {
+        code: 'plugin-startup-validation-failed',
+        exitCode: PLUGIN_VALIDATION_EXIT_CODE,
+        summary: `Plugin startup validation failed with ${issues.length} issue${issues.length === 1 ? '' : 's'}.`,
+      },
+      diagnostics: issues,
+    }, null, 2));
+    return;
+  }
+
+  const lines: string[] = [
+    `Plugin startup validation failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+  ];
+
+  const groupedIssues = new Map<string, PluginStartupIssue[]>();
+  for (const issue of issues) {
+    const key = `${issue.pluginId}|${issue.declarationSource}`;
+    const group = groupedIssues.get(key);
+    if (group) {
+      group.push(issue);
+    } else {
+      groupedIssues.set(key, [issue]);
+    }
+  }
+
+  for (const [groupKey, group] of groupedIssues.entries()) {
+    const [pluginId, declarationSource] = groupKey.split('|');
+    lines.push(`  - plugin ${pluginId} (source: ${declarationSource})`);
+
+    for (const issue of group) {
+      lines.push(`    • ${issue.code}: ${issue.message}`);
+      lines.push(`      fix: ${issue.fix}`);
+    }
+  }
+
+  lines.push("Run 'fred config validate --json' for structured diagnostics.");
+  console.error(lines.join('\n'));
 }
 
 // Run if executed directly

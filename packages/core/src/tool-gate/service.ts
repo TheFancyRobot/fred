@@ -301,7 +301,7 @@ class ToolGateServiceImpl implements ToolGateServiceApi {
 
       const decision: ToolGateDecision = {
         toolId: tool.id,
-        allowed: !deniedBy && (hasAllow || requireApproval),
+        allowed: !deniedBy && hasAllow,
         requireApproval,
         deniedBy,
         matchedRules,
@@ -395,14 +395,14 @@ class ToolGateServiceImpl implements ToolGateServiceApi {
         );
         decisions.push(decision);
 
-        if (decision.allowed) {
+        if (decision.allowed || decision.requireApproval) {
           allowed.push(tool);
         }
       }
 
       return {
         allowed,
-        denied: decisions.filter((decision) => !decision.allowed),
+        denied: decisions.filter((decision) => !decision.allowed && !decision.requireApproval),
       };
     });
   }

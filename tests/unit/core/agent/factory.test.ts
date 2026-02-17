@@ -515,6 +515,125 @@ describe('AgentFactory', () => {
     });
   });
 
+  describe('Retry Boundary', () => {
+    test('propagates _retryDiagnostics from provider errors to thrown error', async () => {
+      const diagnostics = {
+        provider: 'groq',
+        retryable: true,
+        attempts: 4,
+        maxRetries: 3,
+        lastStatusCode: 503,
+        failureCategory: 'transient',
+      };
+
+      const providerError = new Error('HTTP request failed after 4 attempt(s) (transient)');
+      (providerError as any)._retryDiagnostics = diagnostics;
+
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation(() => {
+        return Effect.fail(providerError) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await factory.createAgent({
+        id: 'retry-agent',
+        systemMessage: 'Test retry boundary',
+        platform: 'groq',
+        model: 'llama-3.3-70b-versatile',
+      }, testProvider as any);
+
+      try {
+        await agent.processMessage('hello', []);
+        expect(true).toBe(false); // Should not reach here
+      } catch (err: any) {
+        expect(err._retryDiagnostics).toBeDefined();
+        expect(err._retryDiagnostics.provider).toBe('groq');
+        expect(err._retryDiagnostics.retryable).toBe(true);
+        expect(err._retryDiagnostics.attempts).toBe(4);
+        expect(err._retryDiagnostics.failureCategory).toBe('transient');
+      }
+
+      generateSpy.mockRestore();
+    });
+
+    test('propagates _retryDiagnostics from nested cause', async () => {
+      const diagnostics = {
+        provider: 'groq',
+        retryable: false,
+        attempts: 1,
+        maxRetries: 3,
+        lastStatusCode: 401,
+        failureCategory: 'non-retryable',
+      };
+
+      const innerError = new Error('Unauthorized');
+      (innerError as any)._retryDiagnostics = diagnostics;
+      const outerError = new Error('Provider failed');
+      (outerError as any).cause = innerError;
+
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation(() => {
+        return Effect.fail(outerError) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await factory.createAgent({
+        id: 'retry-nested-agent',
+        systemMessage: 'Test nested retry',
+        platform: 'groq',
+        model: 'llama-3.3-70b-versatile',
+      }, testProvider as any);
+
+      try {
+        await agent.processMessage('hello', []);
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err._retryDiagnostics).toBeDefined();
+        expect(err._retryDiagnostics.retryable).toBe(false);
+        expect(err._retryDiagnostics.lastStatusCode).toBe(401);
+        expect(err._retryDiagnostics.failureCategory).toBe('non-retryable');
+      }
+
+      generateSpy.mockRestore();
+    });
+
+    test('throws original error without diagnostics when provider has none', async () => {
+      const plainError = new Error('Something went wrong');
+
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation(() => {
+        return Effect.fail(plainError) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await factory.createAgent({
+        id: 'plain-error-agent',
+        systemMessage: 'Test plain error',
+        platform: 'openai',
+        model: 'gpt-4',
+      }, testProvider as any);
+
+      try {
+        await agent.processMessage('hello', []);
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err._retryDiagnostics).toBeUndefined();
+      }
+
+      generateSpy.mockRestore();
+    });
+  });
+
+
   describe('Tool Gate Integration', () => {
     test('filters tools by intent context before model invocation', async () => {
       toolRegistry.registerTool({

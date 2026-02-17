@@ -1,11 +1,12 @@
-import { Effect, Layer, Stream } from 'effect';
+import { Cause, Effect, Layer, Option, Runtime, Stream } from 'effect';
 import * as Schema from 'effect/Schema';
 import * as AST from 'effect/SchemaAST';
 import { Tool as EffectTool, Toolkit, LanguageModel, Prompt } from '@effect/ai';
 import { BunContext } from '@effect/platform-bun';
 import { FetchHttpClient } from '@effect/platform';
 import type { StreamEvent } from '../stream/events';
-import type { AgentConfig, AgentMessage, AgentResponse, ToolRetryPolicy } from './agent';
+import type { AgentConfig, AgentMessage, AgentResponse, RetryDiagnostics, ToolRetryPolicy } from './agent';
+import { hasRetryDiagnostics } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
 import type { Tool as FredTool } from '../tool/tool';
@@ -918,7 +919,41 @@ export class AgentFactory {
           program as Effect.Effect<any, any, any>,
           fullLayer as any
         ) as Effect.Effect<any, any, never>;
-        const result = await Effect.runPromise(providedProgram);
+
+        // Retry boundary: providers (e.g. Groq) attach _retryDiagnostics to errors
+        // after exhausting their internal retries. The factory normalizes this metadata
+        // so downstream consumers (CLI --json) can emit structured diagnostics.
+        let result: any;
+        try {
+          result = await Effect.runPromise(providedProgram);
+        } catch (providerError: any) {
+          // Extract original error from FiberFailure using Effect's public Cause API
+          let originalError: unknown = providerError;
+          if (Runtime.isFiberFailure(providerError)) {
+            const cause = providerError[Runtime.FiberFailureCauseId];
+            const failureOpt = Cause.failureOption(cause);
+            if (Option.isSome(failureOpt)) {
+              originalError = failureOpt.value;
+            }
+          }
+
+          // Look for RetryDiagnostics on the original error, its cause chain, or the wrapper
+          const diagnostics: RetryDiagnostics | undefined =
+            hasRetryDiagnostics(originalError) ? originalError._retryDiagnostics
+            : hasRetryDiagnostics((originalError as any)?.cause) ? (originalError as any).cause._retryDiagnostics
+            : hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
+            : undefined;
+
+          if (diagnostics) {
+            // Attach normalized retry metadata for CLI structured error payloads
+            const enrichedError = providerError instanceof Error
+              ? providerError
+              : new Error(String(providerError));
+            (enrichedError as any)._retryDiagnostics = diagnostics;
+            throw enrichedError;
+          }
+          throw providerError;
+        }
 
         // Extract tool calls from result
         const allToolCalls = (result.toolCalls ?? []).map((tc: any) => {
