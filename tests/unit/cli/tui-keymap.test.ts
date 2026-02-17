@@ -47,15 +47,15 @@ describe('TUI Keymap', () => {
       const state = createInitialTuiState();
 
       // input -> sidebar
-      const next1 = nextFocusablePane(state.focusedPane);
+      const next1 = nextFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible });
       expect(next1).toBe('sidebar');
 
       // sidebar -> transcript
-      const next2 = nextFocusablePane(next1);
+      const next2 = nextFocusablePane(next1, { includeSidebar: state.sidebar.isVisible });
       expect(next2).toBe('transcript');
 
       // transcript -> input (wraparound)
-      const next3 = nextFocusablePane(next2);
+      const next3 = nextFocusablePane(next2, { includeSidebar: state.sidebar.isVisible });
       expect(next3).toBe('input');
     });
 
@@ -76,7 +76,7 @@ describe('TUI Keymap', () => {
       state.focusedPane = 'sidebar';
 
       // sidebar -> input (wraparound)
-      const prev = prevFocusablePane(state.focusedPane);
+      const prev = prevFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible });
       expect(prev).toBe('input');
     });
   });
@@ -89,7 +89,7 @@ describe('TUI Keymap', () => {
       const visited = [current];
 
       for (let i = 0; i < 5; i++) {
-        current = nextFocusablePane(current);
+        current = nextFocusablePane(current, { includeSidebar: state.sidebar.isVisible });
         visited.push(current);
       }
 
@@ -549,6 +549,30 @@ describe('TUI Keymap', () => {
       const event = makeKey({ name: 'delete' });
       const action = mapKeyToAction(event, state);
       expect(action.type).toBe('delete-session');
+    });
+  });
+
+  describe('Sidebar visibility toggles', () => {
+    test('Ctrl+B maps to toggle-sidebar', () => {
+      const state = createInitialTuiState();
+      const event = makeKey({ name: 'b', ctrl: true });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('toggle-sidebar');
+    });
+
+    test('focus cycle skips sidebar when hidden', () => {
+      let state = createInitialTuiState();
+      state.focusedPane = 'input';
+
+      const hideAction = mapKeyToAction(makeKey({ name: 'b', ctrl: true }), state);
+      state = applyKeyAction(state, hideAction);
+      expect(state.sidebar.isVisible).toBe(false);
+
+      const nextAction = mapKeyToAction(makeKey({ name: 'tab' }), state);
+      expect(nextAction.type).toBe('focus-next');
+
+      const nextState = applyKeyAction(state, nextAction);
+      expect(nextState.focusedPane).toBe('transcript');
     });
   });
 

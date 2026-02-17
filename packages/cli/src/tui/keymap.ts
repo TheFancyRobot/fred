@@ -34,6 +34,8 @@ import {
   selectNextSession,
   selectPreviousSession,
   selectSidebarSelection,
+  toggleSidebarVisibility,
+  toggleSidebarSection,
 } from './state.js';
 
 /**
@@ -42,6 +44,9 @@ import {
 export type KeyAction =
   | { type: 'focus-next' }
   | { type: 'focus-prev' }
+  | { type: 'toggle-sidebar' }
+  | { type: 'toggle-sessions-section' }
+  | { type: 'toggle-metadata-section' }
   | { type: 'scroll-up'; lines: number }
   | { type: 'scroll-down'; lines: number }
   | { type: 'history-up' }
@@ -161,6 +166,10 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'copy-transcript' };
   }
 
+  if (ctrl && name === 'b') {
+    return { type: 'toggle-sidebar' };
+  }
+
   if (ctrl && name === 'c') {
     return { type: 'quit' };
   }
@@ -260,6 +269,12 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   // Sidebar pane: session navigation
   if (focusedPane === 'sidebar') {
+    if (name === 's') {
+      return { type: 'toggle-sessions-section' };
+    }
+    if (name === 'm') {
+      return { type: 'toggle-metadata-section' };
+    }
     if (name === 'delete' || name === 'backspace') {
       return { type: 'delete-session' };
     }
@@ -283,10 +298,25 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
   switch (action.type) {
     case 'focus-next':
-      return setFocusedPane(state, nextFocusablePane(state.focusedPane));
+      return setFocusedPane(
+        state,
+        nextFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible }),
+      );
 
     case 'focus-prev':
-      return setFocusedPane(state, prevFocusablePane(state.focusedPane));
+      return setFocusedPane(
+        state,
+        prevFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible }),
+      );
+
+    case 'toggle-sidebar':
+      return toggleSidebarVisibility(state);
+
+    case 'toggle-sessions-section':
+      return toggleSidebarSection(state, 'sessions');
+
+    case 'toggle-metadata-section':
+      return toggleSidebarSection(state, 'metadata');
 
     case 'scroll-up':
       return scrollTranscript(state, -action.lines);

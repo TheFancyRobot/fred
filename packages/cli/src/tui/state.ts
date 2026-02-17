@@ -153,6 +153,11 @@ export interface TuiState {
   sidebar: {
     selectedIndex: number;
     hasNewSessionAction: boolean;
+    isVisible: boolean;
+    sections: {
+      sessionsCollapsed: boolean;
+      metadataCollapsed: boolean;
+    };
   };
   deleteConfirm: DeleteConfirmState;
   startup: StartupState;
@@ -221,6 +226,11 @@ export function createInitialTuiStateWithPlugins(
     sidebar: {
       selectedIndex: 0,
       hasNewSessionAction: true,
+      isVisible: true,
+      sections: {
+        sessionsCollapsed: false,
+        metadataCollapsed: false,
+      },
     },
     deleteConfirm: {
       isOpen: false,
@@ -671,41 +681,108 @@ export function getSelectedCommandPaletteAction(state: TuiState): CommandPalette
  */
 const FOCUSABLE_PANES: FocusablePaneId[] = ['sidebar', 'transcript', 'input'];
 
+export type FocusCycleOptions = {
+  includeSidebar?: boolean;
+};
+
+function getFocusablePanes(options?: FocusCycleOptions): FocusablePaneId[] {
+  if (options?.includeSidebar === false) {
+    return ['transcript', 'input'];
+  }
+  return FOCUSABLE_PANES;
+}
+
 /**
  * Get next focusable pane with wraparound
  */
-export function nextFocusablePane(current: FocusablePaneId): FocusablePaneId {
-  const currentIndex = FOCUSABLE_PANES.indexOf(current);
-  const nextIndex = (currentIndex + 1) % FOCUSABLE_PANES.length;
-  return FOCUSABLE_PANES[nextIndex];
+export function nextFocusablePane(current: FocusablePaneId, options?: FocusCycleOptions): FocusablePaneId {
+  const focusablePanes = getFocusablePanes(options);
+  const currentIndex = focusablePanes.indexOf(current);
+  if (currentIndex < 0) {
+    return focusablePanes[0] ?? 'input';
+  }
+  const nextIndex = (currentIndex + 1) % focusablePanes.length;
+  return focusablePanes[nextIndex] ?? 'input';
 }
 
 /**
  * Get previous focusable pane with wraparound
  */
-export function prevFocusablePane(current: FocusablePaneId): FocusablePaneId {
-  const currentIndex = FOCUSABLE_PANES.indexOf(current);
-  const prevIndex = currentIndex === 0 ? FOCUSABLE_PANES.length - 1 : currentIndex - 1;
-  return FOCUSABLE_PANES[prevIndex];
+export function prevFocusablePane(current: FocusablePaneId, options?: FocusCycleOptions): FocusablePaneId {
+  const focusablePanes = getFocusablePanes(options);
+  const currentIndex = focusablePanes.indexOf(current);
+  if (currentIndex < 0) {
+    return focusablePanes[focusablePanes.length - 1] ?? 'input';
+  }
+  const prevIndex = currentIndex === 0 ? focusablePanes.length - 1 : currentIndex - 1;
+  return focusablePanes[prevIndex] ?? 'input';
 }
 
 /**
  * Apply focus change to state
  */
 export function setFocusedPane(state: TuiState, pane: FocusablePaneId): TuiState {
-  const nextScope = state.commandPalette.isOpen ? pane : state.commandPalette.scope;
+  const resolvedPane = pane === 'sidebar' && !state.sidebar.isVisible
+    ? (state.transcript ? 'transcript' : 'input')
+    : pane;
+  const nextScope = state.commandPalette.isOpen ? resolvedPane : state.commandPalette.scope;
   const filteredActions = state.commandPalette.isOpen
-    ? getFilteredPaletteActions(state.commandPalette.actions, state.commandPalette.query, pane)
+    ? getFilteredPaletteActions(state.commandPalette.actions, state.commandPalette.query, resolvedPane)
     : state.commandPalette.filteredActions;
 
   return {
     ...state,
-    focusedPane: pane,
+    focusedPane: resolvedPane,
     commandPalette: withCommandPaletteState(state, {
       scope: nextScope,
       filteredActions,
       selectedIndex: 0,
     }),
+  };
+}
+
+export type SidebarSectionKey = 'sessions' | 'metadata';
+
+export function toggleSidebarVisibility(state: TuiState): TuiState {
+  const nextVisible = !state.sidebar.isVisible;
+  const nextState: TuiState = {
+    ...state,
+    sidebar: {
+      ...state.sidebar,
+      isVisible: nextVisible,
+    },
+  };
+
+  if (!nextVisible && state.focusedPane === 'sidebar') {
+    return setFocusedPane(nextState, 'transcript');
+  }
+
+  return nextState;
+}
+
+export function toggleSidebarSection(state: TuiState, section: SidebarSectionKey): TuiState {
+  if (section === 'sessions') {
+    return {
+      ...state,
+      sidebar: {
+        ...state.sidebar,
+        sections: {
+          ...state.sidebar.sections,
+          sessionsCollapsed: !state.sidebar.sections.sessionsCollapsed,
+        },
+      },
+    };
+  }
+
+  return {
+    ...state,
+    sidebar: {
+      ...state.sidebar,
+      sections: {
+        ...state.sidebar.sections,
+        metadataCollapsed: !state.sidebar.sections.metadataCollapsed,
+      },
+    },
   };
 }
 

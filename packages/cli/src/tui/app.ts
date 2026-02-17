@@ -660,10 +660,16 @@ export class FredTuiApp {
 
     switch (selectedAction.id) {
       case 'focus-next-pane':
-        this.state = setFocusedPane(this.state, nextFocusablePane(this.state.focusedPane));
+        this.state = setFocusedPane(
+          this.state,
+          nextFocusablePane(this.state.focusedPane, { includeSidebar: this.state.sidebar.isVisible }),
+        );
         break;
       case 'focus-previous-pane':
-        this.state = setFocusedPane(this.state, prevFocusablePane(this.state.focusedPane));
+        this.state = setFocusedPane(
+          this.state,
+          prevFocusablePane(this.state.focusedPane, { includeSidebar: this.state.sidebar.isVisible }),
+        );
         break;
       case 'jump-sidebar-pane':
         this.state = setFocusedPane(this.state, 'sidebar');

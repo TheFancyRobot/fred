@@ -178,6 +178,17 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(frame).toContain('Focus: input');
   });
 
+  test('Ctrl+B hides sidebar without losing focus', async () => {
+    await createTestApp();
+
+    expect(app.getState().focusedPane).toBe('input');
+    app.processKey(makeKey({ name: 'b', ctrl: true }));
+
+    const state = app.getState();
+    expect(state.sidebar.isVisible).toBe(false);
+    expect(['input', 'transcript']).toContain(state.focusedPane);
+  });
+
   test('Shift+Tab cycles focus backward', async () => {
     await createTestApp();
 
