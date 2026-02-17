@@ -5,7 +5,8 @@ import { Tool as EffectTool, Toolkit, LanguageModel, Prompt } from '@effect/ai';
 import { BunContext } from '@effect/platform-bun';
 import { FetchHttpClient } from '@effect/platform';
 import type { StreamEvent } from '../stream/events';
-import type { AgentConfig, AgentMessage, AgentResponse, ToolRetryPolicy } from './agent';
+import type { AgentConfig, AgentMessage, AgentResponse, RetryDiagnostics, ToolRetryPolicy } from './agent';
+import { hasRetryDiagnostics } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
 import { ToolRegistry } from '../tool/registry';
 import type { Tool as FredTool } from '../tool/tool';
@@ -927,7 +928,7 @@ export class AgentFactory {
           result = await Effect.runPromise(providedProgram);
         } catch (providerError: any) {
           // Extract original error from FiberFailure using Effect's public Cause API
-          let originalError: any = providerError;
+          let originalError: unknown = providerError;
           if (Runtime.isFiberFailure(providerError)) {
             const cause = providerError[Runtime.FiberFailureCauseId];
             const failureOpt = Cause.failureOption(cause);
@@ -936,9 +937,12 @@ export class AgentFactory {
             }
           }
 
-          const diagnostics = originalError?._retryDiagnostics
-            ?? originalError?.cause?._retryDiagnostics
-            ?? providerError?._retryDiagnostics;
+          // Look for RetryDiagnostics on the original error, its cause chain, or the wrapper
+          const diagnostics: RetryDiagnostics | undefined =
+            hasRetryDiagnostics(originalError) ? originalError._retryDiagnostics
+            : hasRetryDiagnostics((originalError as any)?.cause) ? (originalError as any).cause._retryDiagnostics
+            : hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
+            : undefined;
 
           if (diagnostics) {
             // Attach normalized retry metadata for CLI structured error payloads

@@ -13,7 +13,7 @@ import * as Response from '@effect/ai/Response';
 import * as Tool from '@effect/ai/Tool';
 import { IdGenerator } from '@effect/ai/IdGenerator';
 import { registerBuiltinPack } from '@fancyrobot/fred';
-import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults, RetryDiagnostics } from '@fancyrobot/fred';
 
 /**
  * Groq Chat Completions API response types
@@ -96,14 +96,11 @@ const GROQ_RETRY_CONFIG = {
 const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
 
 /**
- * Retry diagnostics attached to errors when all retries are exhausted.
+ * Groq-specific retry diagnostics. Extends the core RetryDiagnostics
+ * interface with narrowed types for Groq provider values.
  */
-export interface GroqRetryDiagnostics {
+export interface GroqRetryDiagnostics extends RetryDiagnostics {
   readonly provider: 'groq';
-  readonly retryable: boolean;
-  readonly attempts: number;
-  readonly maxRetries: number;
-  readonly lastStatusCode?: number;
   readonly failureCategory: 'transient' | 'rate-limit' | 'non-retryable';
 }
 

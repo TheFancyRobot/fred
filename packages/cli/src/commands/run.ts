@@ -9,7 +9,7 @@
  * zero bytes on stderr.
  */
 
-import { Fred } from '@fancyrobot/fred';
+import { Fred, hasRetryDiagnostics } from '@fancyrobot/fred';
 import {
   ensureDefaultChatAgent,
 } from '@fancyrobot/fred-dev/chat-defaults';
@@ -157,7 +157,7 @@ const runCommandEffect = (
       catch: (error) =>
         new MessageProcessError({
           message: sanitizeErrorForCli(error),
-          retryDiagnostics: (error as any)?._retryDiagnostics,
+          retryDiagnostics: hasRetryDiagnostics(error) ? error._retryDiagnostics : undefined,
         }),
     });
 
