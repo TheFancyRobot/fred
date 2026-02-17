@@ -11,19 +11,19 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 37 of 40 (Theme System & Contrast Layout)
-Plan: 0 of ? in current phase (research not yet started)
-Status: Milestone setup complete — ready for Phase 37 research
-Last activity: 2026-02-17 - Completed quick task 002: Fix malformed Bash permission entry in .claude/settings.local.json
+Phase: 37 of 40 (Theme System & Contrast Layout) — COMPLETE
+Plan: 1 of 1 in current phase (all plans complete)
+Status: Phase 37 verified and complete — ready for Phase 38
+Last activity: 2026-02-17 - Completed Phase 37: centralized TuiTheme + borderless contrast layout
 
-Progress: [░░░░░░░░░░] 0% (0/? plans complete)
+Progress: [██████████] 100% (1/1 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v0.2.2 milestone)
-- Average duration: N/A
-- Total execution time: 0
+- Total plans completed: 1 (v0.2.2 milestone)
+- Average duration: ~25 min
+- Total execution time: ~25 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -37,17 +37,18 @@ Progress: [░░░░░░░░░░] 0% (0/? plans complete)
 ### Discoveries (from TUI exploration)
 
 - **Current TUI uses `@opentui/core` v0.1.77** — Yoga-based flexbox layout with `BoxRenderable`, `TextRenderable`, `ScrollBoxRenderable`
-- **Borders are explicit box-drawing characters** — sidebar and transcript use `borderStyle: 'rounded'` (╭╮╰╯│─), input uses `borderStyle: 'single'` (┌┐└┘│─). Must be replaced with contrast-based separation.
-- **No centralized theme/palette system exists** — all colors are inline hex strings scattered through `app.ts`'s `syncStateToUI()`
-- **Current color inventory**: `#00FFFF` (cyan sidebar title), `#888888`/`#CCCCCC`/`#666666` (grays), `#FFFFFF` (white), `#444444` (status bar bg), `#7aa2f7` (blue, defined but unused), `#ff6b6b`/`#5dade2`/`#7bd88f` (status colors), `#FFD166`/`#7CE38B`/`#FF9E64` (startup chooser)
-- **`updateBorderFocus()` method exists but can't dynamically change border colors** on BoxRenderable after creation — focus is indicated through content text color changes
-- **Layout constants** are in `layout.ts`: sidebar width 30, input height 3-6, status height 1
+- **Centralized theme system established in Phase 37** — `packages/cli/src/tui/theme.ts` exports `TuiTheme` interface and `DEFAULT_TUI_THEME` with semantic fg/bg/accent/status tokens
+- **Borderless contrast layout active** — regions separated by backgroundColor contrast (base → surface → elevated) with padding/gap spacing, no box-drawing borders
+- **Selected items use accent color** — `▸` marked sidebar items and `>` command palette selections render with `accent.primary` + bold
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- (Phase 37) Muted cool palette with 3-step background contrast: base → surface → elevated
+- (Phase 37) Teal primary accent (#5ec2c7) for selected items, focused titles, role labels
+- (Phase 37) All color values consumed from centralized theme tokens — zero inline hex in app.ts
 - (Carried from v0.2.1) Full ANSI rendering loop in TUI app (27-04)
 - (Carried from v0.2.1) Framework-agnostic TUI implementation (27-03)
 - (Carried from v0.2.1) Bounded rich input bar rendering (28-02)
@@ -55,8 +56,7 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- **OpenTUI BoxRenderable border removal** — Need to verify that `borderStyle` can be set to `'none'` or omitted entirely; if not, padding-only layout may require container restructuring
-- **Background color support in OpenTUI** — Must confirm `backgroundColor` property works on `BoxRenderable` for contrast-based separation
+None currently.
 
 ### Pending Todos
 
@@ -73,12 +73,12 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-16T21:00:00Z
-Stopped at: v0.2.2 milestone setup complete — ready for Phase 37 research
+Last session: 2026-02-17T12:00:00Z
+Stopped at: Phase 37 complete — ready for Phase 38 research
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-16 — v0.2.1 milestone formally completed, v0.2.2 in progress*
+*Last updated: 2026-02-17 — Phase 37 complete, Phase 38 next*

@@ -24,7 +24,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 **Milestone Goal:** Redesign the Fred TUI appearance to use contrast-based region separation, muted color palette, information-dense sidebar, and minimal chrome — inspired by modern terminal UIs like OpenCode.
 
-- [ ] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (pending)
+- [x] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (complete)
 - [ ] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (pending)
 - [ ] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (pending)
 - [ ] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (pending)
@@ -40,7 +40,10 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
   2. All TUI components in `app.ts` and `layout.ts` consume colors from the theme system — zero inline hex strings remain
   3. Sidebar, transcript, and input regions are separated by background shade contrast, not box-drawing characters
   4. The borderless aesthetic uses padding-based spacing; no `╭╮╰╯│─┌┐└┘` characters appear in the layout
-**Plans**: TBD (research required)
+**Plans**: 1 plan
+
+Plans:
+- [x] 37-01-PLAN.md — Centralize theme + borderless contrast layout
 
 ### Phase 38: Sidebar Redesign & Toggle
 **Goal**: Redesign sidebar to be information-dense with collapsible sections, and add hotkey + slash command to toggle sidebar visibility
@@ -81,7 +84,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 37. Theme System & Contrast Layout | 0/? | Pending | - |
+| 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 0/? | Pending | - |
 | 39. Transcript & Message Rendering | 0/? | Pending | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
@@ -113,4 +116,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-16 - v0.2.2 TUI Visual Polish milestone created with 4 phases (37-40)*
+*Last updated: 2026-02-17 - Phase 37 complete (1/1 plans), Phase 38 next*
