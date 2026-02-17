@@ -1,5 +1,18 @@
 # @fred/cli
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`d524cb7`](https://github.com/TheFancyRobot/fred/commit/d524cb723370088fc0eb3516ad621b41994f5aa4)]:
+  - @fancyrobot/fred@0.3.0
+  - @fancyrobot/fred-dev@0.1.3
+  - @fancyrobot/fred-anthropic@3.0.0
+  - @fancyrobot/fred-google@3.0.0
+  - @fancyrobot/fred-groq@3.0.0
+  - @fancyrobot/fred-openai@3.0.0
+  - @fancyrobot/fred-openrouter@3.0.0
+
 ## 0.2.1
 
 ### Patch Changes

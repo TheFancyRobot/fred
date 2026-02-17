@@ -1,5 +1,12 @@
 # @fred/provider-google
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`d524cb7`](https://github.com/TheFancyRobot/fred/commit/d524cb723370088fc0eb3516ad621b41994f5aa4)]:
+  - @fancyrobot/fred@0.3.0
+
 ## 2.0.0
 
 ### Patch Changes
