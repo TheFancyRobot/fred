@@ -956,10 +956,21 @@ export class FredTuiApp {
 
     const itemLines = sidebarContent.lines.slice(1);
     this.repopulateScrollBox(this.sidebarItems, itemLines, (line, i) => {
+      const isSelected = line.startsWith('▸') || (this.state.commandPalette.isOpen && line.startsWith('>'));
+      const isFocused = this.state.focusedPane === 'sidebar';
+      let fg: string;
+      if (isSelected) {
+        fg = theme.accent.primary;
+      } else if (isFocused) {
+        fg = theme.fg.primary;
+      } else {
+        fg = theme.fg.dim;
+      }
       const text = new TextRenderable(r, {
         id: `sidebar-item-${i}`,
         content: line,
-        fg: this.state.focusedPane === 'sidebar' ? theme.fg.primary : theme.fg.dim,
+        fg,
+        attributes: isSelected ? TextAttributes.BOLD : 0,
       });
       text.selectable = false;
       return text;
