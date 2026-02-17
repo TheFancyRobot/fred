@@ -277,20 +277,24 @@ function splitMetricKey(key: string): { provider: string; model: string } {
 /**
  * Create ObservabilityService live implementation.
  */
+/**
+ * Parse a numeric environment variable, returning the fallback if the variable
+ * is unset or its value is not a valid number.
+ */
+const parseNumericEnv = (envKey: string, fallback: number): number => {
+  const raw = process.env[envKey];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
 export const ObservabilityServiceLive = Layer.effect(
   ObservabilityService,
   Effect.gen(function* () {
     // Get config from environment or use defaults.
-    // Guard against NaN from invalid env values by falling back to defaults.
-    const parsedSampleRate = Number(process.env.FRED_SAMPLE_RATE);
-    const parsedSlowThreshold = Number(process.env.FRED_SLOW_THRESHOLD_MS);
     const config: ObservabilityServiceConfig = {
-      successSampleRate: !Number.isNaN(parsedSampleRate) && process.env.FRED_SAMPLE_RATE !== undefined
-        ? parsedSampleRate
-        : 0.01,
-      slowThresholdMs: !Number.isNaN(parsedSlowThreshold) && process.env.FRED_SLOW_THRESHOLD_MS !== undefined
-        ? parsedSlowThreshold
-        : 5000,
+      successSampleRate: parseNumericEnv('FRED_SAMPLE_RATE', 0.01),
+      slowThresholdMs: parseNumericEnv('FRED_SLOW_THRESHOLD_MS', 5000),
       debugMode: process.env.FRED_DEBUG === 'true',
       hashPayloads: process.env.FRED_HASH_PAYLOADS !== 'false',
       serviceMetadata: {

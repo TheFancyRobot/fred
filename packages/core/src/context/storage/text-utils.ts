@@ -7,6 +7,7 @@
  */
 
 import type { Prompt } from '@effect/ai';
+import type { ConversationMetadata, SessionSummary } from '../context';
 
 /** Maximum character length for session preview text. */
 export const PREVIEW_MAX_LENGTH = 120;
@@ -66,4 +67,19 @@ export const extractMessagePreviewText = (message: Prompt.MessageEncoded): strin
   const text = normalizeWhitespace(extractMessageText(message));
   if (!text) return undefined;
   return truncateText(text, PREVIEW_MAX_LENGTH);
+};
+
+/** Extract agent id/name from conversation metadata, returning undefined when absent. */
+export const extractAgentMetadata = (
+  metadata: ConversationMetadata
+): SessionSummary['agent'] | undefined => {
+  const agentId = typeof metadata.agentId === 'string' ? metadata.agentId : undefined;
+  const agentName = typeof metadata.agentName === 'string' ? metadata.agentName : undefined;
+  const agent = (metadata as { agent?: { id?: unknown; name?: unknown } }).agent;
+
+  const id = agentId ?? (typeof agent?.id === 'string' ? agent.id : undefined);
+  const name = agentName ?? (typeof agent?.name === 'string' ? agent.name : undefined);
+
+  if (!id && !name) return undefined;
+  return { id, name };
 };

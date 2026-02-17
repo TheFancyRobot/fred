@@ -20,7 +20,7 @@ import {
   serializeMetadata,
   deserializeMetadata,
 } from './serialization';
-import { extractMessagePreviewText } from './text-utils';
+import { extractAgentMetadata, extractMessagePreviewText } from './text-utils';
 
 /**
  * Configuration options for SqliteContextStorage.
@@ -62,20 +62,6 @@ interface SessionRow {
   message_count: number;
   last_payload: string | null;
 }
-
-const extractAgentMetadata = (
-  metadata: ConversationMetadata
-): SessionSummary['agent'] | undefined => {
-  const agentId = typeof metadata.agentId === 'string' ? metadata.agentId : undefined;
-  const agentName = typeof metadata.agentName === 'string' ? metadata.agentName : undefined;
-  const agent = (metadata as { agent?: { id?: unknown; name?: unknown } }).agent;
-
-  const id = agentId ?? (typeof agent?.id === 'string' ? agent.id : undefined);
-  const name = agentName ?? (typeof agent?.name === 'string' ? agent.name : undefined);
-
-  if (!id && !name) return undefined;
-  return { id, name };
-};
 
 /**
  * SQLite-backed implementation of ContextStorage.
