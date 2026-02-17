@@ -1,12 +1,10 @@
 # @fred/cli
 
-## 0.3.0
-
-### Minor Changes
-
-- [#30](https://github.com/TheFancyRobot/fred/pull/30) [`6197d13`](https://github.com/TheFancyRobot/fred/commit/6197d130f10fa52ef2008effc0043c1b59158e86) Thanks [@sincspecv](https://github.com/sincspecv)! - Implemented portable TUI with session management for all fred projects
+## 0.2.2
 
 ### Patch Changes
+
+- [#30](https://github.com/TheFancyRobot/fred/pull/30) [`6197d13`](https://github.com/TheFancyRobot/fred/commit/6197d130f10fa52ef2008effc0043c1b59158e86) Thanks [@sincspecv](https://github.com/sincspecv)! - Implemented portable TUI with session management for all fred projects
 
 - Updated dependencies [[`6197d13`](https://github.com/TheFancyRobot/fred/commit/6197d130f10fa52ef2008effc0043c1b59158e86), [`d524cb7`](https://github.com/TheFancyRobot/fred/commit/d524cb723370088fc0eb3516ad621b41994f5aa4)]:
   - @fancyrobot/fred-groq@2.0.1
