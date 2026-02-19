@@ -14,7 +14,7 @@ import {
   type SyntaxStyle,
 } from '@opentui/core';
 import type { TuiTheme } from './theme.js';
-import type { TuiState } from './state.js';
+import type { TuiState, ToolBlockState } from './state.js';
 
 const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
 const INPUT_CURSOR_INDICATOR = '▍';
@@ -579,5 +579,239 @@ export function buildThinkingRenderable(
   text.selectable = false;
 
   container.add(text);
+  return container;
+}
+
+// ---------------------------------------------------------------------------
+// Tool block rendering with tree connectors
+// ---------------------------------------------------------------------------
+
+const TREE_INTERMEDIATE = '\u2502'; // | vertical line
+const TREE_LAST = '\u2514';        // corner
+const TREE_HORIZONTAL = '\u2500';   // horizontal
+
+const BRAILLE_SPINNER_FRAMES = [
+  '\u2807', '\u280B', '\u2819', '\u2838',
+  '\u2830', '\u2834', '\u281C', '\u280E',
+] as const;
+
+/**
+ * Generate a brief summary string from tool output.
+ * Truncates to ~60 chars for collapsed display.
+ */
+export function getToolBlockSummary(output: unknown): string {
+  if (output === undefined || output === null) {
+    return 'done';
+  }
+
+  if (typeof output === 'string') {
+    if (output.length === 0) return 'done';
+    return output.length <= 60 ? output : `${output.slice(0, 57)}...`;
+  }
+
+  if (Array.isArray(output)) {
+    return `${output.length} item${output.length === 1 ? '' : 's'}`;
+  }
+
+  if (typeof output === 'object') {
+    const obj = output as Record<string, unknown>;
+    if (typeof obj.length === 'number') return `${obj.length} items`;
+    if (typeof obj.count === 'number') return `${obj.count} items`;
+  }
+
+  const str = JSON.stringify(output);
+  return str.length <= 60 ? str : `${str.slice(0, 57)}...`;
+}
+
+/**
+ * Build a renderable for a single tool block with tree connector.
+ *
+ * @param renderer - CLI renderer
+ * @param theme - TUI theme
+ * @param block - Tool block state
+ * @param isLast - Whether this is the last block in the group
+ * @param id - Unique id suffix for renderables
+ * @param nowMs - Current time for spinner frame calculation
+ */
+export function buildToolBlockRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  block: ToolBlockState,
+  isLast: boolean,
+  id: string,
+  nowMs: number,
+): BoxRenderable {
+  // Determine connector color based on kind and status
+  let connectorColor: string;
+  if (block.status === 'errored') {
+    connectorColor = theme.message.errorAccent;
+  } else if (block.kind === 'task') {
+    connectorColor = theme.message.taskAccent;
+  } else {
+    connectorColor = theme.message.toolConnector;
+  }
+
+  const connectorChar = isLast
+    ? `${TREE_LAST}${TREE_HORIZONTAL} `
+    : `${TREE_INTERMEDIATE}${TREE_HORIZONTAL} `;
+
+  const container = new BoxRenderable(renderer, {
+    id: `tool-block-${id}`,
+    flexDirection: 'column',
+    paddingLeft: 2,
+    paddingRight: 2,
+  });
+
+  // Row: connector + summary
+  const row = new BoxRenderable(renderer, {
+    id: `tool-block-row-${id}`,
+    flexDirection: 'row',
+  });
+
+  const connector = new TextRenderable(renderer, {
+    id: `tool-connector-${id}`,
+    content: connectorChar,
+    fg: connectorColor,
+  });
+  connector.selectable = false;
+  row.add(connector);
+
+  // Build summary text based on status
+  let summaryContent: string;
+  let summaryFg: string;
+  let summaryAttributes = 0;
+
+  if (block.status === 'in-progress') {
+    const frameIndex = Math.floor(nowMs / 80) % BRAILLE_SPINNER_FRAMES.length;
+    const spinner = BRAILLE_SPINNER_FRAMES[frameIndex];
+    summaryContent = `${spinner} ${block.toolName}...`;
+    summaryFg = theme.fg.secondary;
+  } else if (block.status === 'errored') {
+    const errorMsg = block.error?.message ?? 'unknown error';
+    summaryContent = `${block.toolName} \u2014 error: ${errorMsg}`;
+    summaryFg = theme.message.errorAccent;
+  } else {
+    // Completed
+    const brief = getToolBlockSummary(block.output);
+    summaryContent = `${block.toolName} \u2014 ${brief}`;
+    summaryFg = theme.fg.dim;
+  }
+
+  const summary = new TextRenderable(renderer, {
+    id: `tool-summary-${id}`,
+    content: summaryContent,
+    fg: summaryFg,
+    attributes: summaryAttributes,
+  });
+  summary.selectable = false;
+  row.add(summary);
+  container.add(row);
+
+  // Expanded detail: show full output for non-in-progress blocks
+  if (block.expanded && block.status !== 'in-progress') {
+    const detailContent = block.status === 'errored'
+      ? (block.error?.message ?? 'unknown error')
+      : formatExpandedOutput(block.output);
+
+    if (detailContent) {
+      // Indentation to align with content after connector
+      const detailRow = new BoxRenderable(renderer, {
+        id: `tool-detail-row-${id}`,
+        flexDirection: 'row',
+        paddingLeft: 2,
+      });
+
+      // Spacing to align under the summary text (connector width)
+      const indent = new TextRenderable(renderer, {
+        id: `tool-detail-indent-${id}`,
+        content: isLast ? '   ' : `${TREE_INTERMEDIATE}  `,
+        fg: connectorColor,
+      });
+      indent.selectable = false;
+      detailRow.add(indent);
+
+      const detail = new TextRenderable(renderer, {
+        id: `tool-detail-${id}`,
+        content: detailContent,
+        fg: theme.fg.dim,
+        attributes: TextAttributes.DIM,
+      });
+      detail.selectable = false;
+      detailRow.add(detail);
+      container.add(detailRow);
+    }
+  }
+
+  return container;
+}
+
+/**
+ * Format expanded output for display (truncated JSON).
+ */
+function formatExpandedOutput(output: unknown): string {
+  if (output === undefined || output === null) return '';
+  if (typeof output === 'string') {
+    return output.length <= 200 ? output : `${output.slice(0, 197)}...`;
+  }
+  const str = JSON.stringify(output, null, 2);
+  return str.length <= 200 ? str : `${str.slice(0, 197)}...`;
+}
+
+/**
+ * Build a renderable for a group of tool blocks from the same message turn.
+ *
+ * If all blocks are completed and collapsed, shows a summary count line.
+ * Otherwise renders each block individually with tree connectors.
+ *
+ * @param renderer - CLI renderer
+ * @param theme - TUI theme
+ * @param blocks - Array of tool block states
+ * @param id - Unique id suffix
+ * @param nowMs - Current time for spinner frame calculation
+ * @returns BoxRenderable or null if no blocks
+ */
+export function buildToolGroupRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  blocks: ToolBlockState[],
+  id: string,
+  nowMs: number,
+): BoxRenderable | null {
+  if (blocks.length === 0) return null;
+
+  const container = new BoxRenderable(renderer, {
+    id: `tool-group-${id}`,
+    flexDirection: 'column',
+    marginBottom: 1,
+  });
+
+  // Parallel tool calls from same turn: if all collapsed and completed, show summary
+  const allCollapsed = blocks.every((b) => !b.expanded && b.status === 'completed');
+  if (blocks.length > 1 && allCollapsed) {
+    const countText = new TextRenderable(renderer, {
+      id: `tool-group-count-${id}`,
+      content: `  ${blocks.length} tools`,
+      fg: theme.fg.dim,
+    });
+    countText.selectable = false;
+    container.add(countText);
+    return container;
+  }
+
+  // Render each block individually
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const isLast = i === blocks.length - 1;
+    const blockRenderable = buildToolBlockRenderable(
+      renderer,
+      theme,
+      block,
+      isLast,
+      `${id}-${i}`,
+      nowMs,
+    );
+    container.add(blockRenderable);
+  }
+
   return container;
 }

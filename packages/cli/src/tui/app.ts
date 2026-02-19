@@ -49,6 +49,7 @@ import {
   completeToolCall,
   failToolCall,
   hasInProgressToolBlocks,
+  getToolBlocksForMessage,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -62,6 +63,7 @@ import {
   buildAssistantMessageRenderable,
   buildThinkingRenderable,
   buildStreamingCursorText,
+  buildToolGroupRenderable,
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
@@ -1331,6 +1333,9 @@ export class FredTuiApp {
     this.activeStreamingMdId = null;
 
     const syntaxStyle = this.syntaxStyle!;
+    const nowMs = Date.now();
+    // Track tool block group index: each group corresponds to a tool-calling step
+    let toolGroupIndex = 0;
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
@@ -1371,6 +1376,23 @@ export class FredTuiApp {
             this.activeStreamingMdId = `msg-assistant-md-${msgId}`;
           }
         }
+
+        // Append tool blocks for this assistant message if any exist
+        const toolBlocks = getToolBlocksForMessage(this.state, toolGroupIndex);
+        if (toolBlocks.length > 0) {
+          const toolGroup = buildToolGroupRenderable(
+            r,
+            theme,
+            toolBlocks,
+            `msg-${msgId}`,
+            nowMs,
+          );
+          if (toolGroup) {
+            this.transcriptContent.add(toolGroup);
+          }
+        }
+        toolGroupIndex++;
+        // NOTE: Manual expand/toggle for tool blocks could be added via keymap later
       } else {
         // System or other roles: render as plain text
         this.transcriptContent.add(
