@@ -10,6 +10,76 @@ import { spawn, spawnSync } from 'child_process';
 import * as readline from 'readline';
 import chokidar, { type FSWatcher } from 'chokidar';
 
+type FredCliLaunchTarget = {
+  entryPath: string;
+  args: string[];
+};
+
+export function resolveFredCliLaunchTarget(cwd = process.cwd()): FredCliLaunchTarget | null {
+  const packageRoot = resolve(cwd, 'node_modules', '@fancyrobot', 'fred-cli');
+  const packageJsonPath = resolve(packageRoot, 'package.json');
+  if (!existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+      bin?: string | Record<string, string>;
+      main?: string;
+    };
+
+    const binField = packageJson.bin;
+    const binPath = typeof binField === 'string'
+      ? binField
+      : binField?.fred;
+    const candidate = binPath ?? packageJson.main;
+
+    if (!candidate) {
+      return null;
+    }
+
+    const entryPath = resolve(packageRoot, candidate);
+    if (!existsSync(entryPath)) {
+      return null;
+    }
+
+    return {
+      entryPath,
+      args: ['chat'],
+    };
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function maybeLaunchFredCliTui(): boolean {
+  const launchTarget = resolveFredCliLaunchTarget();
+  if (!launchTarget) {
+    return false;
+  }
+
+  console.log('Detected @fancyrobot/fred-cli. Launching TUI...');
+
+  const child = spawn('bun', [launchTarget.entryPath, ...launchTarget.args], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
+
+  child.on('exit', (code) => {
+    process.exit(code ?? 0);
+  });
+
+  child.on('error', (error) => {
+    console.error('Failed to launch fred chat:', error);
+    process.exit(1);
+  });
+
+  return true;
+}
+
 /**
  * Development chat interface with hot reload
  * Maintains conversation context until terminal is closed
@@ -391,6 +461,8 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     process.exit(1);
     return false; // Unreachable
   }
+
+  return false;
 }
 
 /**
@@ -1442,14 +1514,17 @@ class DevChatRunner {
  * @param setupHook Optional function to call after Fred is initialized but before auto-agent creation
  */
 export function startDevChat(setupHook?: (fred: Fred) => Promise<void>): void {
+  if (maybeLaunchFredCliTui()) {
+    return;
+  }
   const runner = new DevChatRunner(setupHook);
 
-  const program = Effect.gen(function* () {
-    yield* Effect.acquireRelease(
+  const program = Effect.scoped(
+    Effect.acquireRelease(
       Effect.promise(() => runner.start()),
       () => Effect.promise(() => runner.cleanup())
-    );
-  });
+    )
+  );
 
   BunRuntime.runMain(program);
   // Note: runMain never returns - it runs until interrupted
@@ -1458,14 +1533,16 @@ export function startDevChat(setupHook?: (fred: Fred) => Promise<void>): void {
 // Run if this is the main module
 // @ts-ignore - Bun global
 if (import.meta.main) {
-  const runner = new DevChatRunner();
+  if (!maybeLaunchFredCliTui()) {
+    const runner = new DevChatRunner();
 
-  const program = Effect.gen(function* () {
-    yield* Effect.acquireRelease(
-      Effect.promise(() => runner.start()),
-      () => Effect.promise(() => runner.cleanup())
+    const program = Effect.scoped(
+      Effect.acquireRelease(
+        Effect.promise(() => runner.start()),
+        () => Effect.promise(() => runner.cleanup())
+      )
     );
-  });
 
-  BunRuntime.runMain(program);
+    BunRuntime.runMain(program);
+  }
 }
