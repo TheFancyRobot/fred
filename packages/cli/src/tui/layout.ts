@@ -80,6 +80,13 @@ export interface PaneContent {
   focusIndicator?: string;
 }
 
+export interface SidebarContent extends PaneContent {
+  sessionsHeader: string;
+  sessionsLines: string[];
+  metadataHeader: string;
+  metadataLines: string[];
+}
+
 export interface TranscriptPaneContent extends PaneContent {
   totalLines: number;
   scrollOffset: number;
@@ -130,19 +137,24 @@ export function renderInputContent(
 /**
  * Generate sidebar content
  */
-export function renderSidebarContent(state: TuiState, focused: boolean): PaneContent {
+export function renderSidebarContent(state: TuiState, focused: boolean): SidebarContent {
   if (state.deleteConfirm.isOpen) {
     const title = state.deleteConfirm.title ?? '(untitled)';
+    const lines = [
+      '[Delete Session]',
+      '',
+      'Are you sure you want to delete:',
+      `"${title}"`,
+      '',
+      'Enter/Y: delete',
+      'Esc/N: cancel',
+    ];
     return {
-      lines: [
-        '[Delete Session]',
-        '',
-        'Are you sure you want to delete:',
-        `"${title}"`,
-        '',
-        'Enter/Y: delete',
-        'Esc/N: cancel',
-      ],
+      lines,
+      sessionsHeader: lines[0] ?? '[Delete Session]',
+      sessionsLines: lines.slice(1),
+      metadataHeader: '',
+      metadataLines: [],
       focusIndicator: focused ? '>' : undefined,
     };
   }
@@ -156,13 +168,18 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
       })
       : ['(no matching actions)'];
 
+    const lines = [
+      '[Command Palette]',
+      `Search: ${state.commandPalette.query || '(type to filter)'}`,
+      '',
+      ...paletteLines,
+    ];
     return {
-      lines: [
-        '[Command Palette]',
-        `Search: ${state.commandPalette.query || '(type to filter)'}`,
-        '',
-        ...paletteLines,
-      ],
+      lines,
+      sessionsHeader: lines[0] ?? '[Command Palette]',
+      sessionsLines: lines.slice(1),
+      metadataHeader: '',
+      metadataLines: [],
       focusIndicator: focused ? '>' : undefined,
     };
   }
@@ -199,21 +216,29 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
         return [
           truncate(`${marker} ${title}`),
           truncate(`  ${updated}`),
-          '',
         ];
       })
     : [truncate('(empty)')];
 
   const outputTokenCount = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
-  const metadataLines = [
+  const metadataLinesRaw = [
     `Sessions: ${items.length}`,
     `Model: ${state.telemetry.model || '--'}`,
     `Tokens: in ${state.telemetry.inputTokenCount} / out ${outputTokenCount}`,
   ].map(truncate);
 
+  const sessionsLines = sessionsCollapsed
+    ? []
+    : [
+        newSessionLineDisplay,
+        ...(items.length > 0 ? [''] : []),
+        ...sessionLines,
+      ];
+  const metadataLines = metadataCollapsed ? [] : metadataLinesRaw;
+
   const lines = [sessionsHeader];
   if (!sessionsCollapsed) {
-    lines.push(newSessionLineDisplay, '', ...sessionLines);
+    lines.push(...sessionsLines);
   }
   lines.push('');
   lines.push(metadataHeader);
@@ -223,6 +248,10 @@ export function renderSidebarContent(state: TuiState, focused: boolean): PaneCon
 
   return {
     lines,
+    sessionsHeader,
+    sessionsLines,
+    metadataHeader,
+    metadataLines,
     focusIndicator: focused ? '>' : undefined,
   };
 }

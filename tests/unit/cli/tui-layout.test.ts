@@ -66,6 +66,20 @@ describe('TUI Layout', () => {
       expect(content.lines.join('\n')).toContain('  12:00');
       expect(content.lines.join('\n')).toContain('  11:00');
       expect(content.lines.join('\n')).toContain('Sessions: 2');
+      expect(content.lines.join('\n')).toContain('Model:');
+      expect(content.lines.join('\n')).toContain('Tokens: in');
+    });
+
+    test('collapsing sessions keeps metadata anchored header and avoids extra gaps', () => {
+      const state = createInitialTuiState();
+      state.sidebar.sections.sessionsCollapsed = true;
+
+      const content = renderSidebarContent(state, false);
+
+      expect(content.lines[0]).toBe('▶ Sessions');
+      expect(content.lines[1]).toBe('');
+      expect(content.lines[2]).toBe('▼ Metadata');
+      expect(content.lines).not.toContain('+ New Session (Enter)');
     });
 
     test('highlights new session action when selected', () => {
