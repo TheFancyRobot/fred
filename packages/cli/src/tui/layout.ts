@@ -205,12 +205,42 @@ export function renderSidebarContent(state: TuiState, focused: boolean): Sidebar
   const truncate = (value: string): string => value.length > maxLineLength
     ? `${value.slice(0, Math.max(0, maxLineLength - 1)).trimEnd()}…`
     : value;
+  const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
+  const resolveSessionTitle = (item: (typeof items)[number]): string => {
+    const directTitle = item.title ? normalizeWhitespace(item.title) : '';
+    if (directTitle) {
+      return directTitle;
+    }
+
+    const previewTitle = item.preview ? normalizeWhitespace(item.preview) : '';
+    if (previewTitle) {
+      return previewTitle;
+    }
+
+    const transcript = state.sessions.transcripts[item.id];
+    if (transcript?.messages?.length) {
+      const firstUser = transcript.messages.find((message) => message.role === 'user');
+      const firstMessage = firstUser ?? transcript.messages[0];
+      if (firstMessage) {
+        const snippet = normalizeWhitespace(firstMessage.content);
+        if (snippet) {
+          return snippet;
+        }
+      }
+    }
+
+    return '(untitled)';
+  };
+
+  const renderEmptySessionsLine = (): string => {
+    return sessionsCollapsed || metadataCollapsed ? '(empty)' : '  (empty)';
+  };
 
   const sessionLines = items.length > 0
     ? items.flatMap((item, index) => {
         const isSelected = index === selectedSessionIndex;
         const marker = isSelected ? '▸' : ' ';
-        const title = item.title ?? '(untitled)';
+        const title = resolveSessionTitle(item);
         const updated = formatUpdatedTime(item.updatedAt);
 
         return [
@@ -218,7 +248,7 @@ export function renderSidebarContent(state: TuiState, focused: boolean): Sidebar
           truncate(`  ${updated}`),
         ];
       })
-    : [truncate('(empty)')];
+    : [truncate(renderEmptySessionsLine())];
 
   const outputTokenCount = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
   const metadataLinesRaw = [
@@ -227,20 +257,16 @@ export function renderSidebarContent(state: TuiState, focused: boolean): Sidebar
     `Tokens: in ${state.telemetry.inputTokenCount} / out ${outputTokenCount}`,
   ].map(truncate);
 
-  const sessionsLines = sessionsCollapsed
-    ? []
-    : [
-        newSessionLineDisplay,
-        ...(items.length > 0 ? [''] : []),
-        ...sessionLines,
-      ];
+  const sessionsLines = sessionsCollapsed ? [] : [newSessionLineDisplay, ...sessionLines];
   const metadataLines = metadataCollapsed ? [] : metadataLinesRaw;
 
   const lines = [sessionsHeader];
   if (!sessionsCollapsed) {
     lines.push(...sessionsLines);
   }
-  lines.push('');
+  if (!sessionsCollapsed || !metadataCollapsed) {
+    lines.push('');
+  }
   lines.push(metadataHeader);
   if (!metadataCollapsed) {
     lines.push(...metadataLines);

@@ -30,8 +30,9 @@ describe('TUI Layout', () => {
 
       expect(content.lines).toContain('▼ Sessions');
       expect(content.lines).toContain('▼ Metadata');
-      expect(content.lines).toContain('(empty)');
+      expect(content.lines).toContain('  (empty)');
       expect(content.lines).toContain('▸ + New Session (Enter)');
+      expect(content.lines).not.toContain('(empty)');
     });
 
     test('renders sidebar with items', () => {
@@ -80,6 +81,18 @@ describe('TUI Layout', () => {
       expect(content.lines[1]).toBe('');
       expect(content.lines[2]).toBe('▼ Metadata');
       expect(content.lines).not.toContain('+ New Session (Enter)');
+      expect(content.lines).not.toContain('  (empty)');
+    });
+
+    test('collapsed metadata keeps session empty state aligned', () => {
+      const state = createInitialTuiState();
+      state.sidebar.sections.metadataCollapsed = true;
+
+      const content = renderSidebarContent(state, false);
+
+      expect(content.lines).toContain('▼ Sessions');
+      expect(content.lines).toContain('(empty)');
+      expect(content.lines).toContain('▶ Metadata');
     });
 
     test('highlights new session action when selected', () => {
