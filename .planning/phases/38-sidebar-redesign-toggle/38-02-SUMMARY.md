@@ -12,6 +12,8 @@ provides:
   - Sidebar metadata rendered only in footer without duplication
   - Sidebar layout spans window edges with zero outer padding
   - Collapsed sidebar spacing normalized across sections
+  - Session switching reloads transcripts when available
+  - Composer input accepts uppercase keystrokes with cursor indicator
 affects: [tui-ux]
 
 # Tech tracking
@@ -24,7 +26,9 @@ key-files:
   modified:
     - packages/cli/src/tui/app.ts
     - packages/cli/src/tui/layout.ts
+    - packages/cli/src/tui/keymap.ts
     - tests/unit/cli/tui-layout.test.ts
+    - tests/unit/cli/tui-keymap.test.ts
 
 key-decisions:
   - "Render metadata in a footer region to keep it bottom-aligned regardless of session list length"
@@ -39,15 +43,15 @@ completed: 2026-02-19
 
 # Phase 38 Plan 02: Sidebar Redesign Toggle Summary
 
-**Sidebar metadata renders once in the footer with edge-to-edge layout and clean collapse spacing.**
+**Sidebar metadata renders once in the footer with edge-to-edge layout, clean collapse spacing, reliable session switching, and a visible input cursor.**
 
 ## Performance
 
 - **Duration:** 32 min
 - **Started:** 2026-02-19T03:07:44Z
-- **Completed:** 2026-02-19T03:39:35Z
-- **Tasks:** 8
-- **Files modified:** 5
+- **Completed:** 2026-02-19T06:26:08Z
+- **Tasks:** 10
+- **Files modified:** 7
 
 ## Accomplishments
 - Removed duplicate metadata rendering when sessions are collapsed.
@@ -56,6 +60,9 @@ completed: 2026-02-19
 - Normalized collapsed spacing for sessions and metadata to remove misaligned gaps.
 - Ensured full-height sidebar layout keeps metadata pinned to the bottom.
 - Resolved session titles from metadata/preview snippets before loading transcripts.
+- Restored transcript loading on session navigation and aligned composer width to transcript column.
+- Fixed uppercase keystrokes in the input composer.
+- Added a minimal cursor indicator to the input composer.
 
 ## Task Commits
 
@@ -69,6 +76,9 @@ Each task was committed atomically:
 6. **Task 6: Anchor sidebar metadata footer** - `fc295d3` (fix)
 7. **Task 7: Align collapsed spacing and resolve titles** - `d123793` (fix)
 8. **Task 8: Remove metadata duplication and flush layout** - `475776a` (fix)
+9. **Task 9: Restore session switching and layout sizing** - `104a037` (fix)
+10. **Task 10: Fix input uppercase typing** - `6304a16` (fix)
+11. **Task 11: Restore input cursor indicator** - `2525156` (fix)
 
 **Plan metadata:** `80ffefc` (docs, prior execution)
 
@@ -76,6 +86,8 @@ Each task was committed atomically:
 - `packages/cli/src/tui/layout.ts` - Keep metadata out of session lines and remove outer padding.
 - `packages/cli/src/tui/app.ts` - Avoid rendering footer metadata in the scrollbox.
 - `tests/unit/cli/tui-layout.test.ts` - Assert footer metadata and session-only lines.
+- `packages/cli/src/tui/keymap.ts` - Preserve shifted character input in the composer.
+- `tests/unit/cli/tui-keymap.test.ts` - Cover uppercase input events.
 
 ## Decisions Made
 - Render metadata in a footer region so it stays bottom-aligned.
@@ -124,10 +136,34 @@ Each task was committed atomically:
 - **Verification:** bun test tests/unit/cli/tui-layout.test.ts
 - **Commit:** 475776a
 
+**6. [Rule 1 - Bug] Session switching stopped loading transcript messages**
+- **Found during:** Task 9 (Restore session switching and layout sizing)
+- **Issue:** After first session load, navigating to another session did not fetch transcript messages, leaving the transcript empty.
+- **Fix:** Load transcript on session navigation when message counts indicate stored content.
+- **Files modified:** packages/cli/src/tui/app.ts
+- **Verification:** bun test tests/unit/cli/tui-app.test.ts
+- **Commit:** 104a037
+
+**7. [Rule 1 - Bug] Uppercase typing dropped in input**
+- **Found during:** Task 10 (Fix input uppercase typing)
+- **Issue:** Shifted characters arrived as lowercase names, so uppercase input never rendered.
+- **Fix:** Use key sequences to preserve shifted characters with a fallback to uppercasing when Shift is held.
+- **Files modified:** packages/cli/src/tui/keymap.ts, tests/unit/cli/tui-keymap.test.ts
+- **Verification:** bun test tests/unit/cli/tui-keymap.test.ts
+- **Commit:** 6304a16
+
+**8. [Rule 1 - Bug] Input cursor indicator missing**
+- **Found during:** Task 11 (Restore input cursor indicator)
+- **Issue:** Composer rendered without a cursor marker, making input position unclear.
+- **Fix:** Inject a minimal inline cursor glyph in focused input rendering (including placeholder).
+- **Files modified:** packages/cli/src/tui/layout.ts, tests/unit/cli/tui-layout.test.ts
+- **Verification:** bun test tests/unit/cli/tui-layout.test.ts
+- **Commit:** 2525156
+
 ---
 
-**Total deviations:** 5 auto-fixed (5 bug)
-**Impact on plan:** All fixes required for correct footer rendering, edge-to-edge layout, and spacing. No scope creep.
+**Total deviations:** 8 auto-fixed (8 bug)
+**Impact on plan:** All fixes required for correct sidebar layout, session switching, spacing, and input behavior. No scope creep.
 
 ## Issues Encountered
 None.
@@ -136,7 +172,7 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
-Sidebar layout polish is ready for final verification.
+Pending human verification of sidebar changes, uppercase input handling, and cursor visibility.
 
 ---
 *Phase: 38-sidebar-redesign-toggle*
