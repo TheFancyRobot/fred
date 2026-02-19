@@ -117,6 +117,7 @@ export class FredTuiApp {
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
+  private sidebarFooter!: TextRenderable;
   private sidebarItems!: ScrollBoxRenderable;
   private transcriptContent!: ScrollBoxRenderable;
   private inputText!: TextRenderable;
@@ -335,6 +336,7 @@ export class FredTuiApp {
     this.sidebarBox = new BoxRenderable(r, {
       id: 'sidebar',
       width: DEFAULT_LAYOUT.sidebarWidth,
+      height: '100%',
       flexDirection: 'column',
       backgroundColor: theme.bg.elevated,
       padding: 1,
@@ -346,6 +348,7 @@ export class FredTuiApp {
       attributes: TextAttributes.BOLD,
       fg: theme.accent.primary,
     });
+    this.sidebarTitle.selectable = false;
 
     this.sidebarItems = new ScrollBoxRenderable(r, {
       id: 'sidebar-items',
@@ -355,8 +358,16 @@ export class FredTuiApp {
     });
     this.sidebarItems.selectable = false;
 
+    this.sidebarFooter = new TextRenderable(r, {
+      id: 'sidebar-footer',
+      content: '',
+      fg: theme.fg.dim,
+    });
+    this.sidebarFooter.selectable = false;
+
     this.sidebarBox.add(this.sidebarTitle);
     this.sidebarBox.add(this.sidebarItems);
+    this.sidebarBox.add(this.sidebarFooter);
 
     // Transcript
     this.transcriptBox = new BoxRenderable(r, {
@@ -978,9 +989,11 @@ export class FredTuiApp {
       this.state,
       this.state.focusedPane === 'sidebar'
     );
-    const sidebarHeader = sidebarContent.lines[0] ?? '[Sessions]';
+    const sidebarHeader = sidebarContent.sessionsHeader || sidebarContent.lines[0] || '[Sessions]';
 
-    const itemLines = sidebarContent.lines.slice(1);
+    const itemLines = sidebarContent.sessionsLines.length > 0
+      ? sidebarContent.sessionsLines
+      : sidebarContent.lines.slice(1);
     this.repopulateScrollBox(this.sidebarItems, itemLines, (line, i) => {
       const isSelected = line.startsWith('▸') || (this.state.commandPalette.isOpen && line.startsWith('>'));
       const isFocused = this.state.focusedPane === 'sidebar';
@@ -1009,6 +1022,17 @@ export class FredTuiApp {
       sidebarHeader,
       this.state.focusedPane === 'sidebar' ? theme.accent.primary : theme.fg.dim,
       TextAttributes.BOLD,
+    );
+
+    const footerContent = sidebarContent.metadataHeader
+      ? [sidebarContent.metadataHeader, ...sidebarContent.metadataLines].filter(Boolean).join('\n')
+      : '';
+    this.sidebarFooter = this.rebuildText(
+      this.sidebarFooter,
+      'sidebar-footer',
+      footerContent,
+      this.state.focusedPane === 'sidebar' ? theme.fg.primary : theme.fg.dim,
+      footerContent.length > 0 ? TextAttributes.BOLD : 0,
     );
 
     // Transcript content
@@ -1152,8 +1176,22 @@ export class FredTuiApp {
     fg: string,
     attributes: number,
   ): TextRenderable {
+    const sidebarTitle = this.sidebarBox.getRenderable('sidebar-title');
     const sidebarItems = this.sidebarBox.getRenderable('sidebar-items');
+    const sidebarFooter = this.sidebarBox.getRenderable('sidebar-footer');
+
+    if (sidebarTitle) {
+      this.sidebarBox.remove('sidebar-title');
+    }
+    if (sidebarItems) {
+      this.sidebarBox.remove('sidebar-items');
+    }
+    if (sidebarFooter) {
+      this.sidebarBox.remove('sidebar-footer');
+    }
+
     existing.destroy();
+
     const newText = new TextRenderable(this.renderer, {
       id,
       content,
@@ -1161,11 +1199,20 @@ export class FredTuiApp {
       attributes,
     });
     newText.selectable = false;
-    this.sidebarBox.add(newText);
+
+    const nextTitle = id === 'sidebar-title' ? newText : sidebarTitle;
+    const nextFooter = id === 'sidebar-footer' ? newText : sidebarFooter;
+
+    if (nextTitle) {
+      this.sidebarBox.add(nextTitle);
+    }
     if (sidebarItems) {
-      this.sidebarBox.remove('sidebar-items');
       this.sidebarBox.add(sidebarItems);
     }
+    if (nextFooter) {
+      this.sidebarBox.add(nextFooter);
+    }
+
     return newText;
   }
 
