@@ -69,7 +69,11 @@ Plans:
   1. Assistant messages render with muted/dimmer styling visually distinct from user messages
   2. Tool calls and task results render as inline expandable blocks with `└` tree connectors
   3. Active streaming content uses a distinct accent color (orange/amber) that changes to normal on completion
-**Plans**: TBD (research required)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 39-01-PLAN.md — Theme tokens + renderable-based message styling with streaming accent
+- [ ] 39-02-PLAN.md — Tool block state, event forwarding, and tree connector rendering
 
 ### Phase 40: Input & Status Bar Polish
 **Goal**: Minimize input chrome and polish status bar with compact keyboard shortcut badges
@@ -90,7 +94,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
-| 39. Transcript & Message Rendering | 0/? | Pending | - |
+| 39. Transcript & Message Rendering | 0/2 | In Progress | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
 ---
@@ -120,4 +124,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-19 - Phase 38 complete (2/2 plans), Phase 39 next*
+*Last updated: 2026-02-19 - Phase 39 planned (2 plans), ready for execution*
