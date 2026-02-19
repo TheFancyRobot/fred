@@ -8,6 +8,7 @@
 import type { TuiState } from './state.js';
 
 const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
+const INPUT_CURSOR_INDICATOR = '▍';
 
 interface StatusRenderOptions {
   maxWidth?: number;
@@ -97,10 +98,31 @@ export interface InputPaneContent extends PaneContent {
   height: number;
 }
 
-function formatComposerLines(text: string, maxVisibleLines: number): string[] {
+function formatComposerLines(text: string, maxVisibleLines: number, cursorPosition: number, focused: boolean): string[] {
   const lines = text.split('\n');
-  const visible = lines.slice(Math.max(0, lines.length - maxVisibleLines));
-  return visible.map((line, index) => `${index === 0 ? '> ' : '  '}${line}`);
+  const startIndex = Math.max(0, lines.length - maxVisibleLines);
+  const visible = lines.slice(startIndex);
+  const cursorLocation = focused ? getCursorLocation(text, cursorPosition) : null;
+
+  return visible.map((line, index) => {
+    const prefix = index === 0 ? '> ' : '  ';
+    const lineIndex = startIndex + index;
+    if (!cursorLocation || cursorLocation.line !== lineIndex) {
+      return `${prefix}${line}`;
+    }
+
+    const clampedCol = Math.max(0, Math.min(line.length, cursorLocation.column));
+    const withCursor = `${line.slice(0, clampedCol)}${INPUT_CURSOR_INDICATOR}${line.slice(clampedCol)}`;
+    return `${prefix}${withCursor}`;
+  });
+}
+
+function getCursorLocation(text: string, cursorPosition: number): { line: number; column: number } {
+  const bounded = Math.max(0, Math.min(text.length, cursorPosition));
+  const beforeCursor = text.slice(0, bounded).split('\n');
+  const line = Math.max(0, beforeCursor.length - 1);
+  const column = beforeCursor[beforeCursor.length - 1]?.length ?? 0;
+  return { line, column };
 }
 
 export function renderInputContent(
@@ -110,8 +132,13 @@ export function renderInputContent(
 ): InputPaneContent {
   const hasInput = state.input.text.length > 0;
   const composerLines = hasInput
-    ? formatComposerLines(state.input.text, DEFAULT_LAYOUT.inputMaxVisibleLines)
-    : [`> ${placeholder}`];
+    ? formatComposerLines(
+        state.input.text,
+        DEFAULT_LAYOUT.inputMaxVisibleLines,
+        state.input.cursorPosition,
+        focused,
+      )
+    : [`> ${focused ? `${INPUT_CURSOR_INDICATOR}${placeholder}` : placeholder}`];
   const slashHint = state.input.slashSearch.isActive
     ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex]?.plugin
     : null;

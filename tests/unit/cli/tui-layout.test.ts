@@ -161,8 +161,17 @@ describe('TUI Layout', () => {
       const state = createInitialTuiState();
       const content = renderInputContent(state, true, 'Type a message...');
 
-      expect(content.lines[0]).toBe('> Type a message...');
+      expect(content.lines[0]).toBe('> ▍Type a message...');
       expect(content.lines[0]).not.toContain('Enter send');
+    });
+
+    test('renders cursor indicator inline for input text when focused', () => {
+      const state = createInitialTuiState();
+      state.input.text = 'hello';
+      state.input.cursorPosition = 2;
+
+      const content = renderInputContent(state, true, 'Type a message...');
+      expect(content.lines[0]).toBe('> he▍llo');
     });
 
     test('renders command palette content in sidebar mode', () => {
