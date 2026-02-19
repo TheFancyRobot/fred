@@ -10,6 +10,8 @@ import {
   BoxRenderable,
   TextRenderable,
   ScrollBoxRenderable,
+  MarkdownRenderable,
+  SyntaxStyle,
   TextAttributes,
   type KeyEvent,
   type CliRenderer,
@@ -51,6 +53,11 @@ import {
   renderInputContent,
   selectInputPlaceholder,
   renderStatusContent,
+  getTranscriptMessages,
+  buildUserMessageRenderable,
+  buildAssistantMessageRenderable,
+  buildThinkingRenderable,
+  buildStreamingCursorText,
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
@@ -133,6 +140,11 @@ export class FredTuiApp {
   private previousStreamingState = false;
   private awaitingStartupResumeSelection = false;
 
+  // Renderable-based transcript state
+  private syntaxStyle: SyntaxStyle | null = null;
+  private activeStreamingMdId: string | null = null;
+  private lastRenderedMessageCount = 0;
+
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
 
@@ -160,6 +172,7 @@ export class FredTuiApp {
       },
     });
     this.sessionService = config.sessionService;
+    this.syntaxStyle = SyntaxStyle.create();
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
     }
@@ -385,6 +398,8 @@ export class FredTuiApp {
     this.transcriptContent = new ScrollBoxRenderable(r, {
       id: 'transcript-content',
       flexGrow: 1,
+      stickyScroll: true,
+      stickyStart: 'bottom',
       onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
@@ -1077,73 +1092,7 @@ export class FredTuiApp {
     );
 
     // Transcript content
-    const transcriptData = renderTranscriptContent(
-      this.state,
-      this.state.focusedPane === 'transcript',
-      {
-        maxWidth: Math.max(
-          20,
-          this.getRendererWidth()
-            - (this.state.sidebar.isVisible ? (DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.regionGap) : 0)
-            - (DEFAULT_LAYOUT.outerPadding * 2)
-            - 4, // transcript inner padding (1 each side) + small margin
-        ),
-      },
-    );
-
-    if (
-      this.state.transcript.viewport.totalLines !== transcriptData.totalLines
-      || this.state.transcript.viewport.scrollOffset !== transcriptData.scrollOffset
-      || this.state.transcript.viewport.pinnedToBottom !== transcriptData.pinnedToBottom
-    ) {
-      this.state = {
-        ...this.state,
-        transcript: {
-          ...this.state.transcript,
-          viewport: {
-            ...this.state.transcript.viewport,
-            totalLines: transcriptData.totalLines,
-            scrollOffset: transcriptData.scrollOffset,
-            pinnedToBottom: transcriptData.pinnedToBottom,
-          },
-        },
-      };
-    }
-
-    this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
-      const isRoleLabel = line.endsWith(':') && (line === 'user:' || line === 'assistant:');
-      const isStartupChooserLine = this.state.startup.chooser.isOpen;
-      const isStartupHeader = isStartupChooserLine && i === 0;
-      const isStartupWarning = isStartupChooserLine && line.startsWith('warning:');
-      const isStartupSelectedOption = isStartupChooserLine && line.startsWith('>> ');
-      const isStartupInstruction = isStartupChooserLine && line.startsWith('Use Up/Down');
-
-      let fg = isRoleLabel
-        ? theme.accent.primary
-        : (this.state.focusedPane === 'transcript' ? theme.fg.primary : theme.fg.secondary);
-      let attributes = isRoleLabel ? TextAttributes.BOLD : 0;
-
-      if (isStartupHeader) {
-        fg = theme.accent.primary;
-        attributes = TextAttributes.BOLD;
-      } else if (isStartupSelectedOption) {
-        fg = theme.status.success;
-        attributes = TextAttributes.BOLD;
-      } else if (isStartupWarning) {
-        fg = theme.status.warn;
-      } else if (isStartupInstruction) {
-        fg = theme.fg.secondary;
-      }
-
-      const text = new TextRenderable(r, {
-        id: `transcript-line-${i}`,
-        content: line,
-        fg,
-        attributes,
-      });
-      text.selectable = true;
-      return text;
-    });
+    this.syncTranscriptToUI(r, theme);
 
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
@@ -1202,6 +1151,158 @@ export class FredTuiApp {
 
     // Border highlighting for focused pane
     this.updateBorderFocus();
+  }
+
+  /**
+   * Sync transcript pane to renderables.
+   *
+   * For startup chooser and empty state, uses the legacy string-line path.
+   * For normal messages, builds per-message renderables with distinct styling.
+   * During streaming, updates the active MarkdownRenderable content in place.
+   */
+  private syncTranscriptToUI(r: CliRenderer, theme: typeof DEFAULT_TUI_THEME): void {
+    const messages = getTranscriptMessages(this.state);
+    const isStartupChooser = this.state.startup.chooser.isOpen;
+    const isEmpty = messages.length === 0;
+
+    // Startup chooser and empty state: use legacy string-line path
+    if (isStartupChooser || isEmpty) {
+      this.activeStreamingMdId = null;
+      this.lastRenderedMessageCount = 0;
+
+      const transcriptData = renderTranscriptContent(
+        this.state,
+        this.state.focusedPane === 'transcript',
+      );
+
+      this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
+        const isStartupHeader = isStartupChooser && i === 0;
+        const isStartupWarning = isStartupChooser && line.startsWith('warning:');
+        const isStartupSelectedOption = isStartupChooser && line.startsWith('>> ');
+        const isStartupInstruction = isStartupChooser && line.startsWith('Use Up/Down');
+
+        let fg = this.state.focusedPane === 'transcript' ? theme.fg.primary : theme.fg.secondary;
+        let attributes = 0;
+
+        if (isStartupHeader) {
+          fg = theme.accent.primary;
+          attributes = TextAttributes.BOLD;
+        } else if (isStartupSelectedOption) {
+          fg = theme.status.success;
+          attributes = TextAttributes.BOLD;
+        } else if (isStartupWarning) {
+          fg = theme.status.warn;
+        } else if (isStartupInstruction) {
+          fg = theme.fg.secondary;
+        }
+
+        const text = new TextRenderable(r, {
+          id: `transcript-line-${i}`,
+          content: line,
+          fg,
+          attributes,
+        });
+        text.selectable = true;
+        return text;
+      });
+      return;
+    }
+
+    // Streaming incremental update: update existing MarkdownRenderable in place
+    if (
+      this.activeStreamingMdId
+      && this.state.streaming.isStreaming
+      && messages.length === this.lastRenderedMessageCount
+      && messages.length > 0
+      && messages[messages.length - 1].role === 'assistant'
+    ) {
+      const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (existingMd && existingMd instanceof MarkdownRenderable) {
+        const lastMsg = messages[messages.length - 1];
+        existingMd.content = lastMsg.content + buildStreamingCursorText();
+        return;
+      }
+    }
+
+    // Full rebuild: clear and rebuild all message renderables
+    const children = this.transcriptContent.getChildren();
+    for (const child of children) {
+      this.transcriptContent.remove(child.id);
+    }
+    this.activeStreamingMdId = null;
+
+    const syntaxStyle = this.syntaxStyle!;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const msgId = String(i);
+      const isLastMessage = i === messages.length - 1;
+      const isStreamingThis = isLastMessage && this.state.streaming.isStreaming && msg.role === 'assistant';
+
+      if (msg.role === 'user') {
+        this.transcriptContent.add(
+          buildUserMessageRenderable(r, theme, msg.content, msgId),
+        );
+      } else if (msg.role === 'assistant') {
+        // Detect thinking blocks
+        const isThinking = msg.content.startsWith('<thinking>');
+
+        if (isThinking) {
+          // Extract thinking content (strip tags)
+          const thinkingContent = msg.content
+            .replace(/^<thinking>\s*/, '')
+            .replace(/\s*<\/thinking>\s*$/, '');
+          this.transcriptContent.add(
+            buildThinkingRenderable(r, theme, thinkingContent, msgId),
+          );
+        } else {
+          const displayContent = isStreamingThis
+            ? msg.content + buildStreamingCursorText()
+            : msg.content;
+          const renderable = buildAssistantMessageRenderable(
+            r,
+            theme,
+            displayContent,
+            msgId,
+            { streaming: isStreamingThis, syntaxStyle },
+          );
+          this.transcriptContent.add(renderable);
+
+          if (isStreamingThis) {
+            this.activeStreamingMdId = `msg-assistant-md-${msgId}`;
+          }
+        }
+      } else {
+        // System or other roles: render as plain text
+        this.transcriptContent.add(
+          buildUserMessageRenderable(r, theme, msg.content, msgId),
+        );
+      }
+    }
+
+    this.lastRenderedMessageCount = messages.length;
+
+    // Handle streaming-to-complete transition: remove streaming accent
+    if (!this.state.streaming.isStreaming && this.activeStreamingMdId) {
+      const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (md && md instanceof MarkdownRenderable) {
+        md.streaming = false;
+        md.fg = theme.fg.primary;
+        // Remove cursor character from content
+        if (md.content.toString().endsWith(buildStreamingCursorText())) {
+          md.content = md.content.toString().slice(0, -1);
+        }
+      }
+      this.activeStreamingMdId = null;
+    }
+
+    // Handle streaming error: switch to error accent
+    if (this.state.streaming.lastError && this.activeStreamingMdId) {
+      const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (md && md instanceof MarkdownRenderable) {
+        md.fg = theme.message.errorAccent;
+      }
+    }
   }
 
   /**
@@ -1324,6 +1425,8 @@ export class FredTuiApp {
     if (!this.running) return;
     this.running = false;
     this.streamingController.stop();
+    this.syntaxStyle?.destroy();
+    this.syntaxStyle = null;
     this.renderer.destroy();
     this.events.onQuit?.();
   }
