@@ -52,6 +52,27 @@ export interface TuiTheme {
     /** Error — error messages, failure states */
     error: string;
   };
+  /** Message-specific semantic tokens for transcript rendering */
+  message: {
+    /** User message left border color */
+    userBorder: string;
+    /** User message background (alias for bg.base) */
+    userBg: string;
+    /** Assistant message background (alias for bg.surface) */
+    assistantBg: string;
+    /** Code block background (one step above surface) */
+    codeBg: string;
+    /** Thinking block text (heavily dimmed) */
+    thinkingFg: string;
+    /** Streaming accent foreground (warm amber) */
+    streamingFg: string;
+    /** Tool block tree connector color (gray) */
+    toolConnector: string;
+    /** Task/subagent block accent (blue) */
+    taskAccent: string;
+    /** Failed tool/task accent (red) */
+    errorAccent: string;
+  };
 }
 
 /**
@@ -83,5 +104,16 @@ export const DEFAULT_TUI_THEME: TuiTheme = {
     info: '#6fa6d9',
     warn: '#d6b26c',
     error: '#d97b7b',
+  },
+  message: {
+    userBorder: '#5ec2c7',
+    userBg: '#121417',
+    assistantBg: '#181c21',
+    codeBg: '#1f252b',
+    thinkingFg: '#5a5f66',
+    streamingFg: '#d4a259',
+    toolConnector: '#8b9199',
+    taskAccent: '#6fa6d9',
+    errorAccent: '#d97b7b',
   },
 };

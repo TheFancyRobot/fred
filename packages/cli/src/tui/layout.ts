@@ -5,6 +5,15 @@
  * is handled by OpenTUI's Yoga flexbox engine in app.ts.
  */
 
+import {
+  BoxRenderable,
+  TextRenderable,
+  MarkdownRenderable,
+  TextAttributes,
+  type CliRenderer,
+  type SyntaxStyle,
+} from '@opentui/core';
+import type { TuiTheme } from './theme.js';
 import type { TuiState } from './state.js';
 
 const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
@@ -455,4 +464,120 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
   return {
     lines: [statusText],
   };
+}
+
+/**
+ * Block cursor character appended to streaming content
+ */
+export function buildStreamingCursorText(): string {
+  return '\u2588';
+}
+
+/**
+ * Get transcript messages for the current session
+ */
+export function getTranscriptMessages(state: TuiState): Array<{ role: string; content: string }> {
+  return state.transcript.messages;
+}
+
+/**
+ * Build a renderable for a user message
+ */
+export function buildUserMessageRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  content: string,
+  id: string,
+): BoxRenderable {
+  const container = new BoxRenderable(renderer, {
+    id: `msg-user-${id}`,
+    flexDirection: 'column',
+    backgroundColor: theme.message.userBg,
+    border: ['left'],
+    borderStyle: 'single',
+    borderColor: theme.message.userBorder,
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginBottom: 1,
+  });
+
+  const text = new TextRenderable(renderer, {
+    id: `msg-user-text-${id}`,
+    content,
+    fg: theme.fg.primary,
+  });
+  text.selectable = true;
+
+  container.add(text);
+  return container;
+}
+
+/**
+ * Build a renderable for an assistant message with markdown rendering
+ */
+export function buildAssistantMessageRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  content: string,
+  id: string,
+  options: { streaming: boolean; syntaxStyle: SyntaxStyle },
+): BoxRenderable {
+  const container = new BoxRenderable(renderer, {
+    id: `msg-assistant-${id}`,
+    flexDirection: 'column',
+    backgroundColor: theme.message.assistantBg,
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginBottom: 1,
+  });
+
+  const md = new MarkdownRenderable(renderer, {
+    id: `msg-assistant-md-${id}`,
+    content,
+    syntaxStyle: options.syntaxStyle,
+    streaming: options.streaming,
+    conceal: false,
+  });
+  md.selectable = true;
+
+  if (options.streaming) {
+    md.fg = theme.message.streamingFg;
+  }
+
+  container.add(md);
+  return container;
+}
+
+/**
+ * Build a renderable for a thinking/reasoning block
+ */
+export function buildThinkingRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  content: string,
+  id: string,
+): BoxRenderable {
+  const container = new BoxRenderable(renderer, {
+    id: `msg-thinking-${id}`,
+    flexDirection: 'column',
+    backgroundColor: theme.message.assistantBg,
+    paddingLeft: 2,
+    paddingRight: 2,
+    marginBottom: 1,
+  });
+
+  const text = new TextRenderable(renderer, {
+    id: `msg-thinking-text-${id}`,
+    content,
+    fg: theme.message.thinkingFg,
+    attributes: TextAttributes.DIM | TextAttributes.ITALIC,
+  });
+  text.selectable = false;
+
+  container.add(text);
+  return container;
 }
