@@ -45,6 +45,10 @@ import {
   closeStartupChooser,
   setStartupWarning,
   toggleSidebarVisibility,
+  addToolCall,
+  completeToolCall,
+  failToolCall,
+  hasInProgressToolBlocks,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -144,6 +148,9 @@ export class FredTuiApp {
   private syntaxStyle: SyntaxStyle | null = null;
   private activeStreamingMdId: string | null = null;
   private lastRenderedMessageCount = 0;
+
+  // Tool block spinner animation timer
+  private spinnerInterval: ReturnType<typeof setInterval> | null = null;
 
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
@@ -582,6 +589,7 @@ export class FredTuiApp {
     this.streamingController.finish();
     this.finalizeStreamingTelemetry();
     this.state = finishStreaming(this.state, nowMs);
+    this.stopSpinnerInterval();
     this.refreshSessionCost(false);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
@@ -592,8 +600,74 @@ export class FredTuiApp {
     const message = error instanceof Error ? error.message : String(error);
     this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, message, nowMs);
+    this.stopSpinnerInterval();
     this.refreshSessionCost(false);
     this.events.onError?.(error instanceof Error ? error : new Error(message));
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  /**
+   * Push a tool call event into the TUI state (tool started executing)
+   */
+  pushToolCall(event: {
+    messageId: string;
+    step: number;
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    startedAt: number;
+  }): void {
+    this.state = addToolCall(this.state, event);
+    this.startSpinnerInterval();
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  /**
+   * Push a tool result event (tool completed, possibly with error)
+   */
+  pushToolResult(event: {
+    toolCallId: string;
+    toolName: string;
+    output: unknown;
+    completedAt: number;
+    durationMs: number;
+    error?: { message: string };
+  }): void {
+    this.state = completeToolCall(this.state, {
+      toolCallId: event.toolCallId,
+      output: event.output,
+      completedAt: event.completedAt,
+      durationMs: event.durationMs,
+      error: event.error,
+    });
+    if (!hasInProgressToolBlocks(this.state)) {
+      this.stopSpinnerInterval();
+    }
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  /**
+   * Push a tool error event (tool failed with an error)
+   */
+  pushToolError(event: {
+    toolCallId: string;
+    toolName: string;
+    error: { message: string };
+    completedAt: number;
+    durationMs: number;
+  }): void {
+    this.state = failToolCall(this.state, {
+      toolCallId: event.toolCallId,
+      error: event.error,
+      completedAt: event.completedAt,
+      durationMs: event.durationMs,
+    });
+    if (!hasInProgressToolBlocks(this.state)) {
+      this.stopSpinnerInterval();
+    }
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
@@ -609,6 +683,31 @@ export class FredTuiApp {
     };
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+  }
+
+  /**
+   * Start the braille spinner interval for in-progress tool blocks.
+   * Calls syncStateToUI every 80ms to animate spinner frames.
+   */
+  private startSpinnerInterval(): void {
+    if (this.spinnerInterval !== null) return;
+    this.spinnerInterval = setInterval(() => {
+      if (hasInProgressToolBlocks(this.state)) {
+        this.syncStateToUI();
+      } else {
+        this.stopSpinnerInterval();
+      }
+    }, 80);
+  }
+
+  /**
+   * Stop the braille spinner interval.
+   */
+  private stopSpinnerInterval(): void {
+    if (this.spinnerInterval !== null) {
+      clearInterval(this.spinnerInterval);
+      this.spinnerInterval = null;
+    }
   }
 
   private handleStreamingBatch(batch: StreamingBatch): void {
@@ -1424,6 +1523,7 @@ export class FredTuiApp {
   stop(): void {
     if (!this.running) return;
     this.running = false;
+    this.stopSpinnerInterval();
     this.streamingController.stop();
     this.syntaxStyle?.destroy();
     this.syntaxStyle = null;

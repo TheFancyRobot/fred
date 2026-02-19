@@ -6,6 +6,42 @@
  */
 
 /**
+ * Tool block status tracking for inline tool call rendering
+ */
+export type ToolBlockStatus = 'in-progress' | 'completed' | 'errored';
+
+/**
+ * Kind of tool block: regular tool or task/subagent
+ */
+export type ToolBlockKind = 'tool' | 'task';
+
+/**
+ * State for a single tool call block in the transcript
+ */
+export interface ToolBlockState {
+  toolCallId: string;
+  toolName: string;
+  kind: ToolBlockKind;
+  status: ToolBlockStatus;
+  input: Record<string, unknown>;
+  output?: unknown;
+  error?: { message: string };
+  startedAt: number;
+  completedAt?: number;
+  durationMs?: number;
+  expanded: boolean;
+}
+
+/**
+ * Group of tool blocks belonging to the same assistant message turn
+ */
+export interface ToolBlockGroup {
+  messageId: string;
+  step: number;
+  blocks: ToolBlockState[];
+}
+
+/**
  * Pane identifiers for the TUI layout
  */
 export type PaneId = 'sidebar' | 'transcript' | 'input' | 'status';
@@ -161,6 +197,11 @@ export interface TuiState {
   };
   deleteConfirm: DeleteConfirmState;
   startup: StartupState;
+  toolBlocks: {
+    groups: ToolBlockGroup[];
+    /** Map of toolCallId -> user-toggled expand override */
+    expandOverrides: Record<string, boolean>;
+  };
 }
 
 /**
@@ -243,6 +284,10 @@ export function createInitialTuiStateWithPlugins(
         selected: 'start-new-session',
       },
       warning: null,
+    },
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
     },
   };
 }
@@ -1784,6 +1829,205 @@ export function setSessionDraft(state: TuiState, sessionId: string, draft: strin
         ...state.sessions.drafts,
         [sessionId]: draft,
       },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tool block state management
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine tool vs task kind from tool name.
+ * Tools prefixed with task_, subagent_, or handoff_ are classified as tasks.
+ */
+function inferToolBlockKind(toolName: string): ToolBlockKind {
+  if (
+    toolName.startsWith('task_')
+    || toolName.startsWith('subagent_')
+    || toolName.startsWith('handoff_')
+  ) {
+    return 'task';
+  }
+  return 'tool';
+}
+
+/**
+ * Add a new tool call to the appropriate group (creating the group if needed).
+ * New blocks start as in-progress and expanded.
+ */
+export function addToolCall(
+  state: TuiState,
+  event: {
+    messageId: string;
+    step: number;
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    startedAt: number;
+    kind?: ToolBlockKind;
+  },
+): TuiState {
+  const kind = event.kind ?? inferToolBlockKind(event.toolName);
+  const block: ToolBlockState = {
+    toolCallId: event.toolCallId,
+    toolName: event.toolName,
+    kind,
+    status: 'in-progress',
+    input: event.input,
+    startedAt: event.startedAt,
+    expanded: true,
+  };
+
+  const groups = [...state.toolBlocks.groups];
+  const existingGroupIndex = groups.findIndex(
+    (g) => g.messageId === event.messageId && g.step === event.step,
+  );
+
+  if (existingGroupIndex >= 0) {
+    const existing = groups[existingGroupIndex];
+    groups[existingGroupIndex] = {
+      ...existing,
+      blocks: [...existing.blocks, block],
+    };
+  } else {
+    groups.push({
+      messageId: event.messageId,
+      step: event.step,
+      blocks: [block],
+    });
+  }
+
+  return {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      groups,
+    },
+  };
+}
+
+/**
+ * Complete a tool call. Smart collapse: completed without error -> collapsed,
+ * errored -> expanded.
+ */
+export function completeToolCall(
+  state: TuiState,
+  event: {
+    toolCallId: string;
+    output: unknown;
+    completedAt: number;
+    durationMs: number;
+    error?: { message: string };
+  },
+): TuiState {
+  const hasError = !!event.error;
+  const status: ToolBlockStatus = hasError ? 'errored' : 'completed';
+
+  return updateToolBlock(state, event.toolCallId, (block) => ({
+    ...block,
+    status,
+    output: event.output,
+    error: event.error,
+    completedAt: event.completedAt,
+    durationMs: event.durationMs,
+    expanded: hasError, // smart collapse: errored stays expanded, completed collapses
+  }));
+}
+
+/**
+ * Fail a tool call with an error. Errored blocks stay expanded.
+ */
+export function failToolCall(
+  state: TuiState,
+  event: {
+    toolCallId: string;
+    error: { message: string };
+    completedAt: number;
+    durationMs: number;
+  },
+): TuiState {
+  return updateToolBlock(state, event.toolCallId, (block) => ({
+    ...block,
+    status: 'errored',
+    error: event.error,
+    completedAt: event.completedAt,
+    durationMs: event.durationMs,
+    expanded: true,
+  }));
+}
+
+/**
+ * Toggle the expanded state of a specific tool block.
+ */
+export function toggleToolBlockExpand(state: TuiState, toolCallId: string): TuiState {
+  return updateToolBlock(state, toolCallId, (block) => ({
+    ...block,
+    expanded: !block.expanded,
+  }));
+}
+
+/**
+ * Get tool blocks for a given message step/group index.
+ * The Nth group corresponds to tool blocks from the Nth tool-calling step.
+ */
+export function getToolBlocksForMessage(state: TuiState, groupIndex: number): ToolBlockState[] {
+  const group = state.toolBlocks.groups[groupIndex];
+  return group?.blocks ?? [];
+}
+
+/**
+ * Check if any tool blocks are currently in-progress.
+ */
+export function hasInProgressToolBlocks(state: TuiState): boolean {
+  return state.toolBlocks.groups.some((group) =>
+    group.blocks.some((block) => block.status === 'in-progress'),
+  );
+}
+
+/**
+ * Clear all tool block state (called on new message turn start).
+ */
+export function clearToolBlocks(state: TuiState): TuiState {
+  if (state.toolBlocks.groups.length === 0) {
+    return state;
+  }
+
+  return {
+    ...state,
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
+    },
+  };
+}
+
+/**
+ * Internal helper: update a specific tool block by toolCallId across all groups.
+ */
+function updateToolBlock(
+  state: TuiState,
+  toolCallId: string,
+  updater: (block: ToolBlockState) => ToolBlockState,
+): TuiState {
+  let found = false;
+  const groups = state.toolBlocks.groups.map((group) => {
+    const blockIndex = group.blocks.findIndex((b) => b.toolCallId === toolCallId);
+    if (blockIndex < 0) return group;
+
+    found = true;
+    const blocks = [...group.blocks];
+    blocks[blockIndex] = updater(blocks[blockIndex]);
+    return { ...group, blocks };
+  });
+
+  if (!found) return state;
+
+  return {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      groups,
     },
   };
 }

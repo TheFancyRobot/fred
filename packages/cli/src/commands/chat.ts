@@ -255,6 +255,32 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {
                         app.pushAssistantToken(event.delta, 1);
+                      } else if (event.type === 'tool-call') {
+                        app.pushToolCall({
+                          messageId: event.messageId,
+                          step: event.step,
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          input: event.input,
+                          startedAt: event.startedAt,
+                        });
+                      } else if (event.type === 'tool-result') {
+                        app.pushToolResult({
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          output: event.output,
+                          completedAt: event.completedAt,
+                          durationMs: event.durationMs,
+                          error: event.error ? { message: event.error.message } : undefined,
+                        });
+                      } else if (event.type === 'tool-error') {
+                        app.pushToolError({
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          error: { message: event.error.message },
+                          completedAt: event.completedAt,
+                          durationMs: event.durationMs,
+                        });
                       }
                     }
 
