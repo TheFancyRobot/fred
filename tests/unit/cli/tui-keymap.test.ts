@@ -347,6 +347,22 @@ describe('TUI Keymap', () => {
       expect(newState.input.cursorPosition).toBe(1);
     });
 
+    test('uppercase characters are accepted when shift is held', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+
+      const event = makeKey({ name: 'a', shift: true, sequence: 'A' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('input-text');
+      if (action.type === 'input-text') {
+        expect(action.text).toBe('A');
+      }
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.input.text).toBe('A');
+      expect(newState.input.cursorPosition).toBe(1);
+    });
+
     test('characters are inserted at cursor position', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'input';

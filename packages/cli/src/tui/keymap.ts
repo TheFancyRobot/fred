@@ -86,6 +86,8 @@ export type KeyAction =
 export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   const { name, shift, ctrl, meta } = event;
 
+  const printableChar = getPrintableChar(event);
+
   const isPaletteToggle = (ctrl || meta) && name === 'k';
   if (isPaletteToggle) {
     return { type: 'toggle-command-palette' };
@@ -257,8 +259,8 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
 
     // Printable characters: single char name, no ctrl/meta modifiers
-    if (name.length === 1 && !ctrl && !meta) {
-      return { type: 'input-text', text: name };
+    if (printableChar) {
+      return { type: 'input-text', text: printableChar };
     }
 
     // Space key
@@ -290,6 +292,24 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   }
 
   return { type: 'noop' };
+}
+
+function getPrintableChar(event: KeyEvent): string | null {
+  const { name, shift, ctrl, meta, sequence } = event;
+
+  if (ctrl || meta) {
+    return null;
+  }
+
+  if (typeof sequence === 'string' && sequence.length === 1) {
+    return sequence;
+  }
+
+  if (name.length === 1) {
+    return shift ? name.toUpperCase() : name;
+  }
+
+  return null;
 }
 
 /**
