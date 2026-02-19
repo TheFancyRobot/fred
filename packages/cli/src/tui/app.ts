@@ -122,6 +122,7 @@ export class FredTuiApp {
   private transcriptContent!: ScrollBoxRenderable;
   private inputText!: TextRenderable;
   private statusText!: TextRenderable;
+  private statusBar!: BoxRenderable;
   private sidebarBox!: BoxRenderable;
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
@@ -297,17 +298,18 @@ export class FredTuiApp {
   /**
    * Build the OpenTUI component tree
    *
-   * root (Box, column, 100%x100%, bg: base, padding: outerPadding, gap: regionGap)
-   * +-- mainArea (Box, row, flexGrow: 1, gap: regionGap)
-   * |   +-- sidebar (Box, width: 30, bg: elevated, padding: 1)
-   * |   |   +-- sidebarTitle (Text, "[Sessions]")
-   * |   |   +-- sidebarItems (ScrollBox, flexGrow: 1)
-   * |   +-- transcript (Box, flexGrow: 1, bg: surface, padding: 1)
-   * |       +-- transcriptContent (ScrollBox, flexGrow: 1)
-   * +-- inputBar (Box, height: 3, bg: elevated, padding: 1)
-   * |   +-- inputText (Text, flexGrow: 1)
-   * +-- statusBar (Box, height: 1, bg: status)
-   *     +-- statusText (Text)
+   * root (Box, row, 100%x100%, bg: base, padding: outerPadding, gap: regionGap)
+   * +-- sidebar (Box, width: 30, bg: elevated, padding: 1, height: 100%)
+   * |   +-- sidebarTitle (Text, "[Sessions]")
+   * |   +-- sidebarItems (ScrollBox, flexGrow: 1)
+   * |   +-- sidebarFooter (Text)
+   * +-- mainColumn (Box, column, flexGrow: 1, height: 100%, gap: regionGap)
+   *     +-- transcript (Box, flexGrow: 1, bg: surface, padding: 1)
+   *     |   +-- transcriptContent (ScrollBox, flexGrow: 1)
+   *     +-- inputBar (Box, height: 3, bg: elevated, padding: 1)
+   *     |   +-- inputText (Text, flexGrow: 1)
+   *     +-- statusBar (Box, height: 1, bg: status)
+   *         +-- statusText (Text)
    */
   private buildComponentTree(): void {
     const r = this.renderer;
@@ -318,17 +320,18 @@ export class FredTuiApp {
       id: 'root',
       width: '100%',
       height: '100%',
-      flexDirection: 'column',
+      flexDirection: 'row',
       backgroundColor: theme.bg.base,
       padding: DEFAULT_LAYOUT.outerPadding,
       gap: DEFAULT_LAYOUT.regionGap,
     });
 
-    // Main area (sidebar + transcript)
-    const mainArea = new BoxRenderable(r, {
-      id: 'main-area',
-      flexDirection: 'row',
+    // Main column (transcript + input + status)
+    const mainColumn = new BoxRenderable(r, {
+      id: 'main-column',
+      flexDirection: 'column',
       flexGrow: 1,
+      height: '100%',
       gap: DEFAULT_LAYOUT.regionGap,
     });
 
@@ -390,8 +393,7 @@ export class FredTuiApp {
 
     this.transcriptBox.add(this.transcriptContent);
 
-    mainArea.add(this.sidebarBox);
-    mainArea.add(this.transcriptBox);
+    mainColumn.add(this.transcriptBox);
 
     // Input bar
     this.inputBar = new BoxRenderable(r, {
@@ -412,7 +414,7 @@ export class FredTuiApp {
     this.inputBar.add(this.inputText);
 
     // Status bar
-    const statusBar = new BoxRenderable(r, {
+    this.statusBar = new BoxRenderable(r, {
       id: 'status-bar',
       height: DEFAULT_LAYOUT.statusHeight,
       backgroundColor: theme.bg.status,
@@ -425,12 +427,13 @@ export class FredTuiApp {
     });
     this.statusText.selectable = false;
 
-    statusBar.add(this.statusText);
+    this.statusBar.add(this.statusText);
 
     // Compose tree
-    root.add(mainArea);
-    root.add(this.inputBar);
-    root.add(statusBar);
+    mainColumn.add(this.inputBar);
+    mainColumn.add(this.statusBar);
+    root.add(this.sidebarBox);
+    root.add(mainColumn);
 
     r.root.add(root);
   }
@@ -449,6 +452,7 @@ export class FredTuiApp {
    * Process a key event through the state machine
    */
   processKey(key: KeyEvent): void {
+    const previousSelectedId = this.state.sessions.selectedId;
     if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen && key.ctrl && key.name === 'u') {
       this.state = {
         ...this.state,
@@ -493,6 +497,7 @@ export class FredTuiApp {
       this.state = closeDeleteConfirm(this.state);
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
+      void this.loadSelectedSessionTranscript(previousSelectedId);
       return;
     }
 
@@ -541,6 +546,9 @@ export class FredTuiApp {
     this.state = newState;
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+    if (action.type === 'session-next' || action.type === 'session-prev') {
+      void this.loadSelectedSessionTranscript(previousSelectedId);
+    }
   }
 
   startAssistantStream(nowMs = Date.now()): void {
@@ -863,6 +871,37 @@ export class FredTuiApp {
     this.syncStateToUI();
   }
 
+  private async loadSelectedSessionTranscript(previousSelectedId: string | null): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+
+    const selectedId = this.state.sessions.selectedId;
+    if (!selectedId || selectedId === previousSelectedId) {
+      return;
+    }
+
+    const selectedItem = this.state.sessions.items.find((item) => item.id === selectedId);
+    if (!selectedItem) {
+      return;
+    }
+
+    const existingTranscript = this.state.sessions.transcripts[selectedId];
+    const hasMessages = (existingTranscript?.messages.length ?? 0) > 0;
+    if (hasMessages || selectedItem.messageCount === 0) {
+      return;
+    }
+
+    try {
+      const messages = await loadSessionTranscript(this.sessionService, selectedId);
+      this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
   private async confirmDeleteSession(): Promise<void> {
     if (!this.sessionService) {
       return;
@@ -1159,10 +1198,7 @@ export class FredTuiApp {
       fg: statusFg,
     });
     this.statusText.selectable = false;
-    const statusBar = r.root.getRenderable('root')?.getRenderable('status-bar');
-    if (statusBar) {
-      statusBar.add(this.statusText);
-    }
+    this.statusBar.add(this.statusText);
 
     // Border highlighting for focused pane
     this.updateBorderFocus();

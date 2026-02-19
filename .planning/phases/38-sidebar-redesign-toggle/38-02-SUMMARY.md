@@ -9,7 +9,8 @@ requires:
   - phase: 38-01
     provides: Sidebar visibility state, key bindings, and focus behavior
 provides:
-  - Sidebar metadata anchored to footer with full-height layout
+  - Sidebar metadata rendered only in footer without duplication
+  - Sidebar layout spans window edges with zero outer padding
   - Collapsed sidebar spacing normalized across sections
 affects: [tui-ux]
 
@@ -23,6 +24,7 @@ key-files:
   modified:
     - packages/cli/src/tui/app.ts
     - packages/cli/src/tui/layout.ts
+    - tests/unit/cli/tui-layout.test.ts
 
 key-decisions:
   - "Render metadata in a footer region to keep it bottom-aligned regardless of session list length"
@@ -37,18 +39,20 @@ completed: 2026-02-19
 
 # Phase 38 Plan 02: Sidebar Redesign Toggle Summary
 
-**Sidebar metadata now anchors to the footer with consistent collapsed spacing and immediate session titles.**
+**Sidebar metadata renders once in the footer with edge-to-edge layout and clean collapse spacing.**
 
 ## Performance
 
 - **Duration:** 32 min
 - **Started:** 2026-02-19T03:07:44Z
 - **Completed:** 2026-02-19T03:39:35Z
-- **Tasks:** 7
-- **Files modified:** 3
+- **Tasks:** 8
+- **Files modified:** 5
 
 ## Accomplishments
-- Anchored the metadata section to the sidebar footer while preserving header ordering.
+- Removed duplicate metadata rendering when sessions are collapsed.
+- Eliminated outer padding to keep the sidebar flush with window edges.
+- Kept metadata anchored to the sidebar footer while preserving header ordering.
 - Normalized collapsed spacing for sessions and metadata to remove misaligned gaps.
 - Ensured full-height sidebar layout keeps metadata pinned to the bottom.
 - Resolved session titles from metadata/preview snippets before loading transcripts.
@@ -64,13 +68,14 @@ Each task was committed atomically:
 5. **Task 5: Normalize collapsed spacing in sidebar** - `cb53ebe` (fix)
 6. **Task 6: Anchor sidebar metadata footer** - `fc295d3` (fix)
 7. **Task 7: Align collapsed spacing and resolve titles** - `d123793` (fix)
+8. **Task 8: Remove metadata duplication and flush layout** - `475776a` (fix)
 
 **Plan metadata:** `80ffefc` (docs, prior execution)
 
 ## Files Created/Modified
-- `packages/cli/src/tui/layout.ts` - Build collapsed sections without extra blank gaps.
-- `packages/cli/src/tui/app.ts` - Anchor metadata in footer and maintain renderable ordering.
-- `tests/unit/cli/tui-layout.test.ts` - Cover collapsed spacing expectations.
+- `packages/cli/src/tui/layout.ts` - Keep metadata out of session lines and remove outer padding.
+- `packages/cli/src/tui/app.ts` - Avoid rendering footer metadata in the scrollbox.
+- `tests/unit/cli/tui-layout.test.ts` - Assert footer metadata and session-only lines.
 
 ## Decisions Made
 - Render metadata in a footer region so it stays bottom-aligned.
@@ -103,10 +108,26 @@ Each task was committed atomically:
 - **Verification:** bun test tests/unit/cli/tui-layout.test.ts
 - **Commit:** d123793
 
+**4. [Rule 1 - Bug] Metadata duplicated in collapsed Sessions view**
+- **Found during:** Task 8 (Remove metadata duplication and flush layout)
+- **Issue:** Metadata lines rendered both in the sessions list and footer when Sessions collapsed.
+- **Fix:** Stop injecting metadata into sidebar line list and keep it footer-only; update tests.
+- **Files modified:** packages/cli/src/tui/layout.ts, packages/cli/src/tui/app.ts, tests/unit/cli/tui-layout.test.ts
+- **Verification:** bun test tests/unit/cli/tui-layout.test.ts
+- **Commit:** 475776a
+
+**5. [Rule 1 - Bug] Sidebar gutters remained at window edges**
+- **Found during:** Task 8 (Remove metadata duplication and flush layout)
+- **Issue:** Outer padding introduced gutters between the sidebar and window edges.
+- **Fix:** Set layout outer padding to 0 so the sidebar spans edge-to-edge.
+- **Files modified:** packages/cli/src/tui/layout.ts
+- **Verification:** bun test tests/unit/cli/tui-layout.test.ts
+- **Commit:** 475776a
+
 ---
 
-**Total deviations:** 3 auto-fixed (3 bug)
-**Impact on plan:** All fixes required for correct spacing, footer anchoring, and title display. No scope creep.
+**Total deviations:** 5 auto-fixed (5 bug)
+**Impact on plan:** All fixes required for correct footer rendering, edge-to-edge layout, and spacing. No scope creep.
 
 ## Issues Encountered
 None.
