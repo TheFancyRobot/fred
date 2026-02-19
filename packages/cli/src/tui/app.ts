@@ -1152,6 +1152,7 @@ export class FredTuiApp {
     fg: string,
     attributes: number,
   ): TextRenderable {
+    const sidebarItems = this.sidebarBox.getRenderable('sidebar-items');
     existing.destroy();
     const newText = new TextRenderable(this.renderer, {
       id,
@@ -1161,6 +1162,10 @@ export class FredTuiApp {
     });
     newText.selectable = false;
     this.sidebarBox.add(newText);
+    if (sidebarItems) {
+      this.sidebarBox.remove('sidebar-items');
+      this.sidebarBox.add(sidebarItems);
+    }
     return newText;
   }
 
