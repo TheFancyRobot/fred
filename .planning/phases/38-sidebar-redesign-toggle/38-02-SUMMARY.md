@@ -31,26 +31,27 @@ patterns-established:
   - "Use sidebar footer renderable to anchor metadata at the bottom"
 
 # Metrics
-duration: 21 min
+duration: 32 min
 completed: 2026-02-19
 ---
 
 # Phase 38 Plan 02: Sidebar Redesign Toggle Summary
 
-**Sidebar metadata now anchors to the footer with consistent collapsed spacing and full-height layout.**
+**Sidebar metadata now anchors to the footer with consistent collapsed spacing and immediate session titles.**
 
 ## Performance
 
-- **Duration:** 21 min
+- **Duration:** 32 min
 - **Started:** 2026-02-19T03:07:44Z
-- **Completed:** 2026-02-19T03:29:15Z
-- **Tasks:** 4
+- **Completed:** 2026-02-19T03:39:35Z
+- **Tasks:** 7
 - **Files modified:** 3
 
 ## Accomplishments
 - Anchored the metadata section to the sidebar footer while preserving header ordering.
 - Normalized collapsed spacing for sessions and metadata to remove misaligned gaps.
 - Ensured full-height sidebar layout keeps metadata pinned to the bottom.
+- Resolved session titles from metadata/preview snippets before loading transcripts.
 
 ## Task Commits
 
@@ -62,8 +63,9 @@ Each task was committed atomically:
 4. **Task 4: Launch TUI from dev-chat when CLI installed** - `f0e87a8` (fix)
 5. **Task 5: Normalize collapsed spacing in sidebar** - `cb53ebe` (fix)
 6. **Task 6: Anchor sidebar metadata footer** - `fc295d3` (fix)
+7. **Task 7: Align collapsed spacing and resolve titles** - `d123793` (fix)
 
-**Plan metadata:** `80ffefc` (docs)
+**Plan metadata:** `80ffefc` (docs, prior execution)
 
 ## Files Created/Modified
 - `packages/cli/src/tui/layout.ts` - Build collapsed sections without extra blank gaps.
@@ -93,10 +95,18 @@ Each task was committed atomically:
 - **Verification:** bun test tests/unit/cli/tui-app.test.ts
 - **Commit:** fc295d3
 
+**3. [Rule 1 - Bug] Session titles defaulted to (untitled) before load**
+- **Found during:** Task 7 (Align collapsed spacing and resolve titles)
+- **Issue:** Sidebar session rows showed (untitled) until a transcript load populated titles.
+- **Fix:** Resolve title from session preview or first transcript snippet when available.
+- **Files modified:** packages/cli/src/tui/layout.ts, tests/unit/cli/tui-layout.test.ts
+- **Verification:** bun test tests/unit/cli/tui-layout.test.ts
+- **Commit:** d123793
+
 ---
 
-**Total deviations:** 2 auto-fixed (2 bug)
-**Impact on plan:** Both fixes required for correct spacing and footer anchoring. No scope creep.
+**Total deviations:** 3 auto-fixed (3 bug)
+**Impact on plan:** All fixes required for correct spacing, footer anchoring, and title display. No scope creep.
 
 ## Issues Encountered
 None.

@@ -991,9 +991,11 @@ export class FredTuiApp {
     );
     const sidebarHeader = sidebarContent.sessionsHeader || sidebarContent.lines[0] || '[Sessions]';
 
-    const itemLines = sidebarContent.sessionsLines.length > 0
+    const itemLines = sidebarContent.metadataHeader
       ? sidebarContent.sessionsLines
-      : sidebarContent.lines.slice(1);
+      : (sidebarContent.sessionsLines.length > 0
+        ? sidebarContent.sessionsLines
+        : sidebarContent.lines.slice(1));
     this.repopulateScrollBox(this.sidebarItems, itemLines, (line, i) => {
       const isSelected = line.startsWith('▸') || (this.state.commandPalette.isOpen && line.startsWith('>'));
       const isFocused = this.state.focusedPane === 'sidebar';

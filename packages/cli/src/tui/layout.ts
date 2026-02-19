@@ -53,7 +53,7 @@ export const DEFAULT_LAYOUT = {
   inputMaxHeight: 6,
   inputMaxVisibleLines: 4,
   statusHeight: 1,
-  outerPadding: 1,
+  outerPadding: 0,
   regionGap: 1,
 };
 
@@ -263,13 +263,6 @@ export function renderSidebarContent(state: TuiState, focused: boolean): Sidebar
   const lines = [sessionsHeader];
   if (!sessionsCollapsed) {
     lines.push(...sessionsLines);
-  }
-  if (!sessionsCollapsed || !metadataCollapsed) {
-    lines.push('');
-  }
-  lines.push(metadataHeader);
-  if (!metadataCollapsed) {
-    lines.push(...metadataLines);
   }
 
   return {

@@ -29,10 +29,10 @@ describe('TUI Layout', () => {
       const content = renderSidebarContent(state, false);
 
       expect(content.lines).toContain('▼ Sessions');
-      expect(content.lines).toContain('▼ Metadata');
       expect(content.lines).toContain('  (empty)');
       expect(content.lines).toContain('▸ + New Session (Enter)');
       expect(content.lines).not.toContain('(empty)');
+      expect(content.metadataHeader).toBe('▼ Metadata');
     });
 
     test('renders sidebar with items', () => {
@@ -61,14 +61,14 @@ describe('TUI Layout', () => {
       const content = renderSidebarContent(state, false);
 
       expect(content.lines).toContain('▼ Sessions');
-      expect(content.lines).toContain('▼ Metadata');
       expect(content.lines).toContain('  + New Session (Enter)');
       expect(content.lines.join('\n')).toContain('▸ Session 1');
       expect(content.lines.join('\n')).toContain('  12:00');
       expect(content.lines.join('\n')).toContain('  11:00');
-      expect(content.lines.join('\n')).toContain('Sessions: 2');
-      expect(content.lines.join('\n')).toContain('Model:');
-      expect(content.lines.join('\n')).toContain('Tokens: in');
+      expect(content.metadataLines.join('\n')).toContain('Sessions: 2');
+      expect(content.metadataLines.join('\n')).toContain('Model:');
+      expect(content.metadataLines.join('\n')).toContain('Tokens: in');
+      expect(content.metadataHeader).toBe('▼ Metadata');
     });
 
     test('collapsing sessions keeps metadata anchored header and avoids extra gaps', () => {
@@ -78,10 +78,9 @@ describe('TUI Layout', () => {
       const content = renderSidebarContent(state, false);
 
       expect(content.lines[0]).toBe('▶ Sessions');
-      expect(content.lines[1]).toBe('');
-      expect(content.lines[2]).toBe('▼ Metadata');
       expect(content.lines).not.toContain('+ New Session (Enter)');
       expect(content.lines).not.toContain('  (empty)');
+      expect(content.metadataHeader).toBe('▼ Metadata');
     });
 
     test('collapsed metadata keeps session empty state aligned', () => {
@@ -92,7 +91,7 @@ describe('TUI Layout', () => {
 
       expect(content.lines).toContain('▼ Sessions');
       expect(content.lines).toContain('(empty)');
-      expect(content.lines).toContain('▶ Metadata');
+      expect(content.metadataHeader).toBe('▶ Metadata');
     });
 
     test('highlights new session action when selected', () => {
