@@ -63,7 +63,7 @@ Each task was committed atomically:
 5. **Task 5: Normalize collapsed spacing in sidebar** - `cb53ebe` (fix)
 6. **Task 6: Anchor sidebar metadata footer** - `fc295d3` (fix)
 
-**Plan metadata:** `tbd` (docs)
+**Plan metadata:** `80ffefc` (docs)
 
 ## Files Created/Modified
 - `packages/cli/src/tui/layout.ts` - Build collapsed sections without extra blank gaps.
