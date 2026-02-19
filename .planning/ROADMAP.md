@@ -26,7 +26,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - [x] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (complete)
 - [x] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (complete)
-- [ ] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (pending)
+- [x] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (pending) (completed 2026-02-19)
 - [ ] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (pending)
 
 ## Phase Details
@@ -94,7 +94,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
-| 39. Transcript & Message Rendering | 1/2 | In Progress|  |
+| 39. Transcript & Message Rendering | 2/2 | Complete   | 2026-02-19 |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
 ---

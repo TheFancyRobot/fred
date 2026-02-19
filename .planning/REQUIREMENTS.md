@@ -30,7 +30,7 @@ Requirements for TUI visual polish milestone. Redesign the Fred TUI appearance t
 ### Transcript & Message Rendering
 
 - [x] **VISUAL-12**: Assistant messages render with muted styling distinct from user messages
-- [ ] **VISUAL-13**: Tool calls and task results render as inline expandable blocks with `└` tree connectors
+- [x] **VISUAL-13**: Tool calls and task results render as inline expandable blocks with `└` tree connectors
 - [x] **VISUAL-14**: Active/streaming content uses a distinct accent color (e.g. orange/amber) to indicate liveness
 
 ### Input & Status Bar
@@ -81,7 +81,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISUAL-10 | Phase 38 | Pending |
 | VISUAL-11 | Phase 38 | Pending |
 | VISUAL-12 | Phase 39 | Complete |
-| VISUAL-13 | Phase 39 | Pending |
+| VISUAL-13 | Phase 39 | Complete |
 | VISUAL-14 | Phase 39 | Complete |
 | VISUAL-15 | Phase 40 | Pending |
 | VISUAL-16 | Phase 40 | Pending |
