@@ -25,7 +25,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 **Milestone Goal:** Redesign the Fred TUI appearance to use contrast-based region separation, muted color palette, information-dense sidebar, and minimal chrome — inspired by modern terminal UIs like OpenCode.
 
 - [x] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (complete)
-- [ ] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (pending)
+- [x] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (complete)
 - [ ] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (pending)
 - [ ] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (pending)
 
@@ -59,7 +59,7 @@ Plans:
 
 Plans:
 - [x] 38-01-PLAN.md — Add sidebar visibility + collapse state and keymap actions
-- [ ] 38-02-PLAN.md — Render collapsible sidebar + wire layout visibility
+- [x] 38-02-PLAN.md — Render collapsible sidebar + wire layout visibility
 
 ### Phase 39: Transcript & Message Rendering
 **Goal**: Polish transcript rendering with distinct user/assistant styling, inline expandable tool blocks, and streaming accent color
@@ -89,7 +89,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
-| 38. Sidebar Redesign & Toggle | 1/2 | In progress | - |
+| 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
 | 39. Transcript & Message Rendering | 0/? | Pending | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
@@ -120,4 +120,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-17 - Phase 37 complete (1/1 plans), Phase 38 next*
+*Last updated: 2026-02-19 - Phase 38 complete (2/2 plans), Phase 39 next*

@@ -12,11 +12,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 38 of 40 (Sidebar Redesign & Toggle)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-17 - Completed 38-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-19 - Completed 38-02-PLAN.md
 
-Progress: [██████████] 97% (160/165 plans complete)
+Progress: [██████████] 98% (161/165 plans complete)
 
 ## Performance Metrics
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - (Phase 37) Teal primary accent (#5ec2c7) for selected items, focused titles, role labels
 - (Phase 37) All color values consumed from centralized theme tokens — zero inline hex in app.ts
 - (Phase 38) Focus cycle skips hidden sidebar via focus helpers with includeSidebar option
+- (Phase 38) Preserve sidebar header ordering when rebuilding text renderables
+- (Phase 38) Prefer CLI TUI launch in dev-chat when @fancyrobot/fred-cli is installed
+- (Phase 38) Anchor sidebar metadata in a footer renderable to keep it bottom-aligned
 - (Carried from v0.2.1) Full ANSI rendering loop in TUI app (27-04)
 - (Carried from v0.2.1) Framework-agnostic TUI implementation (27-03)
 - (Carried from v0.2.1) Bounded rich input bar rendering (28-02)
@@ -61,7 +64,7 @@ None currently.
 
 ### Pending Todos
 
-- [ ] Update dev chat (`bun run dev`) to detect `@fancyrobot/fred-cli` and launch the TUI when installed.
+- [ ] None
 
 ### Quick Tasks Completed
 
@@ -74,12 +77,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-17T18:19:24Z
-Stopped at: Completed 38-01-PLAN.md
+Last session: 2026-02-19T03:29:15Z
+Stopped at: Completed 38-02-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-17 — Phase 37 complete, Phase 38 next*
+*Last updated: 2026-02-19 — Phase 38 complete, Phase 39 next*
