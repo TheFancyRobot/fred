@@ -12,18 +12,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 39 of 40 (Transcript & Message Rendering)
-Plan: 2 of 2 in current phase
+Plan: 5 of 5 in current phase
 Status: Phase Complete
-Last activity: 2026-02-19 - Completed 39-02 (tool block rendering)
+Last activity: 2026-02-20 - Completed 39-05 (XML tag filtering)
 
-Progress: [█████████░] 99% (165/167 plans complete)
+Progress: [█████████░] 99% (168/170 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5 (v0.2.2 milestone)
+- Total plans completed: 6 (v0.2.2 milestone)
 - Average duration: ~8 min
-- Total execution time: ~42 min
+- Total execution time: ~46 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -66,6 +66,13 @@ Recent decisions affecting current work:
 - (Phase 39) Tool blocks indexed by group position, correlated with assistant message index in transcript
 - (Phase 39) Braille spinner 80ms interval auto-stops when no in-progress blocks remain
 - (Phase 39) Parallel completed tools collapse to 'N tools' summary for reduced visual noise
+- (Phase 39) Timer-based streaming flush replacing Effect Queue/Stream for incremental display
+- (Phase 39) Dual SyntaxStyle instances for normal vs streaming amber color schemes
+- (Phase 39) getMarkdownSyntaxTheme() centralized markdown scope definitions in theme.ts
+- (Phase 39) Broadened XML regex to match any lowercase tag for future-proof tool name filtering
+- (Phase 39) Buffer-based partial tag detection in TUI token path for XML tags split across deltas
+- (Phase 39) Removed explicit tool name mention from system prompt to reduce XML hallucination
+- [Phase 39]: Timer-based streaming flush replacing Effect Queue/Stream for incremental display
 
 ### Blockers/Concerns
 
@@ -83,15 +90,16 @@ None currently.
 | 002 | Remove malformed 31-VERIFICATION.md heredoc accidentally added as Bash permission entry in .claude/settings.local.json | 2026-02-16 | n/a (gitignored) | [002-fix-malformed-bash-permission-entry-in-c](./quick/002-fix-malformed-bash-permission-entry-in-c/) |
 
 ---
+| Phase 39 P03 | 5min | 2 tasks | 5 files |
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 39-02-PLAN.md (tool block rendering)
-Resume file: .planning/phases/39-transcript-message-rendering/39-02-SUMMARY.md
+Last session: 2026-02-20
+Stopped at: Completed 39-03-PLAN.md (markdown rendering and streaming visual polish)
+Resume file: .planning/phases/39-transcript-message-rendering/39-03-SUMMARY.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-19 — Phase 39 plan 02 complete*
+*Last updated: 2026-02-20 — Phase 39 plan 05 complete*
