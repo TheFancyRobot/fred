@@ -77,6 +77,7 @@ export type KeyAction =
   | { type: 'confirm-delete-session' }
   | { type: 'cancel-delete-session' }
   | { type: 'copy-transcript' }
+  | { type: 'copy-last-message' }
   | { type: 'quit' }
   | { type: 'noop' };
 
@@ -166,6 +167,10 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   if (ctrl && shift && name === 'c') {
     return { type: 'copy-transcript' };
+  }
+
+  if (ctrl && name === 'y') {
+    return { type: 'copy-last-message' };
   }
 
   if (ctrl && name === 'b') {
@@ -446,6 +451,10 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
       return state;
 
     case 'copy-transcript':
+      return state;
+
+    case 'copy-last-message':
+      // Handled by app (clipboard write side-effect)
       return state;
 
     case 'quit':
