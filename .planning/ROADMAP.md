@@ -26,7 +26,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 
 - [x] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (complete)
 - [x] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (complete)
-- [x] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (pending) (completed 2026-02-19)
+- [x] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (gap closure in progress)
 - [ ] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (pending)
 
 ## Phase Details
@@ -69,11 +69,14 @@ Plans:
   1. Assistant messages render with muted/dimmer styling visually distinct from user messages
   2. Tool calls and task results render as inline expandable blocks with `└` tree connectors
   3. Active streaming content uses a distinct accent color (orange/amber) that changes to normal on completion
-**Plans**: 2 plans
+**Plans**: 5 plans
 
 Plans:
-- [ ] 39-01-PLAN.md — Theme tokens + renderable-based message styling with streaming accent
-- [ ] 39-02-PLAN.md — Tool block state, event forwarding, and tree connector rendering
+- [x] 39-01-PLAN.md — Theme tokens + renderable-based message styling with streaming accent
+- [x] 39-02-PLAN.md — Tool block state, event forwarding, and tree connector rendering
+- [ ] 39-03-PLAN.md — Fix markdown rendering and streaming visual polish (gap closure)
+- [ ] 39-04-PLAN.md — Fix paste, auto-scroll, and scroll acceleration (gap closure)
+- [ ] 39-05-PLAN.md — Fix tool calling pipeline (gap closure)
 
 ### Phase 40: Input & Status Bar Polish
 **Goal**: Minimize input chrome and polish status bar with compact keyboard shortcut badges
@@ -94,7 +97,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
-| 39. Transcript & Message Rendering | 2/2 | Complete    | 2026-02-19 |
+| 39. Transcript & Message Rendering | 2/5 | Gap Closure | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
 ---
@@ -124,4 +127,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-19 - Phase 39 planned (2 plans), ready for execution*
+*Last updated: 2026-02-20 - Phase 39 gap closure planned (3 plans: 39-03, 39-04, 39-05)*
