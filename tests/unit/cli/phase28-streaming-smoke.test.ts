@@ -223,8 +223,12 @@ describe('Phase 28 streaming smoke', () => {
     }
   });
 
-  test('stream callback forwards provider chunks as-is (not token-splitting)', async () => {
+  test('stream callback forwards provider chunks with XML tags filtered (not token-splitting)', async () => {
+    // Chunk contains a closing </function> tag that the XML filter should strip.
+    // The TUI now filters XML-like tags from token deltas to prevent hallucinated
+    // XML pseudo-tool-calls from appearing in the transcript.
     const chunk = '/function=brave_search>{"query":"annual potato production"}</function>';
+    const expectedFiltered = '/function=brave_search>{"query":"annual potato production"}';
     const originalStreamMessage = MockFred.prototype.streamMessage;
     MockFred.prototype.streamMessage = function () {
       return {
@@ -271,7 +275,8 @@ describe('Phase 28 streaming smoke', () => {
       events.onSubmit('test message');
       await Bun.sleep(40);
 
-      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(chunk, 1);
+      // XML filtering strips the </function> closing tag from the chunk
+      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(expectedFiltered, 1);
       expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
     } finally {
       MockFred.prototype.streamMessage = originalStreamMessage;

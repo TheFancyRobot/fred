@@ -252,9 +252,38 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       conversationId: activeSessionId,
                     });
 
+                    // Buffer for XML-aware token filtering.
+                    // XML tags may span multiple token deltas, so we accumulate
+                    // and only flush text that is safe (no partial opening tags).
+                    let tokenBuffer = '';
+                    const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*[^>]*>[\s\S]*?(?:<\/[a-z][a-z0-9_-]*>)?/gi;
+
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {
-                        app.pushAssistantToken(event.delta, 1);
+                        tokenBuffer += event.delta;
+
+                        // Check if buffer might contain a partial opening XML tag
+                        const lastOpenBracket = tokenBuffer.lastIndexOf('<');
+                        if (lastOpenBracket >= 0) {
+                          const afterBracket = tokenBuffer.slice(lastOpenBracket);
+                          // If we have an unclosed tag, hold it in the buffer
+                          if (!afterBracket.includes('>')) {
+                            // Flush everything before the potential tag
+                            const safe = tokenBuffer.slice(0, lastOpenBracket);
+                            if (safe) {
+                              app.pushAssistantToken(safe, 1);
+                            }
+                            tokenBuffer = afterBracket;
+                            continue;
+                          }
+                        }
+
+                        // No partial tags -- filter complete XML tags and flush
+                        const filtered = tokenBuffer.replace(xmlTagPattern, '');
+                        if (filtered) {
+                          app.pushAssistantToken(filtered, 1);
+                        }
+                        tokenBuffer = '';
                       } else if (event.type === 'tool-call') {
                         app.pushToolCall({
                           messageId: event.messageId,
@@ -282,6 +311,12 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           durationMs: event.durationMs,
                         });
                       }
+                    }
+
+                    // Flush any remaining buffered tokens (partial tag never closed)
+                    if (tokenBuffer) {
+                      app.pushAssistantToken(tokenBuffer, 1);
+                      tokenBuffer = '';
                     }
 
                     app.completeAssistantStream();
