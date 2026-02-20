@@ -12,18 +12,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 39 of 40 (Transcript & Message Rendering)
-Plan: 5 of 5 in current phase
+Plan: 6 of 6 in current phase
 Status: Phase Complete
-Last activity: 2026-02-20 - Completed 39-05 (XML tag filtering)
+Last activity: 2026-02-20 - Completed 39-06 (markdown formatting visibility)
 
-Progress: [█████████░] 99% (168/170 plans complete)
+Progress: [█████████░] 99% (169/170 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6 (v0.2.2 milestone)
-- Average duration: ~8 min
-- Total execution time: ~46 min
+- Total plans completed: 7 (v0.2.2 milestone)
+- Average duration: ~7 min
+- Total execution time: ~47 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -74,6 +74,7 @@ Recent decisions affecting current work:
 - (Phase 39) Removed explicit tool name mention from system prompt to reduce XML hallucination
 - [Phase 39]: Timer-based streaming flush replacing Effect Queue/Stream for incremental display
 - [Phase 39]: Ctrl+Y for per-message copy, keyboard-driven copy as alternative to native text selection
+- (Phase 39) Bold uses bright white (#ffffff), italic uses blue-gray (#c2c6cc) for color-based markdown visibility
 
 ### Blockers/Concerns
 
@@ -93,15 +94,16 @@ None currently.
 ---
 | Phase 39 P03 | 5min | 2 tasks | 5 files |
 | Phase 39 P04 | 6 | 2 tasks | 3 files |
+| Phase 39 P06 | 1min | 1 task | 1 file |
 
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 39-03-PLAN.md (markdown rendering and streaming visual polish)
-Resume file: .planning/phases/39-transcript-message-rendering/39-03-SUMMARY.md
+Stopped at: Completed 39-06-PLAN.md (markdown formatting visibility)
+Resume file: .planning/phases/39-transcript-message-rendering/39-06-SUMMARY.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-20 — Phase 39 plan 05 complete*
+*Last updated: 2026-02-20 — Phase 39 plan 06 complete*
