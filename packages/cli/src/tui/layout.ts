@@ -454,7 +454,8 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
     'Mouse wheel scroll',
     'PgUp/PgDn scroll',
     'Tab: cycle focus',
-    'Ctrl+Shift+C copy',
+    'Ctrl+Shift+C copy all',
+    'Ctrl+Y copy msg',
     'Ctrl/Cmd+K palette',
     'Esc: quit',
   );
@@ -543,10 +544,6 @@ export function buildAssistantMessageRenderable(
     conceal: true,
   });
   md.selectable = true;
-
-  if (options.streaming) {
-    md.fg = theme.message.streamingFg;
-  }
 
   container.add(md);
   return container;

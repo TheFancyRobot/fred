@@ -69,7 +69,7 @@ import {
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
-import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme } from './theme.js';
+import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme, getStreamingMarkdownSyntaxTheme } from './theme.js';
 import {
   createStreamingController,
   type StreamingController,
@@ -150,6 +150,7 @@ export class FredTuiApp {
 
   // Renderable-based transcript state
   private syntaxStyle: SyntaxStyle | null = null;
+  private streamingSyntaxStyle: SyntaxStyle | null = null;
   private activeStreamingMdId: string | null = null;
   private lastRenderedMessageCount = 0;
 
@@ -184,6 +185,7 @@ export class FredTuiApp {
     });
     this.sessionService = config.sessionService;
     this.syntaxStyle = SyntaxStyle.fromTheme(getMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
+    this.streamingSyntaxStyle = SyntaxStyle.fromTheme(getStreamingMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
     }
@@ -551,6 +553,11 @@ export class FredTuiApp {
 
     if (action.type === 'copy-transcript') {
       this.copyTranscriptToClipboard();
+      return;
+    }
+
+    if (action.type === 'copy-last-message') {
+      this.copyLastAssistantMessage();
       return;
     }
 
@@ -1133,6 +1140,46 @@ export class FredTuiApp {
   }
 
   /**
+   * Copy the last assistant message text to the system clipboard.
+   * Triggered via Ctrl+Y keybinding.
+   */
+  private copyLastAssistantMessage(): void {
+    const lastAssistantMsg = [...this.state.transcript.messages]
+      .reverse()
+      .find((m) => m.role === 'assistant');
+
+    if (!lastAssistantMsg || !lastAssistantMsg.content) {
+      return;
+    }
+
+    this.renderer.copyToClipboardOSC52(lastAssistantMsg.content);
+
+    // Brief "Copied!" feedback via status override
+    this.showCopyFeedback();
+  }
+
+  /**
+   * Temporarily show "Copied to clipboard" in the status bar.
+   * Clears after 2 seconds by triggering a normal status re-render.
+   */
+  private copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+  private copyFeedbackActive = false;
+
+  private showCopyFeedback(): void {
+    this.copyFeedbackActive = true;
+    this.syncStateToUI();
+
+    if (this.copyFeedbackTimeout) {
+      clearTimeout(this.copyFeedbackTimeout);
+    }
+    this.copyFeedbackTimeout = setTimeout(() => {
+      this.copyFeedbackActive = false;
+      this.copyFeedbackTimeout = null;
+      this.syncStateToUI();
+    }, 2000);
+  }
+
+  /**
    * Push current state to OpenTUI renderables
    */
   private syncStateToUI(): void {
@@ -1263,16 +1310,22 @@ export class FredTuiApp {
     }
     this.previousStreamingState = this.state.streaming.isStreaming;
 
-    const statusFg = this.state.streaming.lastError
-      ? theme.status.error
-      : this.state.streaming.isStreaming
-        ? theme.status.info
-        : theme.status.success;
+    const statusFg = this.copyFeedbackActive
+      ? theme.status.success
+      : this.state.streaming.lastError
+        ? theme.status.error
+        : this.state.streaming.isStreaming
+          ? theme.status.info
+          : theme.status.success;
+
+    const displayStatusLine = this.copyFeedbackActive
+      ? 'Copied to clipboard'
+      : this.lastStatusLine;
 
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
-      content: ` ${this.lastStatusLine} `,
+      content: ` ${displayStatusLine} `,
       attributes: TextAttributes.INVERSE,
       fg: statusFg,
     });
@@ -1361,7 +1414,8 @@ export class FredTuiApp {
     }
     this.activeStreamingMdId = null;
 
-    const syntaxStyle = this.syntaxStyle!;
+    const normalSyntaxStyle = this.syntaxStyle!;
+    const streamingSyntaxStyle = this.streamingSyntaxStyle!;
     const nowMs = Date.now();
     // Track tool block group index: each group corresponds to a tool-calling step
     let toolGroupIndex = 0;
@@ -1397,7 +1451,7 @@ export class FredTuiApp {
             theme,
             displayContent,
             msgId,
-            { streaming: isStreamingThis, syntaxStyle },
+            { streaming: isStreamingThis, syntaxStyle: isStreamingThis ? streamingSyntaxStyle : normalSyntaxStyle },
           );
           this.transcriptContent.add(renderable);
 
@@ -1432,12 +1486,12 @@ export class FredTuiApp {
 
     this.lastRenderedMessageCount = messages.length;
 
-    // Handle streaming-to-complete transition: remove streaming accent
+    // Handle streaming-to-complete transition: swap SyntaxStyle to normal colors
     if (!this.state.streaming.isStreaming && this.activeStreamingMdId) {
       const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
       if (md && md instanceof MarkdownRenderable) {
         md.streaming = false;
-        md.fg = theme.fg.primary;
+        md.syntaxStyle = this.syntaxStyle!;
         // Remove cursor character from content
         if (md.content.toString().endsWith(buildStreamingCursorText())) {
           md.content = md.content.toString().slice(0, -1);
@@ -1446,12 +1500,10 @@ export class FredTuiApp {
       this.activeStreamingMdId = null;
     }
 
-    // Handle streaming error: switch to error accent
+    // Handle streaming error: force full rebuild to apply normal styles
     if (this.state.streaming.lastError && this.activeStreamingMdId) {
-      const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
-      if (md && md instanceof MarkdownRenderable) {
-        md.fg = theme.message.errorAccent;
-      }
+      // Clear the active streaming id to trigger a full rebuild on next sync
+      this.activeStreamingMdId = null;
     }
   }
 
@@ -1574,9 +1626,15 @@ export class FredTuiApp {
     if (!this.running) return;
     this.running = false;
     this.stopSpinnerInterval();
+    if (this.copyFeedbackTimeout) {
+      clearTimeout(this.copyFeedbackTimeout);
+      this.copyFeedbackTimeout = null;
+    }
     this.streamingController.stop();
     this.syntaxStyle?.destroy();
     this.syntaxStyle = null;
+    this.streamingSyntaxStyle?.destroy();
+    this.streamingSyntaxStyle = null;
     this.renderer.destroy();
     this.events.onQuit?.();
   }
