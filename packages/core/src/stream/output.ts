@@ -66,7 +66,7 @@ const processEvent = (
   state: OutputState,
   immediateTokens: boolean
 ): { newState: OutputState; textToOutput: string | null } => {
-  const xmlToolCallPattern = /<(?:function|tool)[^>]*>.*?<\/(?:function|tool)>/gi;
+  const xmlToolCallPattern = /<(?:function|tool|[a-z][a-z0-9_-]*)[^>]*>[\s\S]*?<\/(?:function|tool|[a-z][a-z0-9_-]*?)>/gi;
 
   if (event.type === 'step-start') {
     return {
