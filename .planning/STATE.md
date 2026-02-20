@@ -73,6 +73,7 @@ Recent decisions affecting current work:
 - (Phase 39) Buffer-based partial tag detection in TUI token path for XML tags split across deltas
 - (Phase 39) Removed explicit tool name mention from system prompt to reduce XML hallucination
 - [Phase 39]: Timer-based streaming flush replacing Effect Queue/Stream for incremental display
+- [Phase 39]: Ctrl+Y for per-message copy, keyboard-driven copy as alternative to native text selection
 
 ### Blockers/Concerns
 
@@ -91,6 +92,7 @@ None currently.
 
 ---
 | Phase 39 P03 | 5min | 2 tasks | 5 files |
+| Phase 39 P04 | 6 | 2 tasks | 3 files |
 
 ## Session Continuity
 
