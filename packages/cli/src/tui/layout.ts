@@ -540,7 +540,7 @@ export function buildAssistantMessageRenderable(
     content,
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
-    conceal: false,
+    conceal: true,
   });
   md.selectable = true;
 

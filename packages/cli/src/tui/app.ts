@@ -13,7 +13,9 @@ import {
   MarkdownRenderable,
   SyntaxStyle,
   TextAttributes,
+  MacOSScrollAccel,
   type KeyEvent,
+  type PasteEvent,
   type CliRenderer,
   type MouseEvent,
 } from '@opentui/core';
@@ -67,7 +69,7 @@ import {
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
-import { DEFAULT_TUI_THEME } from './theme.js';
+import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme } from './theme.js';
 import {
   createStreamingController,
   type StreamingController,
@@ -181,7 +183,7 @@ export class FredTuiApp {
       },
     });
     this.sessionService = config.sessionService;
-    this.syntaxStyle = SyntaxStyle.create();
+    this.syntaxStyle = SyntaxStyle.fromTheme(getMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
     }
@@ -409,6 +411,7 @@ export class FredTuiApp {
       flexGrow: 1,
       stickyScroll: true,
       stickyStart: 'bottom',
+      scrollAcceleration: new MacOSScrollAccel(),
       onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
@@ -469,6 +472,27 @@ export class FredTuiApp {
     this.renderer.keyInput.on('keypress', (key: KeyEvent) => {
       if (!this.running) return;
       this.processKey(key);
+    });
+
+    this.renderer.keyInput.on('paste', (event: PasteEvent) => {
+      if (!this.running) return;
+      if (this.state.focusedPane !== 'input') return;
+      if (this.state.commandPalette.isOpen) return;
+
+      // Insert pasted text at cursor position (flatten newlines for single-line input)
+      const text = event.text.replace(/\n/g, ' ');
+      const before = this.state.input.text.slice(0, this.state.input.cursorPosition);
+      const after = this.state.input.text.slice(this.state.input.cursorPosition);
+      this.state = {
+        ...this.state,
+        input: {
+          ...this.state.input,
+          text: before + text + after,
+          cursorPosition: this.state.input.cursorPosition + text.length,
+        },
+      };
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
     });
   }
 
@@ -737,6 +761,11 @@ export class FredTuiApp {
     }
 
     this.state = appendUserMessage(this.state, submittedText);
+
+    // Reset OpenTUI scroll position to bottom on new message send.
+    // This overrides _hasManualScroll so stickyScroll re-engages,
+    // ensuring auto-scroll works even if user previously scrolled up.
+    this.transcriptContent.scrollTo(Infinity);
 
     const sidebarInvocation = this.parseSidebarSlashCommand(submittedText);
     if (sidebarInvocation) {
@@ -1493,21 +1522,20 @@ export class FredTuiApp {
 
   private handleTranscriptMouseScroll(event: MouseEvent): void {
     const direction = event.scroll?.direction;
-    if (!direction) {
-      return;
-    }
+    if (!direction) return;
 
     const delta = event.scroll?.delta ?? 1;
-    const lines = Math.max(1, Math.round(delta));
+    // Let OpenTUI's ScrollBoxRenderable handle scroll with acceleration
+    const scrollAmount = direction === 'up' ? -delta : delta;
+    this.transcriptContent.scrollBy(scrollAmount);
 
+    // Also update TUI state for scroll position tracking
+    const lines = Math.max(1, Math.round(Math.abs(scrollAmount)));
     if (direction === 'up') {
       this.state = scrollTranscript(this.state, -lines);
-    } else if (direction === 'down') {
-      this.state = scrollTranscript(this.state, lines);
     } else {
-      return;
+      this.state = scrollTranscript(this.state, lines);
     }
-
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }

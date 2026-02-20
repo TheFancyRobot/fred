@@ -8,6 +8,8 @@
  * Transcript (surface) is slightly darker than sidebar/input (elevated).
  */
 
+import type { ThemeTokenStyle } from '@opentui/core';
+
 /**
  * Semantic color token groups for the TUI
  */
@@ -82,6 +84,46 @@ export interface TuiTheme {
  * - bg.base (#121417) → bg.surface (#181c21) → bg.elevated (#1f252b)
  * - Each step is 1-2 shades apart for subtle but perceptible separation
  */
+/**
+ * Generate markdown scope style definitions for SyntaxStyle.fromTheme().
+ *
+ * MarkdownRenderable internally looks up these exact scope names when rendering:
+ * default, markup.heading.1, markup.heading.2, markup.heading.3,
+ * markup.strong, markup.italic, markup.raw, markup.list,
+ * punctuation, punctuation.special.
+ */
+export function getMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyle[] {
+  return [
+    { scope: ['default'], style: { foreground: theme.fg.primary } },
+    { scope: ['markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true } },
+    { scope: ['markup.strong'], style: { foreground: theme.fg.primary, bold: true } },
+    { scope: ['markup.italic'], style: { foreground: theme.fg.primary, italic: true } },
+    { scope: ['markup.raw'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
+    { scope: ['markup.list'], style: { foreground: theme.fg.dim } },
+    { scope: ['punctuation'], style: { foreground: theme.fg.dim } },
+    { scope: ['punctuation.special'], style: { foreground: theme.fg.dim } },
+  ];
+}
+
+/**
+ * Generate streaming-specific markdown scope styles with amber default foreground.
+ *
+ * Same as getMarkdownSyntaxTheme but overrides the 'default' scope foreground
+ * to the streaming amber color, so all unmarked text appears amber during streaming.
+ */
+export function getStreamingMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyle[] {
+  return [
+    { scope: ['default'], style: { foreground: theme.message.streamingFg } },
+    { scope: ['markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true } },
+    { scope: ['markup.strong'], style: { foreground: theme.message.streamingFg, bold: true } },
+    { scope: ['markup.italic'], style: { foreground: theme.message.streamingFg, italic: true } },
+    { scope: ['markup.raw'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
+    { scope: ['markup.list'], style: { foreground: theme.fg.dim } },
+    { scope: ['punctuation'], style: { foreground: theme.fg.dim } },
+    { scope: ['punctuation.special'], style: { foreground: theme.fg.dim } },
+  ];
+}
+
 export const DEFAULT_TUI_THEME: TuiTheme = {
   fg: {
     primary: '#e6e7ea',
