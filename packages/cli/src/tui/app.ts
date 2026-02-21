@@ -145,10 +145,7 @@ export class FredTuiApp {
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
   private inputPlaceholder: InputPlaceholder;
-  private statusThrottleMs = 100;
-  private lastStatusRenderMs = 0;
-  private lastStatusLine = '';
-  private previousStreamingState = false;
+
   private awaitingStartupResumeSelection = false;
 
   // Renderable-based transcript state
@@ -455,7 +452,7 @@ export class FredTuiApp {
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
       content: '',
-      attributes: TextAttributes.INVERSE,
+      fg: theme.fg.secondary,
     });
     this.statusText.selectable = false;
 
@@ -1369,53 +1366,20 @@ export class FredTuiApp {
     this.inputText.selectable = false;
     this.inputBar.add(this.inputText);
 
-    // Status bar
-    const nowMs = Date.now();
-    const shouldThrottleStatus = this.state.streaming.isStreaming;
-    const streamingTransitioned = this.state.streaming.isStreaming !== this.previousStreamingState;
-    const shouldRenderFreshStatus = !shouldThrottleStatus
-      || streamingTransitioned
-      || this.lastStatusLine.length === 0
-      || (nowMs - this.lastStatusRenderMs) >= this.statusThrottleMs;
-
-    if (shouldRenderFreshStatus) {
-      const statusState = this.state.streaming.isStreaming
-        ? this.state
-        : {
-            ...this.state,
-            streaming: {
-              ...this.state.streaming,
-              outputTokenCount: 0,
-            },
-          };
-
-      const statusData = renderStatusContent(statusState, {
-        maxWidth: Math.max(40, this.getRendererWidth() - 4),
-        nowMs,
-      });
-      this.lastStatusLine = statusData.lines[0] ?? '';
-      this.lastStatusRenderMs = nowMs;
-    }
-    this.previousStreamingState = this.state.streaming.isStreaming;
-
-    const statusFg = this.copyFeedbackActive
-      ? theme.status.success
-      : this.state.streaming.lastError
-        ? theme.status.error
-        : this.state.streaming.isStreaming
-          ? theme.status.info
-          : theme.status.success;
+    // Status bar — stateless badge rendering, no throttle needed
+    const statusData = renderStatusContent(this.state, {
+      maxWidth: Math.max(40, this.getRendererWidth() - 4),
+    });
 
     const displayStatusLine = this.copyFeedbackActive
       ? 'Copied to clipboard'
-      : this.lastStatusLine;
+      : statusData.lines[0] ?? '';
 
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
       content: ` ${displayStatusLine} `,
-      attributes: TextAttributes.INVERSE,
-      fg: statusFg,
+      fg: this.copyFeedbackActive ? theme.status.success : theme.fg.secondary,
     });
     this.statusText.selectable = false;
     this.statusBar.add(this.statusText);

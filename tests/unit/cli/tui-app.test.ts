@@ -150,8 +150,9 @@ describe('TUI App (OpenTUI integration)', () => {
     // Should contain welcome message
     expect(frame).toContain('Fred AI Framework');
 
-    // Should contain focus status
-    expect(frame).toContain('Focus: input');
+    // Should contain shortcut badges in status bar
+    expect(frame).toContain('? Help');
+    expect(frame).toContain('Esc Quit');
   });
 
   test('Tab cycles focus', async () => {
@@ -172,10 +173,12 @@ describe('TUI App (OpenTUI integration)', () => {
     app.processKey(makeKey({ name: 'tab' }));
     expect(app.getState().focusedPane).toBe('input');
 
-    // Render and verify status reflects current focus
+    // Render and verify status shows shortcut badges
     await testSetup.renderOnce();
     const frame = testSetup.captureCharFrame();
-    expect(frame).toContain('Focus: input');
+    expect(frame).toContain('? Help');
+    expect(frame).toContain('Esc Quit');
+    expect(frame).toContain('Ctrl+B Sidebar');
   });
 
   test('Ctrl+B hides sidebar without losing focus', async () => {
@@ -667,34 +670,36 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(capturedErrorMessage).toBe('provider disconnected');
   });
 
-  test('status telemetry is throttled during active streaming and clears indicator when idle', async () => {
+  test('status bar shows shortcut badges during streaming and idle states', async () => {
     await createTestApp();
 
-    const getStatusContent = (): string => {
-      return String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
-    };
+    // Idle state: render badges
+    await testSetup.renderOnce();
+    let frame = testSetup.captureCharFrame();
+    expect(frame).toContain('? Help');
+    expect(frame).toContain('Esc Quit');
+    expect(frame).toContain('Ctrl+B Sidebar');
+    // No telemetry strings
+    expect(frame).not.toMatch(/\btok\b/i);
+    expect(frame).not.toContain('cost $');
 
+    // Start streaming — badges still shown, no telemetry
     app.startAssistantStream();
-    app.pushAssistantToken('a');
-    const firstStreamingLine = getStatusContent();
+    app.pushAssistantToken('hello');
+    await testSetup.renderOnce();
+    frame = testSetup.captureCharFrame();
+    expect(frame).toContain('? Help');
+    expect(frame).toContain('Esc Quit');
+    expect(frame).not.toMatch(/\btok\b/i);
+    expect(frame).not.toContain('cost $');
 
-    await Bun.sleep(30);
-    app.pushAssistantToken('b');
-    const secondStreamingLine = getStatusContent();
-
-    expect(firstStreamingLine).toContain('streaming');
-    expect(secondStreamingLine).toBe(firstStreamingLine);
-
-    await Bun.sleep(120);
-    app.pushAssistantToken('c');
-    await waitFor(() => getStatusContent() !== firstStreamingLine);
-    const thirdStreamingLine = getStatusContent();
-    expect(thirdStreamingLine).not.toBe(firstStreamingLine);
-
+    // Complete streaming — badges persist
     app.completeAssistantStream();
-    const idleLine = getStatusContent();
-    expect(idleLine.includes('streaming')).toBe(false);
-    expect(idleLine).toContain('cost $');
+    await testSetup.renderOnce();
+    frame = testSetup.captureCharFrame();
+    expect(frame).toContain('? Help');
+    expect(frame).toContain('Esc Quit');
+    expect(frame).not.toContain('cost $');
   });
 
   describe('updateTelemetryModel', () => {

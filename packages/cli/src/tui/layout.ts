@@ -16,13 +16,11 @@ import {
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
 
-const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
 const INPUT_CURSOR_INDICATOR = '▍';
 const INPUT_ACCENT_GLYPH = '▎';
 
 interface StatusRenderOptions {
   maxWidth?: number;
-  nowMs?: number;
 }
 
 /**
