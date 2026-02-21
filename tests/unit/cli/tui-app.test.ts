@@ -875,4 +875,133 @@ describe('TUI App (OpenTUI integration)', () => {
       expect(submittedTexts).toEqual(['first', 'second']);
     });
   });
+
+  describe('status bar shortcut badges', () => {
+    test('core shortcuts visible in default idle state', async () => {
+      await createTestApp();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+
+      expect(frame).toContain('? Help');
+      expect(frame).toContain('Esc Quit');
+      expect(frame).toContain('Ctrl+B Sidebar');
+    });
+
+    test('core shortcuts remain visible during active streaming', async () => {
+      await createTestApp();
+      app.startAssistantStream();
+      app.pushAssistantToken('token');
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+
+      expect(frame).toContain('? Help');
+      expect(frame).toContain('Esc Quit');
+      expect(frame).toContain('Ctrl+B Sidebar');
+    });
+
+    test('sidebar-focused shortcuts appear only when sidebar is focused', async () => {
+      await createTestApp();
+
+      // Focus sidebar via Tab (input → sidebar)
+      app.processKey(makeKey({ name: 'tab' }));
+      expect(app.getState().focusedPane).toBe('sidebar');
+      await testSetup.renderOnce();
+      let frame = testSetup.captureCharFrame();
+
+      expect(frame).toContain('j/k nav');
+      expect(frame).toContain('Enter select');
+
+      // Move away from sidebar (sidebar → transcript)
+      app.processKey(makeKey({ name: 'tab' }));
+      expect(app.getState().focusedPane).toBe('transcript');
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+
+      expect(frame).not.toContain('j/k nav');
+      expect(frame).not.toContain('Enter select');
+    });
+
+    test('transcript-focused copy badge appears only with messages', async () => {
+      await createTestApp();
+
+      // Focus transcript (input → sidebar → transcript)
+      app.processKey(makeKey({ name: 'tab' }));
+      app.processKey(makeKey({ name: 'tab' }));
+      expect(app.getState().focusedPane).toBe('transcript');
+
+      // No messages — no copy badge
+      await testSetup.renderOnce();
+      let frame = testSetup.captureCharFrame();
+      expect(frame).toContain('PgUp/PgDn scroll');
+      expect(frame).not.toContain('Ctrl+Y copy');
+
+      // Add a message then re-render
+      app.processKey(makeKey({ name: 'tab' })); // back to input
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      app.completeAssistantStream();
+
+      // Focus transcript again
+      app.processKey(makeKey({ name: 'tab' }));
+      app.processKey(makeKey({ name: 'tab' }));
+      expect(app.getState().focusedPane).toBe('transcript');
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+      expect(frame).toContain('Ctrl+Y copy');
+    });
+
+    test('status output never includes telemetry phrases', async () => {
+      await createTestApp();
+
+      // Simulate streaming with telemetry data
+      app.updateTelemetryModel('gpt-4o', 'openai');
+      app.startAssistantStream();
+      for (let i = 0; i < 10; i++) {
+        app.pushAssistantToken(`token${i} `);
+      }
+      await testSetup.renderOnce();
+      let frame = testSetup.captureCharFrame();
+
+      // None of the old telemetry strings should appear
+      expect(frame).not.toMatch(/\btok\/s\b/);
+      expect(frame).not.toMatch(/\blat\b/);
+      expect(frame).not.toContain('cost $');
+      expect(frame).not.toMatch(/\bmdl\b/);
+      expect(frame).not.toContain('Focus:');
+      expect(frame).not.toContain('streaming');
+
+      // Complete and check idle state too
+      app.completeAssistantStream();
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+
+      expect(frame).not.toMatch(/\btok\/s\b/);
+      expect(frame).not.toMatch(/\blat\b/);
+      expect(frame).not.toContain('cost $');
+      expect(frame).not.toMatch(/\bmdl\b/);
+    });
+
+    test('compact width keeps core badges and drops context badges', async () => {
+      // Create app with narrow width (60 cols)
+      testSetup = await createTestRenderer({
+        width: 60,
+        height: 20,
+      });
+      app = FredTuiApp.createWithRenderer(testSetup.renderer, {}, {});
+
+      // Focus input — palette shortcut is a context badge
+      expect(app.getState().focusedPane).toBe('input');
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+
+      // Core badges must survive (may be truncated with ellipsis at extreme widths)
+      expect(frame).toContain('? Help');
+      expect(frame).toContain('Esc Quit');
+      // Ctrl+B badge present (may be truncated depending on exact rendering width)
+      expect(frame).toContain('Ctrl+B');
+      // Context badge (Ctrl+K palette) should be dropped at this width
+      expect(frame).not.toContain('Ctrl+K palette');
+    });
+  });
 });

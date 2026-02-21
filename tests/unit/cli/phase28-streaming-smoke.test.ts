@@ -171,10 +171,11 @@ describe('Phase 28 streaming smoke', () => {
 
       await Bun.sleep(120);
 
-      const streamingStatus = String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
-      expect(streamingStatus).toContain('streaming');
-      expect(streamingStatus).toContain('tok/s');
-      expect(streamingStatus).toContain('lat ');
+      // Status bar shows shortcut badges (no telemetry)
+      await setup.renderOnce();
+      const streamFrame = setup.captureCharFrame();
+      expect(streamFrame).toContain('? Help');
+      expect(streamFrame).toContain('Esc Quit');
 
       app.processKey(makeKey({ name: 'k', ctrl: true }));
       expect(app.getState().commandPalette.isOpen).toBe(true);
@@ -211,10 +212,12 @@ describe('Phase 28 streaming smoke', () => {
       app.completeAssistantStream();
       await Bun.sleep(40);
 
-      const idleStatus = String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
-      expect(idleStatus).not.toContain('streaming');
-      expect(idleStatus).toContain('cost $');
-      expect(idleStatus).toContain('tok total:');
+      // Idle status shows badges, no telemetry
+      await setup.renderOnce();
+      const idleFrame = setup.captureCharFrame();
+      expect(idleFrame).toContain('? Help');
+      expect(idleFrame).not.toContain('streaming');
+      expect(idleFrame).not.toContain('cost $');
     } finally {
       if (app.isRunning()) {
         app.stop();
