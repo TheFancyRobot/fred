@@ -12,7 +12,9 @@ import {
   TextAttributes,
   type CliRenderer,
   type SyntaxStyle,
+  type RenderNodeContext,
 } from '@opentui/core';
+import type { Token } from 'marked';
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
 
@@ -516,6 +518,40 @@ export function buildUserMessageRenderable(
 }
 
 /**
+ * Build a renderable for a heading token with structural treatment.
+ * Background band + UPPERCASE + teal color + bold for visual hierarchy.
+ */
+function buildHeadingRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  token: Token & { type: 'heading'; text: string; depth: number },
+  id: string,
+): BoxRenderable {
+  const container = new BoxRenderable(renderer, {
+    id: `heading-${id}`,
+    flexDirection: 'column',
+    backgroundColor: theme.message.headingBg,
+    paddingLeft: 1,
+    paddingRight: 1,
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginTop: 1,
+    marginBottom: 1,
+  });
+
+  const headingText = new TextRenderable(renderer, {
+    id: `heading-text-${id}`,
+    content: token.text.toUpperCase(),
+    fg: theme.message.headingFg,
+    attributes: TextAttributes.BOLD,
+  });
+  headingText.selectable = true;
+
+  container.add(headingText);
+  return container;
+}
+
+/**
  * Build a renderable for an assistant message with markdown rendering
  */
 export function buildAssistantMessageRenderable(
@@ -542,6 +578,17 @@ export function buildAssistantMessageRenderable(
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
     conceal: true,
+    renderNode: (token: Token, _context: RenderNodeContext) => {
+      if (token.type === 'heading') {
+        return buildHeadingRenderable(
+          renderer,
+          theme,
+          token as Token & { type: 'heading'; text: string; depth: number },
+          `${id}-h-${(token as any).depth}`,
+        );
+      }
+      return undefined;
+    },
   });
   md.selectable = true;
 
