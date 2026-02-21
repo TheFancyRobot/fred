@@ -780,13 +780,12 @@ export class FredTuiApp {
 
     // Check if streaming is active
     if (this.state.streaming.isStreaming) {
-      // Queue the submission and show immediately as dimmed pending message
+      // Queue the submission - message will be shown dimmed via pending queue projection
       const { state: queuedState, entry } = queuePendingSubmission(this.state, inputText);
       this.state = queuedState;
       
       if (entry) {
-        // Append user message to transcript right away (will be shown dimmed via pending queue projection)
-        this.state = appendUserMessage(this.state, entry.text);
+        // Scroll to bottom so user can see their queued message
         this.transcriptContent.scrollTo(Infinity);
       }
       
@@ -1435,9 +1434,10 @@ export class FredTuiApp {
   private syncTranscriptToUI(r: CliRenderer, theme: typeof DEFAULT_TUI_THEME): void {
     const messages = getTranscriptMessages(this.state);
     const isStartupChooser = this.state.startup.chooser.isOpen;
-    const isEmpty = messages.length === 0;
+    const hasPending = this.state.input.pendingSubmissions.length > 0;
+    const isEmpty = messages.length === 0 && !hasPending;
 
-    // Startup chooser and empty state: use legacy string-line path
+    // Startup chooser and empty state (no pending): use legacy string-line path
     if (isStartupChooser || isEmpty) {
       this.activeStreamingMdId = null;
       this.lastRenderedMessageCount = 0;
@@ -1477,6 +1477,11 @@ export class FredTuiApp {
         text.selectable = true;
         return text;
       });
+
+      // Still render pending submissions even in empty state
+      if (hasPending) {
+        this.renderPendingSubmissions(r, theme, 0);
+      }
       return;
     }
 
@@ -1573,6 +1578,11 @@ export class FredTuiApp {
       }
     }
 
+    // Render pending submissions as dimmed user messages
+    if (hasPending) {
+      this.renderPendingSubmissions(r, theme, messages.length);
+    }
+
     this.lastRenderedMessageCount = messages.length;
 
     // Handle streaming-to-complete transition: swap SyntaxStyle to normal colors
@@ -1593,6 +1603,49 @@ export class FredTuiApp {
     if (this.state.streaming.lastError && this.activeStreamingMdId) {
       // Clear the active streaming id to trigger a full rebuild on next sync
       this.activeStreamingMdId = null;
+    }
+  }
+
+  /**
+   * Render pending submissions as dimmed user message placeholders.
+   * These are projected after committed transcript messages and disappear
+   * as each queued item is dispatched.
+   */
+  private renderPendingSubmissions(
+    r: CliRenderer,
+    theme: typeof DEFAULT_TUI_THEME,
+    startIndex: number,
+  ): void {
+    const pending = this.state.input.pendingSubmissions;
+    for (let i = 0; i < pending.length; i++) {
+      const entry = pending[i];
+      const msgId = `pending-${startIndex + i}`;
+
+      // Build a dimmed user message container
+      const container = new BoxRenderable(r, {
+        id: `msg-pending-${msgId}`,
+        flexDirection: 'column',
+        backgroundColor: theme.message.userBg,
+        border: ['left'],
+        borderStyle: 'single',
+        borderColor: theme.fg.dim, // Dim border instead of accent
+        paddingLeft: 2,
+        paddingRight: 2,
+        paddingTop: 0,
+        paddingBottom: 0,
+        marginBottom: 1,
+      });
+
+      const text = new TextRenderable(r, {
+        id: `msg-pending-text-${msgId}`,
+        content: entry.text,
+        fg: theme.fg.dim, // Dim text
+        attributes: TextAttributes.DIM,
+      });
+      text.selectable = false;
+
+      container.add(text);
+      this.transcriptContent.add(container);
     }
   }
 

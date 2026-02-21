@@ -509,10 +509,12 @@ describe('TUI App (OpenTUI integration)', () => {
   test('mouse wheel scrolling updates transcript viewport offset', async () => {
     await createTestApp();
 
-    // Seed transcript with enough lines to scroll.
+    // Seed transcript with enough lines to scroll by completing streams between submissions.
     for (let i = 0; i < 40; i += 1) {
       app.processKey(makeKey({ name: 'x' }));
       app.processKey(makeKey({ name: 'enter' }));
+      // Complete the stream so the message is added to transcript
+      app.completeAssistantStream();
     }
 
     (app as any).handleTranscriptMouseScroll({
@@ -734,6 +736,138 @@ describe('TUI App (OpenTUI integration)', () => {
       expect(stateChangeCount).toBeGreaterThan(initialCount);
       expect(app.getState().telemetry.model).toBe('gpt-4o-mini');
       expect(app.getState().telemetry.provider).toBe('openai');
+    });
+  });
+
+  describe('pending submission queue', () => {
+    test('submitting while streaming queues the message', async () => {
+      await createTestApp();
+
+      // First submission starts streaming
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      expect(app.getState().streaming.isStreaming).toBe(true);
+      expect(app.getState().transcript.messages).toHaveLength(1);
+      expect(app.getState().input.pendingSubmissions).toHaveLength(0);
+
+      // Second submission while streaming should be queued
+      app.processKey(makeKey({ name: 'n' }));
+      app.processKey(makeKey({ name: 'e' }));
+      app.processKey(makeKey({ name: 'x' }));
+      app.processKey(makeKey({ name: 't' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      // Queued, not added to transcript yet
+      expect(app.getState().input.pendingSubmissions).toHaveLength(1);
+      expect(app.getState().input.pendingSubmissions[0]?.text).toBe('next');
+      expect(app.getState().transcript.messages).toHaveLength(1);
+      expect(app.getState().input.text).toBe('');
+    });
+
+    test('queued submissions are auto-dispatched after stream completes', async () => {
+      let submittedTexts: string[] = [];
+      await createTestApp({
+        onSubmit: (text) => { submittedTexts.push(text); },
+      });
+
+      // First submission
+      app.processKey(makeKey({ name: 'f' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'r' }));
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 't' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      // Queue second while streaming
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 'e' }));
+      app.processKey(makeKey({ name: 'c' }));
+      app.processKey(makeKey({ name: 'o' }));
+      app.processKey(makeKey({ name: 'n' }));
+      app.processKey(makeKey({ name: 'd' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().input.pendingSubmissions).toHaveLength(1);
+      expect(submittedTexts).toEqual(['first']);
+
+      // Complete stream - should drain queue
+      app.completeAssistantStream();
+
+      await waitFor(() => app.getState().input.pendingSubmissions.length === 0);
+      expect(submittedTexts).toEqual(['first', 'second']);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+    });
+
+    test('queued submissions drain in FIFO order', async () => {
+      let submittedTexts: string[] = [];
+      await createTestApp({
+        onSubmit: (text) => { submittedTexts.push(text); },
+      });
+
+      // Submit first and start streaming
+      app.processKey(makeKey({ name: '1' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      // Queue multiple submissions
+      app.processKey(makeKey({ name: '2' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      app.processKey(makeKey({ name: '3' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      app.processKey(makeKey({ name: '4' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().input.pendingSubmissions).toHaveLength(3);
+      expect(submittedTexts).toEqual(['1']);
+
+      // Complete first stream
+      app.completeAssistantStream();
+      await waitFor(() => submittedTexts.length === 2);
+      expect(submittedTexts[1]).toBe('2');
+
+      // Complete second stream
+      app.completeAssistantStream();
+      await waitFor(() => submittedTexts.length === 3);
+      expect(submittedTexts[2]).toBe('3');
+
+      // Complete third stream
+      app.completeAssistantStream();
+      await waitFor(() => submittedTexts.length === 4);
+      expect(submittedTexts[3]).toBe('4');
+    });
+
+    test('queued submissions drain after stream error', async () => {
+      let submittedTexts: string[] = [];
+      await createTestApp({
+        onSubmit: (text) => { submittedTexts.push(text); },
+      });
+
+      // Submit first and start streaming
+      app.processKey(makeKey({ name: 'f' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'r' }));
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 't' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      // Queue second
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 'e' }));
+      app.processKey(makeKey({ name: 'c' }));
+      app.processKey(makeKey({ name: 'o' }));
+      app.processKey(makeKey({ name: 'n' }));
+      app.processKey(makeKey({ name: 'd' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().input.pendingSubmissions).toHaveLength(1);
+
+      // Fail stream - should still drain queue
+      app.failAssistantStream(new Error('test error'));
+      await waitFor(() => submittedTexts.length === 2);
+
+      expect(submittedTexts).toEqual(['first', 'second']);
     });
   });
 });
