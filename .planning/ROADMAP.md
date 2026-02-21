@@ -69,7 +69,7 @@ Plans:
   1. Assistant messages render with muted/dimmer styling visually distinct from user messages
   2. Tool calls and task results render as inline expandable blocks with `└` tree connectors
   3. Active streaming content uses a distinct accent color (orange/amber) that changes to normal on completion
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 Plans:
 - [x] 39-01-PLAN.md — Theme tokens + renderable-based message styling with streaming accent
@@ -77,7 +77,8 @@ Plans:
 - [x] 39-03-PLAN.md — Fix markdown rendering and streaming visual polish (gap closure)
 - [x] 39-04-PLAN.md — Fix paste, auto-scroll, and scroll acceleration (gap closure)
 - [x] 39-05-PLAN.md — Fix tool calling pipeline (gap closure)
-- [ ] 39-06-PLAN.md — Fix markdown formatting visibility via distinct scope colors (gap closure)
+- [x] 39-06-PLAN.md — Fix markdown formatting visibility via distinct scope colors (gap closure)
+- [ ] 39-07-PLAN.md — Fix bold emphasis and heading structural distinction (gap closure)
 
 ### Phase 40: Input & Status Bar Polish
 **Goal**: Minimize input chrome and polish status bar with compact keyboard shortcut badges
@@ -98,7 +99,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
-| 39. Transcript & Message Rendering | 6/6 | Complete    | 2026-02-20 |
+| 39. Transcript & Message Rendering | 6/7 | Gap Closure | - |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
 ---
@@ -128,4 +129,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-20 - Phase 39 gap closure plan 39-06 added (markdown formatting visibility)*
+*Last updated: 2026-02-20 - Phase 39 gap closure plan 39-07 added (bold emphasis + heading structural distinction)*
