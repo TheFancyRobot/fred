@@ -99,7 +99,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 |-------|----------------|--------|-----------|
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
-| 39. Transcript & Message Rendering | 6/7 | Gap Closure | - |
+| 39. Transcript & Message Rendering | 7/7 | Complete   | 2026-02-21 |
 | 40. Input & Status Bar Polish | 0/? | Pending | - |
 
 ---
