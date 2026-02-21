@@ -74,6 +74,10 @@ export interface TuiTheme {
     taskAccent: string;
     /** Failed tool/task accent (red) */
     errorAccent: string;
+    /** Heading background band color */
+    headingBg: string;
+    /** Heading foreground text color */
+    headingFg: string;
   };
 }
 
@@ -157,5 +161,7 @@ export const DEFAULT_TUI_THEME: TuiTheme = {
     toolConnector: '#8b9199',
     taskAccent: '#6fa6d9',
     errorAccent: '#d97b7b',
+    headingBg: '#252a31',
+    headingFg: '#5ec2c7',
   },
 };
