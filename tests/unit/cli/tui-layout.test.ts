@@ -21,6 +21,14 @@ describe('TUI Layout', () => {
     test('has expected status height', () => {
       expect(DEFAULT_LAYOUT.statusHeight).toBe(1);
     });
+
+    test('has 5-line max visible input lines', () => {
+      expect(DEFAULT_LAYOUT.inputMaxVisibleLines).toBe(5);
+    });
+
+    test('has zero region gap for flush transcript/input boundary', () => {
+      expect(DEFAULT_LAYOUT.regionGap).toBe(0);
+    });
   });
 
   describe('Pane content rendering', () => {
@@ -161,7 +169,7 @@ describe('TUI Layout', () => {
       const state = createInitialTuiState();
       const content = renderInputContent(state, true, 'Type a message...');
 
-      expect(content.lines[0]).toBe('> ▍Type a message...');
+      expect(content.lines[0]).toBe('▎ ▍Type a message...');
       expect(content.lines[0]).not.toContain('Enter send');
     });
 
@@ -171,7 +179,7 @@ describe('TUI Layout', () => {
       state.input.cursorPosition = 2;
 
       const content = renderInputContent(state, true, 'Type a message...');
-      expect(content.lines[0]).toBe('> he▍llo');
+      expect(content.lines[0]).toBe('▎ he▍llo');
     });
 
     test('renders command palette content in sidebar mode', () => {

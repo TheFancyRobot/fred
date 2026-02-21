@@ -8,18 +8,17 @@
 import {
   BoxRenderable,
   TextRenderable,
-  MarkdownRenderable,
+  CodeRenderable,
   TextAttributes,
   type CliRenderer,
   type SyntaxStyle,
-  type RenderNodeContext,
 } from '@opentui/core';
-import type { Token } from 'marked';
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
 
 const STREAM_SPINNER_FRAMES = ['-', '\\', '/', '*'] as const;
 const INPUT_CURSOR_INDICATOR = '▍';
+const INPUT_ACCENT_GLYPH = '▎';
 
 interface StatusRenderOptions {
   maxWidth?: number;
@@ -62,11 +61,11 @@ function trimStatusSegments(segments: string[], maxWidth: number): string {
 export const DEFAULT_LAYOUT = {
   sidebarWidth: 30,
   inputHeight: 3,
-  inputMaxHeight: 6,
-  inputMaxVisibleLines: 4,
+  inputMaxHeight: 7,
+  inputMaxVisibleLines: 5,
   statusHeight: 1,
   outerPadding: 0,
-  regionGap: 1,
+  regionGap: 0,
 };
 
 export const INPUT_PLACEHOLDERS = [
@@ -116,7 +115,7 @@ function formatComposerLines(text: string, maxVisibleLines: number, cursorPositi
   const cursorLocation = focused ? getCursorLocation(text, cursorPosition) : null;
 
   return visible.map((line, index) => {
-    const prefix = index === 0 ? '> ' : '  ';
+    const prefix = index === 0 ? `${INPUT_ACCENT_GLYPH} ` : '  ';
     const lineIndex = startIndex + index;
     if (!cursorLocation || cursorLocation.line !== lineIndex) {
       return `${prefix}${line}`;
@@ -149,7 +148,7 @@ export function renderInputContent(
         state.input.cursorPosition,
         focused,
       )
-    : [`> ${focused ? `${INPUT_CURSOR_INDICATOR}${placeholder}` : placeholder}`];
+    : [`${INPUT_ACCENT_GLYPH} ${focused ? `${INPUT_CURSOR_INDICATOR}${placeholder}` : placeholder}`];
   const slashHint = state.input.slashSearch.isActive
     ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex]?.plugin
     : null;
@@ -518,40 +517,6 @@ export function buildUserMessageRenderable(
 }
 
 /**
- * Build a renderable for a heading token with structural treatment.
- * Background band + UPPERCASE + teal color + bold for visual hierarchy.
- */
-function buildHeadingRenderable(
-  renderer: CliRenderer,
-  theme: TuiTheme,
-  token: Token & { type: 'heading'; text: string; depth: number },
-  id: string,
-): BoxRenderable {
-  const container = new BoxRenderable(renderer, {
-    id: `heading-${id}`,
-    flexDirection: 'column',
-    backgroundColor: theme.message.headingBg,
-    paddingLeft: 1,
-    paddingRight: 1,
-    paddingTop: 0,
-    paddingBottom: 0,
-    marginTop: 1,
-    marginBottom: 1,
-  });
-
-  const headingText = new TextRenderable(renderer, {
-    id: `heading-text-${id}`,
-    content: token.text.toUpperCase(),
-    fg: theme.message.headingFg,
-    attributes: TextAttributes.BOLD,
-  });
-  headingText.selectable = true;
-
-  container.add(headingText);
-  return container;
-}
-
-/**
  * Build a renderable for an assistant message with markdown rendering
  */
 export function buildAssistantMessageRenderable(
@@ -572,23 +537,14 @@ export function buildAssistantMessageRenderable(
     marginBottom: 1,
   });
 
-  const md = new MarkdownRenderable(renderer, {
+  const md = new CodeRenderable(renderer, {
     id: `msg-assistant-md-${id}`,
     content,
+    filetype: 'markdown',
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
     conceal: true,
-    renderNode: (token: Token, _context: RenderNodeContext) => {
-      if (token.type === 'heading') {
-        return buildHeadingRenderable(
-          renderer,
-          theme,
-          token as Token & { type: 'heading'; text: string; depth: number },
-          `${id}-h-${(token as any).depth}`,
-        );
-      }
-      return undefined;
-    },
+    drawUnstyledText: false,
   });
   md.selectable = true;
 
