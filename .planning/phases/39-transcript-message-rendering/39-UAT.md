@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 39-transcript-message-rendering
 source: 39-01-SUMMARY.md, 39-02-SUMMARY.md, 39-03-SUMMARY.md, 39-04-SUMMARY.md, 39-05-SUMMARY.md, 39-06-SUMMARY.md
 started: 2026-02-20T12:00:00Z
@@ -100,21 +100,26 @@ skipped: 1
   debug_session: ".planning/debug/markdown-rendering-retest.md"
 
 - truth: "Bold text renders in bright white (#ffffff), clearly brighter than default body text"
-  status: failed
+  status: fixed
   reason: "User reported: text does not appear bold. Concealment works (no ** markers) but all text is same gray color — bright white not applied."
   severity: major
   test: 10
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "#ffffff was perceptually too close to default #e6e7ea (distance 40.5, going brighter on near-white baseline). Human perception is nonlinear — brightening from near-white is barely visible. Italic #c2c6cc works because it goes dimmer (distance 57.3)."
+  artifacts:
+    - path: "packages/cli/src/tui/theme.ts"
+      issue: "markup.strong foreground #ffffff provides insufficient perceptual contrast against #e6e7ea default"
+  missing:
+    - "Changed bold fg from #ffffff to #f0dab4 (warm cream, distance 56.4 matching italic)"
+  debug_session: ".planning/debug/bold-heading-color-not-applied.md"
 
 - truth: "Headings render in teal with underline decoration, standing out as section headers"
-  status: failed
+  status: not-reproduced
   reason: "User reported: headings are the same as the rest of the text. Bold concealment works but foreground colors not applied. Same root cause as test 10."
   severity: major
   test: 12
-  root_cause: ""
-  artifacts: []
+  root_cause: "Heading teal #5ec2c7 (distance 145.2 from default) IS dramatically different and renders correctly. The test model used **bold** instead of # headings, so the teal/underline never triggered. Bold fix (test 10) addresses what was actually visible."
+  artifacts:
+    - path: "packages/cli/src/tui/theme.ts"
+      issue: "Heading rendering is correct; test did not produce actual heading syntax"
   missing: []
-  debug_session: ""
+  debug_session: ".planning/debug/bold-heading-color-not-applied.md"
