@@ -10,7 +10,7 @@ import {
   BoxRenderable,
   TextRenderable,
   ScrollBoxRenderable,
-  MarkdownRenderable,
+  CodeRenderable,
   SyntaxStyle,
   TextAttributes,
   MacOSScrollAccel,
@@ -52,6 +52,9 @@ import {
   failToolCall,
   hasInProgressToolBlocks,
   getToolBlocksForMessage,
+  queuePendingSubmission,
+  dequeuePendingSubmission,
+  hasPendingSubmissions,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -626,6 +629,9 @@ export class FredTuiApp {
     this.refreshSessionCost(false);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+
+    // Drain any queued submissions after stream completion
+    this.drainPendingSubmissionQueue();
   }
 
   failAssistantStream(error: unknown, nowMs = Date.now()): void {
@@ -638,6 +644,9 @@ export class FredTuiApp {
     this.events.onError?.(error instanceof Error ? error : new Error(message));
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+
+    // Drain any queued submissions after stream error
+    this.drainPendingSubmissionQueue();
   }
 
   /**
@@ -759,13 +768,38 @@ export class FredTuiApp {
   }
 
   private submitCurrentInput(): void {
+    const inputText = this.state.input.text;
+    if (!inputText.trim()) {
+      // Clear empty input and return
+      const { state: clearedState } = submitInput(this.state);
+      this.state = clearedState;
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    // Check if streaming is active
+    if (this.state.streaming.isStreaming) {
+      // Queue the submission and show immediately as dimmed pending message
+      const { state: queuedState, entry } = queuePendingSubmission(this.state, inputText);
+      this.state = queuedState;
+      
+      if (entry) {
+        // Append user message to transcript right away (will be shown dimmed via pending queue projection)
+        this.state = appendUserMessage(this.state, entry.text);
+        this.transcriptContent.scrollTo(Infinity);
+      }
+      
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    // Not streaming: submit immediately
     const { state: clearedState, submittedText } = submitInput(this.state);
     this.state = clearedState;
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
-    if (!submittedText.trim()) {
-      return;
-    }
 
     this.state = appendUserMessage(this.state, submittedText);
 
@@ -798,14 +832,69 @@ export class FredTuiApp {
       },
     };
 
-    if (!this.state.streaming.isStreaming) {
-      this.state = startStreaming(this.state);
-      this.streamingController.start();
-    }
+    this.state = startStreaming(this.state);
+    this.streamingController.start();
 
     this.refreshSessionCost(true);
     this.events.onStateChange?.(this.state);
     this.events.onSubmit?.(submittedText, this.state.sessions.selectedId);
+    this.syncStateToUI();
+
+    if (this.state.sessions.selectedId === null) {
+      void this.ensureSessionSelected();
+    }
+  }
+
+  /**
+   * Drain the pending submission queue after stream completion/error.
+   * Dequeues the head entry and submits it, starting a new stream.
+   */
+  private drainPendingSubmissionQueue(): void {
+    if (!hasPendingSubmissions(this.state)) {
+      return;
+    }
+
+    const { state: dequeuedState, entry } = dequeuePendingSubmission(this.state);
+    this.state = dequeuedState;
+
+    if (!entry) {
+      return;
+    }
+
+    this.state = appendUserMessage(this.state, entry.text);
+    this.transcriptContent.scrollTo(Infinity);
+
+    // Handle slash commands in queued submissions
+    const sidebarInvocation = this.parseSidebarSlashCommand(entry.text);
+    if (sidebarInvocation) {
+      this.state = toggleSidebarVisibility(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    const slashInvocation = this.parseSlashInvocation(entry.text);
+    if (slashInvocation) {
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      void this.executePluginSlashCommand(slashInvocation.canonicalName, slashInvocation.args);
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      telemetry: {
+        ...this.state.telemetry,
+        inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(entry.text),
+      },
+    };
+
+    this.state = startStreaming(this.state);
+    this.streamingController.start();
+
+    this.refreshSessionCost(true);
+    this.events.onStateChange?.(this.state);
+    this.events.onSubmit?.(entry.text, this.state.sessions.selectedId);
     this.syncStateToUI();
 
     if (this.state.sessions.selectedId === null) {
@@ -1341,7 +1430,7 @@ export class FredTuiApp {
    *
    * For startup chooser and empty state, uses the legacy string-line path.
    * For normal messages, builds per-message renderables with distinct styling.
-   * During streaming, updates the active MarkdownRenderable content in place.
+   * During streaming, updates the active CodeRenderable content in place.
    */
   private syncTranscriptToUI(r: CliRenderer, theme: typeof DEFAULT_TUI_THEME): void {
     const messages = getTranscriptMessages(this.state);
@@ -1391,7 +1480,7 @@ export class FredTuiApp {
       return;
     }
 
-    // Streaming incremental update: update existing MarkdownRenderable in place
+    // Streaming incremental update: update existing CodeRenderable in place
     if (
       this.activeStreamingMdId
       && this.state.streaming.isStreaming
@@ -1400,7 +1489,7 @@ export class FredTuiApp {
       && messages[messages.length - 1].role === 'assistant'
     ) {
       const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
-      if (existingMd && existingMd instanceof MarkdownRenderable) {
+      if (existingMd && existingMd instanceof CodeRenderable) {
         const lastMsg = messages[messages.length - 1];
         existingMd.content = lastMsg.content + buildStreamingCursorText();
         return;
@@ -1489,7 +1578,7 @@ export class FredTuiApp {
     // Handle streaming-to-complete transition: swap SyntaxStyle to normal colors
     if (!this.state.streaming.isStreaming && this.activeStreamingMdId) {
       const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
-      if (md && md instanceof MarkdownRenderable) {
+      if (md && md instanceof CodeRenderable) {
         md.streaming = false;
         md.syntaxStyle = this.syntaxStyle!;
         // Remove cursor character from content

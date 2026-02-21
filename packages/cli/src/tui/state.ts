@@ -161,6 +161,15 @@ export interface InputHistory {
 }
 
 /**
+ * Pending submission entry in the queue
+ */
+export interface PendingSubmission {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
+/**
  * Complete TUI application state
  */
 export interface TuiState {
@@ -179,6 +188,7 @@ export interface TuiState {
       selectedIndex: number;
       filteredActions: ReadonlyArray<CommandPaletteAction>;
     };
+    pendingSubmissions: PendingSubmission[];
   };
   sessions: {
     items: SessionListItem[];
@@ -257,6 +267,7 @@ export function createInitialTuiStateWithPlugins(
         selectedIndex: 0,
         filteredActions: [],
       },
+      pendingSubmissions: [],
     },
     sessions: {
       items: [],
@@ -1410,6 +1421,99 @@ export function submitInput(state: TuiState): { state: TuiState; submittedText: 
       : state.sessions,
   };
   return { state: newState, submittedText: text };
+}
+
+/**
+ * Generate a unique ID for pending submissions
+ */
+function generatePendingSubmissionId(): string {
+  return `pending-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Queue a pending submission when streaming is active.
+ * Clears input immediately and returns the queued entry.
+ */
+export function queuePendingSubmission(
+  state: TuiState,
+  text: string,
+  nowMs = Date.now(),
+): { state: TuiState; entry: PendingSubmission | null } {
+  if (!text.trim()) {
+    return { state, entry: null };
+  }
+
+  const entry: PendingSubmission = {
+    id: generatePendingSubmissionId(),
+    text,
+    createdAt: nowMs,
+  };
+
+  const newState: TuiState = {
+    ...state,
+    input: {
+      ...state.input,
+      text: '',
+      cursorPosition: 0,
+      slashSearch: getSlashSearchState(state, ''),
+      history: {
+        entries: [...state.input.history.entries, text],
+        currentIndex: -1,
+      },
+      pendingSubmissions: [...state.input.pendingSubmissions, entry],
+    },
+    sessions: state.sessions.selectedId
+      ? {
+          ...state.sessions,
+          drafts: {
+            ...state.sessions.drafts,
+            [state.sessions.selectedId]: '',
+          },
+        }
+      : state.sessions,
+  };
+
+  return { state: newState, entry };
+}
+
+/**
+ * Dequeue the head pending submission (FIFO).
+ * Returns the new state and the dequeued entry (or null if empty).
+ */
+export function dequeuePendingSubmission(state: TuiState): {
+  state: TuiState;
+  entry: PendingSubmission | null;
+} {
+  const pending = state.input.pendingSubmissions;
+  if (pending.length === 0) {
+    return { state, entry: null };
+  }
+
+  const [head, ...rest] = pending;
+  return {
+    state: {
+      ...state,
+      input: {
+        ...state.input,
+        pendingSubmissions: rest,
+      },
+    },
+    entry: head,
+  };
+}
+
+/**
+ * Check if there are any pending submissions in the queue.
+ */
+export function hasPendingSubmissions(state: TuiState): boolean {
+  return state.input.pendingSubmissions.length > 0;
+}
+
+/**
+ * Get the head pending submission without removing it.
+ */
+export function getHeadPendingSubmission(state: TuiState): PendingSubmission | null {
+  return state.input.pendingSubmissions[0] ?? null;
 }
 
 /**
