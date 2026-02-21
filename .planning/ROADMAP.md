@@ -88,7 +88,12 @@ Plans:
   1. Input area uses minimal chrome — just a cursor with subtle left border accent, no decorative box borders
   2. Status bar shows keyboard shortcuts as compact `key: action` badge labels
   3. Status bar background contrasts distinctly with both transcript and input regions
-**Plans**: TBD (research required)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 40-01-PLAN.md — Input Area Polish & Message Queue State
+- [ ] 40-02-PLAN.md — Status Bar Shortcuts
+- [ ] 40-03-PLAN.md — Floating Modals (Slash Commands & Help)
 
 ## Progress
 
@@ -100,7 +105,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
 | 39. Transcript & Message Rendering | 7/7 | Complete   | 2026-02-21 |
-| 40. Input & Status Bar Polish | 0/? | Pending | - |
+| 40. Input & Status Bar Polish | 0/3 | Pending | - |
 
 ---
 
