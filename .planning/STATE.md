@@ -11,19 +11,19 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 39 of 40 (Transcript & Message Rendering)
-Plan: 7 of 7 in current phase
-Status: Phase Complete
-Last activity: 2026-02-21 - Completed 39-07 (bold emphasis and heading structure)
+Phase: 40 of 40 (Input & Status Bar Polish)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-21 - Completed 40-01 (minimal composer chrome and queue-safe submit)
 
-Progress: [██████████] 100% (170/170 plans complete)
+Progress: [██████████] 100% (171/171 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8 (v0.2.2 milestone)
-- Average duration: ~6 min
-- Total execution time: ~50 min
+- Total plans completed: 9 (v0.2.2 milestone)
+- Average duration: ~7.5 min
+- Total execution time: ~68 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -77,6 +77,12 @@ Recent decisions affecting current work:
 - (Phase 39) Bold uses bright white (#ffffff), italic uses blue-gray (#c2c6cc) for color-based markdown visibility
 - (Phase 39) Headings use background band + UPPERCASE + teal color for structural distinction without font size
 - (Phase 39) renderNode callback pattern for custom token rendering in MarkdownRenderable
+- (Phase 40) Subtle left accent glyph (▎) replaces > prompt for minimal composer chrome
+- (Phase 40) 5-line max visible input with 7-line maxHeight cap for upward growth
+- (Phase 40) Zero regionGap for flush transcript/input boundary
+- (Phase 40) Pending submissions projected as dimmed renderables, not added to transcript
+- (Phase 40) Queue state in TuiState.input.pendingSubmissions for streaming-safe submits
+- (Phase 40) FIFO queue drain from complete/fail stream handlers
 
 ### Blockers/Concerns
 
@@ -94,6 +100,7 @@ None currently.
 | 002 | Remove malformed 31-VERIFICATION.md heredoc accidentally added as Bash permission entry in .claude/settings.local.json | 2026-02-16 | n/a (gitignored) | [002-fix-malformed-bash-permission-entry-in-c](./quick/002-fix-malformed-bash-permission-entry-in-c/) |
 
 ---
+| Phase 40 P01 | 18min | 3 tasks | 5 files |
 | Phase 39 P03 | 5min | 2 tasks | 5 files |
 | Phase 39 P04 | 6 | 2 tasks | 3 files |
 | Phase 39 P06 | 1min | 1 task | 1 file |
@@ -102,11 +109,11 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 39-07-PLAN.md (bold emphasis and heading structure)
-Resume file: .planning/phases/39-transcript-message-rendering/39-07-SUMMARY.md
+Stopped at: Completed 40-01-PLAN.md (minimal composer chrome and queue-safe submit)
+Resume file: .planning/phases/40-input-and-status-bar-polish/40-01-SUMMARY.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-21 — Phase 39 plan 07 complete*
+*Last updated: 2026-02-21 — Phase 40 plan 01 complete*

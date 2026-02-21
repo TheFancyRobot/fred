@@ -4,6 +4,7 @@ import {
   renderSidebarContent,
   renderTranscriptContent,
   renderStatusContent,
+  buildStatusBadges,
   DEFAULT_LAYOUT,
 } from '../../../packages/cli/src/tui/layout.js';
 import { createInitialTuiState } from '../../../packages/cli/src/tui/state.js';
@@ -152,17 +153,137 @@ describe('TUI Layout', () => {
       expect(content.lines.join('\n')).toContain('Hi there!');
     });
 
-    test('renders status bar with focus indicator', () => {
+    test('renders status bar with core shortcut badges only', () => {
       const state = createInitialTuiState();
-      state.focusedPane = 'transcript';
+      state.focusedPane = 'input';
 
       const content = renderStatusContent(state);
 
-      expect(content.lines[0]).toContain('Focus: transcript');
-      expect(content.lines[0]).toContain('Esc: quit');
-      expect(content.lines[0]).toContain('cost $0.0000');
-      expect(content.lines[0]).toContain('tok total:0');
-      expect(content.lines[0]).toContain('in:0 out:0');
+      // Core badges are always present
+      expect(content.lines[0]).toContain('? Help');
+      expect(content.lines[0]).toContain('Esc Quit');
+      expect(content.lines[0]).toContain('Ctrl+B Sidebar');
+    });
+
+    test('status output excludes telemetry metrics', () => {
+      const state = createInitialTuiState();
+      state.streaming.isStreaming = true;
+      state.streaming.tokensPerSecond = 42.5;
+      state.streaming.firstTokenLatencyMs = 150;
+      state.telemetry.model = 'claude-3';
+      state.telemetry.sessionCostUsd = 0.002;
+
+      const content = renderStatusContent(state);
+
+      // No telemetry phrases should appear
+      expect(content.lines[0]).not.toContain('tok');
+      expect(content.lines[0]).not.toContain('lat');
+      expect(content.lines[0]).not.toContain('cost');
+      expect(content.lines[0]).not.toContain('mdl');
+      expect(content.lines[0]).not.toContain('Focus:');
+      expect(content.lines[0]).not.toContain('streaming');
+    });
+
+    test('buildStatusBadges returns core badges with highest priority', () => {
+      const state = createInitialTuiState();
+      const badges = buildStatusBadges(state);
+
+      // Core badges
+      const helpBadge = badges.find((b) => b.text === '? Help');
+      const quitBadge = badges.find((b) => b.text === 'Esc Quit');
+      const sidebarBadge = badges.find((b) => b.text === 'Ctrl+B Sidebar');
+
+      expect(helpBadge).toBeDefined();
+      expect(quitBadge).toBeDefined();
+      expect(sidebarBadge).toBeDefined();
+      expect(helpBadge?.priority).toBe(100);
+      expect(quitBadge?.priority).toBe(100);
+      expect(sidebarBadge?.priority).toBe(100);
+    });
+
+    test('sidebar focused shows j/k nav and session actions', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+      state.sessions.items = [
+        {
+          id: 's1',
+          title: 'Test',
+          updatedAt: new Date(),
+          messageCount: 1,
+          preview: 'test',
+          unread: false,
+        },
+      ];
+      state.sessions.selectedId = 's1';
+
+      const badges = buildStatusBadges(state);
+      const texts = badges.map((b) => b.text);
+
+      expect(texts).toContain('j/k nav');
+      expect(texts).toContain('Enter select');
+      expect(texts).toContain('Del delete');
+    });
+
+    test('transcript focused shows scroll and copy badges', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'transcript';
+      state.transcript.messages = [{ role: 'assistant', content: 'test' }];
+
+      const badges = buildStatusBadges(state);
+      const texts = badges.map((b) => b.text);
+
+      expect(texts).toContain('PgUp/PgDn scroll');
+      expect(texts).toContain('Ctrl+Y copy');
+    });
+
+    test('transcript focused shows no copy badge when empty', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'transcript';
+      state.transcript.messages = [];
+
+      const badges = buildStatusBadges(state);
+      const texts = badges.map((b) => b.text);
+
+      expect(texts).not.toContain('Ctrl+Y copy');
+      expect(texts).toContain('PgUp/PgDn scroll');
+    });
+
+    test('input focused with slash search shows Tab complete', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.slashSearch.isActive = true;
+
+      const badges = buildStatusBadges(state);
+      const texts = badges.map((b) => b.text);
+
+      expect(texts).toContain('Tab complete');
+      expect(texts).not.toContain('Ctrl+K palette');
+    });
+
+    test('input focused without slash search shows palette shortcut', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.slashSearch.isActive = false;
+
+      const badges = buildStatusBadges(state);
+      const texts = badges.map((b) => b.text);
+
+      expect(texts).toContain('Ctrl+K palette');
+      expect(texts).not.toContain('Tab complete');
+    });
+
+    test('truncation preserves core badges at narrow widths', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+      state.input.slashSearch.isActive = false;
+
+      const content = renderStatusContent(state, { maxWidth: 40 });
+
+      // Core badges must still be visible even at narrow width
+      expect(content.lines[0]).toContain('? Help');
+      expect(content.lines[0]).toContain('Esc Quit');
+      expect(content.lines[0]).toContain('Ctrl+B Sidebar');
+      // Context badge may be dropped
     });
 
     test('renders composer without shortcut hint suffix', () => {
@@ -193,29 +314,12 @@ describe('TUI Layout', () => {
       expect(content.lines.join('\n')).toContain('Focus Next Pane');
     });
 
-    test('shows streaming indicator only when actively streaming', () => {
-      const state = createInitialTuiState();
-
-      state.streaming.isStreaming = true;
-      state.streaming.tokensPerSecond = 42.4;
-      state.streaming.firstTokenLatencyMs = 91;
-      const streaming = renderStatusContent(state, { nowMs: 1_000 });
-      expect(streaming.lines[0]).toContain('streaming');
-      expect(streaming.lines[0]).toContain('42.4 tok/s');
-      expect(streaming.lines[0]).toContain('lat 91ms');
-
-      state.streaming.isStreaming = false;
-      const idle = renderStatusContent(state, { nowMs: 1_150 });
-      expect(idle.lines[0]).not.toContain('streaming');
-    });
-
     test('degrades status output for compact widths', () => {
       const state = createInitialTuiState();
-      state.streaming.isStreaming = true;
-      state.streaming.tokensPerSecond = 120.2;
+      state.focusedPane = 'input';
 
-      const content = renderStatusContent(state, { maxWidth: 52, nowMs: 1_200 });
-      expect(content.lines[0].length).toBeLessThanOrEqual(52);
+      const content = renderStatusContent(state, { maxWidth: 40 });
+      expect(content.lines[0].length).toBeLessThanOrEqual(40);
       expect(content.lines[0].length).toBeGreaterThan(0);
     });
   });

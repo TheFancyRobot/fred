@@ -25,34 +25,108 @@ interface StatusRenderOptions {
   nowMs?: number;
 }
 
-function formatUsd(value: number): string {
-  return `$${value.toFixed(4)}`;
+/**
+ * Badge definition for status bar shortcut display
+ */
+interface StatusBadge {
+  /** Display text (e.g., "? Help", "Esc Quit") */
+  text: string;
+  /** Priority: higher = kept longer during truncation. Core badges have priority 100 */
+  priority: number;
 }
 
-function formatLatency(latencyMs: number | null): string {
-  if (latencyMs === null) {
-    return 'lat n/a';
+/**
+ * Build status bar badge content from TUI state.
+ *
+ * Core badges (always shown):
+ * - ? Help
+ * - Esc Quit
+ * - Ctrl+B Sidebar
+ *
+ * Context badges (shown when relevant):
+ * - Sidebar focused: j/k nav, Enter select, Del delete
+ * - Transcript focused: PgUp/PgDn scroll, Ctrl+Y copy
+ * - Input focused with slash search: Tab complete
+ */
+export function buildStatusBadges(state: TuiState): StatusBadge[] {
+  const badges: StatusBadge[] = [];
+
+  // Core badges - highest priority, always shown
+  badges.push({ text: '? Help', priority: 100 });
+  badges.push({ text: 'Esc Quit', priority: 100 });
+  badges.push({ text: 'Ctrl+B Sidebar', priority: 100 });
+
+  // Context-specific badges based on focused pane
+  if (state.focusedPane === 'sidebar') {
+    badges.push({ text: 'j/k nav', priority: 50 });
+    badges.push({ text: 'Enter select', priority: 50 });
+    if (state.sessions.selectedId) {
+      badges.push({ text: 'Del delete', priority: 40 });
+    }
+  } else if (state.focusedPane === 'transcript') {
+    badges.push({ text: 'PgUp/PgDn scroll', priority: 50 });
+    // Show copy badge when there are messages to copy
+    if (state.transcript.messages.length > 0) {
+      badges.push({ text: 'Ctrl+Y copy', priority: 45 });
+    }
+  } else if (state.focusedPane === 'input') {
+    // Show slash search hint when active
+    if (state.input.slashSearch.isActive) {
+      badges.push({ text: 'Tab complete', priority: 60 });
+    }
+    // Show palette shortcut when not in slash mode
+    if (!state.input.slashSearch.isActive) {
+      badges.push({ text: 'Ctrl+K palette', priority: 55 });
+    }
   }
-  return `lat ${Math.round(latencyMs)}ms`;
+
+  return badges;
 }
 
-function formatRate(tokensPerSecond: number): string {
-  if (!Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) {
-    return '0 tok/s';
-  }
-  return `${tokensPerSecond.toFixed(1)} tok/s`;
-}
+/**
+ * Join badges with truncation that preserves high-priority badges.
+ * Drops lowest-priority badges first until content fits maxWidth.
+ */
+function joinBadgesWithTruncation(badges: StatusBadge[], maxWidth: number): string {
+  // Sort by priority (descending) for truncation decisions
+  const sorted = [...badges].sort((a, b) => b.priority - a.priority);
 
-function trimStatusSegments(segments: string[], maxWidth: number): string {
-  let active = [...segments];
-  while (active.length > 1 && active.join(' | ').length > maxWidth) {
-    active.splice(active.length - 2, 1);
+  // Try including all badges first
+  let active = [...badges];
+  const fullText = active.map((b) => b.text).join('  ');
+
+  if (fullText.length <= maxWidth) {
+    return fullText;
   }
-  const joined = active.join(' | ');
-  if (joined.length <= maxWidth) {
-    return joined;
+
+  // Need to truncate - drop lowest priority badges
+  // Always keep priority 100 (core badges)
+  const coreBadges = badges.filter((b) => b.priority === 100);
+  const contextBadges = badges.filter((b) => b.priority < 100).sort((a, b) => a.priority - b.priority);
+
+  // Start with core badges, add context badges from highest to lowest priority
+  active = [...coreBadges];
+  const sortedContext = [...contextBadges].sort((a, b) => b.priority - a.priority);
+
+  for (const badge of sortedContext) {
+    const candidate = [...active, badge];
+    const candidateText = candidate.map((b) => b.text).join('  ');
+    if (candidateText.length <= maxWidth) {
+      active = candidate;
+    } else {
+      // Can't fit this badge, stop adding more
+      break;
+    }
   }
-  return joined.slice(0, Math.max(0, maxWidth - 3)).trimEnd() + '...';
+
+  let result = active.map((b) => b.text).join('  ');
+
+  // Final truncation with ellipsis if still too long (shouldn't happen with core badges)
+  if (result.length > maxWidth) {
+    result = result.slice(0, Math.max(0, maxWidth - 3)).trimEnd() + '...';
+  }
+
+  return result;
 }
 
 /**
@@ -428,40 +502,11 @@ export function renderTranscriptContent(
  * Generate status bar content
  */
 export function renderStatusContent(state: TuiState, options: StatusRenderOptions = {}): PaneContent {
-  const nowMs = options.nowMs ?? Date.now();
   const maxWidth = options.maxWidth ?? 120;
-  const spinner = STREAM_SPINNER_FRAMES[Math.floor(nowMs / 100) % STREAM_SPINNER_FRAMES.length];
 
-  const streamSegment = state.streaming.isStreaming
-    ? `${spinner} streaming`
-    : state.streaming.lastError
-      ? `error: ${state.streaming.lastError}`
-      : null;
-
-  const totalOutput = state.telemetry.outputTokenCount + state.streaming.outputTokenCount;
-  const totalTokens = state.telemetry.inputTokenCount + totalOutput;
-  const telemetrySegments = [`Focus: ${state.focusedPane}`];
-  if (streamSegment) {
-    telemetrySegments.push(streamSegment);
-  }
-
-  telemetrySegments.push(
-    `tok total:${totalTokens}`,
-    formatRate(state.streaming.tokensPerSecond),
-    formatLatency(state.streaming.firstTokenLatencyMs),
-    `in:${state.telemetry.inputTokenCount} out:${totalOutput}`,
-    `mdl ${state.telemetry.model}`,
-    `cost ${formatUsd(state.telemetry.sessionCostUsd)}`,
-    'Mouse wheel scroll',
-    'PgUp/PgDn scroll',
-    'Tab: cycle focus',
-    'Ctrl+Shift+C copy all',
-    'Ctrl+Y copy msg',
-    'Ctrl/Cmd+K palette',
-    'Esc: quit',
-  );
-
-  const statusText = trimStatusSegments(telemetrySegments, maxWidth);
+  // Build badge-based status line (no telemetry)
+  const badges = buildStatusBadges(state);
+  const statusText = joinBadgesWithTruncation(badges, maxWidth);
 
   return {
     lines: [statusText],
