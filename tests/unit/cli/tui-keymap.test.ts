@@ -756,4 +756,79 @@ describe('TUI Keymap', () => {
       expect(result.action.type).toBe('focus-next');
     });
   });
+
+  describe('Help modal', () => {
+    test('? from transcript pane toggles help modal', () => {
+      let state = createInitialTuiState();
+      state = { ...state, focusedPane: 'transcript' };
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('toggle-help');
+    });
+
+    test('? from sidebar pane toggles help modal', () => {
+      let state = createInitialTuiState();
+      state = { ...state, focusedPane: 'sidebar' };
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('toggle-help');
+    });
+
+    test('? from input pane types character instead of toggling help', () => {
+      const state = createInitialTuiState();
+      expect(state.focusedPane).toBe('input');
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('input-text');
+      expect((action as { type: 'input-text'; text: string }).text).toBe('?');
+    });
+
+    test('f1 toggles help modal globally (from any pane)', () => {
+      for (const pane of ['input', 'transcript', 'sidebar'] as const) {
+        let state = createInitialTuiState();
+        state = { ...state, focusedPane: pane };
+
+        const action = mapKeyToAction(makeKey({ name: 'f1' }), state);
+        expect(action.type).toBe('toggle-help');
+      }
+    });
+
+    test('Escape closes help modal when open', () => {
+      let state = createInitialTuiState();
+      state = { ...state, helpModal: { isOpen: true } };
+
+      const action = mapKeyToAction(makeKey({ name: 'escape' }), state);
+      expect(action.type).toBe('toggle-help');
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.helpModal.isOpen).toBe(false);
+    });
+
+    test('Escape does NOT close help modal when not open (still quits)', () => {
+      const state = createInitialTuiState();
+      expect(state.helpModal.isOpen).toBe(false);
+
+      const action = mapKeyToAction(makeKey({ name: 'escape' }), state);
+      expect(action.type).toBe('quit');
+    });
+
+    test('other keys are noop when help modal is open', () => {
+      let state = createInitialTuiState();
+      state = { ...state, helpModal: { isOpen: true } };
+
+      const action = mapKeyToAction(makeKey({ name: 'a', sequence: 'a' }), state);
+      expect(action.type).toBe('noop');
+    });
+
+    test('toggle-help action toggles helpModal.isOpen via applyKeyAction', () => {
+      let state = createInitialTuiState();
+      expect(state.helpModal.isOpen).toBe(false);
+
+      state = applyKeyAction(state, { type: 'toggle-help' });
+      expect(state.helpModal.isOpen).toBe(true);
+
+      state = applyKeyAction(state, { type: 'toggle-help' });
+      expect(state.helpModal.isOpen).toBe(false);
+    });
+  });
 });

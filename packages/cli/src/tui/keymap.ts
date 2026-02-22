@@ -36,6 +36,7 @@ import {
   selectSidebarSelection,
   toggleSidebarVisibility,
   toggleSidebarSection,
+  toggleHelpModal,
 } from './state.js';
 
 /**
@@ -78,6 +79,7 @@ export type KeyAction =
   | { type: 'cancel-delete-session' }
   | { type: 'copy-transcript' }
   | { type: 'copy-last-message' }
+  | { type: 'toggle-help' }
   | { type: 'quit' }
   | { type: 'noop' };
 
@@ -156,7 +158,19 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'noop' };
   }
 
+  // Help modal: Escape closes, other keys are noop
+  if (state.helpModal.isOpen) {
+    if (name === 'escape') {
+      return { type: 'toggle-help' };
+    }
+    return { type: 'noop' };
+  }
+
   // Global keybindings (work regardless of focus)
+  if (name === 'f1') {
+    return { type: 'toggle-help' };
+  }
+
   if (name === 'tab') {
     return shift ? { type: 'focus-prev' } : { type: 'focus-next' };
   }
@@ -194,6 +208,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   // Transcript pane: scroll navigation
   if (focusedPane === 'transcript') {
+    if (printableChar === '?') {
+      return { type: 'toggle-help' };
+    }
     if (name === 'up') {
       return { type: 'scroll-up', lines: 1 };
     }
@@ -276,6 +293,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   // Sidebar pane: session navigation
   if (focusedPane === 'sidebar') {
+    if (printableChar === '?') {
+      return { type: 'toggle-help' };
+    }
     if (name === 's') {
       return { type: 'toggle-sessions-section' };
     }
@@ -456,6 +476,9 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
     case 'copy-last-message':
       // Handled by app (clipboard write side-effect)
       return state;
+
+    case 'toggle-help':
+      return toggleHelpModal(state);
 
     case 'quit':
       // Handled by app, just return state

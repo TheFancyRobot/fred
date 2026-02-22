@@ -212,6 +212,9 @@ export interface TuiState {
     /** Map of toolCallId -> user-toggled expand override */
     expandOverrides: Record<string, boolean>;
   };
+  helpModal: {
+    isOpen: boolean;
+  };
 }
 
 /**
@@ -299,6 +302,9 @@ export function createInitialTuiStateWithPlugins(
     toolBlocks: {
       groups: [],
       expandOverrides: {},
+    },
+    helpModal: {
+      isOpen: false,
     },
   };
 }
@@ -692,6 +698,15 @@ export function closeCommandPalette(state: TuiState): TuiState {
 
 export function toggleCommandPalette(state: TuiState): TuiState {
   return state.commandPalette.isOpen ? closeCommandPalette(state) : openCommandPalette(state);
+}
+
+export function toggleHelpModal(state: TuiState): TuiState {
+  return {
+    ...state,
+    helpModal: {
+      isOpen: !state.helpModal.isOpen,
+    },
+  };
 }
 
 export function updateCommandPaletteQuery(state: TuiState, query: string): TuiState {

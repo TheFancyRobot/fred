@@ -12,18 +12,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 40 of 40 (Input & Status Bar Polish)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-21 - Completed 40-01 (minimal composer chrome and queue-safe submit)
+Last activity: 2026-02-22 - Completed 40-02 (compact shortcut badges)
 
-Progress: [██████████] 100% (171/171 plans complete)
+Progress: [██████████] 100% (172/172 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9 (v0.2.2 milestone)
-- Average duration: ~7.5 min
-- Total execution time: ~68 min
+- Total plans completed: 10 (v0.2.2 milestone)
+- Average duration: ~7.6 min
+- Total execution time: ~83 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -83,6 +83,9 @@ Recent decisions affecting current work:
 - (Phase 40) Pending submissions projected as dimmed renderables, not added to transcript
 - (Phase 40) Queue state in TuiState.input.pendingSubmissions for streaming-safe submits
 - (Phase 40) FIFO queue drain from complete/fail stream handlers
+- (Phase 40) Stateless badge pipeline for status bar — no throttle, no telemetry
+- (Phase 40) fg.secondary for badge text, bg.status for contrast — no INVERSE attribute
+- (Phase 40) Copy feedback sole status override, reverts to badges after 2s
 
 ### Blockers/Concerns
 
@@ -100,6 +103,7 @@ None currently.
 | 002 | Remove malformed 31-VERIFICATION.md heredoc accidentally added as Bash permission entry in .claude/settings.local.json | 2026-02-16 | n/a (gitignored) | [002-fix-malformed-bash-permission-entry-in-c](./quick/002-fix-malformed-bash-permission-entry-in-c/) |
 
 ---
+| Phase 40 P02 | 15min | 3 tasks | 4 files |
 | Phase 40 P01 | 18min | 3 tasks | 5 files |
 | Phase 39 P03 | 5min | 2 tasks | 5 files |
 | Phase 39 P04 | 6 | 2 tasks | 3 files |
@@ -108,12 +112,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 40-01-PLAN.md (minimal composer chrome and queue-safe submit)
-Resume file: .planning/phases/40-input-and-status-bar-polish/40-01-SUMMARY.md
+Last session: 2026-02-22
+Stopped at: Completed 40-02-PLAN.md (compact shortcut badges)
+Resume file: .planning/phases/40-input-and-status-bar-polish/40-02-SUMMARY.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-21 — Phase 40 plan 01 complete*
+*Last updated: 2026-02-22 — Phase 40 plan 02 complete*
