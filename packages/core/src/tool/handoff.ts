@@ -1,7 +1,6 @@
 import { Schema } from 'effect';
 import type { Tool, ToolSchemaDefinition } from './tool';
-import { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { Tracer, SpanKind } from '../tracing';
 
 /**
  * Handoff input type

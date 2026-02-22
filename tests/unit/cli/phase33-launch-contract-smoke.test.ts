@@ -305,7 +305,8 @@ describe('phase 33 launch contract smoke', () => {
     expect(resumeApp.getState().startup.chooser.isOpen).toBe(false);
     expect(resumeApp.getState().sessions.selectedId).toBe('s-latest');
     expect(resumeApp.getState().focusedPane).toBe('sidebar');
-    expect(resumeApp.getState().transcript.messages).toHaveLength(0);
+    // Transcript is now eagerly loaded for the initially-selected session
+    expect(resumeApp.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
 
     resumeApp.processKey(makeKey({ name: 'enter' }));
     await Bun.sleep(20);
@@ -332,7 +333,8 @@ describe('phase 33 launch contract smoke', () => {
 
     expect(app.getState().sessions.selectedId).toBe('s-latest');
     expect(app.getState().focusedPane).toBe('sidebar');
-    expect(app.getState().transcript.messages).toHaveLength(0);
+    // Transcript is now eagerly loaded for the initially-selected session
+    expect(app.getState().transcript.messages[0]?.content).toBe('Welcome back latest');
 
     app.processKey(makeKey({ name: 'enter' }));
     await Bun.sleep(20);

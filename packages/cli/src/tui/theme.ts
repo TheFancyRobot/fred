@@ -99,10 +99,10 @@ export interface TuiTheme {
 export function getMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyle[] {
   return [
     { scope: ['default'], style: { foreground: theme.fg.primary } },
-    { scope: ['markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true, underline: true } },
-    { scope: ['markup.strong'], style: { foreground: '#ffffff', bold: true } },
+    { scope: ['markup.heading', 'markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true } },
+    { scope: ['markup.bold', 'markup.strong'], style: { foreground: theme.fg.primary, bold: true } },
     { scope: ['markup.italic'], style: { foreground: theme.fg.secondary, italic: true } },
-    { scope: ['markup.raw'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
+    { scope: ['markup.raw', 'markup.raw.inline'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
     { scope: ['markup.list'], style: { foreground: theme.fg.dim } },
     { scope: ['punctuation'], style: { foreground: theme.fg.dim } },
     { scope: ['punctuation.special'], style: { foreground: theme.fg.dim } },
@@ -118,8 +118,8 @@ export function getMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyle[] {
 export function getStreamingMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyle[] {
   return [
     { scope: ['default'], style: { foreground: theme.message.streamingFg } },
-    { scope: ['markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true, underline: true } },
-    { scope: ['markup.strong'], style: { foreground: '#ffffff', bold: true } },
+    { scope: ['markup.heading', 'markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true } },
+    { scope: ['markup.bold', 'markup.strong'], style: { foreground: theme.fg.primary, bold: true } },
     { scope: ['markup.italic'], style: { foreground: theme.fg.secondary, italic: true } },
     { scope: ['markup.raw'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
     { scope: ['markup.list'], style: { foreground: theme.fg.dim } },

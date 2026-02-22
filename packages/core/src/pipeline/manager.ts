@@ -7,8 +7,7 @@ import { AgentManager } from '../agent/manager';
 import { AgentMessage, AgentResponse } from '../agent/agent';
 import { HookManager } from '../hooks/manager';
 import { semanticMatch } from '../utils/semantic';
-import { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { Tracer, SpanKind } from '../tracing';
 import {
   validateId,
   validateMessageLength,

@@ -10,7 +10,7 @@ import { Prompt } from '@effect/ai';
 import type { AgentMessage, AgentResponse, AgentInstance } from '../agent/agent';
 import type { StreamEvent, RunEndEvent, HandoffStartEvent } from '../stream/events';
 import { makeHandoffStartEvent } from '../stream/events';
-import { SpanKind } from '../tracing/types';
+import { SpanKind } from '../tracing';
 import type { Tracer } from '../tracing';
 import { validateMessageLength } from '../utils/validation';
 import { semanticMatch } from '../utils/semantic';

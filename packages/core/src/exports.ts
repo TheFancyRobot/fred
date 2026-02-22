@@ -10,7 +10,7 @@ export * from './platform/provider';
 // Provider pack registry for external provider packages
 export {
   registerBuiltinPack,
-  getBuiltinPack,
+  loadBuiltinPack,
   getBuiltinPackIds,
   isBuiltinPack,
 } from './platform/packs';
@@ -48,7 +48,6 @@ export type {
   PauseMetadata,
   HumanInputResumeOptions,
 } from './pipeline/pause/types';
-export { createRequestHumanInputTool } from './pipeline/pause';
 export { createCalculatorTool } from './tool/calculator';
 
 export { HookManager } from './hooks/manager';
@@ -60,31 +59,9 @@ export {
   buildNarrative,
   detectConcerns,
 } from './routing/explainer';
-export {
-  calculateConversationBoost,
-  createConversationRoutingHistory,
-  type ConversationRoutingHistory,
-} from './routing/conversation';
-export {
-  type TemperatureScalingCalibrator,
-  createTemperatureScalingCalibrator,
-} from './routing/calibration/temperature';
-export {
-  type HistoricalAccuracyTracker,
-  createHistoricalAccuracyTracker,
-} from './routing/calibration/history';
-export {
-  type AdaptiveCalibrationCoordinator,
-  createAdaptiveCalibrationCoordinator,
-  type CalibrationState,
-  type RoutingSource,
-} from './routing/calibration/adaptive';
 export { WorkflowManager } from './workflow/manager';
-export { WorkflowContext } from './workflow/context';
-export * from './workflow/types';
+export type { Workflow } from './workflow/manager';
 export * from './tracing';
-export { NoOpTracer } from './tracing/noop-tracer';
-export { createOpenTelemetryTracer, isOpenTelemetryAvailable } from './tracing/otel-exporter';
 export * from './eval/golden-trace';
 export * from './eval/artifact';
 export * from './eval/normalizer';
@@ -92,13 +69,10 @@ export * from './eval/storage';
 export * from './eval/service';
 export { GoldenTraceRecorder } from './eval/recorder';
 export * from './eval/assertions';
-export * from './eval/assertion-runner';
 export * from './eval/replay';
 export * from './eval/comparator';
 export * from './eval/suite';
 export * from './eval/metrics';
-export * from './eval/mock-tools';
-export * from './eval/test-clock';
 
 // Observability exports
 export { buildObservabilityLayers, annotateSpan, withFredSpan } from './observability/otel';
@@ -109,13 +83,10 @@ export {
   getCorrelationContext,
   getSpanIds,
   withCorrelationContext,
-  runWithCorrelationBridge,
   // Backward-compatible sync API
   createCorrelationContext,
   getCurrentCorrelationContext,
   getCurrentSpanIds,
-  // Legacy (deprecated, delegates to bridge)
-  runWithCorrelationContext,
 } from './observability/context';
 export type { CorrelationContext } from './observability/context';
 export { ObservabilityService, ObservabilityServiceLive } from './observability/service';
@@ -128,35 +99,6 @@ export type {
   ToolUsage,
   ModelUsage,
 } from './observability/service';
-
-// Stream output utilities
-export { streamOutput, streamOutputSimple, StreamOutputError } from './stream/output';
-export type { StreamOutputOptions } from './stream/output';
-
-// Global variables
-export type { VariableFactory, VariableValue } from './variables';
-
-// Message processing types
-export type {
-  RouteResult,
-  ProcessingOptions,
-  MemoryDefaults,
-  SemanticMatcherFn,
-} from './message-processor/types';
-
-// Intent service wrappers (for Effect-based usage)
-export {
-  IntentMatcherService,
-  IntentMatcherServiceFromInstance,
-  IntentRouterService,
-  IntentRouterServiceFromInstance,
-} from './intent/service';
-
-// Routing service wrapper (for Effect-based usage)
-export {
-  MessageRouterService,
-  MessageRouterServiceFromInstance,
-} from './routing/service';
 
 // Utility functions
 export { sanitizeError } from './utils/validation';

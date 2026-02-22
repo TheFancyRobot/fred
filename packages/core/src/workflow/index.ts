@@ -1,7 +1,2 @@
-/**
- * Workflow subsystem exports
- */
-
-export type { Workflow, WorkflowConfig } from './types';
-export { WorkflowContext } from './context';
+export type { Workflow } from './manager';
 export { WorkflowManager } from './manager';

@@ -127,31 +127,6 @@ export function withCorrelationContext(ctx: CorrelationContext) {
 }
 
 /**
- * Run a Promise-based function with correlation context in AsyncLocalStorage bridge.
- *
- * Use this for Promise-based boundaries (non-Effect code).
- *
- * @param ctx - Correlation context to activate
- * @param fn - Function to run with context
- * @returns Result of the function
- *
- * @example
- * ```typescript
- * const ctx = createCorrelationContext({ runId: 'run-123' });
- * await runWithCorrelationBridge(ctx, async () => {
- *   const currentCtx = getCurrentCorrelationContext();
- *   console.log(currentCtx?.runId); // 'run-123'
- * });
- * ```
- */
-export function runWithCorrelationBridge<T>(
-  ctx: CorrelationContext,
-  fn: () => T | Promise<T>
-): Promise<T> {
-  return correlationBridge.run(ctx, async () => fn());
-}
-
-/**
  * Get current OpenTelemetry span IDs from Effect.currentSpan.
  *
  * @returns Effect yielding traceId, spanId, parentSpanId (if available)
@@ -187,17 +162,4 @@ export function getCurrentSpanIds(): {
   };
 }
 
-/**
- * Run a function with correlation context active.
- *
- * @deprecated Use withCorrelationContext (Effect) or runWithCorrelationBridge (Promise)
- * @param context - Correlation context to activate
- * @param fn - Function to run with context
- * @returns Result of the function
- */
-export function runWithCorrelationContext<T>(
-  context: CorrelationContext,
-  fn: () => T | Promise<T>
-): Promise<T> {
-  return runWithCorrelationBridge(context, fn);
-}
+

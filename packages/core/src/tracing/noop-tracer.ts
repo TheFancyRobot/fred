@@ -1,5 +1,4 @@
-import { Tracer, Span } from './tracer';
-import { SpanOptions, SpanContext, SpanStatus } from './types';
+import { Tracer, Span, SpanOptions, SpanContext, SpanStatus } from './tracer';
 import { setActiveSpan, getActiveSpan } from './context';
 
 /**

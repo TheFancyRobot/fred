@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { load as parseYaml } from 'js-yaml';
 import type { EvaluationArtifact } from './artifact';
-import { runAssertions, type TestResult } from './assertion-runner';
+import { runAssertions, type TestResult } from './assertions';
 import { compare, type CompareOptions, type CompareResult } from './comparator';
 import type { GoldenTrace } from './golden-trace';
 import { calculateIntentMetrics, type IntentMetricsReport } from './metrics';

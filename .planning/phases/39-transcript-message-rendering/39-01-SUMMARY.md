@@ -77,7 +77,7 @@ Each task was committed atomically:
 1. **Task 1: Extend theme with message tokens and create per-message renderable builders** - `4c6e2a7` (feat)
 2. **Task 2: Wire renderable-based transcript in app.ts with streaming accent and auto-scroll** - `de21c83` (feat)
 
-**Plan metadata:** (pending) (docs: complete plan)
+**Plan metadata:** `a1062d5` (docs: complete plan)
 
 ## Files Created/Modified
 - `packages/cli/src/tui/theme.ts` - Added message token group with 9 semantic colors (userBorder, userBg, assistantBg, codeBg, thinkingFg, streamingFg, toolConnector, taskAccent, errorAccent)

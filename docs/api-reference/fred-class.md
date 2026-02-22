@@ -32,28 +32,6 @@ await fred.useProvider(platform: string, config?: ProviderConfig): Promise<AIPro
 const openai = await fred.useProvider('openai', { apiKey: 'your-key' });
 ```
 
-### use()
-
-Register a custom integration/plugin.
-
-```typescript
-fred.use(name: string, integration: ((fred: Fred) => void) | any): Fred
-```
-
-**Parameters:**
-- `name`: Integration name
-- `integration`: Integration function or object
-
-**Returns:** Fred instance (for chaining)
-
-**Example:**
-
-```typescript
-fred.use('custom-logger', (fred) => {
-  // Custom integration
-});
-```
-
 ### registerDefaultProviders()
 
 Register default providers (OpenAI and Groq).

@@ -16,7 +16,7 @@ import {
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
 
-const INPUT_CURSOR_INDICATOR = '▍';
+const INPUT_CURSOR_INDICATOR = '█';
 const INPUT_ACCENT_GLYPH = '▎';
 
 interface StatusRenderOptions {
@@ -182,7 +182,7 @@ export interface InputPaneContent extends PaneContent {
   height: number;
 }
 
-function formatComposerLines(text: string, maxVisibleLines: number, cursorPosition: number, focused: boolean): string[] {
+function formatComposerLines(text: string, maxVisibleLines: number, cursorPosition: number, focused: boolean, cursorVisible: boolean): string[] {
   const lines = text.split('\n');
   const startIndex = Math.max(0, lines.length - maxVisibleLines);
   const visible = lines.slice(startIndex);
@@ -196,7 +196,10 @@ function formatComposerLines(text: string, maxVisibleLines: number, cursorPositi
     }
 
     const clampedCol = Math.max(0, Math.min(line.length, cursorLocation.column));
-    const withCursor = `${line.slice(0, clampedCol)}${INPUT_CURSOR_INDICATOR}${line.slice(clampedCol)}`;
+    // Always insert a character at the cursor position to prevent text shift during blink.
+    // Show block cursor when visible, space when hidden (same width in monospace terminal).
+    const cursorChar = cursorVisible ? INPUT_CURSOR_INDICATOR : ' ';
+    const withCursor = `${line.slice(0, clampedCol)}${cursorChar}${line.slice(clampedCol)}`;
     return `${prefix}${withCursor}`;
   });
 }
@@ -213,16 +216,19 @@ export function renderInputContent(
   state: TuiState,
   focused: boolean,
   placeholder: InputPlaceholder,
+  cursorVisible: boolean = true,
 ): InputPaneContent {
   const hasInput = state.input.text.length > 0;
+  const showCursor = focused && cursorVisible;
   const composerLines = hasInput
     ? formatComposerLines(
         state.input.text,
         DEFAULT_LAYOUT.inputMaxVisibleLines,
         state.input.cursorPosition,
         focused,
+        cursorVisible,
       )
-    : [`${INPUT_ACCENT_GLYPH} ${focused ? `${INPUT_CURSOR_INDICATOR}${placeholder}` : placeholder}`];
+    : [`${INPUT_ACCENT_GLYPH} ${focused ? `${showCursor ? INPUT_CURSOR_INDICATOR : ' '}${placeholder}` : placeholder}`];
   const slashHint = state.input.slashSearch.isActive
     ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex]?.plugin
     : null;
@@ -555,8 +561,8 @@ export function buildUserMessageRenderable(
     borderColor: theme.message.userBorder,
     paddingLeft: 2,
     paddingRight: 2,
-    paddingTop: 0,
-    paddingBottom: 0,
+    paddingTop: 1,
+    paddingBottom: 1,
     marginBottom: 1,
   });
 

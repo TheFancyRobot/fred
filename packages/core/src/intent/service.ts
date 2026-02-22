@@ -137,20 +137,4 @@ export const IntentRouterServiceLive = Layer.effect(
   })
 );
 
-/**
- * Create IntentMatcherService from an existing IntentMatcher instance
- * (for backward compatibility during migration)
- */
-export const IntentMatcherServiceFromInstance = (
-  matcher: IntentMatcher
-): Layer.Layer<IntentMatcherService> =>
-  Layer.succeed(IntentMatcherService, new IntentMatcherServiceImpl(matcher));
 
-/**
- * Create IntentRouterService from an existing IntentRouter instance
- * (for backward compatibility during migration)
- */
-export const IntentRouterServiceFromInstance = (
-  router: IntentRouter
-): Layer.Layer<IntentRouterService> =>
-  Layer.succeed(IntentRouterService, new IntentRouterServiceImpl(router));

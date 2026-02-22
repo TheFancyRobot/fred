@@ -21,11 +21,11 @@ Requirements for TUI visual polish milestone. Redesign the Fred TUI appearance t
 
 ### Sidebar Redesign
 
-- [ ] **VISUAL-07**: Sidebar displays collapsible sections with `▼`/`▶` markers for session list and metadata
-- [ ] **VISUAL-08**: Sidebar shows compact, information-dense metadata (session count, model, token stats)
-- [ ] **VISUAL-09**: User can toggle sidebar visibility with a keyboard hotkey
-- [ ] **VISUAL-10**: User can toggle sidebar visibility with a `/sidebar` slash command
-- [ ] **VISUAL-11**: Sidebar toggle state persists within the session
+- [x] **VISUAL-07**: Sidebar displays collapsible sections with `▼`/`▶` markers for session list and metadata
+- [x] **VISUAL-08**: Sidebar shows compact, information-dense metadata (session count, model, token stats)
+- [x] **VISUAL-09**: User can toggle sidebar visibility with a keyboard hotkey
+- [x] **VISUAL-10**: User can toggle sidebar visibility with a `/sidebar` slash command
+- [x] **VISUAL-11**: Sidebar toggle state persists within the session
 
 ### Transcript & Message Rendering
 
@@ -35,9 +35,9 @@ Requirements for TUI visual polish milestone. Redesign the Fred TUI appearance t
 
 ### Input & Status Bar
 
-- [ ] **VISUAL-15**: Input area uses minimal chrome — cursor with subtle left border accent, no decorative box
-- [ ] **VISUAL-16**: Bottom status bar displays keyboard shortcut labels as compact badges
-- [ ] **VISUAL-17**: Status bar uses muted background that contrasts with transcript and input areas
+- [x] **VISUAL-15**: Input area uses minimal chrome — cursor with subtle left border accent, no decorative box
+- [x] **VISUAL-16**: Bottom status bar displays keyboard shortcut labels as compact badges
+- [x] **VISUAL-17**: Status bar uses muted background that contrasts with transcript and input areas
 
 ## Future Requirements
 
@@ -75,17 +75,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISUAL-04 | Phase 37 | Done |
 | VISUAL-05 | Phase 37 | Done |
 | VISUAL-06 | Phase 37 | Done |
-| VISUAL-07 | Phase 38 | Pending |
-| VISUAL-08 | Phase 38 | Pending |
-| VISUAL-09 | Phase 38 | Pending |
-| VISUAL-10 | Phase 38 | Pending |
-| VISUAL-11 | Phase 38 | Pending |
+| VISUAL-07 | Phase 38 | Complete |
+| VISUAL-08 | Phase 38 | Complete |
+| VISUAL-09 | Phase 38 | Complete |
+| VISUAL-10 | Phase 38 | Complete |
+| VISUAL-11 | Phase 38 | Complete |
 | VISUAL-12 | Phase 39 | Complete |
 | VISUAL-13 | Phase 39 | Complete |
 | VISUAL-14 | Phase 39 | Complete |
-| VISUAL-15 | Phase 40 | Pending |
-| VISUAL-16 | Phase 40 | Pending |
-| VISUAL-17 | Phase 40 | Pending |
+| VISUAL-15 | Phase 40 | Complete |
+| VISUAL-16 | Phase 40 | Complete |
+| VISUAL-17 | Phase 40 | Complete |
 
 **Coverage:**
 - v0.2.2 requirements: 17 total
@@ -94,4 +94,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-17 — VISUAL-01 through VISUAL-06 completed (Phase 37)*
+*Last updated: 2026-02-22 — All VISUAL-01 through VISUAL-17 completed (v0.2.2 shipped)*

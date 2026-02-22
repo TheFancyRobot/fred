@@ -1,6 +1,5 @@
 import { HookType, HookEvent, HookResult, HookHandler } from './types';
-import { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { Tracer, SpanKind } from '../tracing';
 import { getActiveSpan, setActiveSpan } from '../tracing/context';
 import type { ObservabilityService } from '../observability/service';
 import { Effect } from 'effect';

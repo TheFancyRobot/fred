@@ -6,11 +6,6 @@
  * @module pause
  *
  * @example
- * // In agent step - use request_human_input tool
- * const tool = createRequestHumanInputTool();
- * fred.registerTool(tool);
- *
- * @example
  * // In function step - return PauseRequest
  * const step: FunctionStep = {
  *   type: 'function',
@@ -43,9 +38,6 @@ export {
   isPauseRequest,
   toPauseMetadata,
 } from './types';
-
-// Tool
-export { createRequestHumanInputTool } from './tool';
 
 // Detector
 export { detectPauseSignal, type DetectedPause } from './detector';

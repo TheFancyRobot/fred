@@ -1,5 +1,4 @@
-import { Tracer, Span } from './tracer';
-import { SpanOptions, SpanContext, SpanStatus } from './types';
+import { Tracer, Span, SpanOptions, SpanContext, SpanStatus } from './tracer';
 import { setActiveSpan, getActiveSpan } from './context';
 
 /**
@@ -168,5 +167,28 @@ class OpenTelemetrySpan implements Span {
       return undefined;
     }
     return endTime - this.getStartTime();
+  }
+}
+
+/**
+ * Create an OpenTelemetry tracer if available.
+ * Returns undefined if @opentelemetry/api is not installed.
+ */
+export function createOpenTelemetryTracer(): Tracer | undefined {
+  try {
+    require.resolve('@opentelemetry/api');
+    return new OpenTelemetryTracer();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Check if OpenTelemetry is available */
+export function isOpenTelemetryAvailable(): boolean {
+  try {
+    require.resolve('@opentelemetry/api');
+    return true;
+  } catch {
+    return false;
   }
 }

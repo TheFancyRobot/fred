@@ -24,12 +24,10 @@ import {
 import { AgentManager } from '../agent/manager';
 import { HookManager } from '../hooks/manager';
 import { Effect } from 'effect';
-import { RoutingMatcherError, NoAgentsAvailableError } from './errors';
+import { NoAgentsAvailableError } from './errors';
 import { getCurrentCorrelationContext, getCorrelationContext } from '../observability/context';
 import type { HookEvent } from '../hooks/types';
 import { generateRoutingExplanation } from './explainer';
-import type { AdaptiveCalibrationCoordinator } from './calibration/adaptive';
-import type { HistoricalAccuracyTracker } from './calibration/history';
 
 /**
  * Specificity base scores by match type.
@@ -50,21 +48,15 @@ export class MessageRouter {
   private readonly config: RoutingConfig;
   private readonly agentManager: AgentManager;
   private readonly hookManager?: HookManager;
-  private readonly calibrationCoordinator?: AdaptiveCalibrationCoordinator;
-  private readonly historyTracker?: HistoricalAccuracyTracker;
 
   constructor(
     agentManager: AgentManager,
     hookManager: HookManager | undefined,
     config: RoutingConfig,
-    calibrationCoordinator?: AdaptiveCalibrationCoordinator,
-    historyTracker?: HistoricalAccuracyTracker
   ) {
     this.agentManager = agentManager;
     this.hookManager = hookManager;
     this.config = config;
-    this.calibrationCoordinator = calibrationCoordinator;
-    this.historyTracker = historyTracker;
   }
 
   /**
@@ -115,42 +107,17 @@ export class MessageRouter {
           matchType: m.matchType,
         }));
 
-        // Calibrate winner confidence if coordinator is available
-        let calibratedConfidence = match.confidence;
-        let calibrationMetadata: CalibrationMetadata = {
+        const calibrationMetadata: CalibrationMetadata = {
           rawScore: match.confidence,
           calibratedScore: match.confidence,
           calibrated: false,
         };
 
-        if (self.calibrationCoordinator) {
-          calibratedConfidence = yield* self.calibrationCoordinator.calibrate(
-            match.confidence,
-            'rule'
-          );
-
-          // Get historical accuracy if tracker is available
-          let historicalAccuracy: number | undefined;
-          let observationCount = 0;
-          if (self.historyTracker) {
-            historicalAccuracy = yield* self.historyTracker.getAccuracy(match.rule.agent);
-            observationCount = yield* self.historyTracker.getObservationCount(match.rule.agent);
-          }
-
-          calibrationMetadata = {
-            rawScore: match.confidence,
-            calibratedScore: calibratedConfidence,
-            historicalAccuracy,
-            calibrated: observationCount >= 100,
-            observationCount,
-          };
-        }
-
         // Generate explanation
         const winner: RoutingAlternative = {
           targetId: match.rule.agent,
           targetName: match.rule.agent,
-          confidence: calibratedConfidence,
+          confidence: match.confidence,
           matchType: match.matchType,
         };
 
@@ -164,10 +131,10 @@ export class MessageRouter {
         // Generate HITL clarification pause signal if needed (use filtered alternatives from explanation)
         let clarificationNeeded: import('../pipeline/pause/types').PauseSignal | undefined;
         const filteredAlternatives = explanation.alternatives; // Already filtered to exclude winner
-        if (calibratedConfidence < 0.6 || (filteredAlternatives.length > 0 && calibratedConfidence - filteredAlternatives[0].confidence < 0.1)) {
-          const reason = calibratedConfidence < 0.6
-            ? `Low confidence (${(calibratedConfidence * 100).toFixed(1)}%)`
-            : `Close alternatives (gap: ${((calibratedConfidence - filteredAlternatives[0].confidence) * 100).toFixed(1)}%)`;
+        if (match.confidence < 0.6 || (filteredAlternatives.length > 0 && match.confidence - filteredAlternatives[0].confidence < 0.1)) {
+          const reason = match.confidence < 0.6
+            ? `Low confidence (${(match.confidence * 100).toFixed(1)}%)`
+            : `Close alternatives (gap: ${((match.confidence - filteredAlternatives[0].confidence) * 100).toFixed(1)}%)`;
 
           clarificationNeeded = {
             __pause: true,
@@ -312,42 +279,17 @@ export class MessageRouter {
           matchType: m.matchType,
         }));
 
-        // Calibrate winner confidence if coordinator is available
-        let calibratedConfidence = match.confidence;
-        let calibrationMetadata: CalibrationMetadata = {
+        const calibrationMetadata: CalibrationMetadata = {
           rawScore: match.confidence,
           calibratedScore: match.confidence,
           calibrated: false,
         };
 
-        if (self.calibrationCoordinator) {
-          calibratedConfidence = yield* self.calibrationCoordinator.calibrate(
-            match.confidence,
-            'rule'
-          );
-
-          // Get historical accuracy if tracker is available
-          let historicalAccuracy: number | undefined;
-          let observationCount = 0;
-          if (self.historyTracker) {
-            historicalAccuracy = yield* self.historyTracker.getAccuracy(match.rule.agent);
-            observationCount = yield* self.historyTracker.getObservationCount(match.rule.agent);
-          }
-
-          calibrationMetadata = {
-            rawScore: match.confidence,
-            calibratedScore: calibratedConfidence,
-            historicalAccuracy,
-            calibrated: observationCount >= 100,
-            observationCount,
-          };
-        }
-
         // Generate explanation
         const winner: RoutingAlternative = {
           targetId: match.rule.agent,
           targetName: match.rule.agent,
-          confidence: calibratedConfidence,
+          confidence: match.confidence,
           matchType: match.matchType,
         };
 
@@ -463,66 +405,6 @@ export class MessageRouter {
         })
       );
     });
-  }
-
-  /**
-   * Get fallback agent using cascade logic (sync version for backward compatibility).
-   * Logs warnings when falling back.
-   *
-   * Cascade:
-   * 1. Use config.defaultAgent if set and agent exists
-   * 2. Use first registered agent (with warning)
-   * 3. Throw error if no agents exist
-   */
-  getFallbackAgent(): string {
-    // Try configured default agent
-    if (this.config.defaultAgent) {
-      if (this.agentManager.hasAgent(this.config.defaultAgent)) {
-        return this.config.defaultAgent;
-      }
-      console.warn(
-        `[Routing] Default agent "${this.config.defaultAgent}" not found, falling back to first registered agent`
-      );
-    }
-
-    // Try first registered agent
-    const allAgents = this.agentManager.getAllAgents();
-    if (allAgents.length > 0) {
-      const firstAgent = allAgents[0];
-      console.warn(
-        `[Routing] No default agent configured, using first registered agent: "${firstAgent.id}"`
-      );
-      return firstAgent.id;
-    }
-
-    // No agents available
-    throw new Error(
-      'No agents available for routing. Register at least one agent.'
-    );
-  }
-
-  /**
-   * Get fallback agent silently (for testRoute, sync version for backward compatibility).
-   * Same cascade logic but without logging.
-   */
-  private getFallbackAgentSilent(): string {
-    // Try configured default agent
-    if (this.config.defaultAgent) {
-      if (this.agentManager.hasAgent(this.config.defaultAgent)) {
-        return this.config.defaultAgent;
-      }
-    }
-
-    // Try first registered agent
-    const allAgents = this.agentManager.getAllAgents();
-    if (allAgents.length > 0) {
-      return allAgents[0].id;
-    }
-
-    // No agents available
-    throw new Error(
-      'No agents available for routing. Register at least one agent.'
-    );
   }
 
   /**

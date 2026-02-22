@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { runAssertions } from '../../../../packages/core/src/eval/assertion-runner';
+import { runAssertions } from '../../../../packages/core/src/eval/assertions';
 import type { GoldenTrace } from '../../../../packages/core/src/eval/golden-trace';
 
 function createTrace(): GoldenTrace {

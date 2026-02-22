@@ -22,19 +22,17 @@ import { HookManager } from './hooks';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
-import { Effect, Runtime, Layer, Exit } from 'effect';
+import { Effect, Runtime, Layer } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { MessageRouter } from './routing/router';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
 import { WorkflowManager } from './workflow/manager';
-import type { Workflow } from './workflow/types';
+import type { Workflow } from './workflow/manager';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
 import type { ObservabilityConfig } from './config/types';
 import type { ToolPoliciesConfig } from './config/types';
 import {
-  GlobalVariablesService,
-  GlobalVariablesServiceLive,
   type VariableFactory,
 } from './variables';
 import { ProviderService } from './provider/service';
@@ -232,22 +230,6 @@ export class Fred implements FredLike {
   }
 
   /**
-   * Run an Effect that can fail, returning null on failure.
-   *
-   * @internal
-   */
-  private async runEffectOptional<A, E>(
-    effect: Effect.Effect<A, E, FredServices>
-  ): Promise<A | null> {
-    const runtime = await this.ensureRuntime();
-    const exit = await Runtime.runPromiseExit(runtime)(effect);
-    return Exit.match(exit, {
-      onFailure: () => null,
-      onSuccess: (value) => value,
-    });
-  }
-
-  /**
    * Get the Effect runtime for advanced use cases.
    *
    * Power users can use this to run custom Effects with Fred services.
@@ -356,16 +338,6 @@ export class Fred implements FredLike {
 
   async registerDefaultProviders(config?: ProviderConfigInput): Promise<void> {
     return this.providerService.registerDefaultProviders(config);
-  }
-
-  /**
-   * Use a custom integration/plugin
-   */
-  use(name: string, integration: ((fred: Fred) => void) | unknown): Fred {
-    if (typeof integration === 'function') {
-      (integration as (fred: Fred) => void)(this);
-    }
-    return this;
   }
 
   // --- Tool Management ---

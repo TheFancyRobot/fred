@@ -159,9 +159,14 @@ export class FredTuiApp {
   private streamingSyntaxStyle: SyntaxStyle | null = null;
   private activeStreamingMdId: string | null = null;
   private lastRenderedMessageCount = 0;
+  private lastTranscriptFingerprint: string = '';
 
   // Tool block spinner animation timer
   private spinnerInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Cursor blink timer
+  private cursorBlinkInterval: ReturnType<typeof setInterval> | null = null;
+  private cursorVisible = true;
 
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
@@ -282,6 +287,8 @@ export class FredTuiApp {
         this.state = setFocusedPane(this.state, 'sidebar');
         this.events.onStateChange?.(this.state);
         this.syncStateToUI();
+        // Load transcript for the already-selected first session
+        void this.loadSelectedSessionTranscript(null);
         return;
       }
     } catch (error) {
@@ -557,6 +564,12 @@ export class FredTuiApp {
    */
   processKey(key: KeyEvent): void {
     const previousSelectedId = this.state.sessions.selectedId;
+
+    // Reset cursor blink on every key press so cursor stays visible while typing
+    if (this.state.focusedPane === 'input') {
+      this.resetCursorBlink();
+    }
+
     if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen && key.ctrl && key.name === 'u') {
       this.state = {
         ...this.state,
@@ -803,6 +816,69 @@ export class FredTuiApp {
     }
   }
 
+  /**
+   * Start cursor blink interval. Toggles cursor visibility every 530ms.
+   * Only updates the input renderable, not the full transcript.
+   */
+  private startCursorBlink(): void {
+    if (this.cursorBlinkInterval !== null) return;
+    this.cursorVisible = true;
+    this.cursorBlinkInterval = setInterval(() => {
+      this.cursorVisible = !this.cursorVisible;
+      this.syncInputToUI();
+    }, 530);
+  }
+
+  /**
+   * Stop cursor blink interval and reset cursor to visible.
+   */
+  private stopCursorBlink(): void {
+    if (this.cursorBlinkInterval !== null) {
+      clearInterval(this.cursorBlinkInterval);
+      this.cursorBlinkInterval = null;
+    }
+    this.cursorVisible = true;
+  }
+
+  /**
+   * Reset cursor blink phase (show cursor immediately, restart timer).
+   * Called on any key press to keep cursor visible while typing.
+   */
+  private resetCursorBlink(): void {
+    this.cursorVisible = true;
+    if (this.cursorBlinkInterval !== null) {
+      clearInterval(this.cursorBlinkInterval);
+      this.cursorBlinkInterval = setInterval(() => {
+        this.cursorVisible = !this.cursorVisible;
+        this.syncInputToUI();
+      }, 530);
+    }
+  }
+
+  /**
+   * Sync only the input text renderable (lightweight, used by cursor blink).
+   */
+  private syncInputToUI(): void {
+    const theme = DEFAULT_TUI_THEME;
+    const r = this.renderer;
+    const focused = this.state.focusedPane === 'input';
+    const inputData = renderInputContent(
+      this.state,
+      focused,
+      this.inputPlaceholder,
+      this.cursorVisible,
+    );
+    this.inputText.destroy();
+    this.inputText = new TextRenderable(r, {
+      id: 'input-text',
+      content: inputData.lines.join('\n'),
+      flexGrow: 1,
+      fg: focused ? theme.fg.primary : theme.fg.dim,
+    });
+    this.inputText.selectable = false;
+    this.inputBar.add(this.inputText);
+  }
+
   private handleStreamingBatch(batch: StreamingBatch): void {
     this.state = appendAssistant(this.state, batch.text, batch.tokenCount);
     this.events.onStateChange?.(this.state);
@@ -857,6 +933,11 @@ export class FredTuiApp {
     // This overrides _hasManualScroll so stickyScroll re-engages,
     // ensuring auto-scroll works even if user previously scrolled up.
     this.transcriptContent.scrollTo(Infinity);
+
+    if (this.parseExitSlashCommand(submittedText)) {
+      this.stop();
+      return;
+    }
 
     const sidebarInvocation = this.parseSidebarSlashCommand(submittedText);
     if (sidebarInvocation) {
@@ -915,6 +996,11 @@ export class FredTuiApp {
     this.transcriptContent.scrollTo(Infinity);
 
     // Handle slash commands in queued submissions
+    if (this.parseExitSlashCommand(entry.text)) {
+      this.stop();
+      return;
+    }
+
     const sidebarInvocation = this.parseSidebarSlashCommand(entry.text);
     if (sidebarInvocation) {
       this.state = toggleSidebarVisibility(this.state);
@@ -1063,6 +1149,11 @@ export class FredTuiApp {
     }
 
     return trimmed === '/sidebar' || trimmed === '/sb';
+  }
+
+  private parseExitSlashCommand(text: string): boolean {
+    const trimmed = text.trim().toLowerCase();
+    return trimmed === '/exit' || trimmed === '/quit';
   }
 
   private async executePluginSlashCommand(canonicalName: string, args: string): Promise<void> {
@@ -1332,6 +1423,7 @@ export class FredTuiApp {
       this.state,
       this.state.focusedPane === 'input',
       this.inputPlaceholder,
+      this.cursorVisible,
     );
     this.inputBar.height = inputData.height;
 
@@ -1415,7 +1507,7 @@ export class FredTuiApp {
       id: 'input-text',
       content: inputData.lines.join('\n'),
       flexGrow: 1,
-      fg: this.state.input.text ? theme.fg.primary : theme.fg.dim,
+      fg: this.state.focusedPane === 'input' ? theme.fg.primary : theme.fg.dim,
     });
     this.inputText.selectable = false;
     this.inputBar.add(this.inputText);
@@ -1496,6 +1588,13 @@ export class FredTuiApp {
 
     // Border highlighting for focused pane
     this.updateBorderFocus();
+
+    // Manage cursor blink based on focus
+    if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen) {
+      this.startCursorBlink();
+    } else {
+      this.stopCursorBlink();
+    }
   }
 
   /**
@@ -1511,8 +1610,24 @@ export class FredTuiApp {
     const hasPending = this.state.input.pendingSubmissions.length > 0;
     const isEmpty = messages.length === 0 && !hasPending;
 
+    // Compute a fingerprint of transcript-affecting state to skip redundant full rebuilds.
+    // This avoids destroying and recreating all renderables on every key press.
+    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+    const pendingCount = this.state.input.pendingSubmissions.length;
+    const toolBlockCount = this.state.toolBlocks.groups.length;
+    const lastToolStatus = toolBlockCount > 0
+      ? this.state.toolBlocks.groups[toolBlockCount - 1].blocks.map(b => b.status).join(',')
+      : '';
+    const transcriptFingerprint = `${isStartupChooser}|${messages.length}|${lastMsg?.role ?? ''}|${lastMsg?.content.length ?? 0}|${this.state.streaming.isStreaming}|${this.state.streaming.lastError ?? ''}|${pendingCount}|${toolBlockCount}|${lastToolStatus}|${this.state.startup.chooser.selected}|${this.state.focusedPane}`;
+
     // Startup chooser and empty state (no pending): use legacy string-line path
     if (isStartupChooser || isEmpty) {
+      // Check fingerprint to avoid redundant rebuilds even for startup chooser
+      if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+        return;
+      }
+      this.lastTranscriptFingerprint = transcriptFingerprint;
+
       this.activeStreamingMdId = null;
       this.lastRenderedMessageCount = 0;
 
@@ -1576,6 +1691,12 @@ export class FredTuiApp {
     }
 
     // Full rebuild: clear and rebuild all message renderables
+    // Skip if transcript fingerprint hasn't changed (avoids flicker on unrelated state changes)
+    if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+      return;
+    }
+    this.lastTranscriptFingerprint = transcriptFingerprint;
+
     const children = this.transcriptContent.getChildren();
     for (const child of children) {
       this.transcriptContent.remove(child.id);
@@ -1842,6 +1963,7 @@ export class FredTuiApp {
     if (!this.running) return;
     this.running = false;
     this.stopSpinnerInterval();
+    this.stopCursorBlink();
     if (this.copyFeedbackTimeout) {
       clearTimeout(this.copyFeedbackTimeout);
       this.copyFeedbackTimeout = null;

@@ -3,7 +3,8 @@
 import { BunRuntime } from '@effect/platform-bun';
 import { Effect } from 'effect';
 import { Fred } from '@fancyrobot/fred';
-import { WorkflowManager, WorkflowContext, getBuiltinPackIds } from '@fancyrobot/fred';
+import { WorkflowManager, getBuiltinPackIds } from '@fancyrobot/fred';
+import { WorkflowContext } from './workflow-context';
 import { resolve, join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { spawn, spawnSync } from 'child_process';

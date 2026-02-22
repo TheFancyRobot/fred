@@ -99,27 +99,31 @@ skipped: 1
     - "Ensure italic text has visible color difference from normal text"
   debug_session: ".planning/debug/markdown-rendering-retest.md"
 
-- truth: "Bold text renders in bright white (#ffffff), clearly brighter than default body text"
-  status: fixed
-  reason: "User reported: text does not appear bold. Concealment works (no ** markers) but all text is same gray color — bright white not applied."
+- truth: "Bold text renders visibly as bold emphasis"
+  status: failed
+  reason: "User reported: warm cream #f0dab4 fix is visible but reads as 'heading color' not 'emphasis'. Bold should look bold, not amber."
   severity: major
   test: 10
-  root_cause: "#ffffff was perceptually too close to default #e6e7ea (distance 40.5, going brighter on near-white baseline). Human perception is nonlinear — brightening from near-white is barely visible. Italic #c2c6cc works because it goes dimmer (distance 57.3)."
+  root_cause: "Color hue shift (#f0dab4 warm cream) is wrong approach for bold. Bold should use brightness/weight to convey emphasis, not a warm tint that reads as decorative heading color."
   artifacts:
     - path: "packages/cli/src/tui/theme.ts"
-      issue: "markup.strong foreground #ffffff provides insufficient perceptual contrast against #e6e7ea default"
+      issue: "markup.strong uses warm cream hue shift instead of brightness-based emphasis"
   missing:
-    - "Changed bold fg from #ffffff to #f0dab4 (warm cream, distance 56.4 matching italic)"
+    - "Bold needs brightness-based emphasis (e.g., true bright white with BOLD attribute) not color shift"
   debug_session: ".planning/debug/bold-heading-color-not-applied.md"
 
-- truth: "Headings render in teal with underline decoration, standing out as section headers"
-  status: not-reproduced
-  reason: "User reported: headings are the same as the rest of the text. Bold concealment works but foreground colors not applied. Same root cause as test 10."
+- truth: "Headings render with structural distinction (not just color) appropriate for terminal"
+  status: failed
+  reason: "User reported: headings should be sized appropriately, not just colored. Terminal can't change font size but headings need structural weight — spacing, background, uppercase, etc."
   severity: major
   test: 12
-  root_cause: "Heading teal #5ec2c7 (distance 145.2 from default) IS dramatically different and renders correctly. The test model used **bold** instead of # headings, so the teal/underline never triggered. Bold fix (test 10) addresses what was actually visible."
+  root_cause: "Two problems: (1) Models produce **bold** not # heading syntax, so heading scope never triggers. (2) Even when heading scope triggers, teal+underline alone lacks the structural weight users expect from headings. Terminal headings need spacing, background bands, or other structural treatments."
   artifacts:
     - path: "packages/cli/src/tui/theme.ts"
-      issue: "Heading rendering is correct; test did not produce actual heading syntax"
-  missing: []
+      issue: "Heading scope relies on color+underline only — no structural treatment"
+    - path: "packages/cli/src/tui/layout.ts"
+      issue: "MarkdownRenderable has no heading-specific layout (padding, background, uppercase)"
+  missing:
+    - "Heading rendering with structural weight (spacing above/below, background band, uppercase, or similar)"
+    - "Consider if MarkdownRenderable supports block-level heading customization or if this needs layout-level handling"
   debug_session: ".planning/debug/bold-heading-color-not-applied.md"

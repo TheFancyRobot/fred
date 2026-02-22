@@ -1,13 +1,9 @@
-import { Effect } from 'effect';
+import { createHash } from 'crypto';
+import { Duration, Effect, Fiber, TestClock, TestContext } from 'effect';
 import type { Tool } from '../tool/tool';
-import type { EvalCheckpointArtifact, EvaluationArtifact } from './artifact';
+import type { EvalCheckpointArtifact, EvalToolCallArtifact, EvaluationArtifact } from './artifact';
+import { toDeterministicValue } from './artifact';
 import { TraceStorageService, type TraceStorageApi } from './storage';
-import { buildReplayToolMocks } from './mock-tools';
-import {
-  deterministicReplayHash,
-  deriveClockAdjustmentsFromOffsets,
-  runEffectWithTestClock,
-} from './test-clock';
 
 export type ReplayMode = 'retry' | 'skip' | 'restart';
 
@@ -48,6 +44,139 @@ export interface ReplayResult {
   mode: ReplayMode;
   output: unknown;
   outputHash: string;
+}
+
+// --- Test clock utilities (merged from test-clock.ts) ---
+
+export function deterministicReplayHash(value: unknown): string {
+  const normalized = JSON.stringify(toDeterministicValue(value));
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+export function runEffectWithTestClock<A, E>(
+  effect: Effect.Effect<A, E>,
+  adjustmentsMs: ReadonlyArray<number>
+): Promise<A> {
+  const program = Effect.gen(function* () {
+    const fiber = yield* Effect.fork(effect);
+    for (const adjustmentMs of adjustmentsMs) {
+      yield* TestClock.adjust(Duration.millis(Math.max(0, adjustmentMs)));
+    }
+    return yield* Fiber.join(fiber);
+  }).pipe(Effect.provide(TestContext.TestContext));
+  return Effect.runPromise(program);
+}
+
+export function deriveClockAdjustmentsFromOffsets(
+  offsetsMs: ReadonlyArray<number>,
+  extraMs = 1
+): ReadonlyArray<number> {
+  if (offsetsMs.length === 0) return [];
+  const maxOffset = Math.max(...offsetsMs, 0);
+  return [maxOffset + Math.max(0, extraMs)];
+}
+
+// --- Mock tools (merged from mock-tools.ts) ---
+
+export class MissingToolMockResponseError extends Error {
+  constructor(toolId: string, callOrdinal: number) {
+    super(
+      `Replay mock missing recorded response for tool "${toolId}" call #${callOrdinal}. ` +
+        'Replay requires recorded mock responses for every expected tool call.'
+    );
+    this.name = 'MissingToolMockResponseError';
+  }
+}
+
+export class ToolMockSignatureMismatchError extends Error {
+  constructor(toolId: string, callOrdinal: number) {
+    super(
+      `Replay tool call signature mismatch for "${toolId}" call #${callOrdinal}. ` +
+        'Recorded arguments do not match replay invocation.'
+    );
+    this.name = 'ToolMockSignatureMismatchError';
+  }
+}
+
+interface ToolQueueState {
+  index: number;
+  calls: EvalToolCallArtifact[];
+}
+
+export interface ReplayToolMocks {
+  readonly toolExecutors: Map<string, Tool['execute']>;
+  assertConsumed: () => void;
+}
+
+function deterministicJson(value: unknown): string {
+  return JSON.stringify(toDeterministicValue(value));
+}
+
+function assertMockResponsesExist(toolCalls: ReadonlyArray<EvalToolCallArtifact>): void {
+  for (const call of toolCalls) {
+    if (call.status === 'success' && call.result === undefined) {
+      throw new MissingToolMockResponseError(call.toolId, call.callOrdinal);
+    }
+  }
+}
+
+export function buildReplayToolMocks(artifact: EvaluationArtifact): ReplayToolMocks {
+  assertMockResponsesExist(artifact.toolCalls);
+
+  const byTool = new Map<string, ToolQueueState>();
+  for (const call of artifact.toolCalls) {
+    const current = byTool.get(call.toolId);
+    if (current) {
+      current.calls.push(call);
+    } else {
+      byTool.set(call.toolId, { index: 0, calls: [call] });
+    }
+  }
+
+  const toolExecutors = new Map<string, Tool['execute']>();
+
+  for (const [toolId, queue] of byTool.entries()) {
+    toolExecutors.set(toolId, async (args: unknown) => {
+      const call = queue.calls[queue.index];
+      if (!call) {
+        throw new MissingToolMockResponseError(toolId, queue.index);
+      }
+
+      if (call.args !== undefined) {
+        const expectedSignature = deterministicJson(call.args);
+        const actualSignature = deterministicJson(args);
+        if (expectedSignature !== actualSignature) {
+          throw new ToolMockSignatureMismatchError(toolId, call.callOrdinal);
+        }
+      }
+
+      queue.index += 1;
+
+      if (call.status === 'error') {
+        throw new Error(call.error ?? `Recorded replay tool failure for "${toolId}".`);
+      }
+
+      if (call.result === undefined) {
+        throw new MissingToolMockResponseError(toolId, call.callOrdinal);
+      }
+
+      return toDeterministicValue(call.result);
+    });
+  }
+
+  return {
+    toolExecutors,
+    assertConsumed: () => {
+      for (const [toolId, queue] of byTool.entries()) {
+        if (queue.index !== queue.calls.length) {
+          throw new Error(
+            `Replay did not consume all recorded mocks for tool "${toolId}". ` +
+              `Consumed ${queue.index}/${queue.calls.length}.`
+          );
+        }
+      }
+    },
+  };
 }
 
 export class ReplayTraceNotFoundError extends Error {

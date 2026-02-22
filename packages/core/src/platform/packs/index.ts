@@ -37,16 +37,6 @@ export function registerBuiltinPack(pack: EffectProviderFactory): void {
 }
 
 /**
- * Get a registered provider pack by ID.
- *
- * @param id - Provider ID (case-insensitive)
- * @returns The provider factory or undefined if not found
- */
-export function getBuiltinPack(id: string): EffectProviderFactory | undefined {
-  return packRegistry.get(id.toLowerCase());
-}
-
-/**
  * Get all registered provider pack IDs.
  *
  * @returns Array of unique provider IDs (excludes aliases)
@@ -56,14 +46,13 @@ export function getBuiltinPackIds(): string[] {
 }
 
 /**
- * Load a built-in pack by ID.
+ * Load a registered provider pack by ID.
  *
  * @param id - Provider ID (case-insensitive)
  * @returns The provider factory or null if not found
- * @deprecated Use getBuiltinPack instead for consistent naming
  */
 export function loadBuiltinPack(id: string): EffectProviderFactory | null {
-  return getBuiltinPack(id) ?? null;
+  return packRegistry.get(id.toLowerCase()) ?? null;
 }
 
 /**
@@ -80,9 +69,9 @@ export function isBuiltinPack(id: string): boolean {
  * Legacy BUILTIN_PACKS export for backward compatibility.
  *
  * This object is dynamically populated from the registry.
- * Prefer using getBuiltinPack() or getBuiltinPackIds() instead.
+ * Prefer using loadBuiltinPack() or getBuiltinPackIds() instead.
  *
- * @deprecated Access registry via getBuiltinPack/getBuiltinPackIds functions
+ * @deprecated Access registry via loadBuiltinPack/getBuiltinPackIds functions
  */
 export const BUILTIN_PACKS: Record<string, EffectProviderFactory> = new Proxy(
   {} as Record<string, EffectProviderFactory>,
