@@ -146,6 +146,12 @@ export class FredTuiApp {
   private inputBar!: BoxRenderable;
   private inputPlaceholder: InputPlaceholder;
 
+  // Overlay component references
+  private slashOverlay!: BoxRenderable;
+  private slashOverlayText!: TextRenderable;
+  private helpOverlay!: BoxRenderable;
+  private helpOverlayText!: TextRenderable;
+
   private awaitingStartupResumeSelection = false;
 
   // Renderable-based transcript state
@@ -463,6 +469,54 @@ export class FredTuiApp {
     mainColumn.add(this.statusBar);
     root.add(this.sidebarBox);
     root.add(mainColumn);
+
+    // Slash autocomplete overlay (positioned above input bar)
+    this.slashOverlay = new BoxRenderable(r, {
+      id: 'slash-overlay',
+      position: 'absolute',
+      bottom: DEFAULT_LAYOUT.statusHeight + DEFAULT_LAYOUT.inputHeight,
+      left: DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.outerPadding + 1,
+      width: 40,
+      maxHeight: 8,
+      flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
+    });
+    this.slashOverlay.visible = false;
+    this.slashOverlay.zIndex = 10;
+
+    this.slashOverlayText = new TextRenderable(r, {
+      id: 'slash-overlay-text',
+      content: '',
+      fg: theme.fg.primary,
+    });
+    this.slashOverlayText.selectable = false;
+    this.slashOverlay.add(this.slashOverlayText);
+
+    // Help modal overlay (centered over transcript)
+    this.helpOverlay = new BoxRenderable(r, {
+      id: 'help-overlay',
+      position: 'absolute',
+      top: 3,
+      left: DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.outerPadding + 4,
+      width: 50,
+      flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
+    });
+    this.helpOverlay.visible = false;
+    this.helpOverlay.zIndex = 20;
+
+    this.helpOverlayText = new TextRenderable(r, {
+      id: 'help-overlay-text',
+      content: '',
+      fg: theme.fg.primary,
+    });
+    this.helpOverlayText.selectable = false;
+    this.helpOverlay.add(this.helpOverlayText);
+
+    root.add(this.slashOverlay);
+    root.add(this.helpOverlay);
 
     r.root.add(root);
   }
@@ -1383,6 +1437,60 @@ export class FredTuiApp {
     });
     this.statusText.selectable = false;
     this.statusBar.add(this.statusText);
+
+    // Slash autocomplete overlay
+    const slashActive = this.state.input.slashSearch.isActive;
+    this.slashOverlay.visible = slashActive;
+    if (slashActive) {
+      const { filteredActions, selectedIndex } = this.state.input.slashSearch;
+      const lines = filteredActions.map((action, i) => {
+        const marker = i === selectedIndex ? '▸ ' : '  ';
+        return `${marker}/${action.label}`;
+      });
+      const content = lines.length > 0 ? lines.join('\n') : '  No matches';
+      this.slashOverlayText.destroy();
+      this.slashOverlayText = new TextRenderable(r, {
+        id: 'slash-overlay-text',
+        content,
+        fg: theme.fg.primary,
+      });
+      this.slashOverlayText.selectable = false;
+      this.slashOverlay.add(this.slashOverlayText);
+    }
+
+    // Help modal overlay
+    const helpOpen = this.state.helpModal.isOpen;
+    this.helpOverlay.visible = helpOpen;
+    if (helpOpen) {
+      const helpContent = [
+        '  Keyboard Shortcuts',
+        '',
+        '  Tab / Shift+Tab    Cycle focus',
+        '  Ctrl+B             Toggle sidebar',
+        '  Ctrl+K             Command palette',
+        '  Ctrl+Y             Copy last message',
+        '  Ctrl+Shift+C       Copy transcript',
+        '  PgUp / PgDn        Scroll transcript',
+        '  F1 / ?             Toggle this help',
+        '  Esc                Close / Quit',
+        '',
+        '  Input',
+        '  Enter              Send message',
+        '  Shift+Enter        Insert newline',
+        '  /                  Slash commands',
+        '  Up / Down          History navigation',
+        '',
+        '  Press Esc to close',
+      ].join('\n');
+      this.helpOverlayText.destroy();
+      this.helpOverlayText = new TextRenderable(r, {
+        id: 'help-overlay-text',
+        content: helpContent,
+        fg: theme.fg.primary,
+      });
+      this.helpOverlayText.selectable = false;
+      this.helpOverlay.add(this.helpOverlayText);
+    }
 
     // Border highlighting for focused pane
     this.updateBorderFocus();
