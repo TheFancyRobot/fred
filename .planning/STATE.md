@@ -12,18 +12,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 40 of 40 (Input & Status Bar Polish)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-22 - Completed 40-02 (compact shortcut badges)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-22 - Completed 40-03 (help modal, slash overlay, badge dimming)
 
-Progress: [██████████] 100% (172/172 plans complete)
+Progress: [██████████] 100% (173/173 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (v0.2.2 milestone)
-- Average duration: ~7.6 min
-- Total execution time: ~83 min
+- Total plans completed: 11 (v0.2.2 milestone)
+- Average duration: ~7.5 min
+- Total execution time: ~90 min
 
 **Previous Milestones:**
 - v0.2.1: 31 plans, ~5.32 min/plan
@@ -86,6 +86,10 @@ Recent decisions affecting current work:
 - (Phase 40) Stateless badge pipeline for status bar — no throttle, no telemetry
 - (Phase 40) fg.secondary for badge text, bg.status for contrast — no INVERSE attribute
 - (Phase 40) Copy feedback sole status override, reverts to badges after 2s
+- (Phase 40) F1 universal help toggle; ? only fires from transcript/sidebar panes
+- (Phase 40) Help modal routing blocks all keys except Escape while open
+- (Phase 40) StatusPaneContent.dim flag threads overlay state to rendering-level color decision
+- (Phase 40) Absolute overlays with zIndex and visible toggle for slash/help — no focus steal
 
 ### Blockers/Concerns
 
@@ -103,6 +107,7 @@ None currently.
 | 002 | Remove malformed 31-VERIFICATION.md heredoc accidentally added as Bash permission entry in .claude/settings.local.json | 2026-02-16 | n/a (gitignored) | [002-fix-malformed-bash-permission-entry-in-c](./quick/002-fix-malformed-bash-permission-entry-in-c/) |
 
 ---
+| Phase 40 P03 | 7min | 3 tasks | 7 files |
 | Phase 40 P02 | 15min | 3 tasks | 4 files |
 | Phase 40 P01 | 18min | 3 tasks | 5 files |
 | Phase 39 P03 | 5min | 2 tasks | 5 files |
@@ -113,11 +118,11 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 40-02-PLAN.md (compact shortcut badges)
-Resume file: .planning/phases/40-input-and-status-bar-polish/40-02-SUMMARY.md
+Stopped at: Completed 40-03-PLAN.md (help modal, slash overlay, badge dimming)
+Resume file: .planning/phases/40-input-and-status-bar-polish/40-03-SUMMARY.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-22 — Phase 40 plan 02 complete*
+*Last updated: 2026-02-22 — Phase 40 plan 03 complete*

@@ -27,7 +27,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - [x] **Phase 37: Theme System & Contrast Layout** - Centralized theme/palette system and borderless contrast-based region separation (complete)
 - [x] **Phase 38: Sidebar Redesign & Toggle** - Information-dense collapsible sidebar with hotkey and slash command toggle (complete)
 - [x] **Phase 39: Transcript & Message Rendering** - Muted assistant styling, inline tool/task blocks with tree connectors, streaming accent (gap closure in progress)
-- [ ] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (pending)
+- [x] **Phase 40: Input & Status Bar Polish** - Minimal input chrome, compact status bar badges, final visual cohesion pass (complete)
 
 ## Phase Details
 
@@ -78,7 +78,7 @@ Plans:
 - [x] 39-04-PLAN.md — Fix paste, auto-scroll, and scroll acceleration (gap closure)
 - [x] 39-05-PLAN.md — Fix tool calling pipeline (gap closure)
 - [x] 39-06-PLAN.md — Fix markdown formatting visibility via distinct scope colors (gap closure)
-- [ ] 39-07-PLAN.md — Fix bold emphasis and heading structural distinction (gap closure)
+- [x] 39-07-PLAN.md — Fix bold emphasis and heading structural distinction (gap closure)
 
 ### Phase 40: Input & Status Bar Polish
 **Goal**: Minimize input chrome and polish status bar with compact keyboard shortcut badges
@@ -91,9 +91,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 40-01-PLAN.md — Input Area Polish & Message Queue State
-- [ ] 40-02-PLAN.md — Status Bar Shortcuts
-- [ ] 40-03-PLAN.md — Floating Modals (Slash Commands & Help)
+- [x] 40-01-PLAN.md — Minimal input chrome + queue-safe submit flow
+- [x] 40-02-PLAN.md — Shortcut badge pipeline and contrasted status bar
+- [x] 40-03-PLAN.md — Floating slash/help overlays with status dimming
 
 ## Progress
 
@@ -105,7 +105,7 @@ Phases 37 first (foundation), then 38/39/40 can proceed (38/39 depend only on 37
 | 37. Theme System & Contrast Layout | 1/1 | Complete | 2026-02-17 |
 | 38. Sidebar Redesign & Toggle | 2/2 | Complete | 2026-02-19 |
 | 39. Transcript & Message Rendering | 7/7 | Complete   | 2026-02-21 |
-| 40. Input & Status Bar Polish | 0/3 | Pending | - |
+| 40. Input & Status Bar Polish | 3/3 | Complete | 2026-02-22 |
 
 ---
 
@@ -134,4 +134,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-20 - Phase 39 gap closure plan 39-07 added (bold emphasis + heading structural distinction)*
+*Last updated: 2026-02-22 - Phase 40 complete, v0.2.2 milestone all phases complete*
