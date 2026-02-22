@@ -563,6 +563,9 @@ export class FredTuiApp {
    * Process a key event through the state machine
    */
   processKey(key: KeyEvent): void {
+    if (this.state.helpModal.isOpen && key.name !== 'escape' && key.name !== 'f1') {
+      return;
+    }
     const previousSelectedId = this.state.sessions.selectedId;
 
     // Reset cursor blink on every key press so cursor stays visible while typing
@@ -868,6 +871,7 @@ export class FredTuiApp {
       this.inputPlaceholder,
       this.cursorVisible,
     );
+    this.inputBar.remove('input-text');
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
       id: 'input-text',

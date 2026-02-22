@@ -680,8 +680,12 @@ export function getToolBlockSummary(output: unknown): string {
     if (typeof obj.count === 'number') return `${obj.count} items`;
   }
 
-  const str = JSON.stringify(output);
-  return str.length <= 60 ? str : `${str.slice(0, 57)}...`;
+  try {
+    const str = JSON.stringify(output);
+    return str.length <= 60 ? str : `${str.slice(0, 57)}...`;
+  } catch {
+    return '[object]';
+  }
 }
 
 /**

@@ -51,8 +51,6 @@ export function resolveFredCliLaunchTarget(cwd = process.cwd()): FredCliLaunchTa
   } catch {
     return null;
   }
-
-  return null;
 }
 
 function maybeLaunchFredCliTui(): boolean {
@@ -424,7 +422,6 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     console.log('\nExiting. Please install the package manually and try again:');
     console.log(`   bun add ${packageName}\n`);
     process.exit(0);
-    return false; // Unreachable
   }
 
   // User wants to install - install the package
@@ -456,13 +453,10 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
       });
     });
   } catch (error) {
-    // installPackage already prints detailed error messages, but we add a final message
     console.error(`\n   Installation failed. Please try installing manually:`);
     console.error(`   bun add ${packageName}\n`);
     process.exit(1);
-    return false; // Unreachable
   }
-
   return false;
 }
 
