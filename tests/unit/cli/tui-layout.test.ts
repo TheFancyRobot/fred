@@ -322,6 +322,21 @@ describe('TUI Layout', () => {
       expect(content.lines[0].length).toBeLessThanOrEqual(40);
       expect(content.lines[0].length).toBeGreaterThan(0);
     });
+
+    test('renderStatusContent returns dim flag when overlay is active', () => {
+      const state = createInitialTuiState();
+
+      // Default: not dimmed
+      const normal = renderStatusContent(state);
+      expect(normal.dim).toBe(false);
+
+      // Explicit dim: true
+      const dimmed = renderStatusContent(state, { dim: true });
+      expect(dimmed.dim).toBe(true);
+
+      // Content is the same regardless of dim flag
+      expect(dimmed.lines[0]).toBe(normal.lines[0]);
+    });
   });
 
   describe('Initial focus state', () => {

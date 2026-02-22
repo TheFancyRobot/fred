@@ -21,6 +21,8 @@ const INPUT_ACCENT_GLYPH = '▎';
 
 interface StatusRenderOptions {
   maxWidth?: number;
+  /** When true, badges render with dimmed colors (overlay/modal is open) */
+  dim?: boolean;
 }
 
 /**
@@ -497,10 +499,19 @@ export function renderTranscriptContent(
 }
 
 /**
+ * Status bar content with dimming metadata
+ */
+export interface StatusPaneContent extends PaneContent {
+  /** Whether badges should render dimmed (overlay/modal is active) */
+  dim: boolean;
+}
+
+/**
  * Generate status bar content
  */
-export function renderStatusContent(state: TuiState, options: StatusRenderOptions = {}): PaneContent {
+export function renderStatusContent(state: TuiState, options: StatusRenderOptions = {}): StatusPaneContent {
   const maxWidth = options.maxWidth ?? 120;
+  const dim = options.dim ?? false;
 
   // Build badge-based status line (no telemetry)
   const badges = buildStatusBadges(state);
@@ -508,6 +519,7 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
 
   return {
     lines: [statusText],
+    dim,
   };
 }
 

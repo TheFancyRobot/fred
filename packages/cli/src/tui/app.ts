@@ -1421,8 +1421,10 @@ export class FredTuiApp {
     this.inputBar.add(this.inputText);
 
     // Status bar — stateless badge rendering, no throttle needed
+    const overlayActive = this.state.input.slashSearch.isActive || this.state.helpModal.isOpen;
     const statusData = renderStatusContent(this.state, {
       maxWidth: Math.max(40, this.getRendererWidth() - 4),
+      dim: overlayActive,
     });
 
     const displayStatusLine = this.copyFeedbackActive
@@ -1433,7 +1435,7 @@ export class FredTuiApp {
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
       content: ` ${displayStatusLine} `,
-      fg: this.copyFeedbackActive ? theme.status.success : theme.fg.secondary,
+      fg: this.copyFeedbackActive ? theme.status.success : (statusData.dim ? theme.fg.dim : theme.fg.secondary),
     });
     this.statusText.selectable = false;
     this.statusBar.add(this.statusText);

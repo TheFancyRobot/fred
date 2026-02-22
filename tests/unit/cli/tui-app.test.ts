@@ -1004,4 +1004,82 @@ describe('TUI App (OpenTUI integration)', () => {
       expect(frame).not.toContain('Ctrl+K palette');
     });
   });
+
+  describe('Help modal', () => {
+    test('F1 opens help modal and Escape closes it', async () => {
+      await createTestApp();
+
+      // Initially help is closed
+      expect(app.getState().helpModal.isOpen).toBe(false);
+      await testSetup.renderOnce();
+      let frame = testSetup.captureCharFrame();
+      expect(frame).not.toContain('Keyboard Shortcuts');
+
+      // Press F1 to open help
+      app.processKey(makeKey({ name: 'f1' }));
+      expect(app.getState().helpModal.isOpen).toBe(true);
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+      expect(frame).toContain('Keyboard Shortcuts');
+
+      // Press Escape to close help
+      app.processKey(makeKey({ name: 'escape' }));
+      expect(app.getState().helpModal.isOpen).toBe(false);
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+      expect(frame).not.toContain('Keyboard Shortcuts');
+    });
+
+    test('help modal blocks other key actions while open', async () => {
+      await createTestApp();
+
+      // Open help
+      app.processKey(makeKey({ name: 'f1' }));
+      expect(app.getState().helpModal.isOpen).toBe(true);
+
+      // Tab should not change focus while help is open
+      const focusBefore = app.getState().focusedPane;
+      app.processKey(makeKey({ name: 'tab' }));
+      expect(app.getState().focusedPane).toBe(focusBefore);
+      expect(app.getState().helpModal.isOpen).toBe(true);
+    });
+  });
+
+  describe('Status badge dimming', () => {
+    test('status badges dim when help modal is open', async () => {
+      await createTestApp();
+
+      // Normal state — badges are visible
+      await testSetup.renderOnce();
+      let frame = testSetup.captureCharFrame();
+      expect(frame).toContain('? Help');
+
+      // Open help modal
+      app.processKey(makeKey({ name: 'f1' }));
+      expect(app.getState().helpModal.isOpen).toBe(true);
+
+      // Status badges still present (dimmed visually, but content unchanged)
+      await testSetup.renderOnce();
+      frame = testSetup.captureCharFrame();
+      expect(frame).toContain('? Help');
+      expect(frame).toContain('Esc Quit');
+    });
+
+    test('status badges dim when slash overlay is active', async () => {
+      await createTestApp();
+
+      // Type / to activate slash search
+      expect(app.getState().focusedPane).toBe('input');
+      app.processKey(makeKey({ name: '/' }));
+
+      // Slash search should be active
+      expect(app.getState().input.slashSearch.isActive).toBe(true);
+
+      // Status badges still render (dimmed) and Tab complete appears
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain('? Help');
+      expect(frame).toContain('Tab complete');
+    });
+  });
 });
