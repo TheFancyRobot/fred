@@ -180,7 +180,7 @@ describe('Conditional afterRoutingDecision Hook Emission', () => {
     expect(decision.agent).toBe('agent-a');
   });
 
-  it('clarificationNeeded PauseSignal generated when confidence < 0.6', async () => {
+  it('does not generate clarificationNeeded signal on low-confidence fallback', async () => {
     // Fallback scenario -> confidence=0.5 < 0.6
     router = new MessageRouter(
       agentManager,
@@ -207,6 +207,7 @@ describe('Conditional afterRoutingDecision Hook Emission', () => {
     expect(decision.explanation).toBeDefined();
     expect(decision.explanation!.concerns.length).toBeGreaterThan(0);
     expect(decision.explanation!.concerns[0].type).toBe('low-confidence');
+    expect(decision.clarificationNeeded).toBeUndefined();
   });
 
   it('clarificationNeeded PauseSignal generated when top-2 gap < 0.1', async () => {

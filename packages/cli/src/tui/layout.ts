@@ -752,8 +752,7 @@ export function buildToolBlockRenderable(
     summaryContent = `${spinner} ${block.toolName}...`;
     summaryFg = theme.fg.secondary;
   } else if (block.status === 'errored') {
-    const errorMsg = block.error?.message ?? 'unknown error';
-    summaryContent = `${block.toolName} \u2014 error: ${errorMsg}`;
+    summaryContent = `${block.toolName} — error`;
     summaryFg = theme.message.errorAccent;
   } else {
     // Completed
@@ -775,7 +774,7 @@ export function buildToolBlockRenderable(
   // Expanded detail: show full output for non-in-progress blocks
   if (block.expanded && block.status !== 'in-progress') {
     const detailContent = block.status === 'errored'
-      ? (block.error?.message ?? 'unknown error')
+      ? 'An error occurred while executing this tool.'
       : formatExpandedOutput(block.output);
 
     if (detailContent) {
