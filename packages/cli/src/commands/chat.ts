@@ -256,7 +256,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     // XML tags may span multiple token deltas, so we accumulate
                     // and only flush text that is safe (no partial opening tags).
                     let tokenBuffer = '';
-                    const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi;
+                    const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
 
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {
@@ -279,7 +279,13 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                         }
 
                         // No partial tags -- filter complete XML tags and flush
-                        const filtered = tokenBuffer.replace(xmlTagPattern, '');
+                        // Loop until stable to handle cases like <scr<foo>ipt> → <script>
+                        let filtered = tokenBuffer;
+                        let previous: string;
+                        do {
+                          previous = filtered;
+                          filtered = filtered.replace(xmlTagPattern, '');
+                        } while (filtered !== previous);
                         if (filtered) {
                           app.pushAssistantToken(filtered, 1);
                         }
