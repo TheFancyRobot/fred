@@ -817,8 +817,12 @@ function formatExpandedOutput(output: unknown): string {
   if (typeof output === 'string') {
     return output.length <= 200 ? output : `${output.slice(0, 197)}...`;
   }
-  const str = JSON.stringify(output, null, 2);
-  return str.length <= 200 ? str : `${str.slice(0, 197)}...`;
+  try {
+    const str = JSON.stringify(output, null, 2);
+    return str.length <= 200 ? str : `${str.slice(0, 197)}...`;
+  } catch {
+    return '[output unavailable]';
+  }
 }
 
 /**

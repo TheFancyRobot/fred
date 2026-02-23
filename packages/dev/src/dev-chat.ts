@@ -16,6 +16,10 @@ type FredCliLaunchTarget = {
   args: string[];
 };
 
+function terminate(code: number): never {
+  process.exit(code);
+}
+
 export function resolveFredCliLaunchTarget(cwd = process.cwd()): FredCliLaunchTarget | null {
   const packageRoot = resolve(cwd, 'node_modules', '@fancyrobot', 'fred-cli');
   const packageJsonPath = resolve(packageRoot, 'package.json');
@@ -421,7 +425,7 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
   if (!shouldInstall) {
     console.log('\nExiting. Please install the package manually and try again:');
     console.log(`   bun add ${packageName}\n`);
-    process.exit(0);
+    terminate(0);
   }
 
   // User wants to install - install the package
@@ -446,7 +450,7 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     // This prevents the parent from continuing execution
     await new Promise<never>((_, reject) => {
       child.on('exit', (code) => {
-        process.exit(code || 0);
+        terminate(code || 0);
       });
       child.on('error', (err) => {
         reject(err);
@@ -455,9 +459,8 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
   } catch (error) {
     console.error(`\n   Installation failed. Please try installing manually:`);
     console.error(`   bun add ${packageName}\n`);
-    process.exit(1);
+    terminate(1);
   }
-  return false;
 }
 
 /**
