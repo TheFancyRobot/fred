@@ -61,6 +61,7 @@ export function runEffectWithTestClock<A, E>(
     const fiber = yield* Effect.fork(effect);
     for (const adjustmentMs of adjustmentsMs) {
       yield* TestClock.adjust(Duration.millis(Math.max(0, adjustmentMs)));
+      yield* Effect.yieldNow();
     }
     return yield* Fiber.join(fiber);
   }).pipe(Effect.provide(TestContext.TestContext));

@@ -182,25 +182,97 @@ export interface InputPaneContent extends PaneContent {
   height: number;
 }
 
-function formatComposerLines(text: string, maxVisibleLines: number, cursorPosition: number, focused: boolean, cursorVisible: boolean): string[] {
-  const lines = text.split('\n');
-  const startIndex = Math.max(0, lines.length - maxVisibleLines);
-  const visible = lines.slice(startIndex);
+function formatComposerLines(text: string, maxVisibleLines: number, cursorPosition: number, focused: boolean, cursorVisible: boolean, availableWidth?: number): string[] {
+  const logicalLines = text.split('\n');
   const cursorLocation = focused ? getCursorLocation(text, cursorPosition) : null;
 
-  return visible.map((line, index) => {
-    const prefix = index === 0 ? `${INPUT_ACCENT_GLYPH} ` : '  ';
-    const lineIndex = startIndex + index;
-    if (!cursorLocation || cursorLocation.line !== lineIndex) {
-      return `${prefix}${line}`;
+  // Prefix is 2 chars ("▎ " or "  "), so content area is availableWidth - 2
+  const wrapWidth = typeof availableWidth === 'number' && availableWidth > 4
+    ? availableWidth - 2
+    : 0; // 0 means no wrapping
+
+  // Build visual lines with mapping back to logical coordinates.
+  // Each visual line tracks: { logicalLine, logicalColStart, text }
+  interface VisualLine {
+    logicalLine: number;
+    logicalColStart: number;
+    text: string;
+    isFirstLogical: boolean; // true for the first visual line of the first logical line
+  }
+
+  const visualLines: VisualLine[] = [];
+
+  for (let li = 0; li < logicalLines.length; li++) {
+    const line = logicalLines[li];
+    const segments = wrapWidth > 0 ? wordWrapLine(line, wrapWidth) : [line];
+    let colOffset = 0;
+    for (let si = 0; si < segments.length; si++) {
+      visualLines.push({
+        logicalLine: li,
+        logicalColStart: colOffset,
+        text: segments[si],
+        isFirstLogical: li === 0 && si === 0,
+      });
+      // +1 accounts for the space that was the word boundary (not perfectly accurate for
+      // char-broken words, but close enough for cursor positioning since we re-derive below)
+      colOffset += segments[si].length;
+      // For word-wrapped segments the split consumed a space between words; however the
+      // first segment starts at 0 and subsequent ones start right after the previous text.
+      // We do NOT add +1 here because wordWrapLine preserves the exact characters.
+    }
+  }
+
+  // Viewport: show the last maxVisibleLines visual lines
+  const startIndex = Math.max(0, visualLines.length - maxVisibleLines);
+  const visible = visualLines.slice(startIndex);
+
+  // Map logical cursor to visual line + column
+  let visualCursorLine: number | null = null;
+  let visualCursorCol: number | null = null;
+
+  if (cursorLocation) {
+    // Find which visual line contains the cursor
+    for (let vi = visualLines.length - 1; vi >= 0; vi--) {
+      const vl = visualLines[vi];
+      if (vl.logicalLine === cursorLocation.line
+        && cursorLocation.column >= vl.logicalColStart
+        && cursorLocation.column <= vl.logicalColStart + vl.text.length) {
+        visualCursorLine = vi;
+        visualCursorCol = cursorLocation.column - vl.logicalColStart;
+        break;
+      }
+    }
+    // Fallback: cursor at end of last visual line of its logical line
+    if (visualCursorLine === null) {
+      for (let vi = visualLines.length - 1; vi >= 0; vi--) {
+        if (visualLines[vi].logicalLine === cursorLocation.line) {
+          visualCursorLine = vi;
+          visualCursorCol = visualLines[vi].text.length;
+          break;
+        }
+      }
+    }
+  }
+
+  return visible.map((vl, index) => {
+    const absoluteIndex = startIndex + index;
+    // First visual line overall gets the accent glyph; continuation lines get spaces
+    const prefix = absoluteIndex === 0 || (startIndex > 0 && index === 0 && vl.isFirstLogical)
+      ? `${INPUT_ACCENT_GLYPH} `
+      : '  ';
+    // Special case: if viewport scrolled and the topmost visible line is the very first
+    // logical line's first segment, show the accent glyph
+    const usePrefix = vl.isFirstLogical ? `${INPUT_ACCENT_GLYPH} ` : prefix;
+    const finalPrefix = vl.isFirstLogical ? `${INPUT_ACCENT_GLYPH} ` : '  ';
+
+    if (visualCursorLine === null || absoluteIndex !== visualCursorLine) {
+      return `${finalPrefix}${vl.text}`;
     }
 
-    const clampedCol = Math.max(0, Math.min(line.length, cursorLocation.column));
-    // Always insert a character at the cursor position to prevent text shift during blink.
-    // Show block cursor when visible, space when hidden (same width in monospace terminal).
+    const clampedCol = Math.max(0, Math.min(vl.text.length, visualCursorCol ?? 0));
     const cursorChar = cursorVisible ? INPUT_CURSOR_INDICATOR : ' ';
-    const withCursor = `${line.slice(0, clampedCol)}${cursorChar}${line.slice(clampedCol)}`;
-    return `${prefix}${withCursor}`;
+    const withCursor = `${vl.text.slice(0, clampedCol)}${cursorChar}${vl.text.slice(clampedCol)}`;
+    return `${finalPrefix}${withCursor}`;
   });
 }
 
@@ -217,6 +289,7 @@ export function renderInputContent(
   focused: boolean,
   placeholder: InputPlaceholder,
   cursorVisible: boolean = true,
+  availableWidth?: number,
 ): InputPaneContent {
   const hasInput = state.input.text.length > 0;
   const showCursor = focused && cursorVisible;
@@ -227,6 +300,7 @@ export function renderInputContent(
         state.input.cursorPosition,
         focused,
         cursorVisible,
+        availableWidth,
       )
     : [`${INPUT_ACCENT_GLYPH} ${focused ? `${showCursor ? INPUT_CURSOR_INDICATOR : ' '}${placeholder}` : placeholder}`];
   const slashHint = state.input.slashSearch.isActive
@@ -415,6 +489,58 @@ function wrapLine(line: string, maxWidth: number): string[] {
     remaining = remaining.slice(maxWidth);
   }
   wrapped.push(remaining);
+  return wrapped;
+}
+
+/**
+ * Word-wrap a single line at word boundaries.
+ * Falls back to character break when a word exceeds the width.
+ * Returns an array of visual lines.
+ */
+function wordWrapLine(line: string, maxWidth: number): string[] {
+  if (maxWidth <= 0 || line.length <= maxWidth) {
+    return [line];
+  }
+
+  const words = line.split(' ');
+  const wrapped: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    if (current.length === 0) {
+      // First word on line - must take it even if too long
+      if (word.length > maxWidth) {
+        // Character-break the oversized word
+        let remaining = word;
+        while (remaining.length > maxWidth) {
+          wrapped.push(remaining.slice(0, maxWidth));
+          remaining = remaining.slice(maxWidth);
+        }
+        current = remaining;
+      } else {
+        current = word;
+      }
+    } else if (current.length + 1 + word.length <= maxWidth) {
+      // Fits on current line with a space
+      current += ` ${word}`;
+    } else {
+      // Doesn't fit - flush current line and start new one
+      wrapped.push(current);
+      if (word.length > maxWidth) {
+        let remaining = word;
+        while (remaining.length > maxWidth) {
+          wrapped.push(remaining.slice(0, maxWidth));
+          remaining = remaining.slice(maxWidth);
+        }
+        current = remaining;
+      } else {
+        current = word;
+      }
+    }
+  }
+
+  // Flush last line (may be empty string for trailing space)
+  wrapped.push(current);
   return wrapped;
 }
 

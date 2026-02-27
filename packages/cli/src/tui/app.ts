@@ -539,11 +539,14 @@ export class FredTuiApp {
 
     this.renderer.keyInput.on('paste', (event: PasteEvent) => {
       if (!this.running) return;
+      if (this.state.helpModal.isOpen) return;
       if (this.state.focusedPane !== 'input') return;
       if (this.state.commandPalette.isOpen) return;
 
       // Insert pasted text at cursor position (flatten newlines for single-line input)
-      const text = event.text.replace(/\n/g, ' ');
+      // Cap paste length to prevent resource exhaustion from extremely large pastes
+      const MAX_PASTE_LENGTH = 100_000;
+      const text = event.text.slice(0, MAX_PASTE_LENGTH).replace(/\n/g, ' ');
       const before = this.state.input.text.slice(0, this.state.input.cursorPosition);
       const after = this.state.input.text.slice(this.state.input.cursorPosition);
       this.state = {
@@ -870,6 +873,7 @@ export class FredTuiApp {
       focused,
       this.inputPlaceholder,
       this.cursorVisible,
+      this.getInputContentWidth(),
     );
     this.inputBar.remove('input-text');
     this.inputText.destroy();
@@ -1280,6 +1284,12 @@ export class FredTuiApp {
 
     try {
       const messages = await loadSessionTranscript(this.sessionService, selectedId);
+
+      // Session may have changed while loading; ignore stale results
+      if (this.state.sessions.selectedId !== selectedId) {
+        return;
+      }
+
       this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
@@ -1347,6 +1357,18 @@ export class FredTuiApp {
     return typeof candidate === 'number' && candidate > 0 ? candidate : 120;
   }
 
+  /**
+   * Calculate the available text width for the input composer area.
+   * Accounts for sidebar, input bar padding (1 on each side = 2 total).
+   */
+  private getInputContentWidth(): number {
+    const rendererWidth = this.getRendererWidth();
+    const sidebarWidth = this.state.sidebar.isVisible ? DEFAULT_LAYOUT.sidebarWidth : 0;
+    // inputBar has padding: 1 (all sides), so 1 left + 1 right = 2 horizontal padding
+    const inputBarPadding = 2;
+    return Math.max(10, rendererWidth - sidebarWidth - inputBarPadding);
+  }
+
   private getRendererHeight(): number {
     const candidate = (this.renderer as unknown as { height?: number; terminal?: { height?: number } }).height
       ?? (this.renderer as unknown as { terminal?: { height?: number } }).terminal?.height
@@ -1364,13 +1386,28 @@ export class FredTuiApp {
       .join('\n\n');
   }
 
+  /**
+   * Strip ANSI/OSC/control escape sequences from text before clipboard copy.
+   * Prevents terminal escape injection via untrusted content.
+   */
+  private sanitizeForClipboard(text: string): string {
+    // Strip ANSI escape sequences (CSI, OSC, etc.)
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b[^[\]]/g, '')
+      // Strip remaining C0/C1 control chars except newline, tab, carriage return
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+  }
+
   private copyTranscriptToClipboard(): void {
     const text = this.getTranscriptPlainText();
     if (!text) {
       return;
     }
 
-    this.renderer.copyToClipboardOSC52(text);
+    this.renderer.copyToClipboardOSC52(this.sanitizeForClipboard(text));
   }
 
   /**
@@ -1386,7 +1423,7 @@ export class FredTuiApp {
       return;
     }
 
-    this.renderer.copyToClipboardOSC52(lastAssistantMsg.content);
+    this.renderer.copyToClipboardOSC52(this.sanitizeForClipboard(lastAssistantMsg.content));
 
     // Brief "Copied!" feedback via status override
     this.showCopyFeedback();
@@ -1428,6 +1465,7 @@ export class FredTuiApp {
       this.state.focusedPane === 'input',
       this.inputPlaceholder,
       this.cursorVisible,
+      this.getInputContentWidth(),
     );
     this.inputBar.height = inputData.height;
 
@@ -1506,6 +1544,7 @@ export class FredTuiApp {
     // Transcript content
     this.syncTranscriptToUI(r, theme);
 
+    this.inputBar.remove('input-text');
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
       id: 'input-text',
@@ -1527,6 +1566,7 @@ export class FredTuiApp {
       ? 'Copied to clipboard'
       : statusData.lines[0] ?? '';
 
+    this.statusBar.remove('status-text');
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
@@ -1546,6 +1586,7 @@ export class FredTuiApp {
         return `${marker}/${action.label}`;
       });
       const content = lines.length > 0 ? lines.join('\n') : '  No matches';
+      this.slashOverlay.remove('slash-overlay-text');
       this.slashOverlayText.destroy();
       this.slashOverlayText = new TextRenderable(r, {
         id: 'slash-overlay-text',
@@ -1692,6 +1733,9 @@ export class FredTuiApp {
         existingMd.content = lastMsg.content + buildStreamingCursorText();
         return;
       }
+
+      // Renderable was lost (e.g., after rebuild); force a full rebuild
+      this.activeStreamingMdId = null;
     }
 
     // Full rebuild: clear and rebuild all message renderables
@@ -1704,6 +1748,7 @@ export class FredTuiApp {
     const children = this.transcriptContent.getChildren();
     for (const child of children) {
       this.transcriptContent.remove(child.id);
+      child.destroy();
     }
     this.activeStreamingMdId = null;
 

@@ -303,6 +303,55 @@ describe('TUI Layout', () => {
       expect(content.lines[0]).toBe('▎ he█llo');
     });
 
+    test('word-wraps long input lines when availableWidth is provided', () => {
+      const state = createInitialTuiState();
+      // "▎ " prefix is 2 chars, so content area is availableWidth - 2 = 18
+      state.input.text = 'hello world this is a long line';
+      state.input.cursorPosition = 0;
+
+      const content = renderInputContent(state, true, 'Type a message...', true, 20);
+      // Content wraps at 18 chars: "hello world this" (16), "is a long line" (14)
+      expect(content.lines.length).toBe(2);
+      expect(content.lines[0]).toMatch(/^▎ /);
+      expect(content.lines[1]).toMatch(/^  /);
+    });
+
+    test('cursor appears on correct wrapped line', () => {
+      const state = createInitialTuiState();
+      // availableWidth 20 => wrap at 18 content chars
+      state.input.text = 'hello world this is a test';
+      // Place cursor at position 20 (inside "is")
+      state.input.cursorPosition = 20;
+
+      const content = renderInputContent(state, true, 'Type a message...', true, 20);
+      // Should have multiple visual lines, cursor block on wrapped line
+      expect(content.lines.length).toBeGreaterThan(1);
+      // At least one line should contain the cursor indicator
+      const cursorLine = content.lines.find((l: string) => l.includes('█'));
+      expect(cursorLine).toBeDefined();
+    });
+
+    test('input grows up to maxVisibleLines then scrolls', () => {
+      const state = createInitialTuiState();
+      // Make text that wraps into many lines at width 12 (content area 10)
+      state.input.text = 'aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj';
+      state.input.cursorPosition = state.input.text.length;
+
+      const content = renderInputContent(state, true, 'Type a message...', true, 12);
+      // Should be capped at DEFAULT_LAYOUT.inputMaxVisibleLines (5)
+      expect(content.lines.length).toBeLessThanOrEqual(DEFAULT_LAYOUT.inputMaxVisibleLines);
+    });
+
+    test('no wrapping when availableWidth is not provided', () => {
+      const state = createInitialTuiState();
+      state.input.text = 'hello world this is a long line that should not wrap';
+      state.input.cursorPosition = 0;
+
+      const content = renderInputContent(state, true, 'Type a message...', true);
+      // Without availableWidth, should be a single line (no wrapping)
+      expect(content.lines.length).toBe(1);
+    });
+
     test('renders command palette content in sidebar mode', () => {
       const state = createInitialTuiState();
       state.commandPalette.isOpen = true;

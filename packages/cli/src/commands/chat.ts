@@ -256,7 +256,10 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     // XML tags may span multiple token deltas, so we accumulate
                     // and only flush text that is safe (no partial opening tags).
                     let tokenBuffer = '';
+                    const MAX_TOKEN_BUFFER_CHARS = 8_192;
                     const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
+
+                    const filterXmlTags = (text: string): string => text.replace(xmlTagPattern, '');
 
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {
@@ -266,26 +269,26 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                         const lastOpenBracket = tokenBuffer.lastIndexOf('<');
                         if (lastOpenBracket >= 0) {
                           const afterBracket = tokenBuffer.slice(lastOpenBracket);
-                          // If we have an unclosed tag, hold it in the buffer
-                          if (!afterBracket.includes('>')) {
+                          // Only buffer if '<' is followed by a likely tag start character
+                          if (/^<[a-z/]/i.test(afterBracket) && !afterBracket.includes('>')) {
                             // Flush everything before the potential tag
                             const safe = tokenBuffer.slice(0, lastOpenBracket);
                             if (safe) {
-                              app.pushAssistantToken(safe, 1);
+                              app.pushAssistantToken(filterXmlTags(safe), 1);
                             }
                             tokenBuffer = afterBracket;
+
+                            // Safety: cap buffered partial tags to prevent unbounded growth
+                            if (tokenBuffer.length > MAX_TOKEN_BUFFER_CHARS) {
+                              app.pushAssistantToken(filterXmlTags(tokenBuffer), 1);
+                              tokenBuffer = '';
+                            }
                             continue;
                           }
                         }
 
                         // No partial tags -- filter complete XML tags and flush
-                        // Loop until stable to handle cases like <scr<foo>ipt> → <script>
-                        let filtered = tokenBuffer;
-                        let previous: string;
-                        do {
-                          previous = filtered;
-                          filtered = filtered.replace(xmlTagPattern, '');
-                        } while (filtered !== previous);
+                        const filtered = filterXmlTags(tokenBuffer);
                         if (filtered) {
                           app.pushAssistantToken(filtered, 1);
                         }
@@ -321,7 +324,10 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
 
                     // Flush any remaining buffered tokens (partial tag never closed)
                     if (tokenBuffer) {
-                      app.pushAssistantToken(tokenBuffer, 1);
+                      const finalFiltered = filterXmlTags(tokenBuffer);
+                      if (finalFiltered) {
+                        app.pushAssistantToken(finalFiltered, 1);
+                      }
                       tokenBuffer = '';
                     }
 
