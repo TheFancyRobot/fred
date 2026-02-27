@@ -47,15 +47,15 @@ describe('TUI Keymap', () => {
       const state = createInitialTuiState();
 
       // input -> sidebar
-      const next1 = nextFocusablePane(state.focusedPane);
+      const next1 = nextFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible });
       expect(next1).toBe('sidebar');
 
       // sidebar -> transcript
-      const next2 = nextFocusablePane(next1);
+      const next2 = nextFocusablePane(next1, { includeSidebar: state.sidebar.isVisible });
       expect(next2).toBe('transcript');
 
       // transcript -> input (wraparound)
-      const next3 = nextFocusablePane(next2);
+      const next3 = nextFocusablePane(next2, { includeSidebar: state.sidebar.isVisible });
       expect(next3).toBe('input');
     });
 
@@ -76,7 +76,7 @@ describe('TUI Keymap', () => {
       state.focusedPane = 'sidebar';
 
       // sidebar -> input (wraparound)
-      const prev = prevFocusablePane(state.focusedPane);
+      const prev = prevFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible });
       expect(prev).toBe('input');
     });
   });
@@ -89,7 +89,7 @@ describe('TUI Keymap', () => {
       const visited = [current];
 
       for (let i = 0; i < 5; i++) {
-        current = nextFocusablePane(current);
+        current = nextFocusablePane(current, { includeSidebar: state.sidebar.isVisible });
         visited.push(current);
       }
 
@@ -347,6 +347,22 @@ describe('TUI Keymap', () => {
       expect(newState.input.cursorPosition).toBe(1);
     });
 
+    test('uppercase characters are accepted when shift is held', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'input';
+
+      const event = makeKey({ name: 'a', shift: true, sequence: 'A' });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('input-text');
+      if (action.type === 'input-text') {
+        expect(action.text).toBe('A');
+      }
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.input.text).toBe('A');
+      expect(newState.input.cursorPosition).toBe(1);
+    });
+
     test('characters are inserted at cursor position', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'input';
@@ -552,6 +568,46 @@ describe('TUI Keymap', () => {
     });
   });
 
+  describe('Sidebar visibility toggles', () => {
+    test('Ctrl+B maps to toggle-sidebar', () => {
+      const state = createInitialTuiState();
+      const event = makeKey({ name: 'b', ctrl: true });
+      const action = mapKeyToAction(event, state);
+      expect(action.type).toBe('toggle-sidebar');
+    });
+
+    test('focus cycle skips sidebar when hidden', () => {
+      let state = createInitialTuiState();
+      state.focusedPane = 'input';
+
+      const hideAction = mapKeyToAction(makeKey({ name: 'b', ctrl: true }), state);
+      state = applyKeyAction(state, hideAction);
+      expect(state.sidebar.isVisible).toBe(false);
+
+      const nextAction = mapKeyToAction(makeKey({ name: 'tab' }), state);
+      expect(nextAction.type).toBe('focus-next');
+
+      const nextState = applyKeyAction(state, nextAction);
+      expect(nextState.focusedPane).toBe('transcript');
+    });
+
+    test('uppercase S toggles sidebar sessions section', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const action = mapKeyToAction(makeKey({ name: 's', shift: true, sequence: 'S' }), state);
+      expect(action.type).toBe('toggle-sessions-section');
+    });
+
+    test('uppercase M toggles sidebar metadata section', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const action = mapKeyToAction(makeKey({ name: 'm', shift: true, sequence: 'M' }), state);
+      expect(action.type).toBe('toggle-metadata-section');
+    });
+  });
+
   describe('Command palette controls', () => {
     test('Ctrl+K toggles command palette on Windows/Linux', () => {
       const state = createInitialTuiState();
@@ -714,6 +770,81 @@ describe('TUI Keymap', () => {
 
       expect(result.state.focusedPane).not.toBe(state.focusedPane);
       expect(result.action.type).toBe('focus-next');
+    });
+  });
+
+  describe('Help modal', () => {
+    test('? from transcript pane toggles help modal', () => {
+      let state = createInitialTuiState();
+      state = { ...state, focusedPane: 'transcript' };
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('toggle-help');
+    });
+
+    test('? from sidebar pane toggles help modal', () => {
+      let state = createInitialTuiState();
+      state = { ...state, focusedPane: 'sidebar' };
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('toggle-help');
+    });
+
+    test('? from input pane types character instead of toggling help', () => {
+      const state = createInitialTuiState();
+      expect(state.focusedPane).toBe('input');
+
+      const action = mapKeyToAction(makeKey({ name: '?', sequence: '?' }), state);
+      expect(action.type).toBe('input-text');
+      expect((action as { type: 'input-text'; text: string }).text).toBe('?');
+    });
+
+    test('f1 toggles help modal globally (from any pane)', () => {
+      for (const pane of ['input', 'transcript', 'sidebar'] as const) {
+        let state = createInitialTuiState();
+        state = { ...state, focusedPane: pane };
+
+        const action = mapKeyToAction(makeKey({ name: 'f1' }), state);
+        expect(action.type).toBe('toggle-help');
+      }
+    });
+
+    test('Escape closes help modal when open', () => {
+      let state = createInitialTuiState();
+      state = { ...state, helpModal: { isOpen: true } };
+
+      const action = mapKeyToAction(makeKey({ name: 'escape' }), state);
+      expect(action.type).toBe('toggle-help');
+
+      const newState = applyKeyAction(state, action);
+      expect(newState.helpModal.isOpen).toBe(false);
+    });
+
+    test('Escape does NOT close help modal when not open (still quits)', () => {
+      const state = createInitialTuiState();
+      expect(state.helpModal.isOpen).toBe(false);
+
+      const action = mapKeyToAction(makeKey({ name: 'escape' }), state);
+      expect(action.type).toBe('quit');
+    });
+
+    test('other keys are noop when help modal is open', () => {
+      let state = createInitialTuiState();
+      state = { ...state, helpModal: { isOpen: true } };
+
+      const action = mapKeyToAction(makeKey({ name: 'a', sequence: 'a' }), state);
+      expect(action.type).toBe('noop');
+    });
+
+    test('toggle-help action toggles helpModal.isOpen via applyKeyAction', () => {
+      let state = createInitialTuiState();
+      expect(state.helpModal.isOpen).toBe(false);
+
+      state = applyKeyAction(state, { type: 'toggle-help' });
+      expect(state.helpModal.isOpen).toBe(true);
+
+      state = applyKeyAction(state, { type: 'toggle-help' });
+      expect(state.helpModal.isOpen).toBe(false);
     });
   });
 });

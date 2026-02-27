@@ -171,10 +171,11 @@ describe('Phase 28 streaming smoke', () => {
 
       await Bun.sleep(120);
 
-      const streamingStatus = String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
-      expect(streamingStatus).toContain('streaming');
-      expect(streamingStatus).toContain('tok/s');
-      expect(streamingStatus).toContain('lat ');
+      // Status bar shows shortcut badges (no telemetry)
+      await setup.renderOnce();
+      const streamFrame = setup.captureCharFrame();
+      expect(streamFrame).toContain('? Help');
+      expect(streamFrame).toContain('Esc Quit');
 
       app.processKey(makeKey({ name: 'k', ctrl: true }));
       expect(app.getState().commandPalette.isOpen).toBe(true);
@@ -211,10 +212,12 @@ describe('Phase 28 streaming smoke', () => {
       app.completeAssistantStream();
       await Bun.sleep(40);
 
-      const idleStatus = String((app as unknown as { lastStatusLine?: string }).lastStatusLine ?? '');
-      expect(idleStatus).not.toContain('streaming');
-      expect(idleStatus).toContain('cost $');
-      expect(idleStatus).toContain('tok total:');
+      // Idle status shows badges, no telemetry
+      await setup.renderOnce();
+      const idleFrame = setup.captureCharFrame();
+      expect(idleFrame).toContain('? Help');
+      expect(idleFrame).not.toContain('streaming');
+      expect(idleFrame).not.toContain('cost $');
     } finally {
       if (app.isRunning()) {
         app.stop();
@@ -223,8 +226,12 @@ describe('Phase 28 streaming smoke', () => {
     }
   });
 
-  test('stream callback forwards provider chunks as-is (not token-splitting)', async () => {
+  test('stream callback forwards provider chunks with XML tags filtered (not token-splitting)', async () => {
+    // Chunk contains a closing </function> tag that the XML filter should strip.
+    // The TUI now filters XML-like tags from token deltas to prevent hallucinated
+    // XML pseudo-tool-calls from appearing in the transcript.
     const chunk = '/function=brave_search>{"query":"annual potato production"}</function>';
+    const expectedFiltered = '/function=brave_search>{"query":"annual potato production"}';
     const originalStreamMessage = MockFred.prototype.streamMessage;
     MockFred.prototype.streamMessage = function () {
       return {
@@ -271,7 +278,8 @@ describe('Phase 28 streaming smoke', () => {
       events.onSubmit('test message');
       await Bun.sleep(40);
 
-      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(chunk, 1);
+      // XML filtering strips the </function> closing tag from the chunk
+      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(expectedFiltered, 1);
       expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
     } finally {
       MockFred.prototype.streamMessage = originalStreamMessage;

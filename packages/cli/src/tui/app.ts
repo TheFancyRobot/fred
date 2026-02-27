@@ -10,8 +10,12 @@ import {
   BoxRenderable,
   TextRenderable,
   ScrollBoxRenderable,
+  CodeRenderable,
+  SyntaxStyle,
   TextAttributes,
+  MacOSScrollAccel,
   type KeyEvent,
+  type PasteEvent,
   type CliRenderer,
   type MouseEvent,
 } from '@opentui/core';
@@ -42,6 +46,15 @@ import {
   openStartupChooser,
   closeStartupChooser,
   setStartupWarning,
+  toggleSidebarVisibility,
+  addToolCall,
+  completeToolCall,
+  failToolCall,
+  hasInProgressToolBlocks,
+  getToolBlocksForMessage,
+  queuePendingSubmission,
+  dequeuePendingSubmission,
+  hasPendingSubmissions,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -50,9 +63,17 @@ import {
   renderInputContent,
   selectInputPlaceholder,
   renderStatusContent,
+  getTranscriptMessages,
+  buildUserMessageRenderable,
+  buildAssistantMessageRenderable,
+  buildThinkingRenderable,
+  buildStreamingCursorText,
+  buildToolGroupRenderable,
+  sanitizeForTerminalDisplay,
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
+import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme, getStreamingMarkdownSyntaxTheme } from './theme.js';
 import {
   createStreamingController,
   type StreamingController,
@@ -115,19 +136,38 @@ export class FredTuiApp {
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
+  private sidebarFooter!: TextRenderable;
   private sidebarItems!: ScrollBoxRenderable;
   private transcriptContent!: ScrollBoxRenderable;
   private inputText!: TextRenderable;
   private statusText!: TextRenderable;
+  private statusBar!: BoxRenderable;
   private sidebarBox!: BoxRenderable;
   private transcriptBox!: BoxRenderable;
   private inputBar!: BoxRenderable;
   private inputPlaceholder: InputPlaceholder;
-  private statusThrottleMs = 100;
-  private lastStatusRenderMs = 0;
-  private lastStatusLine = '';
-  private previousStreamingState = false;
+
+  // Overlay component references
+  private slashOverlay!: BoxRenderable;
+  private slashOverlayText!: TextRenderable;
+  private helpOverlay!: BoxRenderable;
+  private helpOverlayText!: TextRenderable;
+
   private awaitingStartupResumeSelection = false;
+
+  // Renderable-based transcript state
+  private syntaxStyle: SyntaxStyle | null = null;
+  private streamingSyntaxStyle: SyntaxStyle | null = null;
+  private activeStreamingMdId: string | null = null;
+  private lastRenderedMessageCount = 0;
+  private lastTranscriptFingerprint: string = '';
+
+  // Tool block spinner animation timer
+  private spinnerInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Cursor blink timer
+  private cursorBlinkInterval: ReturnType<typeof setInterval> | null = null;
+  private cursorVisible = true;
 
   private static readonly INPUT_TOKEN_COST_USD = 0.0000015;
   private static readonly OUTPUT_TOKEN_COST_USD = 0.000002;
@@ -156,6 +196,8 @@ export class FredTuiApp {
       },
     });
     this.sessionService = config.sessionService;
+    this.syntaxStyle = SyntaxStyle.fromTheme(getMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
+    this.streamingSyntaxStyle = SyntaxStyle.fromTheme(getStreamingMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
     }
@@ -246,6 +288,8 @@ export class FredTuiApp {
         this.state = setFocusedPane(this.state, 'sidebar');
         this.events.onStateChange?.(this.state);
         this.syncStateToUI();
+        // Load transcript for the already-selected first session
+        void this.loadSelectedSessionTranscript(null);
         return;
       }
     } catch (error) {
@@ -294,52 +338,60 @@ export class FredTuiApp {
   /**
    * Build the OpenTUI component tree
    *
-   * root (Box, column, 100%x100%)
-   * +-- mainArea (Box, row, flexGrow: 1)
-   * |   +-- sidebar (Box, width: 30, border: rounded)
-   * |   |   +-- sidebarTitle (Text, "[Sessions]")
-   * |   |   +-- sidebarItems (ScrollBox, flexGrow: 1)
-   * |   +-- transcript (Box, flexGrow: 1, border: rounded)
-   * |       +-- transcriptContent (ScrollBox, flexGrow: 1)
-   * +-- inputBar (Box, height: 3, border: single)
-   * |   +-- prompt (Text, "> ")
-   * |   +-- inputText (Text, flexGrow: 1)
-   * +-- statusBar (Box, height: 1, inverse bg)
-   *     +-- statusText (Text)
+   * root (Box, row, 100%x100%, bg: base, padding: outerPadding, gap: regionGap)
+   * +-- sidebar (Box, width: 30, bg: elevated, padding: 1, height: 100%)
+   * |   +-- sidebarTitle (Text, "[Sessions]")
+   * |   +-- sidebarItems (ScrollBox, flexGrow: 1)
+   * |   +-- sidebarFooter (Text)
+   * +-- mainColumn (Box, column, flexGrow: 1, height: 100%, gap: regionGap)
+   *     +-- transcript (Box, flexGrow: 1, bg: surface, padding: 1)
+   *     |   +-- transcriptContent (ScrollBox, flexGrow: 1)
+   *     +-- inputBar (Box, height: 3, bg: elevated, padding: 1)
+   *     |   +-- inputText (Text, flexGrow: 1)
+   *     +-- statusBar (Box, height: 1, bg: status)
+   *         +-- statusText (Text)
    */
   private buildComponentTree(): void {
     const r = this.renderer;
+    const theme = DEFAULT_TUI_THEME;
 
     // Root container
     const root = new BoxRenderable(r, {
       id: 'root',
       width: '100%',
       height: '100%',
-      flexDirection: 'column',
+      flexDirection: 'row',
+      backgroundColor: theme.bg.base,
+      padding: DEFAULT_LAYOUT.outerPadding,
+      gap: DEFAULT_LAYOUT.regionGap,
     });
 
-    // Main area (sidebar + transcript)
-    const mainArea = new BoxRenderable(r, {
-      id: 'main-area',
-      flexDirection: 'row',
+    // Main column (transcript + input + status)
+    const mainColumn = new BoxRenderable(r, {
+      id: 'main-column',
+      flexDirection: 'column',
       flexGrow: 1,
+      height: '100%',
+      gap: DEFAULT_LAYOUT.regionGap,
     });
 
     // Sidebar
     this.sidebarBox = new BoxRenderable(r, {
       id: 'sidebar',
       width: DEFAULT_LAYOUT.sidebarWidth,
-      border: true,
-      borderStyle: 'rounded',
+      height: '100%',
       flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
     });
 
     this.sidebarTitle = new TextRenderable(r, {
       id: 'sidebar-title',
       content: '[Sessions]',
       attributes: TextAttributes.BOLD,
-      fg: '#00FFFF',
+      fg: theme.accent.primary,
     });
+    this.sidebarTitle.selectable = false;
 
     this.sidebarItems = new ScrollBoxRenderable(r, {
       id: 'sidebar-items',
@@ -349,22 +401,33 @@ export class FredTuiApp {
     });
     this.sidebarItems.selectable = false;
 
+    this.sidebarFooter = new TextRenderable(r, {
+      id: 'sidebar-footer',
+      content: '',
+      fg: theme.fg.dim,
+    });
+    this.sidebarFooter.selectable = false;
+
     this.sidebarBox.add(this.sidebarTitle);
     this.sidebarBox.add(this.sidebarItems);
+    this.sidebarBox.add(this.sidebarFooter);
 
     // Transcript
     this.transcriptBox = new BoxRenderable(r, {
       id: 'transcript',
       flexGrow: 1,
-      border: true,
-      borderStyle: 'rounded',
       flexDirection: 'column',
+      backgroundColor: theme.bg.surface,
+      padding: 1,
       onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
     });
 
     this.transcriptContent = new ScrollBoxRenderable(r, {
       id: 'transcript-content',
       flexGrow: 1,
+      stickyScroll: true,
+      stickyStart: 'bottom',
+      scrollAcceleration: new MacOSScrollAccel(),
       onMouseScroll: (event) => this.handleTranscriptMouseScroll(event),
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
@@ -373,16 +436,15 @@ export class FredTuiApp {
 
     this.transcriptBox.add(this.transcriptContent);
 
-    mainArea.add(this.sidebarBox);
-    mainArea.add(this.transcriptBox);
+    mainColumn.add(this.transcriptBox);
 
     // Input bar
     this.inputBar = new BoxRenderable(r, {
       id: 'input-bar',
       height: DEFAULT_LAYOUT.inputHeight,
-      border: true,
-      borderStyle: 'single',
       flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
     });
 
     this.inputText = new TextRenderable(r, {
@@ -395,25 +457,74 @@ export class FredTuiApp {
     this.inputBar.add(this.inputText);
 
     // Status bar
-    const statusBar = new BoxRenderable(r, {
+    this.statusBar = new BoxRenderable(r, {
       id: 'status-bar',
       height: DEFAULT_LAYOUT.statusHeight,
-      backgroundColor: '#444444',
+      backgroundColor: theme.bg.status,
     });
 
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
       content: '',
-      attributes: TextAttributes.INVERSE,
+      fg: theme.fg.secondary,
     });
     this.statusText.selectable = false;
 
-    statusBar.add(this.statusText);
+    this.statusBar.add(this.statusText);
 
     // Compose tree
-    root.add(mainArea);
-    root.add(this.inputBar);
-    root.add(statusBar);
+    mainColumn.add(this.inputBar);
+    mainColumn.add(this.statusBar);
+    root.add(this.sidebarBox);
+    root.add(mainColumn);
+
+    // Slash autocomplete overlay (positioned above input bar)
+    this.slashOverlay = new BoxRenderable(r, {
+      id: 'slash-overlay',
+      position: 'absolute',
+      bottom: DEFAULT_LAYOUT.statusHeight + DEFAULT_LAYOUT.inputHeight,
+      left: DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.outerPadding + 1,
+      width: 40,
+      maxHeight: 8,
+      flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
+    });
+    this.slashOverlay.visible = false;
+    this.slashOverlay.zIndex = 10;
+
+    this.slashOverlayText = new TextRenderable(r, {
+      id: 'slash-overlay-text',
+      content: '',
+      fg: theme.fg.primary,
+    });
+    this.slashOverlayText.selectable = false;
+    this.slashOverlay.add(this.slashOverlayText);
+
+    // Help modal overlay (centered over transcript)
+    this.helpOverlay = new BoxRenderable(r, {
+      id: 'help-overlay',
+      position: 'absolute',
+      top: 3,
+      left: DEFAULT_LAYOUT.sidebarWidth + DEFAULT_LAYOUT.outerPadding + 4,
+      width: 50,
+      flexDirection: 'column',
+      backgroundColor: theme.bg.elevated,
+      padding: 1,
+    });
+    this.helpOverlay.visible = false;
+    this.helpOverlay.zIndex = 20;
+
+    this.helpOverlayText = new TextRenderable(r, {
+      id: 'help-overlay-text',
+      content: '',
+      fg: theme.fg.primary,
+    });
+    this.helpOverlayText.selectable = false;
+    this.helpOverlay.add(this.helpOverlayText);
+
+    root.add(this.slashOverlay);
+    root.add(this.helpOverlay);
 
     r.root.add(root);
   }
@@ -426,12 +537,51 @@ export class FredTuiApp {
       if (!this.running) return;
       this.processKey(key);
     });
+
+    this.renderer.keyInput.on('paste', (event: PasteEvent) => {
+      if (!this.running) return;
+      if (this.state.helpModal.isOpen) return;
+      if (this.state.focusedPane !== 'input') return;
+      if (this.state.commandPalette.isOpen) return;
+
+      // Insert pasted text at cursor position (flatten newlines for single-line input)
+      // Cap paste length to prevent resource exhaustion from extremely large pastes
+      const MAX_PASTE_LENGTH = 100_000;
+      const text = event.text
+        .slice(0, MAX_PASTE_LENGTH)
+        .replace(/\n/g, ' ')
+        // Strip control chars except tab/carriage return to prevent terminal control abuse.
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+      const before = this.state.input.text.slice(0, this.state.input.cursorPosition);
+      const after = this.state.input.text.slice(this.state.input.cursorPosition);
+      this.state = {
+        ...this.state,
+        input: {
+          ...this.state.input,
+          text: before + text + after,
+          cursorPosition: this.state.input.cursorPosition + text.length,
+        },
+      };
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+    });
   }
 
   /**
    * Process a key event through the state machine
    */
   processKey(key: KeyEvent): void {
+    if (this.state.helpModal.isOpen && key.name !== 'escape' && key.name !== 'f1') {
+      return;
+    }
+    const previousSelectedId = this.state.sessions.selectedId;
+
+    // Reset cursor blink on every key press so cursor stays visible while typing
+    if (this.state.focusedPane === 'input') {
+      this.resetCursorBlink();
+    }
+
     if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen && key.ctrl && key.name === 'u') {
       this.state = {
         ...this.state,
@@ -476,11 +626,17 @@ export class FredTuiApp {
       this.state = closeDeleteConfirm(this.state);
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
+      void this.loadSelectedSessionTranscript(previousSelectedId);
       return;
     }
 
     if (action.type === 'copy-transcript') {
       this.copyTranscriptToClipboard();
+      return;
+    }
+
+    if (action.type === 'copy-last-message') {
+      this.copyLastAssistantMessage();
       return;
     }
 
@@ -524,6 +680,9 @@ export class FredTuiApp {
     this.state = newState;
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+    if (action.type === 'session-next' || action.type === 'session-prev') {
+      void this.loadSelectedSessionTranscript(previousSelectedId);
+    }
   }
 
   startAssistantStream(nowMs = Date.now()): void {
@@ -542,9 +701,13 @@ export class FredTuiApp {
     this.streamingController.finish();
     this.finalizeStreamingTelemetry();
     this.state = finishStreaming(this.state, nowMs);
+    this.stopSpinnerInterval();
     this.refreshSessionCost(false);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+
+    // Drain any queued submissions after stream completion
+    this.drainPendingSubmissionQueue();
   }
 
   failAssistantStream(error: unknown, nowMs = Date.now()): void {
@@ -552,8 +715,77 @@ export class FredTuiApp {
     const message = error instanceof Error ? error.message : String(error);
     this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, message, nowMs);
+    this.stopSpinnerInterval();
     this.refreshSessionCost(false);
     this.events.onError?.(error instanceof Error ? error : new Error(message));
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+
+    // Drain any queued submissions after stream error
+    this.drainPendingSubmissionQueue();
+  }
+
+  /**
+   * Push a tool call event into the TUI state (tool started executing)
+   */
+  pushToolCall(event: {
+    messageId: string;
+    step: number;
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    startedAt: number;
+  }): void {
+    this.state = addToolCall(this.state, event);
+    this.startSpinnerInterval();
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  /**
+   * Push a tool result event (tool completed, possibly with error)
+   */
+  pushToolResult(event: {
+    toolCallId: string;
+    toolName: string;
+    output: unknown;
+    completedAt: number;
+    durationMs: number;
+    error?: { message: string };
+  }): void {
+    this.state = completeToolCall(this.state, {
+      toolCallId: event.toolCallId,
+      output: event.output,
+      completedAt: event.completedAt,
+      durationMs: event.durationMs,
+      error: event.error,
+    });
+    if (!hasInProgressToolBlocks(this.state)) {
+      this.stopSpinnerInterval();
+    }
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
+  /**
+   * Push a tool error event (tool failed with an error)
+   */
+  pushToolError(event: {
+    toolCallId: string;
+    toolName: string;
+    error: { message: string };
+    completedAt: number;
+    durationMs: number;
+  }): void {
+    this.state = failToolCall(this.state, {
+      toolCallId: event.toolCallId,
+      error: event.error,
+      completedAt: event.completedAt,
+      durationMs: event.durationMs,
+    });
+    if (!hasInProgressToolBlocks(this.state)) {
+      this.stopSpinnerInterval();
+    }
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
@@ -569,6 +801,100 @@ export class FredTuiApp {
     };
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
+  }
+
+  /**
+   * Start the braille spinner interval for in-progress tool blocks.
+   * Calls syncStateToUI every 80ms to animate spinner frames.
+   */
+  private startSpinnerInterval(): void {
+    if (this.spinnerInterval !== null) return;
+    this.spinnerInterval = setInterval(() => {
+      if (hasInProgressToolBlocks(this.state)) {
+        this.syncStateToUI();
+      } else {
+        this.stopSpinnerInterval();
+      }
+    }, 80);
+  }
+
+  /**
+   * Stop the braille spinner interval.
+   */
+  private stopSpinnerInterval(): void {
+    if (this.spinnerInterval !== null) {
+      clearInterval(this.spinnerInterval);
+      this.spinnerInterval = null;
+    }
+  }
+
+  /**
+   * Start cursor blink interval. Toggles cursor visibility every 530ms.
+   * Only updates the input renderable, not the full transcript.
+   */
+  private startCursorBlink(): void {
+    if (this.cursorBlinkInterval !== null) return;
+    this.cursorVisible = true;
+    this.cursorBlinkInterval = setInterval(() => {
+      this.cursorVisible = !this.cursorVisible;
+      this.syncInputToUI();
+    }, 530);
+  }
+
+  /**
+   * Stop cursor blink interval and reset cursor to visible.
+   */
+  private stopCursorBlink(): void {
+    if (this.cursorBlinkInterval !== null) {
+      clearInterval(this.cursorBlinkInterval);
+      this.cursorBlinkInterval = null;
+    }
+    this.cursorVisible = true;
+  }
+
+  /**
+   * Reset cursor blink phase (show cursor immediately, restart timer).
+   * Called on any key press to keep cursor visible while typing.
+   */
+  private resetCursorBlink(): void {
+    this.cursorVisible = true;
+    if (this.cursorBlinkInterval !== null) {
+      clearInterval(this.cursorBlinkInterval);
+      this.cursorBlinkInterval = setInterval(() => {
+        this.cursorVisible = !this.cursorVisible;
+        this.syncInputToUI();
+      }, 530);
+    }
+  }
+
+  /**
+   * Sync only the input text renderable (lightweight, used by cursor blink).
+   */
+  private syncInputToUI(): void {
+    if (!this.running) {
+      return;
+    }
+
+    const theme = DEFAULT_TUI_THEME;
+    const r = this.renderer;
+    const focused = this.state.focusedPane === 'input';
+    const inputData = renderInputContent(
+      this.state,
+      focused,
+      this.inputPlaceholder,
+      this.cursorVisible,
+      this.getInputContentWidth(),
+    );
+    this.inputBar.remove('input-text');
+    this.inputText.destroy();
+    this.inputText = new TextRenderable(r, {
+      id: 'input-text',
+      content: inputData.lines.join('\n'),
+      flexGrow: 1,
+      fg: focused ? theme.fg.primary : theme.fg.dim,
+    });
+    this.inputText.selectable = false;
+    this.inputBar.add(this.inputText);
   }
 
   private handleStreamingBatch(batch: StreamingBatch): void {
@@ -587,15 +913,57 @@ export class FredTuiApp {
   }
 
   private submitCurrentInput(): void {
+    const inputText = this.state.input.text;
+    if (!inputText.trim()) {
+      // Clear empty input and return
+      const { state: clearedState } = submitInput(this.state);
+      this.state = clearedState;
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    // Check if streaming is active
+    if (this.state.streaming.isStreaming) {
+      // Queue the submission - message will be shown dimmed via pending queue projection
+      const { state: queuedState, entry } = queuePendingSubmission(this.state, inputText);
+      this.state = queuedState;
+      
+      if (entry) {
+        // Scroll to bottom so user can see their queued message
+        this.transcriptContent.scrollTo(Infinity);
+      }
+      
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
+
+    // Not streaming: submit immediately
     const { state: clearedState, submittedText } = submitInput(this.state);
     this.state = clearedState;
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
-    if (!submittedText.trim()) {
+
+    this.state = appendUserMessage(this.state, submittedText);
+
+    // Reset OpenTUI scroll position to bottom on new message send.
+    // This overrides _hasManualScroll so stickyScroll re-engages,
+    // ensuring auto-scroll works even if user previously scrolled up.
+    this.transcriptContent.scrollTo(Infinity);
+
+    if (this.parseExitSlashCommand(submittedText)) {
+      this.stop();
       return;
     }
 
-    this.state = appendUserMessage(this.state, submittedText);
+    const sidebarInvocation = this.parseSidebarSlashCommand(submittedText);
+    if (sidebarInvocation) {
+      this.state = toggleSidebarVisibility(this.state);
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+      return;
+    }
 
     const slashInvocation = this.parseSlashInvocation(submittedText);
     if (slashInvocation) {
@@ -613,10 +981,8 @@ export class FredTuiApp {
       },
     };
 
-    if (!this.state.streaming.isStreaming) {
-      this.state = startStreaming(this.state);
-      this.streamingController.start();
-    }
+    this.state = startStreaming(this.state);
+    this.streamingController.start();
 
     this.refreshSessionCost(true);
     this.events.onStateChange?.(this.state);
@@ -625,6 +991,71 @@ export class FredTuiApp {
 
     if (this.state.sessions.selectedId === null) {
       void this.ensureSessionSelected();
+    }
+  }
+
+  /**
+   * Drain the pending submission queue after stream completion/error.
+   * Dequeues the head entry and submits it, starting a new stream.
+   */
+  private drainPendingSubmissionQueue(): void {
+    while (hasPendingSubmissions(this.state) && !this.state.streaming.isStreaming) {
+      const { state: dequeuedState, entry } = dequeuePendingSubmission(this.state);
+      this.state = dequeuedState;
+
+      if (!entry) {
+        return;
+      }
+
+      this.state = appendUserMessage(this.state, entry.text);
+      this.transcriptContent.scrollTo(Infinity);
+
+      // Handle slash commands in queued submissions.
+      // These commands may not start a stream, so continue draining until
+      // we either start streaming or run out of queued entries.
+      if (this.parseExitSlashCommand(entry.text)) {
+        this.stop();
+        return;
+      }
+
+      const sidebarInvocation = this.parseSidebarSlashCommand(entry.text);
+      if (sidebarInvocation) {
+        this.state = toggleSidebarVisibility(this.state);
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        continue;
+      }
+
+      const slashInvocation = this.parseSlashInvocation(entry.text);
+      if (slashInvocation) {
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        void this.executePluginSlashCommand(slashInvocation.canonicalName, slashInvocation.args);
+        continue;
+      }
+
+      this.state = {
+        ...this.state,
+        telemetry: {
+          ...this.state.telemetry,
+          inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(entry.text),
+        },
+      };
+
+      this.state = startStreaming(this.state);
+      this.streamingController.start();
+
+      this.refreshSessionCost(true);
+      this.events.onStateChange?.(this.state);
+      this.events.onSubmit?.(entry.text, this.state.sessions.selectedId);
+      this.syncStateToUI();
+
+      if (this.state.sessions.selectedId === null) {
+        void this.ensureSessionSelected();
+      }
+
+      // Stream started; completion/error hooks will trigger the next drain.
+      return;
     }
   }
 
@@ -655,10 +1086,16 @@ export class FredTuiApp {
 
     switch (selectedAction.id) {
       case 'focus-next-pane':
-        this.state = setFocusedPane(this.state, nextFocusablePane(this.state.focusedPane));
+        this.state = setFocusedPane(
+          this.state,
+          nextFocusablePane(this.state.focusedPane, { includeSidebar: this.state.sidebar.isVisible }),
+        );
         break;
       case 'focus-previous-pane':
-        this.state = setFocusedPane(this.state, prevFocusablePane(this.state.focusedPane));
+        this.state = setFocusedPane(
+          this.state,
+          prevFocusablePane(this.state.focusedPane, { includeSidebar: this.state.sidebar.isVisible }),
+        );
         break;
       case 'jump-sidebar-pane':
         this.state = setFocusedPane(this.state, 'sidebar');
@@ -724,6 +1161,20 @@ export class FredTuiApp {
       canonicalName: commandToken,
       args,
     };
+  }
+
+  private parseSidebarSlashCommand(text: string): boolean {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('/')) {
+      return false;
+    }
+
+    return trimmed === '/sidebar' || trimmed === '/sb';
+  }
+
+  private parseExitSlashCommand(text: string): boolean {
+    const trimmed = text.trim().toLowerCase();
+    return trimmed === '/exit' || trimmed === '/quit';
   }
 
   private async executePluginSlashCommand(canonicalName: string, args: string): Promise<void> {
@@ -823,6 +1274,43 @@ export class FredTuiApp {
     this.syncStateToUI();
   }
 
+  private async loadSelectedSessionTranscript(previousSelectedId: string | null): Promise<void> {
+    if (!this.sessionService) {
+      return;
+    }
+
+    const selectedId = this.state.sessions.selectedId;
+    if (!selectedId || selectedId === previousSelectedId) {
+      return;
+    }
+
+    const selectedItem = this.state.sessions.items.find((item) => item.id === selectedId);
+    if (!selectedItem) {
+      return;
+    }
+
+    const existingTranscript = this.state.sessions.transcripts[selectedId];
+    const hasMessages = (existingTranscript?.messages.length ?? 0) > 0;
+    if (hasMessages || selectedItem.messageCount === 0) {
+      return;
+    }
+
+    try {
+      const messages = await loadSessionTranscript(this.sessionService, selectedId);
+
+      // Session may have changed while loading; ignore stale results
+      if (this.state.sessions.selectedId !== selectedId) {
+        return;
+      }
+
+      this.state = upsertSessionTranscript(this.state, selectedId, messages, { pinnedToBottom: true });
+      this.events.onStateChange?.(this.state);
+      this.syncStateToUI();
+    } catch (error) {
+      this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
   private async confirmDeleteSession(): Promise<void> {
     if (!this.sessionService) {
       return;
@@ -882,6 +1370,18 @@ export class FredTuiApp {
     return typeof candidate === 'number' && candidate > 0 ? candidate : 120;
   }
 
+  /**
+   * Calculate the available text width for the input composer area.
+   * Accounts for sidebar, input bar padding (1 on each side = 2 total).
+   */
+  private getInputContentWidth(): number {
+    const rendererWidth = this.getRendererWidth();
+    const sidebarWidth = this.state.sidebar.isVisible ? DEFAULT_LAYOUT.sidebarWidth : 0;
+    // inputBar has padding: 1 (all sides), so 1 left + 1 right = 2 horizontal padding
+    const inputBarPadding = 2;
+    return Math.max(10, rendererWidth - sidebarWidth - inputBarPadding);
+  }
+
   private getRendererHeight(): number {
     const candidate = (this.renderer as unknown as { height?: number; terminal?: { height?: number } }).height
       ?? (this.renderer as unknown as { terminal?: { height?: number } }).terminal?.height
@@ -899,13 +1399,71 @@ export class FredTuiApp {
       .join('\n\n');
   }
 
+  /**
+   * Strip ANSI/OSC/control escape sequences from text before clipboard copy.
+   * Prevents terminal escape injection via untrusted content.
+   */
+  private sanitizeForClipboard(text: string): string {
+    // Strip ANSI/OSC/DCS control sequences first.
+    // eslint-disable-next-line no-control-regex
+    return text
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '')
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\x9b[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\x1b[@-_]/g, '')
+      // Strip remaining C0/C1 control chars except newline, tab, carriage return
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+  }
+
   private copyTranscriptToClipboard(): void {
     const text = this.getTranscriptPlainText();
     if (!text) {
       return;
     }
 
-    this.renderer.copyToClipboardOSC52(text);
+    this.renderer.copyToClipboardOSC52(this.sanitizeForClipboard(text));
+  }
+
+  /**
+   * Copy the last assistant message text to the system clipboard.
+   * Triggered via Ctrl+Y keybinding.
+   */
+  private copyLastAssistantMessage(): void {
+    const lastAssistantMsg = [...this.state.transcript.messages]
+      .reverse()
+      .find((m) => m.role === 'assistant');
+
+    if (!lastAssistantMsg || !lastAssistantMsg.content) {
+      return;
+    }
+
+    this.renderer.copyToClipboardOSC52(this.sanitizeForClipboard(lastAssistantMsg.content));
+
+    // Brief "Copied!" feedback via status override
+    this.showCopyFeedback();
+  }
+
+  /**
+   * Temporarily show "Copied to clipboard" in the status bar.
+   * Clears after 2 seconds by triggering a normal status re-render.
+   */
+  private copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+  private copyFeedbackActive = false;
+
+  private showCopyFeedback(): void {
+    this.copyFeedbackActive = true;
+    this.syncStateToUI();
+
+    if (this.copyFeedbackTimeout) {
+      clearTimeout(this.copyFeedbackTimeout);
+    }
+    this.copyFeedbackTimeout = setTimeout(() => {
+      this.copyFeedbackActive = false;
+      this.copyFeedbackTimeout = null;
+      this.syncStateToUI();
+    }, 2000);
   }
 
   /**
@@ -913,19 +1471,25 @@ export class FredTuiApp {
    */
   private syncStateToUI(): void {
     const r = this.renderer;
+    const theme = DEFAULT_TUI_THEME;
+
+    this.sidebarBox.visible = this.state.sidebar.isVisible;
 
     // Input text (calculate first so transcript viewport can account for dynamic composer height)
     const inputData = renderInputContent(
       this.state,
       this.state.focusedPane === 'input',
       this.inputPlaceholder,
+      this.cursorVisible,
+      this.getInputContentWidth(),
     );
     this.inputBar.height = inputData.height;
 
     const rendererHeight = this.getRendererHeight();
     const transcriptVisibleLines = Math.max(
       3,
-      rendererHeight - inputData.height - DEFAULT_LAYOUT.statusHeight - 2,
+      rendererHeight - inputData.height - DEFAULT_LAYOUT.statusHeight
+        - (DEFAULT_LAYOUT.outerPadding * 2) - (DEFAULT_LAYOUT.regionGap * 2),
     );
     if (this.state.transcript.viewport.visibleLines !== transcriptVisibleLines) {
       this.state = {
@@ -945,14 +1509,29 @@ export class FredTuiApp {
       this.state,
       this.state.focusedPane === 'sidebar'
     );
-    const sidebarHeader = sidebarContent.lines[0] ?? '[Sessions]';
+    const sidebarHeader = sidebarContent.sessionsHeader || sidebarContent.lines[0] || '[Sessions]';
 
-    const itemLines = sidebarContent.lines.slice(1);
+    const itemLines = sidebarContent.metadataHeader
+      ? sidebarContent.sessionsLines
+      : (sidebarContent.sessionsLines.length > 0
+        ? sidebarContent.sessionsLines
+        : sidebarContent.lines.slice(1));
     this.repopulateScrollBox(this.sidebarItems, itemLines, (line, i) => {
+      const isSelected = line.startsWith('▸') || (this.state.commandPalette.isOpen && line.startsWith('>'));
+      const isFocused = this.state.focusedPane === 'sidebar';
+      let fg: string;
+      if (isSelected) {
+        fg = theme.accent.primary;
+      } else if (isFocused) {
+        fg = theme.fg.primary;
+      } else {
+        fg = theme.fg.dim;
+      }
       const text = new TextRenderable(r, {
         id: `sidebar-item-${i}`,
         content: line,
-        fg: this.state.focusedPane === 'sidebar' ? '#FFFFFF' : '#888888',
+        fg,
+        attributes: isSelected ? TextAttributes.BOLD : 0,
       });
       text.selectable = false;
       return text;
@@ -963,133 +1542,372 @@ export class FredTuiApp {
       this.sidebarTitle,
       'sidebar-title',
       sidebarHeader,
-      this.state.focusedPane === 'sidebar' ? '#00FFFF' : '#888888',
+      this.state.focusedPane === 'sidebar' ? theme.accent.primary : theme.fg.dim,
       TextAttributes.BOLD,
     );
 
-    // Transcript content
-    const transcriptData = renderTranscriptContent(
-      this.state,
-      this.state.focusedPane === 'transcript',
-      {
-        maxWidth: Math.max(20, this.getRendererWidth() - DEFAULT_LAYOUT.sidebarWidth - 8),
-      },
+    const footerContent = sidebarContent.metadataHeader
+      ? [sidebarContent.metadataHeader, ...sidebarContent.metadataLines].filter(Boolean).join('\n')
+      : '';
+    this.sidebarFooter = this.rebuildText(
+      this.sidebarFooter,
+      'sidebar-footer',
+      footerContent,
+      this.state.focusedPane === 'sidebar' ? theme.fg.primary : theme.fg.dim,
+      footerContent.length > 0 ? TextAttributes.BOLD : 0,
     );
 
-    if (
-      this.state.transcript.viewport.totalLines !== transcriptData.totalLines
-      || this.state.transcript.viewport.scrollOffset !== transcriptData.scrollOffset
-      || this.state.transcript.viewport.pinnedToBottom !== transcriptData.pinnedToBottom
-    ) {
-      this.state = {
-        ...this.state,
-        transcript: {
-          ...this.state.transcript,
-          viewport: {
-            ...this.state.transcript.viewport,
-            totalLines: transcriptData.totalLines,
-            scrollOffset: transcriptData.scrollOffset,
-            pinnedToBottom: transcriptData.pinnedToBottom,
-          },
-        },
-      };
-    }
+    // Transcript content
+    this.syncTranscriptToUI(r, theme);
 
-    this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
-      const isRoleLabel = line.endsWith(':') && (line === 'user:' || line === 'assistant:');
-      const isStartupChooserLine = this.state.startup.chooser.isOpen;
-      const isStartupHeader = isStartupChooserLine && i === 0;
-      const isStartupWarning = isStartupChooserLine && line.startsWith('warning:');
-      const isStartupSelectedOption = isStartupChooserLine && line.startsWith('>> ');
-      const isStartupInstruction = isStartupChooserLine && line.startsWith('Use Up/Down');
-
-      let fg = isRoleLabel
-        ? '#00FFFF'
-        : (this.state.focusedPane === 'transcript' ? '#FFFFFF' : '#CCCCCC');
-      let attributes = isRoleLabel ? TextAttributes.BOLD : 0;
-
-      if (isStartupHeader) {
-        fg = '#FFD166';
-        attributes = TextAttributes.BOLD;
-      } else if (isStartupSelectedOption) {
-        fg = '#7CE38B';
-        attributes = TextAttributes.BOLD;
-      } else if (isStartupWarning) {
-        fg = '#FF9E64';
-      } else if (isStartupInstruction) {
-        fg = '#FFD166';
-      }
-
-      const text = new TextRenderable(r, {
-        id: `transcript-line-${i}`,
-        content: line,
-        fg,
-        attributes,
-      });
-      text.selectable = true;
-      return text;
-    });
-
+    this.inputBar.remove('input-text');
     this.inputText.destroy();
     this.inputText = new TextRenderable(r, {
       id: 'input-text',
       content: inputData.lines.join('\n'),
       flexGrow: 1,
-      fg: this.state.input.text ? '#FFFFFF' : '#666666',
+      fg: this.state.focusedPane === 'input' ? theme.fg.primary : theme.fg.dim,
     });
     this.inputText.selectable = false;
     this.inputBar.add(this.inputText);
 
-    // Status bar
-    const nowMs = Date.now();
-    const shouldThrottleStatus = this.state.streaming.isStreaming;
-    const streamingTransitioned = this.state.streaming.isStreaming !== this.previousStreamingState;
-    const shouldRenderFreshStatus = !shouldThrottleStatus
-      || streamingTransitioned
-      || this.lastStatusLine.length === 0
-      || (nowMs - this.lastStatusRenderMs) >= this.statusThrottleMs;
+    // Status bar — stateless badge rendering, no throttle needed
+    const overlayActive = this.state.input.slashSearch.isActive || this.state.helpModal.isOpen;
+    const statusData = renderStatusContent(this.state, {
+      maxWidth: Math.max(40, this.getRendererWidth() - 4),
+      dim: overlayActive,
+    });
 
-    if (shouldRenderFreshStatus) {
-      const statusState = this.state.streaming.isStreaming
-        ? this.state
-        : {
-            ...this.state,
-            streaming: {
-              ...this.state.streaming,
-              outputTokenCount: 0,
-            },
-          };
+    const displayStatusLine = this.copyFeedbackActive
+      ? 'Copied to clipboard'
+      : statusData.lines[0] ?? '';
 
-      const statusData = renderStatusContent(statusState, {
-        maxWidth: Math.max(40, this.getRendererWidth() - 4),
-        nowMs,
-      });
-      this.lastStatusLine = statusData.lines[0] ?? '';
-      this.lastStatusRenderMs = nowMs;
-    }
-    this.previousStreamingState = this.state.streaming.isStreaming;
-
-    const statusFg = this.state.streaming.lastError
-      ? '#ff6b6b'
-      : this.state.streaming.isStreaming
-        ? '#5dade2'
-        : '#7bd88f';
-
+    this.statusBar.remove('status-text');
     this.statusText.destroy();
     this.statusText = new TextRenderable(r, {
       id: 'status-text',
-      content: ` ${this.lastStatusLine} `,
-      attributes: TextAttributes.INVERSE,
-      fg: statusFg,
+      content: ` ${displayStatusLine} `,
+      fg: this.copyFeedbackActive ? theme.status.success : (statusData.dim ? theme.fg.dim : theme.fg.secondary),
     });
     this.statusText.selectable = false;
-    const statusBar = r.root.getRenderable('root')?.getRenderable('status-bar');
-    if (statusBar) {
-      statusBar.add(this.statusText);
+    this.statusBar.add(this.statusText);
+
+    // Slash autocomplete overlay
+    const slashActive = this.state.input.slashSearch.isActive;
+    this.slashOverlay.visible = slashActive;
+    if (slashActive) {
+      const { filteredActions, selectedIndex } = this.state.input.slashSearch;
+      const lines = filteredActions.map((action, i) => {
+        const marker = i === selectedIndex ? '▸ ' : '  ';
+        return `${marker}/${action.label}`;
+      });
+      const content = lines.length > 0 ? lines.join('\n') : '  No matches';
+      this.slashOverlay.remove('slash-overlay-text');
+      this.slashOverlayText.destroy();
+      this.slashOverlayText = new TextRenderable(r, {
+        id: 'slash-overlay-text',
+        content,
+        fg: theme.fg.primary,
+      });
+      this.slashOverlayText.selectable = false;
+      this.slashOverlay.add(this.slashOverlayText);
+    }
+
+    // Help modal overlay
+    const helpOpen = this.state.helpModal.isOpen;
+    this.helpOverlay.visible = helpOpen;
+    if (helpOpen) {
+      const helpContent = [
+        '  Keyboard Shortcuts',
+        '',
+        '  Tab / Shift+Tab    Cycle focus',
+        '  Ctrl+B             Toggle sidebar',
+        '  Ctrl+K             Command palette',
+        '  Ctrl+Y             Copy last message',
+        '  Ctrl+Shift+C       Copy transcript',
+        '  PgUp / PgDn        Scroll transcript',
+        '  F1 / ?             Toggle this help',
+        '  Esc                Close / Quit',
+        '',
+        '  Input',
+        '  Enter              Send message',
+        '  Shift+Enter        Insert newline',
+        '  /                  Slash commands',
+        '  Up / Down          History navigation',
+        '',
+        '  Press Esc to close',
+      ].join('\n');
+      this.helpOverlayText.destroy();
+      this.helpOverlayText = new TextRenderable(r, {
+        id: 'help-overlay-text',
+        content: helpContent,
+        fg: theme.fg.primary,
+      });
+      this.helpOverlayText.selectable = false;
+      this.helpOverlay.add(this.helpOverlayText);
     }
 
     // Border highlighting for focused pane
     this.updateBorderFocus();
+
+    // Manage cursor blink based on focus
+    if (this.state.focusedPane === 'input' && !this.state.commandPalette.isOpen) {
+      this.startCursorBlink();
+    } else {
+      this.stopCursorBlink();
+    }
+  }
+
+  /**
+   * Sync transcript pane to renderables.
+   *
+   * For startup chooser and empty state, uses the legacy string-line path.
+   * For normal messages, builds per-message renderables with distinct styling.
+   * During streaming, updates the active CodeRenderable content in place.
+   */
+  private syncTranscriptToUI(r: CliRenderer, theme: typeof DEFAULT_TUI_THEME): void {
+    const messages = getTranscriptMessages(this.state);
+    const isStartupChooser = this.state.startup.chooser.isOpen;
+    const hasPending = this.state.input.pendingSubmissions.length > 0;
+    const isEmpty = messages.length === 0 && !hasPending;
+
+    // Compute a fingerprint of transcript-affecting state to skip redundant full rebuilds.
+    // This avoids destroying and recreating all renderables on every key press.
+    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+    const pendingCount = this.state.input.pendingSubmissions.length;
+    const toolBlockCount = this.state.toolBlocks.groups.length;
+    const lastToolStatus = toolBlockCount > 0
+      ? this.state.toolBlocks.groups[toolBlockCount - 1].blocks.map(b => b.status).join(',')
+      : '';
+    const transcriptFingerprint = `${isStartupChooser}|${messages.length}|${lastMsg?.role ?? ''}|${lastMsg?.content.length ?? 0}|${this.state.streaming.isStreaming}|${this.state.streaming.lastError ?? ''}|${pendingCount}|${toolBlockCount}|${lastToolStatus}|${this.state.startup.chooser.selected}|${this.state.focusedPane}`;
+
+    // Startup chooser and empty state (no pending): use legacy string-line path
+    if (isStartupChooser || isEmpty) {
+      // Check fingerprint to avoid redundant rebuilds even for startup chooser
+      if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+        return;
+      }
+      this.lastTranscriptFingerprint = transcriptFingerprint;
+
+      this.activeStreamingMdId = null;
+      this.lastRenderedMessageCount = 0;
+
+      const transcriptData = renderTranscriptContent(
+        this.state,
+        this.state.focusedPane === 'transcript',
+      );
+
+      this.repopulateScrollBox(this.transcriptContent, transcriptData.lines, (line, i) => {
+        const isStartupHeader = isStartupChooser && i === 0;
+        const isStartupWarning = isStartupChooser && line.startsWith('warning:');
+        const isStartupSelectedOption = isStartupChooser && line.startsWith('>> ');
+        const isStartupInstruction = isStartupChooser && line.startsWith('Use Up/Down');
+
+        let fg = this.state.focusedPane === 'transcript' ? theme.fg.primary : theme.fg.secondary;
+        let attributes = 0;
+
+        if (isStartupHeader) {
+          fg = theme.accent.primary;
+          attributes = TextAttributes.BOLD;
+        } else if (isStartupSelectedOption) {
+          fg = theme.status.success;
+          attributes = TextAttributes.BOLD;
+        } else if (isStartupWarning) {
+          fg = theme.status.warn;
+        } else if (isStartupInstruction) {
+          fg = theme.fg.secondary;
+        }
+
+        const text = new TextRenderable(r, {
+          id: `transcript-line-${i}`,
+          content: line,
+          fg,
+          attributes,
+        });
+        text.selectable = true;
+        return text;
+      });
+
+      // Still render pending submissions even in empty state
+      if (hasPending) {
+        this.renderPendingSubmissions(r, theme, 0);
+      }
+      return;
+    }
+
+    // Streaming incremental update: update existing CodeRenderable in place
+    if (
+      this.activeStreamingMdId
+      && this.state.streaming.isStreaming
+      && this.state.toolBlocks.groups.length === 0
+      && messages.length === this.lastRenderedMessageCount
+      && messages.length > 0
+      && messages[messages.length - 1].role === 'assistant'
+    ) {
+      const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (existingMd && existingMd instanceof CodeRenderable) {
+        const lastMsg = messages[messages.length - 1];
+        existingMd.content = sanitizeForTerminalDisplay(lastMsg.content) + buildStreamingCursorText();
+        return;
+      }
+
+      // Renderable was lost (e.g., after rebuild); force a full rebuild
+      this.activeStreamingMdId = null;
+    }
+
+    // Full rebuild: clear and rebuild all message renderables
+    // Skip if transcript fingerprint hasn't changed (avoids flicker on unrelated state changes)
+    if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+      return;
+    }
+    this.lastTranscriptFingerprint = transcriptFingerprint;
+
+    const children = this.transcriptContent.getChildren();
+    for (const child of children) {
+      this.transcriptContent.remove(child.id);
+      child.destroy();
+    }
+    this.activeStreamingMdId = null;
+
+    const normalSyntaxStyle = this.syntaxStyle!;
+    const streamingSyntaxStyle = this.streamingSyntaxStyle!;
+    const nowMs = Date.now();
+    // Track tool block group index: each group corresponds to a tool-calling step
+    let toolGroupIndex = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const msgId = String(i);
+      const isLastMessage = i === messages.length - 1;
+      const isStreamingThis = isLastMessage && this.state.streaming.isStreaming && msg.role === 'assistant';
+
+      if (msg.role === 'user') {
+        this.transcriptContent.add(
+          buildUserMessageRenderable(r, theme, msg.content, msgId),
+        );
+      } else if (msg.role === 'assistant') {
+        // Detect thinking blocks
+        const isThinking = msg.content.startsWith('<thinking>');
+
+        if (isThinking) {
+          // Extract thinking content (strip tags)
+          const thinkingContent = msg.content
+            .replace(/^<thinking>\s*/, '')
+            .replace(/\s*<\/thinking>\s*$/, '');
+          this.transcriptContent.add(
+            buildThinkingRenderable(r, theme, thinkingContent, msgId),
+          );
+        } else {
+          const displayContent = isStreamingThis
+            ? msg.content + buildStreamingCursorText()
+            : msg.content;
+          const renderable = buildAssistantMessageRenderable(
+            r,
+            theme,
+            displayContent,
+            msgId,
+            { streaming: isStreamingThis, syntaxStyle: isStreamingThis ? streamingSyntaxStyle : normalSyntaxStyle },
+          );
+          this.transcriptContent.add(renderable);
+
+          if (isStreamingThis) {
+            this.activeStreamingMdId = `msg-assistant-md-${msgId}`;
+          }
+        }
+
+        // Append tool blocks for this assistant message if any exist
+        const toolBlocks = getToolBlocksForMessage(this.state, toolGroupIndex);
+        if (toolBlocks.length > 0) {
+          const toolGroup = buildToolGroupRenderable(
+            r,
+            theme,
+            toolBlocks,
+            `msg-${msgId}`,
+            nowMs,
+          );
+          if (toolGroup) {
+            this.transcriptContent.add(toolGroup);
+          }
+        }
+        toolGroupIndex++;
+        // NOTE: Manual expand/toggle for tool blocks could be added via keymap later
+      } else {
+        // System or other roles: render as plain text
+        this.transcriptContent.add(
+          buildUserMessageRenderable(r, theme, msg.content, msgId),
+        );
+      }
+    }
+
+    // Render pending submissions as dimmed user messages
+    if (hasPending) {
+      this.renderPendingSubmissions(r, theme, messages.length);
+    }
+
+    this.lastRenderedMessageCount = messages.length;
+
+    // Handle streaming-to-complete transition: swap SyntaxStyle to normal colors
+    if (!this.state.streaming.isStreaming && this.activeStreamingMdId) {
+      const md = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (md && md instanceof CodeRenderable) {
+        md.streaming = false;
+        md.syntaxStyle = this.syntaxStyle!;
+        // Remove cursor character from content
+        if (md.content.toString().endsWith(buildStreamingCursorText())) {
+          md.content = md.content.toString().slice(0, -1);
+        }
+      }
+      this.activeStreamingMdId = null;
+    }
+
+    // Handle streaming error: force full rebuild to apply normal styles
+    if (this.state.streaming.lastError && this.activeStreamingMdId) {
+      // Clear the active streaming id to trigger a full rebuild on next sync
+      this.activeStreamingMdId = null;
+    }
+  }
+
+  /**
+   * Render pending submissions as dimmed user message placeholders.
+   * These are projected after committed transcript messages and disappear
+   * as each queued item is dispatched.
+   */
+  private renderPendingSubmissions(
+    r: CliRenderer,
+    theme: typeof DEFAULT_TUI_THEME,
+    startIndex: number,
+  ): void {
+    const pending = this.state.input.pendingSubmissions;
+    for (let i = 0; i < pending.length; i++) {
+      const entry = pending[i];
+      const msgId = `pending-${startIndex + i}`;
+
+      // Build a dimmed user message container
+      const container = new BoxRenderable(r, {
+        id: `msg-pending-${msgId}`,
+        flexDirection: 'column',
+        backgroundColor: theme.message.userBg,
+        border: ['left'],
+        borderStyle: 'single',
+        borderColor: theme.fg.dim, // Dim border instead of accent
+        paddingLeft: 2,
+        paddingRight: 2,
+        paddingTop: 0,
+        paddingBottom: 0,
+        marginBottom: 1,
+      });
+
+      const text = new TextRenderable(r, {
+        id: `msg-pending-text-${msgId}`,
+        content: entry.text,
+        fg: theme.fg.dim, // Dim text
+        attributes: TextAttributes.DIM,
+      });
+      text.selectable = false;
+
+      container.add(text);
+      this.transcriptContent.add(container);
+    }
   }
 
   /**
@@ -1102,7 +1920,22 @@ export class FredTuiApp {
     fg: string,
     attributes: number,
   ): TextRenderable {
+    const sidebarTitle = this.sidebarBox.getRenderable('sidebar-title');
+    const sidebarItems = this.sidebarBox.getRenderable('sidebar-items');
+    const sidebarFooter = this.sidebarBox.getRenderable('sidebar-footer');
+
+    if (sidebarTitle) {
+      this.sidebarBox.remove('sidebar-title');
+    }
+    if (sidebarItems) {
+      this.sidebarBox.remove('sidebar-items');
+    }
+    if (sidebarFooter) {
+      this.sidebarBox.remove('sidebar-footer');
+    }
+
     existing.destroy();
+
     const newText = new TextRenderable(this.renderer, {
       id,
       content,
@@ -1110,7 +1943,20 @@ export class FredTuiApp {
       attributes,
     });
     newText.selectable = false;
-    this.sidebarBox.add(newText);
+
+    const nextTitle = id === 'sidebar-title' ? newText : sidebarTitle;
+    const nextFooter = id === 'sidebar-footer' ? newText : sidebarFooter;
+
+    if (nextTitle) {
+      this.sidebarBox.add(nextTitle);
+    }
+    if (sidebarItems) {
+      this.sidebarBox.add(sidebarItems);
+    }
+    if (nextFooter) {
+      this.sidebarBox.add(nextFooter);
+    }
+
     return newText;
   }
 
@@ -1131,35 +1977,33 @@ export class FredTuiApp {
 
   private handleTranscriptMouseScroll(event: MouseEvent): void {
     const direction = event.scroll?.direction;
-    if (!direction) {
-      return;
-    }
+    if (!direction) return;
 
     const delta = event.scroll?.delta ?? 1;
-    const lines = Math.max(1, Math.round(delta));
+    const scrollAmount = direction === 'up' ? -delta : delta;
 
+    // Update TUI state as the single source of truth for transcript scrolling.
+    const lines = Math.max(1, Math.round(Math.abs(scrollAmount)));
     if (direction === 'up') {
       this.state = scrollTranscript(this.state, -lines);
-    } else if (direction === 'down') {
-      this.state = scrollTranscript(this.state, lines);
     } else {
-      return;
+      this.state = scrollTranscript(this.state, lines);
     }
-
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
   }
 
   /**
-   * Update border colors to indicate focus
+   * Update visual focus indication
+   *
+   * With borderless layout, focus is conveyed through content text color
+   * changes (accent for focused, dim for unfocused) applied in syncStateToUI.
    */
   private updateBorderFocus(): void {
-    const focusColor = '#7aa2f7';
-    const dimColor = '#444444';
-
-    // We can't dynamically change border color on BoxRenderable after creation
-    // without rebuilding, so we rely on the content styling to indicate focus.
-    // The title/text color changes above provide visual focus indication.
+    // Focus indication handled by content styling in syncStateToUI.
+    // Sidebar title: accent.primary (focused) vs fg.dim (unfocused)
+    // Sidebar items: fg.primary (focused) vs fg.dim (unfocused)
+    // Transcript text: fg.primary (focused) vs fg.secondary (unfocused)
   }
 
   /**
@@ -1182,7 +2026,17 @@ export class FredTuiApp {
   stop(): void {
     if (!this.running) return;
     this.running = false;
+    this.stopSpinnerInterval();
+    this.stopCursorBlink();
+    if (this.copyFeedbackTimeout) {
+      clearTimeout(this.copyFeedbackTimeout);
+      this.copyFeedbackTimeout = null;
+    }
     this.streamingController.stop();
+    this.syntaxStyle?.destroy();
+    this.syntaxStyle = null;
+    this.streamingSyntaxStyle?.destroy();
+    this.streamingSyntaxStyle = null;
     this.renderer.destroy();
     this.events.onQuit?.();
   }

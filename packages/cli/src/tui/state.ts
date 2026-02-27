@@ -6,6 +6,42 @@
  */
 
 /**
+ * Tool block status tracking for inline tool call rendering
+ */
+export type ToolBlockStatus = 'in-progress' | 'completed' | 'errored';
+
+/**
+ * Kind of tool block: regular tool or task/subagent
+ */
+export type ToolBlockKind = 'tool' | 'task';
+
+/**
+ * State for a single tool call block in the transcript
+ */
+export interface ToolBlockState {
+  toolCallId: string;
+  toolName: string;
+  kind: ToolBlockKind;
+  status: ToolBlockStatus;
+  input: Record<string, unknown>;
+  output?: unknown;
+  error?: { message: string };
+  startedAt: number;
+  completedAt?: number;
+  durationMs?: number;
+  expanded: boolean;
+}
+
+/**
+ * Group of tool blocks belonging to the same assistant message turn
+ */
+export interface ToolBlockGroup {
+  messageId: string;
+  step: number;
+  blocks: ToolBlockState[];
+}
+
+/**
  * Pane identifiers for the TUI layout
  */
 export type PaneId = 'sidebar' | 'transcript' | 'input' | 'status';
@@ -125,6 +161,15 @@ export interface InputHistory {
 }
 
 /**
+ * Pending submission entry in the queue
+ */
+export interface PendingSubmission {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
+/**
  * Complete TUI application state
  */
 export interface TuiState {
@@ -143,6 +188,7 @@ export interface TuiState {
       selectedIndex: number;
       filteredActions: ReadonlyArray<CommandPaletteAction>;
     };
+    pendingSubmissions: PendingSubmission[];
   };
   sessions: {
     items: SessionListItem[];
@@ -153,9 +199,22 @@ export interface TuiState {
   sidebar: {
     selectedIndex: number;
     hasNewSessionAction: boolean;
+    isVisible: boolean;
+    sections: {
+      sessionsCollapsed: boolean;
+      metadataCollapsed: boolean;
+    };
   };
   deleteConfirm: DeleteConfirmState;
   startup: StartupState;
+  toolBlocks: {
+    groups: ToolBlockGroup[];
+    /** Map of toolCallId -> user-toggled expand override */
+    expandOverrides: Record<string, boolean>;
+  };
+  helpModal: {
+    isOpen: boolean;
+  };
 }
 
 /**
@@ -211,6 +270,7 @@ export function createInitialTuiStateWithPlugins(
         selectedIndex: 0,
         filteredActions: [],
       },
+      pendingSubmissions: [],
     },
     sessions: {
       items: [],
@@ -221,6 +281,11 @@ export function createInitialTuiStateWithPlugins(
     sidebar: {
       selectedIndex: 0,
       hasNewSessionAction: true,
+      isVisible: true,
+      sections: {
+        sessionsCollapsed: false,
+        metadataCollapsed: false,
+      },
     },
     deleteConfirm: {
       isOpen: false,
@@ -233,6 +298,13 @@ export function createInitialTuiStateWithPlugins(
         selected: 'start-new-session',
       },
       warning: null,
+    },
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
+    },
+    helpModal: {
+      isOpen: false,
     },
   };
 }
@@ -628,6 +700,15 @@ export function toggleCommandPalette(state: TuiState): TuiState {
   return state.commandPalette.isOpen ? closeCommandPalette(state) : openCommandPalette(state);
 }
 
+export function toggleHelpModal(state: TuiState): TuiState {
+  return {
+    ...state,
+    helpModal: {
+      isOpen: !state.helpModal.isOpen,
+    },
+  };
+}
+
 export function updateCommandPaletteQuery(state: TuiState, query: string): TuiState {
   const filteredActions = getFilteredPaletteActions(
     state.commandPalette.actions,
@@ -671,41 +752,108 @@ export function getSelectedCommandPaletteAction(state: TuiState): CommandPalette
  */
 const FOCUSABLE_PANES: FocusablePaneId[] = ['sidebar', 'transcript', 'input'];
 
+export type FocusCycleOptions = {
+  includeSidebar?: boolean;
+};
+
+function getFocusablePanes(options?: FocusCycleOptions): FocusablePaneId[] {
+  if (options?.includeSidebar === false) {
+    return ['transcript', 'input'];
+  }
+  return FOCUSABLE_PANES;
+}
+
 /**
  * Get next focusable pane with wraparound
  */
-export function nextFocusablePane(current: FocusablePaneId): FocusablePaneId {
-  const currentIndex = FOCUSABLE_PANES.indexOf(current);
-  const nextIndex = (currentIndex + 1) % FOCUSABLE_PANES.length;
-  return FOCUSABLE_PANES[nextIndex];
+export function nextFocusablePane(current: FocusablePaneId, options?: FocusCycleOptions): FocusablePaneId {
+  const focusablePanes = getFocusablePanes(options);
+  const currentIndex = focusablePanes.indexOf(current);
+  if (currentIndex < 0) {
+    return focusablePanes[0] ?? 'input';
+  }
+  const nextIndex = (currentIndex + 1) % focusablePanes.length;
+  return focusablePanes[nextIndex] ?? 'input';
 }
 
 /**
  * Get previous focusable pane with wraparound
  */
-export function prevFocusablePane(current: FocusablePaneId): FocusablePaneId {
-  const currentIndex = FOCUSABLE_PANES.indexOf(current);
-  const prevIndex = currentIndex === 0 ? FOCUSABLE_PANES.length - 1 : currentIndex - 1;
-  return FOCUSABLE_PANES[prevIndex];
+export function prevFocusablePane(current: FocusablePaneId, options?: FocusCycleOptions): FocusablePaneId {
+  const focusablePanes = getFocusablePanes(options);
+  const currentIndex = focusablePanes.indexOf(current);
+  if (currentIndex < 0) {
+    return focusablePanes[focusablePanes.length - 1] ?? 'input';
+  }
+  const prevIndex = currentIndex === 0 ? focusablePanes.length - 1 : currentIndex - 1;
+  return focusablePanes[prevIndex] ?? 'input';
 }
 
 /**
  * Apply focus change to state
  */
 export function setFocusedPane(state: TuiState, pane: FocusablePaneId): TuiState {
-  const nextScope = state.commandPalette.isOpen ? pane : state.commandPalette.scope;
+  const resolvedPane = pane === 'sidebar' && !state.sidebar.isVisible
+    ? (state.transcript ? 'transcript' : 'input')
+    : pane;
+  const nextScope = state.commandPalette.isOpen ? resolvedPane : state.commandPalette.scope;
   const filteredActions = state.commandPalette.isOpen
-    ? getFilteredPaletteActions(state.commandPalette.actions, state.commandPalette.query, pane)
+    ? getFilteredPaletteActions(state.commandPalette.actions, state.commandPalette.query, resolvedPane)
     : state.commandPalette.filteredActions;
 
   return {
     ...state,
-    focusedPane: pane,
+    focusedPane: resolvedPane,
     commandPalette: withCommandPaletteState(state, {
       scope: nextScope,
       filteredActions,
       selectedIndex: 0,
     }),
+  };
+}
+
+export type SidebarSectionKey = 'sessions' | 'metadata';
+
+export function toggleSidebarVisibility(state: TuiState): TuiState {
+  const nextVisible = !state.sidebar.isVisible;
+  const nextState: TuiState = {
+    ...state,
+    sidebar: {
+      ...state.sidebar,
+      isVisible: nextVisible,
+    },
+  };
+
+  if (!nextVisible && state.focusedPane === 'sidebar') {
+    return setFocusedPane(nextState, 'transcript');
+  }
+
+  return nextState;
+}
+
+export function toggleSidebarSection(state: TuiState, section: SidebarSectionKey): TuiState {
+  if (section === 'sessions') {
+    return {
+      ...state,
+      sidebar: {
+        ...state.sidebar,
+        sections: {
+          ...state.sidebar.sections,
+          sessionsCollapsed: !state.sidebar.sections.sessionsCollapsed,
+        },
+      },
+    };
+  }
+
+  return {
+    ...state,
+    sidebar: {
+      ...state.sidebar,
+      sections: {
+        ...state.sidebar.sections,
+        metadataCollapsed: !state.sidebar.sections.metadataCollapsed,
+      },
+    },
   };
 }
 
@@ -1291,6 +1439,99 @@ export function submitInput(state: TuiState): { state: TuiState; submittedText: 
 }
 
 /**
+ * Generate a unique ID for pending submissions
+ */
+function generatePendingSubmissionId(): string {
+  return `pending-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Queue a pending submission when streaming is active.
+ * Clears input immediately and returns the queued entry.
+ */
+export function queuePendingSubmission(
+  state: TuiState,
+  text: string,
+  nowMs = Date.now(),
+): { state: TuiState; entry: PendingSubmission | null } {
+  if (!text.trim()) {
+    return { state, entry: null };
+  }
+
+  const entry: PendingSubmission = {
+    id: generatePendingSubmissionId(),
+    text,
+    createdAt: nowMs,
+  };
+
+  const newState: TuiState = {
+    ...state,
+    input: {
+      ...state.input,
+      text: '',
+      cursorPosition: 0,
+      slashSearch: getSlashSearchState(state, ''),
+      history: {
+        entries: [...state.input.history.entries, text],
+        currentIndex: -1,
+      },
+      pendingSubmissions: [...state.input.pendingSubmissions, entry],
+    },
+    sessions: state.sessions.selectedId
+      ? {
+          ...state.sessions,
+          drafts: {
+            ...state.sessions.drafts,
+            [state.sessions.selectedId]: '',
+          },
+        }
+      : state.sessions,
+  };
+
+  return { state: newState, entry };
+}
+
+/**
+ * Dequeue the head pending submission (FIFO).
+ * Returns the new state and the dequeued entry (or null if empty).
+ */
+export function dequeuePendingSubmission(state: TuiState): {
+  state: TuiState;
+  entry: PendingSubmission | null;
+} {
+  const pending = state.input.pendingSubmissions;
+  if (pending.length === 0) {
+    return { state, entry: null };
+  }
+
+  const [head, ...rest] = pending;
+  return {
+    state: {
+      ...state,
+      input: {
+        ...state.input,
+        pendingSubmissions: rest,
+      },
+    },
+    entry: head,
+  };
+}
+
+/**
+ * Check if there are any pending submissions in the queue.
+ */
+export function hasPendingSubmissions(state: TuiState): boolean {
+  return state.input.pendingSubmissions.length > 0;
+}
+
+/**
+ * Get the head pending submission without removing it.
+ */
+export function getHeadPendingSubmission(state: TuiState): PendingSubmission | null {
+  return state.input.pendingSubmissions[0] ?? null;
+}
+
+/**
  * Remove character before cursor (backspace behavior)
  */
 export function backspaceAtCursor(state: TuiState): TuiState {
@@ -1707,6 +1948,246 @@ export function setSessionDraft(state: TuiState, sessionId: string, draft: strin
         ...state.sessions.drafts,
         [sessionId]: draft,
       },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tool block state management
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine tool vs task kind from tool name.
+ * Tools prefixed with task_, subagent_, or handoff_ are classified as tasks.
+ */
+function inferToolBlockKind(toolName: string): ToolBlockKind {
+  if (
+    toolName.startsWith('task_')
+    || toolName.startsWith('subagent_')
+    || toolName.startsWith('handoff_')
+  ) {
+    return 'task';
+  }
+  return 'tool';
+}
+
+/**
+ * Add a new tool call to the appropriate group (creating the group if needed).
+ * New blocks start as in-progress and expanded.
+ */
+export function addToolCall(
+  state: TuiState,
+  event: {
+    messageId: string;
+    step: number;
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    startedAt: number;
+    kind?: ToolBlockKind;
+  },
+): TuiState {
+  const kind = event.kind ?? inferToolBlockKind(event.toolName);
+  const block: ToolBlockState = {
+    toolCallId: event.toolCallId,
+    toolName: event.toolName,
+    kind,
+    status: 'in-progress',
+    input: event.input,
+    startedAt: event.startedAt,
+    expanded: true,
+  };
+
+  const groups = [...state.toolBlocks.groups];
+  const existingGroupIndex = groups.findIndex(
+    (g) => g.messageId === event.messageId && g.step === event.step,
+  );
+
+  if (existingGroupIndex >= 0) {
+    const existing = groups[existingGroupIndex];
+    const existingBlockIndex = existing.blocks.findIndex((entry) => entry.toolCallId === event.toolCallId);
+
+    if (existingBlockIndex >= 0) {
+      const nextBlocks = [...existing.blocks];
+      nextBlocks[existingBlockIndex] = {
+        ...nextBlocks[existingBlockIndex],
+        ...block,
+      };
+      groups[existingGroupIndex] = {
+        ...existing,
+        blocks: nextBlocks,
+      };
+    } else {
+      groups[existingGroupIndex] = {
+        ...existing,
+        blocks: [...existing.blocks, block],
+      };
+    }
+  } else {
+    groups.push({
+      messageId: event.messageId,
+      step: event.step,
+      blocks: [block],
+    });
+  }
+
+  return {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      groups,
+    },
+  };
+}
+
+/**
+ * Complete a tool call. Smart collapse: completed without error -> collapsed,
+ * errored -> expanded.
+ */
+export function completeToolCall(
+  state: TuiState,
+  event: {
+    toolCallId: string;
+    output: unknown;
+    completedAt: number;
+    durationMs: number;
+    error?: { message: string };
+  },
+): TuiState {
+  const hasError = !!event.error;
+  const status: ToolBlockStatus = hasError ? 'errored' : 'completed';
+  const expandOverride = state.toolBlocks.expandOverrides[event.toolCallId];
+
+  return updateToolBlock(state, event.toolCallId, (block) => ({
+    ...block,
+    status,
+    output: event.output,
+    error: event.error,
+    completedAt: event.completedAt,
+    durationMs: event.durationMs,
+    expanded: expandOverride ?? hasError,
+  }));
+}
+
+/**
+ * Fail a tool call with an error. Errored blocks stay expanded.
+ */
+export function failToolCall(
+  state: TuiState,
+  event: {
+    toolCallId: string;
+    error: { message: string };
+    completedAt: number;
+    durationMs: number;
+  },
+): TuiState {
+  const expandOverride = state.toolBlocks.expandOverrides[event.toolCallId];
+
+  return updateToolBlock(state, event.toolCallId, (block) => ({
+    ...block,
+    status: 'errored',
+    error: event.error,
+    completedAt: event.completedAt,
+    durationMs: event.durationMs,
+    expanded: expandOverride ?? true,
+  }));
+}
+
+/**
+ * Toggle the expanded state of a specific tool block.
+ */
+export function toggleToolBlockExpand(state: TuiState, toolCallId: string): TuiState {
+  let nextExpanded: boolean | null = null;
+  for (const group of state.toolBlocks.groups) {
+    const block = group.blocks.find((entry) => entry.toolCallId === toolCallId);
+    if (block) {
+      nextExpanded = !block.expanded;
+      break;
+    }
+  }
+
+  if (nextExpanded === null) {
+    return state;
+  }
+
+  const withOverride = {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      expandOverrides: {
+        ...state.toolBlocks.expandOverrides,
+        [toolCallId]: nextExpanded,
+      },
+    },
+  };
+
+  return updateToolBlock(withOverride, toolCallId, (block) => ({
+    ...block,
+    expanded: nextExpanded,
+  }));
+}
+
+/**
+ * Get tool blocks for a given message step/group index.
+ * The Nth group corresponds to tool blocks from the Nth tool-calling step.
+ */
+export function getToolBlocksForMessage(state: TuiState, groupIndex: number): ToolBlockState[] {
+  const group = state.toolBlocks.groups[groupIndex];
+  return group?.blocks ?? [];
+}
+
+/**
+ * Check if any tool blocks are currently in-progress.
+ */
+export function hasInProgressToolBlocks(state: TuiState): boolean {
+  return state.toolBlocks.groups.some((group) =>
+    group.blocks.some((block) => block.status === 'in-progress'),
+  );
+}
+
+/**
+ * Clear all tool block state (called on new message turn start).
+ */
+export function clearToolBlocks(state: TuiState): TuiState {
+  if (state.toolBlocks.groups.length === 0) {
+    return state;
+  }
+
+  return {
+    ...state,
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
+    },
+  };
+}
+
+/**
+ * Internal helper: update a specific tool block by toolCallId across all groups.
+ */
+function updateToolBlock(
+  state: TuiState,
+  toolCallId: string,
+  updater: (block: ToolBlockState) => ToolBlockState,
+): TuiState {
+  let found = false;
+  const groups = state.toolBlocks.groups.map((group) => {
+    const blockIndex = group.blocks.findIndex((b) => b.toolCallId === toolCallId);
+    if (blockIndex < 0) return group;
+
+    found = true;
+    const blocks = [...group.blocks];
+    blocks[blockIndex] = updater(blocks[blockIndex]);
+    return { ...group, blocks };
+  });
+
+  if (!found) return state;
+
+  return {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      groups,
     },
   };
 }

@@ -1,6 +1,8 @@
-import { Tracer, Span } from './tracer';
-import { SpanOptions, SpanContext, SpanStatus } from './types';
+import { createRequire } from 'node:module';
+import { Tracer, Span, SpanOptions, SpanContext, SpanStatus } from './tracer';
 import { setActiveSpan, getActiveSpan } from './context';
+
+const esmRequire = createRequire(import.meta.url);
 
 /**
  * OpenTelemetry tracer implementation
@@ -14,9 +16,7 @@ export class OpenTelemetryTracer implements Tracer {
   constructor() {
     // Try to load OpenTelemetry API
     try {
-      // Dynamic import to avoid hard dependency
-      // In a real implementation, you'd check if it's available
-      this.otelApi = require('@opentelemetry/api');
+      this.otelApi = esmRequire('@opentelemetry/api');
       this.otelTracer = this.otelApi.trace.getTracer('fred');
       this.traceId = this.generateTraceId();
     } catch (error) {
@@ -168,5 +168,28 @@ class OpenTelemetrySpan implements Span {
       return undefined;
     }
     return endTime - this.getStartTime();
+  }
+}
+
+/**
+ * Create an OpenTelemetry tracer if available.
+ * Returns undefined if @opentelemetry/api is not installed.
+ */
+export function createOpenTelemetryTracer(): Tracer | undefined {
+  try {
+    esmRequire.resolve('@opentelemetry/api');
+    return new OpenTelemetryTracer();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Check if OpenTelemetry is available */
+export function isOpenTelemetryAvailable(): boolean {
+  try {
+    esmRequire.resolve('@opentelemetry/api');
+    return true;
+  } catch {
+    return false;
   }
 }

@@ -36,7 +36,7 @@
     "agents",
     "framework",
     "intent",
-    "vercel-ai-sdk"
+    "effect-ts"
   ],
   "license": "MIT",
   "private": true,
@@ -47,7 +47,6 @@
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:all": "bun test",
-    "test:phase35:smoke": "bun run scripts/phase35-smoke.ts",
     "typecheck": "bunx tsc --noEmit",
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "changeset": "changeset",

@@ -1,4 +1,6 @@
 import { Schema } from 'effect';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { calculateSimilarity } from '../utils/semantic';
 import { validateGoldenTrace } from './golden-trace';
 import type { GoldenTrace } from './golden-trace';
@@ -314,4 +316,108 @@ export function runAssertion(trace: GoldenTrace, spec: AssertionSpec): Assertion
         message: isValid ? 'Trace schema is valid' : 'Trace schema is invalid',
       };
   }
+}
+
+// --- Assertion runner (merged from assertion-runner.ts) ---
+
+export interface TestCase {
+  name: string;
+  traceFile: string;
+  assertions: unknown[];
+}
+
+export interface TestResult {
+  testCase: string;
+  passed: boolean;
+  results: AssertionResult[];
+  error?: string;
+}
+
+export async function runAssertions(
+  trace: GoldenTrace,
+  assertions: unknown[]
+): Promise<AssertionResult[]> {
+  let typedSpecs: AssertionSpec[];
+  try {
+    typedSpecs = decodeAssertionSpecs(assertions);
+  } catch (error) {
+    return [{
+      type: 'schema',
+      passed: false,
+      message: `Invalid assertion suite: ${error instanceof Error ? error.message : String(error)}`,
+      details: { assertions },
+    }];
+  }
+  return typedSpecs.map((spec) => runAssertion(trace, spec));
+}
+
+export async function loadGoldenTrace(filepath: string): Promise<GoldenTrace> {
+  const content = await readFile(filepath, 'utf-8');
+  const trace = JSON.parse(content);
+  if (!validateGoldenTrace(trace)) {
+    throw new Error(`Invalid golden trace format in ${filepath}`);
+  }
+  return trace;
+}
+
+export async function runTestCase(
+  testCase: TestCase,
+  tracesDirectory: string
+): Promise<TestResult> {
+  try {
+    const tracePath = join(tracesDirectory, testCase.traceFile);
+    const trace = await loadGoldenTrace(tracePath);
+    const results = await runAssertions(trace, testCase.assertions);
+    const passed = results.every(r => r.passed);
+    return { testCase: testCase.name, passed, results };
+  } catch (error) {
+    return {
+      testCase: testCase.name,
+      passed: false,
+      results: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function runTestCases(
+  testCases: TestCase[],
+  tracesDirectory: string
+): Promise<TestResult[]> {
+  const results: TestResult[] = [];
+  for (const testCase of testCases) {
+    results.push(await runTestCase(testCase, tracesDirectory));
+  }
+  return results;
+}
+
+export function formatTestResults(results: TestResult[]): string {
+  const lines: string[] = [];
+  const totalTests = results.length;
+  const passedTests = results.filter(r => r.passed).length;
+  const failedTests = totalTests - passedTests;
+
+  lines.push(`\nTest Results: ${passedTests}/${totalTests} passed\n`);
+
+  for (const result of results) {
+    const status = result.passed ? '\u2713' : '\u2717';
+    lines.push(`${status} ${result.testCase}`);
+    if (!result.passed) {
+      if (result.error) {
+        lines.push(`  Error: ${result.error}`);
+      } else {
+        for (const assertionResult of result.results) {
+          if (!assertionResult.passed) {
+            lines.push(`  \u2717 ${assertionResult.message}`);
+            if (assertionResult.details) {
+              lines.push(`    Details: ${JSON.stringify(assertionResult.details, null, 2)}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lines.push(`\nSummary: ${passedTests} passed, ${failedTests} failed`);
+  return lines.join('\n');
 }

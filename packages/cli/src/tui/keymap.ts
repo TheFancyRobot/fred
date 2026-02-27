@@ -34,6 +34,9 @@ import {
   selectNextSession,
   selectPreviousSession,
   selectSidebarSelection,
+  toggleSidebarVisibility,
+  toggleSidebarSection,
+  toggleHelpModal,
 } from './state.js';
 
 /**
@@ -42,6 +45,9 @@ import {
 export type KeyAction =
   | { type: 'focus-next' }
   | { type: 'focus-prev' }
+  | { type: 'toggle-sidebar' }
+  | { type: 'toggle-sessions-section' }
+  | { type: 'toggle-metadata-section' }
   | { type: 'scroll-up'; lines: number }
   | { type: 'scroll-down'; lines: number }
   | { type: 'history-up' }
@@ -72,6 +78,8 @@ export type KeyAction =
   | { type: 'confirm-delete-session' }
   | { type: 'cancel-delete-session' }
   | { type: 'copy-transcript' }
+  | { type: 'copy-last-message' }
+  | { type: 'toggle-help' }
   | { type: 'quit' }
   | { type: 'noop' };
 
@@ -80,6 +88,8 @@ export type KeyAction =
  */
 export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   const { name, shift, ctrl, meta } = event;
+
+  const printableChar = getPrintableChar(event);
 
   const isPaletteToggle = (ctrl || meta) && name === 'k';
   if (isPaletteToggle) {
@@ -148,7 +158,19 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'noop' };
   }
 
+  // Help modal: Escape closes, other keys are noop
+  if (state.helpModal.isOpen) {
+    if (name === 'escape') {
+      return { type: 'toggle-help' };
+    }
+    return { type: 'noop' };
+  }
+
   // Global keybindings (work regardless of focus)
+  if (name === 'f1') {
+    return { type: 'toggle-help' };
+  }
+
   if (name === 'tab') {
     return shift ? { type: 'focus-prev' } : { type: 'focus-next' };
   }
@@ -159,6 +181,14 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   if (ctrl && shift && name === 'c') {
     return { type: 'copy-transcript' };
+  }
+
+  if (ctrl && name === 'y') {
+    return { type: 'copy-last-message' };
+  }
+
+  if (ctrl && name === 'b') {
+    return { type: 'toggle-sidebar' };
   }
 
   if (ctrl && name === 'c') {
@@ -178,6 +208,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   // Transcript pane: scroll navigation
   if (focusedPane === 'transcript') {
+    if (printableChar === '?') {
+      return { type: 'toggle-help' };
+    }
     if (name === 'up') {
       return { type: 'scroll-up', lines: 1 };
     }
@@ -248,8 +281,8 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     }
 
     // Printable characters: single char name, no ctrl/meta modifiers
-    if (name.length === 1 && !ctrl && !meta) {
-      return { type: 'input-text', text: name };
+    if (printableChar) {
+      return { type: 'input-text', text: printableChar };
     }
 
     // Space key
@@ -260,6 +293,15 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
 
   // Sidebar pane: session navigation
   if (focusedPane === 'sidebar') {
+    if (printableChar === '?') {
+      return { type: 'toggle-help' };
+    }
+    if (printableChar?.toLowerCase() === 's') {
+      return { type: 'toggle-sessions-section' };
+    }
+    if (printableChar?.toLowerCase() === 'm') {
+      return { type: 'toggle-metadata-section' };
+    }
     if (name === 'delete' || name === 'backspace') {
       return { type: 'delete-session' };
     }
@@ -277,16 +319,49 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
   return { type: 'noop' };
 }
 
+function getPrintableChar(event: KeyEvent): string | null {
+  const { name, shift, ctrl, meta, sequence } = event;
+
+  if (ctrl || meta) {
+    return null;
+  }
+
+  if (typeof sequence === 'string' && sequence.length === 1) {
+    return sequence;
+  }
+
+  if (name.length === 1) {
+    return shift ? name.toUpperCase() : name;
+  }
+
+  return null;
+}
+
 /**
  * Apply key action to state
  */
 export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
   switch (action.type) {
     case 'focus-next':
-      return setFocusedPane(state, nextFocusablePane(state.focusedPane));
+      return setFocusedPane(
+        state,
+        nextFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible }),
+      );
 
     case 'focus-prev':
-      return setFocusedPane(state, prevFocusablePane(state.focusedPane));
+      return setFocusedPane(
+        state,
+        prevFocusablePane(state.focusedPane, { includeSidebar: state.sidebar.isVisible }),
+      );
+
+    case 'toggle-sidebar':
+      return toggleSidebarVisibility(state);
+
+    case 'toggle-sessions-section':
+      return toggleSidebarSection(state, 'sessions');
+
+    case 'toggle-metadata-section':
+      return toggleSidebarSection(state, 'metadata');
 
     case 'scroll-up':
       return scrollTranscript(state, -action.lines);
@@ -397,6 +472,13 @@ export function applyKeyAction(state: TuiState, action: KeyAction): TuiState {
 
     case 'copy-transcript':
       return state;
+
+    case 'copy-last-message':
+      // Handled by app (clipboard write side-effect)
+      return state;
+
+    case 'toggle-help':
+      return toggleHelpModal(state);
 
     case 'quit':
       // Handled by app, just return state

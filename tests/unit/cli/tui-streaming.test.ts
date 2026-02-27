@@ -14,11 +14,10 @@ describe('TUI streaming controller', () => {
     activeControllers.length = 0;
   });
 
-  test('coalesces bursty token events and preserves output order', async () => {
+  test('coalesces bursty token events within timer frames and preserves output order', async () => {
     const batches: StreamingBatch[] = [];
     const controller = createStreamingController({
       frameMs: 16,
-      maxRenderQueue: 2,
       callbacks: {
         onBatch: (batch) => {
           batches.push(batch);
@@ -46,10 +45,9 @@ describe('TUI streaming controller', () => {
     expect(metrics.firstTokenLatencyMs).not.toBeNull();
   });
 
-  test('handles 100+ tokens/sec without unbounded queue growth', async () => {
+  test('handles 100+ tokens/sec without unbounded growth', async () => {
     const controller = createStreamingController({
       frameMs: 16,
-      maxRenderQueue: 2,
     });
     activeControllers.push(controller);
 
@@ -67,14 +65,16 @@ describe('TUI streaming controller', () => {
     const rate = burstTokens / Math.max(0.001, elapsedMs / 1000);
     expect(rate).toBeGreaterThan(100);
 
+    // Timer-based: no render queue, depth always 0
     const buffer = controller.getBufferSnapshot();
-    expect(buffer.renderQueueDepth).toBeLessThanOrEqual(2);
+    expect(buffer.renderQueueDepth).toBe(0);
 
     await Bun.sleep(90);
 
     const metrics = controller.getMetricsSnapshot();
     expect(metrics.tokensProcessed).toBe(burstTokens);
-    expect(metrics.droppedRenderSignals).toBeGreaterThan(0);
+    // Timer-based: no signals are dropped
+    expect(metrics.droppedRenderSignals).toBe(0);
     expect(metrics.bufferedChars).toBeGreaterThanOrEqual(0);
   });
 
@@ -82,7 +82,6 @@ describe('TUI streaming controller', () => {
     const metricTimestamps: number[] = [];
     const controller = createStreamingController({
       frameMs: 16,
-      maxRenderQueue: 2,
       callbacks: {
         onMetrics: () => {
           metricTimestamps.push(Date.now());
@@ -109,7 +108,7 @@ describe('TUI streaming controller', () => {
 
     expect(pushed).toBeGreaterThan(40);
     expect(metrics.tokensPerSecond).toBeGreaterThan(100);
-    expect(buffer.renderQueueDepth).toBeLessThanOrEqual(2);
+    expect(buffer.renderQueueDepth).toBe(0);
 
     const uniqueMetricTimestamps = Array.from(new Set(metricTimestamps));
     expect(uniqueMetricTimestamps.length).toBeGreaterThan(2);
@@ -119,10 +118,15 @@ describe('TUI streaming controller', () => {
     expect(Math.max(...deltas)).toBeLessThanOrEqual(120);
   });
 
-  test('keeps render queue bounded while coalescing render signals', async () => {
+  test('flushes all tokens through timer without dropping signals', async () => {
+    const batches: StreamingBatch[] = [];
     const controller = createStreamingController({
       frameMs: 16,
-      maxRenderQueue: 2,
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+      },
     });
     activeControllers.push(controller);
 
@@ -132,21 +136,21 @@ describe('TUI streaming controller', () => {
       controller.pushToken('x');
     }
 
-    const buffer = controller.getBufferSnapshot();
-    expect(buffer.renderQueueDepth).toBeLessThanOrEqual(2);
-
     await Bun.sleep(80);
 
     const metrics = controller.getMetricsSnapshot();
     expect(metrics.tokensProcessed).toBe(200);
-    expect(metrics.droppedRenderSignals).toBeGreaterThan(0);
+    // Timer-based: no signals dropped, all tokens flushed incrementally
+    expect(metrics.droppedRenderSignals).toBe(0);
+
+    const totalFlushed = batches.reduce((sum, b) => sum + b.text.length, 0);
+    expect(totalFlushed).toBe(200);
   });
 
   test('emits error events and retains deterministic metrics snapshot', async () => {
     let seenErrorMessage: string | undefined;
     const controller = createStreamingController({
       frameMs: 16,
-      maxRenderQueue: 2,
       callbacks: {
         onError: (error) => {
           seenErrorMessage = error.message;
@@ -159,13 +163,80 @@ describe('TUI streaming controller', () => {
     controller.pushToken('hello');
     controller.fail(new Error('upstream failed'));
 
-    await Bun.sleep(40);
-
+    // fail() is now synchronous - error emitted immediately
     expect(seenErrorMessage).toBe('upstream failed');
 
     const metrics = controller.getMetricsSnapshot();
     expect(metrics.tokensProcessed).toBe(1);
     expect(metrics.lastError).toBe('upstream failed');
     expect(metrics.endedAtMs).not.toBeNull();
+  });
+
+  test('stop() flushes pending buffered tokens before halting', () => {
+    const batches: StreamingBatch[] = [];
+    const controller = createStreamingController({
+      frameMs: 100,
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('hello');
+    controller.pushToken(' world');
+    controller.stop();
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.text).toBe('hello world');
+  });
+
+  test('finish() still cleans up when finish callback throws', () => {
+    const controller = createStreamingController({
+      callbacks: {
+        onFinish: () => {
+          throw new Error('finish hook failed');
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('a');
+
+    expect(() => controller.finish()).toThrow('finish hook failed');
+
+    const tokensAfterFinish = controller.getMetricsSnapshot().tokensProcessed;
+    controller.pushToken('b');
+    expect(controller.getMetricsSnapshot().tokensProcessed).toBe(tokensAfterFinish);
+  });
+
+  test('finish() flushes pending text synchronously', () => {
+    const batches: StreamingBatch[] = [];
+    let finishCalled = false;
+    const controller = createStreamingController({
+      frameMs: 16,
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+        onFinish: () => {
+          finishCalled = true;
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('hello');
+    controller.pushToken(' world');
+    controller.finish();
+
+    // finish() flushes synchronously
+    expect(batches.length).toBe(1);
+    expect(batches[0].text).toBe('hello world');
+    expect(finishCalled).toBe(true);
   });
 });

@@ -12,13 +12,15 @@ import type {
   CalibrationMetadata,
   MatchType,
 } from './types';
-import { MIN_SAMPLES } from './calibration/temperature';
 
 /** Low confidence threshold for concern detection */
 const LOW_CONFIDENCE_THRESHOLD = 0.6;
 
 /** Close alternatives gap threshold for concern detection */
 const CLOSE_ALTERNATIVES_GAP = 0.1;
+
+/** Minimum samples for calibration */
+const MIN_SAMPLES = 100;
 
 /**
  * Detect routing concerns from explanation data.

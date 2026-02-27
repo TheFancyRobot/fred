@@ -12,8 +12,7 @@ import { executeGraphWorkflow } from '../../../../packages/core/src/pipeline/gra
 import { AgentManager } from '../../../../packages/core/src/agent/manager';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
-import { Tracer } from '../../../../packages/core/src/tracing';
-import { Span } from '../../../../packages/core/src/tracing/types';
+import { Tracer, Span } from '../../../../packages/core/src/tracing';
 import type { PipelineConfigV2 } from '../../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../../packages/core/src/pipeline/graph';
 

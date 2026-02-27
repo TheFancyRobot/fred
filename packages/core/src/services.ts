@@ -22,16 +22,12 @@ import { PipelineService, PipelineServiceLive } from './pipeline/service';
 import { MessageProcessorService, MessageProcessorServiceLive } from './message-processor/service';
 import { IntentMatcherService, IntentMatcherServiceLive } from './intent/service';
 import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
-import { MessageRouterService, MessageRouterServiceFromInstance } from './routing/service';
+import { MessageRouterService } from './routing/service';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
 
 /**
  * Core Fred service types included in FredLayers.
- *
- * Note: IntentMatcherService, IntentRouterService, and MessageRouterService
- * are optional services that wrap non-Effect classes. They can be added
- * separately when needed using FromInstance factories.
  */
 export type FredServices =
   | ToolRegistryService
@@ -371,7 +367,6 @@ export {
   IntentRouterService,
   IntentRouterServiceLive,
   MessageRouterService,
-  MessageRouterServiceFromInstance,
   ObservabilityService,
   ObservabilityServiceLive,
 };

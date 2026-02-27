@@ -2,7 +2,7 @@ import { Context, Effect, Stream } from 'effect';
 import { Prompt } from '@effect/ai';
 import type { AgentMessage, AgentResponse } from '../agent/agent';
 import type { StreamEvent } from '../stream/events';
-import { SpanKind } from '../tracing/types';
+import { SpanKind } from '../tracing';
 import { validateMessageLength } from '../utils/validation';
 import { semanticMatch } from '../utils/semantic';
 import { createCorrelationContext, withCorrelationContext } from '../observability/context';

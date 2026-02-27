@@ -54,8 +54,8 @@ export interface EnsureDefaultChatAgentResult {
 const DEFAULT_AGENT_ID = '__dev_agent__';
 const DEFAULT_SYSTEM_MESSAGE =
   'You are a helpful assistant. Answer questions naturally and conversationally.\n\n' +
-  'You have access to a calculator tool for arithmetic. When you need to calculate a mathematical expression, use the calculator tool. ' +
-  'Do not generate text that looks like XML tags or function calls - use the actual tool calling feature.\n\n' +
+  'When you need to perform calculations or use other tools, use the tool calling feature provided by the API. ' +
+  'Do not generate text that looks like XML tags or function calls - always use the native tool calling mechanism.\n\n' +
   'This is a temporary agent for dev-chat. Users can create custom agents in their config files.';
 
 export async function ensureDefaultChatAgent(

@@ -252,10 +252,94 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       conversationId: activeSessionId,
                     });
 
+                    // Buffer for XML-aware token filtering.
+                    // XML tags may span multiple token deltas, so we accumulate
+                    // and only flush text that is safe (no partial opening tags).
+                    let tokenBuffer = '';
+                    const MAX_TOKEN_BUFFER_CHARS = 8_192;
+                    const MAX_XML_FILTER_PASSES = 8;
+                    const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
+
+                    const filterXmlTags = (text: string): string => {
+                      let filtered = text;
+                      let previous = '';
+                      let passes = 0;
+                      while (filtered !== previous && passes < MAX_XML_FILTER_PASSES) {
+                        previous = filtered;
+                        filtered = filtered.replace(xmlTagPattern, '');
+                        passes += 1;
+                      }
+                      return filtered;
+                    };
+
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {
-                        app.pushAssistantToken(event.delta, 1);
+                        tokenBuffer += event.delta;
+
+                        // Check if buffer might contain a partial opening XML tag
+                        const lastOpenBracket = tokenBuffer.lastIndexOf('<');
+                        if (lastOpenBracket >= 0) {
+                          const afterBracket = tokenBuffer.slice(lastOpenBracket);
+                          // Only buffer if '<' is followed by a likely tag start character
+                          if (/^<[a-z/]/i.test(afterBracket) && !afterBracket.includes('>')) {
+                            // Flush everything before the potential tag
+                            const safe = tokenBuffer.slice(0, lastOpenBracket);
+                            if (safe) {
+                              app.pushAssistantToken(filterXmlTags(safe), 1);
+                            }
+                            tokenBuffer = afterBracket;
+
+                            // Safety: cap buffered partial tags to prevent unbounded growth
+                            if (tokenBuffer.length > MAX_TOKEN_BUFFER_CHARS) {
+                              app.pushAssistantToken(filterXmlTags(tokenBuffer), 1);
+                              tokenBuffer = '';
+                            }
+                            continue;
+                          }
+                        }
+
+                        // No partial tags -- filter complete XML tags and flush
+                        const filtered = filterXmlTags(tokenBuffer);
+                        if (filtered) {
+                          app.pushAssistantToken(filtered, 1);
+                        }
+                        tokenBuffer = '';
+                      } else if (event.type === 'tool-call') {
+                        app.pushToolCall({
+                          messageId: event.messageId,
+                          step: event.step,
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          input: event.input,
+                          startedAt: event.startedAt,
+                        });
+                      } else if (event.type === 'tool-result') {
+                        app.pushToolResult({
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          output: event.output,
+                          completedAt: event.completedAt,
+                          durationMs: event.durationMs,
+                          error: event.error ? { message: event.error.message } : undefined,
+                        });
+                      } else if (event.type === 'tool-error') {
+                        app.pushToolError({
+                          toolCallId: event.toolCallId,
+                          toolName: event.toolName,
+                          error: { message: event.error.message },
+                          completedAt: event.completedAt,
+                          durationMs: event.durationMs,
+                        });
                       }
+                    }
+
+                    // Flush any remaining buffered tokens (partial tag never closed)
+                    if (tokenBuffer) {
+                      const finalFiltered = filterXmlTags(tokenBuffer);
+                      if (finalFiltered) {
+                        app.pushAssistantToken(finalFiltered, 1);
+                      }
+                      tokenBuffer = '';
                     }
 
                     app.completeAssistantStream();

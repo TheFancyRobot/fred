@@ -1,5 +1,3 @@
-import { Chunk, Effect, Fiber, Queue, Stream } from 'effect';
-
 export interface StreamingMetrics {
   startedAtMs: number | null;
   firstTokenAtMs: number | null;
@@ -17,11 +15,6 @@ export interface StreamingBatch {
   text: string;
   tokenCount: number;
   metrics: StreamingMetrics;
-}
-
-interface RenderSignal {
-  readonly type: 'render' | 'finish' | 'error';
-  readonly error?: Error;
 }
 
 export interface StreamingControllerCallbacks {
@@ -49,28 +42,22 @@ export interface StreamingController {
 }
 
 const DEFAULT_FRAME_MS = 16;
-const DEFAULT_MAX_RENDER_QUEUE = 3;
-const GROUP_SIZE = 1;
 
 export function createStreamingController(options: StreamingControllerOptions = {}): StreamingController {
   const frameMs = options.frameMs ?? DEFAULT_FRAME_MS;
-  const maxRenderQueue = options.maxRenderQueue ?? DEFAULT_MAX_RENDER_QUEUE;
   const now = options.now ?? Date.now;
   const callbacks = options.callbacks ?? {};
 
   let running = false;
-  let queue: Queue.Queue<RenderSignal> | null = null;
-  let fiber: Fiber.RuntimeFiber<void, unknown> | null = null;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
 
   let pendingText = '';
   let pendingTokens = 0;
-  let renderQueueDepth = 0;
 
   let startedAtMs: number | null = null;
   let firstTokenAtMs: number | null = null;
   let endedAtMs: number | null = null;
   let tokensProcessed = 0;
-  let droppedRenderSignals = 0;
   let lastError: string | null = null;
 
   const getMetricsSnapshot = (): StreamingMetrics => {
@@ -88,7 +75,7 @@ export function createStreamingController(options: StreamingControllerOptions = 
       tokensPerSecond: elapsedMs > 0 ? (tokensProcessed * 1000) / elapsedMs : 0,
       bufferedTokens: pendingTokens,
       bufferedChars: pendingText.length,
-      droppedRenderSignals,
+      droppedRenderSignals: 0,
       endedAtMs,
       lastError,
     };
@@ -117,41 +104,6 @@ export function createStreamingController(options: StreamingControllerOptions = 
     emitMetrics();
   };
 
-  const processSignalChunk = (signals: Chunk.Chunk<RenderSignal>): void => {
-    renderQueueDepth = Math.max(0, renderQueueDepth - Chunk.size(signals));
-
-    flushPending();
-
-    const signalArray = Chunk.toArray(signals);
-    for (const signal of signalArray) {
-      if (signal.type === 'error' && signal.error) {
-        lastError = signal.error.message;
-        endedAtMs = now();
-        callbacks.onError?.(signal.error, getMetricsSnapshot());
-      }
-
-      if (signal.type === 'finish') {
-        endedAtMs = now();
-        callbacks.onFinish?.(getMetricsSnapshot());
-      }
-    }
-  };
-
-  const offerRenderSignal = (signal: RenderSignal): void => {
-    if (!queue || !running) {
-      return;
-    }
-
-    if (renderQueueDepth >= maxRenderQueue) {
-      droppedRenderSignals += 1;
-      renderQueueDepth = maxRenderQueue;
-    } else {
-      renderQueueDepth += 1;
-    }
-
-    Effect.runFork(Queue.offer(queue, signal));
-  };
-
   const start = (): void => {
     if (running) {
       return;
@@ -162,19 +114,13 @@ export function createStreamingController(options: StreamingControllerOptions = 
     firstTokenAtMs = null;
     endedAtMs = null;
     tokensProcessed = 0;
-    droppedRenderSignals = 0;
     pendingText = '';
     pendingTokens = 0;
-    renderQueueDepth = 0;
     lastError = null;
 
-    queue = Effect.runSync(Queue.sliding<RenderSignal>(maxRenderQueue));
-    const stream = Stream.fromQueue(queue).pipe(
-      Stream.groupedWithin(GROUP_SIZE, `${frameMs} millis`),
-      Stream.runForEach((signals) => Effect.sync(() => processSignalChunk(signals))),
-    );
-
-    fiber = Effect.runFork(stream);
+    intervalId = setInterval(() => {
+      flushPending();
+    }, frameMs);
     emitMetrics();
   };
 
@@ -183,18 +129,15 @@ export function createStreamingController(options: StreamingControllerOptions = 
       return;
     }
 
+    flushPending();
     running = false;
     endedAtMs = now();
 
-    if (queue) {
-      Effect.runFork(Queue.shutdown(queue));
-    }
-    if (fiber) {
-      Effect.runFork(Fiber.interrupt(fiber));
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
     }
 
-    queue = null;
-    fiber = null;
     emitMetrics();
   };
 
@@ -210,14 +153,26 @@ export function createStreamingController(options: StreamingControllerOptions = 
     pendingText += token;
     pendingTokens += tokenCount;
     tokensProcessed += tokenCount;
-    offerRenderSignal({ type: 'render' });
   };
 
   const finish = (): void => {
     if (!running) {
       return;
     }
-    offerRenderSignal({ type: 'finish' });
+
+    flushPending();
+    endedAtMs = now();
+
+    try {
+      callbacks.onFinish?.(getMetricsSnapshot());
+    } finally {
+      running = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      emitMetrics();
+    }
   };
 
   const fail = (error: unknown): void => {
@@ -226,7 +181,20 @@ export function createStreamingController(options: StreamingControllerOptions = 
     }
 
     const normalized = error instanceof Error ? error : new Error(String(error));
-    offerRenderSignal({ type: 'error', error: normalized });
+    flushPending();
+    lastError = normalized.message;
+    endedAtMs = now();
+
+    try {
+      callbacks.onError?.(normalized, getMetricsSnapshot());
+    } finally {
+      running = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      emitMetrics();
+    }
   };
 
   return {
@@ -239,7 +207,7 @@ export function createStreamingController(options: StreamingControllerOptions = 
     getBufferSnapshot: () => ({
       pendingTokens,
       pendingChars: pendingText.length,
-      renderQueueDepth,
+      renderQueueDepth: 0,
     }),
   };
 }

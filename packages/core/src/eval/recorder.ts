@@ -303,25 +303,4 @@ interface SpanData {
   endTime?: number;
 }
 
-/**
- * Effect-native recording entrypoint for deterministic evaluation artifacts.
- */
-export const recordEvaluationArtifact = (
-  runId: string,
-  options?: EvaluationRecordOptions
-): Effect.Effect<EvaluationArtifact, unknown, EvaluationService> =>
-  Effect.gen(function* () {
-    const service = yield* EvaluationService;
-    return yield* service.record(runId, options);
-  });
 
-/**
- * Effect-native load entrypoint for deterministic evaluation artifacts.
- */
-export const loadEvaluationArtifact = (
-  traceId: string
-): Effect.Effect<EvaluationArtifact, unknown, EvaluationService> =>
-  Effect.gen(function* () {
-    const service = yield* EvaluationService;
-    return yield* service.load(traceId);
-  });

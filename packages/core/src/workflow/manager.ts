@@ -3,7 +3,15 @@
  */
 
 import type { Fred } from '../index';
-import type { Workflow } from './types';
+import type { RoutingConfig } from '../routing/types';
+
+/** Workflow definition — a named entry point that groups related agents. */
+export interface Workflow {
+  name: string;
+  defaultAgent: string;
+  agents: string[];
+  routing?: RoutingConfig;
+}
 
 /**
  * WorkflowManager stores and validates workflows.

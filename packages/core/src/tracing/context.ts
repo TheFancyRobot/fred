@@ -41,14 +41,4 @@ export async function runWithSpanAsync<T>(span: Span, fn: () => Promise<T>): Pro
   return spanStore.run(span, fn);
 }
 
-/**
- * Clear span context (for testing)
- * Note: AsyncLocalStorage doesn't have a direct clear method,
- * but we can exit the current context if we're in one
- */
-export function clearSpanContext(): void {
-  // AsyncLocalStorage doesn't have a global clear method
-  // This is mainly for testing - in practice, contexts are cleared
-  // automatically when async operations complete
-  // For testing, you can use runWithSpan(undefined, ...) or just let contexts expire
-}
+

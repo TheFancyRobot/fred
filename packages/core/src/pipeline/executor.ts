@@ -24,7 +24,7 @@ import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hoo
 import { AgentManager } from '../agent/manager';
 import type { AgentResponse } from '../agent/agent';
 import type { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { SpanKind } from '../tracing';
 import type { CheckpointManager } from './checkpoint/manager';
 import { detectPauseSignal, type DetectedPause } from './pause';
 import { Effect } from 'effect';

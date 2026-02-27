@@ -15,7 +15,7 @@ import type { HandoffResult } from '../tool/handoff';
 import { loadPromptFile } from '../utils/prompt-loader';
 import { MCPClientImpl, convertMCPToolsToFredTools, MCPServerRegistry } from '../mcp';
 import type { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { SpanKind } from '../tracing';
 import { wrapToolExecution } from '../tool/validation';
 import { annotateSpan } from '../observability/otel';
 import { attachErrorToSpan, classifyError, ErrorClass } from '../observability/errors';

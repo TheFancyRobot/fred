@@ -25,7 +25,7 @@ import type { PipelineContext } from './context';
 import type { ExecutorOptions } from './executor';
 import type { HookManager } from '../hooks/manager';
 import type { Tracer } from '../tracing';
-import { SpanKind } from '../tracing/types';
+import { SpanKind } from '../tracing';
 import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hooks/types';
 import type { AgentManager } from '../agent/manager';
 import { isHandoffSignal, type HandoffSignal } from './handoff-tool';
