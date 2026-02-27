@@ -26,7 +26,7 @@ bun add @fancyrobot/fred effect
 bun add @fancyrobot/fred-openai @effect/ai-openai
 bun add @fancyrobot/fred-anthropic @effect/ai-anthropic
 bun add @fancyrobot/fred-google @effect/ai-google
-bun add @fancyrobot/fred-groq @effect/platform
+bun add @fancyrobot/fred-groq @effect/ai-groq
 bun add @fancyrobot/fred-openrouter @effect/ai-openai
 
 # CLI (optional)

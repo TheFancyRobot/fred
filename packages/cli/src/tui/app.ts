@@ -69,6 +69,7 @@ import {
   buildThinkingRenderable,
   buildStreamingCursorText,
   buildToolGroupRenderable,
+  sanitizeForTerminalDisplay,
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
@@ -546,7 +547,12 @@ export class FredTuiApp {
       // Insert pasted text at cursor position (flatten newlines for single-line input)
       // Cap paste length to prevent resource exhaustion from extremely large pastes
       const MAX_PASTE_LENGTH = 100_000;
-      const text = event.text.slice(0, MAX_PASTE_LENGTH).replace(/\n/g, ' ');
+      const text = event.text
+        .slice(0, MAX_PASTE_LENGTH)
+        .replace(/\n/g, ' ')
+        // Strip control chars except tab/carriage return to prevent terminal control abuse.
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
       const before = this.state.input.text.slice(0, this.state.input.cursorPosition);
       const after = this.state.input.text.slice(this.state.input.cursorPosition);
       this.state = {
@@ -865,6 +871,10 @@ export class FredTuiApp {
    * Sync only the input text renderable (lightweight, used by cursor blink).
    */
   private syncInputToUI(): void {
+    if (!this.running) {
+      return;
+    }
+
     const theme = DEFAULT_TUI_THEME;
     const r = this.renderer;
     const focused = this.state.focusedPane === 'input';
@@ -989,60 +999,63 @@ export class FredTuiApp {
    * Dequeues the head entry and submits it, starting a new stream.
    */
   private drainPendingSubmissionQueue(): void {
-    if (!hasPendingSubmissions(this.state)) {
-      return;
-    }
+    while (hasPendingSubmissions(this.state) && !this.state.streaming.isStreaming) {
+      const { state: dequeuedState, entry } = dequeuePendingSubmission(this.state);
+      this.state = dequeuedState;
 
-    const { state: dequeuedState, entry } = dequeuePendingSubmission(this.state);
-    this.state = dequeuedState;
+      if (!entry) {
+        return;
+      }
 
-    if (!entry) {
-      return;
-    }
+      this.state = appendUserMessage(this.state, entry.text);
+      this.transcriptContent.scrollTo(Infinity);
 
-    this.state = appendUserMessage(this.state, entry.text);
-    this.transcriptContent.scrollTo(Infinity);
+      // Handle slash commands in queued submissions.
+      // These commands may not start a stream, so continue draining until
+      // we either start streaming or run out of queued entries.
+      if (this.parseExitSlashCommand(entry.text)) {
+        this.stop();
+        return;
+      }
 
-    // Handle slash commands in queued submissions
-    if (this.parseExitSlashCommand(entry.text)) {
-      this.stop();
-      return;
-    }
+      const sidebarInvocation = this.parseSidebarSlashCommand(entry.text);
+      if (sidebarInvocation) {
+        this.state = toggleSidebarVisibility(this.state);
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        continue;
+      }
 
-    const sidebarInvocation = this.parseSidebarSlashCommand(entry.text);
-    if (sidebarInvocation) {
-      this.state = toggleSidebarVisibility(this.state);
+      const slashInvocation = this.parseSlashInvocation(entry.text);
+      if (slashInvocation) {
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+        void this.executePluginSlashCommand(slashInvocation.canonicalName, slashInvocation.args);
+        continue;
+      }
+
+      this.state = {
+        ...this.state,
+        telemetry: {
+          ...this.state.telemetry,
+          inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(entry.text),
+        },
+      };
+
+      this.state = startStreaming(this.state);
+      this.streamingController.start();
+
+      this.refreshSessionCost(true);
       this.events.onStateChange?.(this.state);
+      this.events.onSubmit?.(entry.text, this.state.sessions.selectedId);
       this.syncStateToUI();
+
+      if (this.state.sessions.selectedId === null) {
+        void this.ensureSessionSelected();
+      }
+
+      // Stream started; completion/error hooks will trigger the next drain.
       return;
-    }
-
-    const slashInvocation = this.parseSlashInvocation(entry.text);
-    if (slashInvocation) {
-      this.events.onStateChange?.(this.state);
-      this.syncStateToUI();
-      void this.executePluginSlashCommand(slashInvocation.canonicalName, slashInvocation.args);
-      return;
-    }
-
-    this.state = {
-      ...this.state,
-      telemetry: {
-        ...this.state.telemetry,
-        inputTokenCount: this.state.telemetry.inputTokenCount + this.estimateTokenCount(entry.text),
-      },
-    };
-
-    this.state = startStreaming(this.state);
-    this.streamingController.start();
-
-    this.refreshSessionCost(true);
-    this.events.onStateChange?.(this.state);
-    this.events.onSubmit?.(entry.text, this.state.sessions.selectedId);
-    this.syncStateToUI();
-
-    if (this.state.sessions.selectedId === null) {
-      void this.ensureSessionSelected();
     }
   }
 
@@ -1391,11 +1404,14 @@ export class FredTuiApp {
    * Prevents terminal escape injection via untrusted content.
    */
   private sanitizeForClipboard(text: string): string {
-    // Strip ANSI escape sequences (CSI, OSC, etc.)
+    // Strip ANSI/OSC/DCS control sequences first.
     // eslint-disable-next-line no-control-regex
-    return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    return text
       .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-      .replace(/\x1b[^[\]]/g, '')
+      .replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '')
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\x9b[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\x1b[@-_]/g, '')
       // Strip remaining C0/C1 control chars except newline, tab, carriage return
       // eslint-disable-next-line no-control-regex
       .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
@@ -1723,6 +1739,7 @@ export class FredTuiApp {
     if (
       this.activeStreamingMdId
       && this.state.streaming.isStreaming
+      && this.state.toolBlocks.groups.length === 0
       && messages.length === this.lastRenderedMessageCount
       && messages.length > 0
       && messages[messages.length - 1].role === 'assistant'
@@ -1730,7 +1747,7 @@ export class FredTuiApp {
       const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
       if (existingMd && existingMd instanceof CodeRenderable) {
         const lastMsg = messages[messages.length - 1];
-        existingMd.content = lastMsg.content + buildStreamingCursorText();
+        existingMd.content = sanitizeForTerminalDisplay(lastMsg.content) + buildStreamingCursorText();
         return;
       }
 
@@ -1963,11 +1980,9 @@ export class FredTuiApp {
     if (!direction) return;
 
     const delta = event.scroll?.delta ?? 1;
-    // Let OpenTUI's ScrollBoxRenderable handle scroll with acceleration
     const scrollAmount = direction === 'up' ? -delta : delta;
-    this.transcriptContent.scrollBy(scrollAmount);
 
-    // Also update TUI state for scroll position tracking
+    // Update TUI state as the single source of truth for transcript scrolling.
     const lines = Math.max(1, Math.round(Math.abs(scrollAmount)));
     if (direction === 'up') {
       this.state = scrollTranscript(this.state, -lines);

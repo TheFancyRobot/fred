@@ -19,6 +19,107 @@ import type { TuiState, ToolBlockState } from './state.js';
 const INPUT_CURSOR_INDICATOR = '█';
 const INPUT_ACCENT_GLYPH = '▎';
 
+const SUMMARY_CHAR_LIMIT = 60;
+const DETAIL_CHAR_LIMIT = 200;
+const MAX_SERIALIZE_DEPTH = 4;
+const MAX_SERIALIZE_ITEMS = 20;
+const MAX_SERIALIZE_NODES = 120;
+
+/**
+ * Strip terminal control sequences before rendering untrusted content.
+ * Keeps newlines/tabs/carriage returns so layout remains readable.
+ */
+export function sanitizeForTerminalDisplay(text: string): string {
+  return text
+    // OSC (e.g. OSC52), DCS/PM/APC payloads, CSI, and simple ESC sequences.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x9b[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b[@-_]/g, '')
+    // Strip remaining C0/C1 controls except tab/newline/carriage-return.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+}
+
+function truncateText(text: string, maxChars: number): string {
+  return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
+function toBoundedSerializable(
+  value: unknown,
+  depth = 0,
+  seen = new WeakSet<object>(),
+  nodeState: { count: number } = { count: 0 },
+): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (typeof value === 'function') {
+    return '[Function]';
+  }
+
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+
+  if (nodeState.count >= MAX_SERIALIZE_NODES) {
+    return '[Truncated: node limit]';
+  }
+  nodeState.count += 1;
+
+  if (depth >= MAX_SERIALIZE_DEPTH) {
+    return '[Truncated: depth limit]';
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    const preview = value
+      .slice(0, MAX_SERIALIZE_ITEMS)
+      .map((entry) => toBoundedSerializable(entry, depth + 1, seen, nodeState));
+    if (value.length > MAX_SERIALIZE_ITEMS) {
+      preview.push(`[+${value.length - MAX_SERIALIZE_ITEMS} more]`);
+    }
+    return preview;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  const limited = entries.slice(0, MAX_SERIALIZE_ITEMS);
+  const output: Record<string, unknown> = {};
+  for (const [key, entryValue] of limited) {
+    output[key] = toBoundedSerializable(entryValue, depth + 1, seen, nodeState);
+  }
+  if (entries.length > MAX_SERIALIZE_ITEMS) {
+    output.__truncatedKeys = entries.length - MAX_SERIALIZE_ITEMS;
+  }
+  return output;
+}
+
+function stringifyOutputForDisplay(output: unknown, maxChars: number): string {
+  try {
+    const bounded = toBoundedSerializable(output);
+    const json = JSON.stringify(bounded, null, 2);
+    return truncateText(sanitizeForTerminalDisplay(json), maxChars);
+  } catch {
+    return '[output unavailable]';
+  }
+}
+
 interface StatusRenderOptions {
   maxWidth?: number;
   /** When true, badges render with dimmed colors (overlay/modal is open) */
@@ -204,7 +305,7 @@ function formatComposerLines(text: string, maxVisibleLines: number, cursorPositi
 
   for (let li = 0; li < logicalLines.length; li++) {
     const line = logicalLines[li];
-    const segments = wrapWidth > 0 ? wordWrapLine(line, wrapWidth) : [line];
+    const segments = wrapWidth > 0 ? wrapLine(line, wrapWidth) : [line];
     let colOffset = 0;
     for (let si = 0; si < segments.length; si++) {
       visualLines.push({
@@ -256,14 +357,9 @@ function formatComposerLines(text: string, maxVisibleLines: number, cursorPositi
 
   return visible.map((vl, index) => {
     const absoluteIndex = startIndex + index;
-    // First visual line overall gets the accent glyph; continuation lines get spaces
-    const prefix = absoluteIndex === 0 || (startIndex > 0 && index === 0 && vl.isFirstLogical)
+    const finalPrefix = absoluteIndex === 0 || (startIndex > 0 && index === 0 && vl.isFirstLogical)
       ? `${INPUT_ACCENT_GLYPH} `
       : '  ';
-    // Special case: if viewport scrolled and the topmost visible line is the very first
-    // logical line's first segment, show the accent glyph
-    const usePrefix = vl.isFirstLogical ? `${INPUT_ACCENT_GLYPH} ` : prefix;
-    const finalPrefix = vl.isFirstLogical ? `${INPUT_ACCENT_GLYPH} ` : '  ';
 
     if (visualCursorLine === null || absoluteIndex !== visualCursorLine) {
       return `${finalPrefix}${vl.text}`;
@@ -492,58 +588,6 @@ function wrapLine(line: string, maxWidth: number): string[] {
   return wrapped;
 }
 
-/**
- * Word-wrap a single line at word boundaries.
- * Falls back to character break when a word exceeds the width.
- * Returns an array of visual lines.
- */
-function wordWrapLine(line: string, maxWidth: number): string[] {
-  if (maxWidth <= 0 || line.length <= maxWidth) {
-    return [line];
-  }
-
-  const words = line.split(' ');
-  const wrapped: string[] = [];
-  let current = '';
-
-  for (const word of words) {
-    if (current.length === 0) {
-      // First word on line - must take it even if too long
-      if (word.length > maxWidth) {
-        // Character-break the oversized word
-        let remaining = word;
-        while (remaining.length > maxWidth) {
-          wrapped.push(remaining.slice(0, maxWidth));
-          remaining = remaining.slice(maxWidth);
-        }
-        current = remaining;
-      } else {
-        current = word;
-      }
-    } else if (current.length + 1 + word.length <= maxWidth) {
-      // Fits on current line with a space
-      current += ` ${word}`;
-    } else {
-      // Doesn't fit - flush current line and start new one
-      wrapped.push(current);
-      if (word.length > maxWidth) {
-        let remaining = word;
-        while (remaining.length > maxWidth) {
-          wrapped.push(remaining.slice(0, maxWidth));
-          remaining = remaining.slice(maxWidth);
-        }
-        current = remaining;
-      } else {
-        current = word;
-      }
-    }
-  }
-
-  // Flush last line (may be empty string for trailing space)
-  wrapped.push(current);
-  return wrapped;
-}
-
 export function renderTranscriptContent(
   state: TuiState,
   focused: boolean,
@@ -594,7 +638,8 @@ export function renderTranscriptContent(
 
   // Build line model with explicit wrapping so viewport math matches rendered content.
   const lines = messages.flatMap((msg) => {
-    const contentLines = msg.content.split('\n').flatMap((line) => {
+    const safeContent = sanitizeForTerminalDisplay(msg.content);
+    const contentLines = safeContent.split('\n').flatMap((line) => {
       if (typeof maxWidth === 'number' && maxWidth > 0) {
         return wrapLine(line, maxWidth);
       }
@@ -678,6 +723,7 @@ export function buildUserMessageRenderable(
   content: string,
   id: string,
 ): BoxRenderable {
+  const safeContent = sanitizeForTerminalDisplay(content);
   const container = new BoxRenderable(renderer, {
     id: `msg-user-${id}`,
     flexDirection: 'column',
@@ -694,7 +740,7 @@ export function buildUserMessageRenderable(
 
   const text = new TextRenderable(renderer, {
     id: `msg-user-text-${id}`,
-    content,
+    content: safeContent,
     fg: theme.fg.primary,
   });
   text.selectable = true;
@@ -713,6 +759,7 @@ export function buildAssistantMessageRenderable(
   id: string,
   options: { streaming: boolean; syntaxStyle: SyntaxStyle },
 ): BoxRenderable {
+  const safeContent = sanitizeForTerminalDisplay(content);
   const container = new BoxRenderable(renderer, {
     id: `msg-assistant-${id}`,
     flexDirection: 'column',
@@ -726,7 +773,7 @@ export function buildAssistantMessageRenderable(
 
   const md = new CodeRenderable(renderer, {
     id: `msg-assistant-md-${id}`,
-    content,
+    content: safeContent,
     filetype: 'markdown',
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
@@ -748,6 +795,7 @@ export function buildThinkingRenderable(
   content: string,
   id: string,
 ): BoxRenderable {
+  const safeContent = sanitizeForTerminalDisplay(content);
   const container = new BoxRenderable(renderer, {
     id: `msg-thinking-${id}`,
     flexDirection: 'column',
@@ -759,7 +807,7 @@ export function buildThinkingRenderable(
 
   const text = new TextRenderable(renderer, {
     id: `msg-thinking-text-${id}`,
-    content,
+    content: safeContent,
     fg: theme.message.thinkingFg,
     attributes: TextAttributes.DIM | TextAttributes.ITALIC,
   });
@@ -792,8 +840,9 @@ export function getToolBlockSummary(output: unknown): string {
   }
 
   if (typeof output === 'string') {
-    if (output.length === 0) return 'done';
-    return output.length <= 60 ? output : `${output.slice(0, 57)}...`;
+    const safe = sanitizeForTerminalDisplay(output);
+    if (safe.length === 0) return 'done';
+    return truncateText(safe, SUMMARY_CHAR_LIMIT);
   }
 
   if (Array.isArray(output)) {
@@ -804,14 +853,11 @@ export function getToolBlockSummary(output: unknown): string {
     const obj = output as Record<string, unknown>;
     if (typeof obj.length === 'number') return `${obj.length} items`;
     if (typeof obj.count === 'number') return `${obj.count} items`;
+    const keyCount = Object.keys(obj).length;
+    return keyCount === 0 ? 'object' : `${keyCount} field${keyCount === 1 ? '' : 's'}`;
   }
 
-  try {
-    const str = JSON.stringify(output);
-    return str.length <= 60 ? str : `${str.slice(0, 57)}...`;
-  } catch {
-    return '[object]';
-  }
+  return truncateText(sanitizeForTerminalDisplay(String(output)), SUMMARY_CHAR_LIMIT);
 }
 
 /**
@@ -941,14 +987,10 @@ export function buildToolBlockRenderable(
 function formatExpandedOutput(output: unknown): string {
   if (output === undefined || output === null) return '';
   if (typeof output === 'string') {
-    return output.length <= 200 ? output : `${output.slice(0, 197)}...`;
+    return truncateText(sanitizeForTerminalDisplay(output), DETAIL_CHAR_LIMIT);
   }
-  try {
-    const str = JSON.stringify(output, null, 2);
-    return str.length <= 200 ? str : `${str.slice(0, 197)}...`;
-  } catch {
-    return '[output unavailable]';
-  }
+
+  return stringifyOutputForDisplay(output, DETAIL_CHAR_LIMIT);
 }
 
 /**

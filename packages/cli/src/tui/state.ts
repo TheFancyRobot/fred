@@ -2005,10 +2005,24 @@ export function addToolCall(
 
   if (existingGroupIndex >= 0) {
     const existing = groups[existingGroupIndex];
-    groups[existingGroupIndex] = {
-      ...existing,
-      blocks: [...existing.blocks, block],
-    };
+    const existingBlockIndex = existing.blocks.findIndex((entry) => entry.toolCallId === event.toolCallId);
+
+    if (existingBlockIndex >= 0) {
+      const nextBlocks = [...existing.blocks];
+      nextBlocks[existingBlockIndex] = {
+        ...nextBlocks[existingBlockIndex],
+        ...block,
+      };
+      groups[existingGroupIndex] = {
+        ...existing,
+        blocks: nextBlocks,
+      };
+    } else {
+      groups[existingGroupIndex] = {
+        ...existing,
+        blocks: [...existing.blocks, block],
+      };
+    }
   } else {
     groups.push({
       messageId: event.messageId,
@@ -2042,6 +2056,7 @@ export function completeToolCall(
 ): TuiState {
   const hasError = !!event.error;
   const status: ToolBlockStatus = hasError ? 'errored' : 'completed';
+  const expandOverride = state.toolBlocks.expandOverrides[event.toolCallId];
 
   return updateToolBlock(state, event.toolCallId, (block) => ({
     ...block,
@@ -2050,7 +2065,7 @@ export function completeToolCall(
     error: event.error,
     completedAt: event.completedAt,
     durationMs: event.durationMs,
-    expanded: hasError, // smart collapse: errored stays expanded, completed collapses
+    expanded: expandOverride ?? hasError,
   }));
 }
 
@@ -2066,13 +2081,15 @@ export function failToolCall(
     durationMs: number;
   },
 ): TuiState {
+  const expandOverride = state.toolBlocks.expandOverrides[event.toolCallId];
+
   return updateToolBlock(state, event.toolCallId, (block) => ({
     ...block,
     status: 'errored',
     error: event.error,
     completedAt: event.completedAt,
     durationMs: event.durationMs,
-    expanded: true,
+    expanded: expandOverride ?? true,
   }));
 }
 
@@ -2080,9 +2097,33 @@ export function failToolCall(
  * Toggle the expanded state of a specific tool block.
  */
 export function toggleToolBlockExpand(state: TuiState, toolCallId: string): TuiState {
-  return updateToolBlock(state, toolCallId, (block) => ({
+  let nextExpanded: boolean | null = null;
+  for (const group of state.toolBlocks.groups) {
+    const block = group.blocks.find((entry) => entry.toolCallId === toolCallId);
+    if (block) {
+      nextExpanded = !block.expanded;
+      break;
+    }
+  }
+
+  if (nextExpanded === null) {
+    return state;
+  }
+
+  const withOverride = {
+    ...state,
+    toolBlocks: {
+      ...state.toolBlocks,
+      expandOverrides: {
+        ...state.toolBlocks.expandOverrides,
+        [toolCallId]: nextExpanded,
+      },
+    },
+  };
+
+  return updateToolBlock(withOverride, toolCallId, (block) => ({
     ...block,
-    expanded: !block.expanded,
+    expanded: nextExpanded,
   }));
 }
 

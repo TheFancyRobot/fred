@@ -316,6 +316,19 @@ describe('TUI Layout', () => {
       expect(content.lines[1]).toMatch(/^  /);
     });
 
+    test('preserves significant whitespace when wrapping input', () => {
+      const state = createInitialTuiState();
+      state.input.text = 'a  b';
+      state.input.cursorPosition = 0;
+
+      const content = renderInputContent(state, true, 'Type a message...', true, 5);
+
+      // width 5 => content area 3, so this wraps to "a  " + "b".
+      expect(content.lines).toHaveLength(2);
+      expect(content.lines[0]).toBe('▎ █a  ');
+      expect(content.lines[1]).toBe('  b');
+    });
+
     test('cursor appears on correct wrapped line', () => {
       const state = createInitialTuiState();
       // availableWidth 20 => wrap at 18 content chars

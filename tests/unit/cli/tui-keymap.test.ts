@@ -590,6 +590,22 @@ describe('TUI Keymap', () => {
       const nextState = applyKeyAction(state, nextAction);
       expect(nextState.focusedPane).toBe('transcript');
     });
+
+    test('uppercase S toggles sidebar sessions section', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const action = mapKeyToAction(makeKey({ name: 's', shift: true, sequence: 'S' }), state);
+      expect(action.type).toBe('toggle-sessions-section');
+    });
+
+    test('uppercase M toggles sidebar metadata section', () => {
+      const state = createInitialTuiState();
+      state.focusedPane = 'sidebar';
+
+      const action = mapKeyToAction(makeKey({ name: 'm', shift: true, sequence: 'M' }), state);
+      expect(action.type).toBe('toggle-metadata-section');
+    });
   });
 
   describe('Command palette controls', () => {

@@ -296,10 +296,10 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     if (printableChar === '?') {
       return { type: 'toggle-help' };
     }
-    if (printableChar === 's') {
+    if (printableChar?.toLowerCase() === 's') {
       return { type: 'toggle-sessions-section' };
     }
-    if (printableChar === 'm') {
+    if (printableChar?.toLowerCase() === 'm') {
       return { type: 'toggle-metadata-section' };
     }
     if (name === 'delete' || name === 'backspace') {

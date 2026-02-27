@@ -172,6 +172,47 @@ describe('TUI streaming controller', () => {
     expect(metrics.endedAtMs).not.toBeNull();
   });
 
+  test('stop() flushes pending buffered tokens before halting', () => {
+    const batches: StreamingBatch[] = [];
+    const controller = createStreamingController({
+      frameMs: 100,
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('hello');
+    controller.pushToken(' world');
+    controller.stop();
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.text).toBe('hello world');
+  });
+
+  test('finish() still cleans up when finish callback throws', () => {
+    const controller = createStreamingController({
+      callbacks: {
+        onFinish: () => {
+          throw new Error('finish hook failed');
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('a');
+
+    expect(() => controller.finish()).toThrow('finish hook failed');
+
+    const tokensAfterFinish = controller.getMetricsSnapshot().tokensProcessed;
+    controller.pushToken('b');
+    expect(controller.getMetricsSnapshot().tokensProcessed).toBe(tokensAfterFinish);
+  });
+
   test('finish() flushes pending text synchronously', () => {
     const batches: StreamingBatch[] = [];
     let finishCalled = false;

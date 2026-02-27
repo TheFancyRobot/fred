@@ -257,9 +257,20 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     // and only flush text that is safe (no partial opening tags).
                     let tokenBuffer = '';
                     const MAX_TOKEN_BUFFER_CHARS = 8_192;
+                    const MAX_XML_FILTER_PASSES = 8;
                     const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
 
-                    const filterXmlTags = (text: string): string => text.replace(xmlTagPattern, '');
+                    const filterXmlTags = (text: string): string => {
+                      let filtered = text;
+                      let previous = '';
+                      let passes = 0;
+                      while (filtered !== previous && passes < MAX_XML_FILTER_PASSES) {
+                        previous = filtered;
+                        filtered = filtered.replace(xmlTagPattern, '');
+                        passes += 1;
+                      }
+                      return filtered;
+                    };
 
                     for await (const event of streamResult.fullStream) {
                       if (event.type === 'token' && event.delta) {

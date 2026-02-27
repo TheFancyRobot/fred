@@ -121,7 +121,7 @@ export function getStreamingMarkdownSyntaxTheme(theme: TuiTheme): ThemeTokenStyl
     { scope: ['markup.heading', 'markup.heading.1', 'markup.heading.2', 'markup.heading.3'], style: { foreground: theme.accent.primary, bold: true } },
     { scope: ['markup.bold', 'markup.strong'], style: { foreground: theme.fg.primary, bold: true } },
     { scope: ['markup.italic'], style: { foreground: theme.fg.secondary, italic: true } },
-    { scope: ['markup.raw'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
+    { scope: ['markup.raw', 'markup.raw.inline'], style: { foreground: theme.fg.secondary, background: theme.message.codeBg } },
     { scope: ['markup.list'], style: { foreground: theme.fg.dim } },
     { scope: ['punctuation'], style: { foreground: theme.fg.dim } },
     { scope: ['punctuation.special'], style: { foreground: theme.fg.dim } },

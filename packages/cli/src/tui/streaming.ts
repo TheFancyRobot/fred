@@ -129,6 +129,7 @@ export function createStreamingController(options: StreamingControllerOptions = 
       return;
     }
 
+    flushPending();
     running = false;
     endedAtMs = now();
 
@@ -161,14 +162,17 @@ export function createStreamingController(options: StreamingControllerOptions = 
 
     flushPending();
     endedAtMs = now();
-    callbacks.onFinish?.(getMetricsSnapshot());
 
-    running = false;
-    if (intervalId !== null) {
-      clearInterval(intervalId);
-      intervalId = null;
+    try {
+      callbacks.onFinish?.(getMetricsSnapshot());
+    } finally {
+      running = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      emitMetrics();
     }
-    emitMetrics();
   };
 
   const fail = (error: unknown): void => {
@@ -180,14 +184,17 @@ export function createStreamingController(options: StreamingControllerOptions = 
     flushPending();
     lastError = normalized.message;
     endedAtMs = now();
-    callbacks.onError?.(normalized, getMetricsSnapshot());
 
-    running = false;
-    if (intervalId !== null) {
-      clearInterval(intervalId);
-      intervalId = null;
+    try {
+      callbacks.onError?.(normalized, getMetricsSnapshot());
+    } finally {
+      running = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      emitMetrics();
     }
-    emitMetrics();
   };
 
   return {

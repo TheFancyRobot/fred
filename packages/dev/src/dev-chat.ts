@@ -16,8 +16,11 @@ type FredCliLaunchTarget = {
   args: string[];
 };
 
-function terminate(code: number): never {
-  process.exit(code);
+function terminate(code: number): void {
+  process.exitCode = code;
+  process.nextTick(() => {
+    process.exit();
+  });
 }
 
 export function resolveFredCliLaunchTarget(cwd = process.cwd()): FredCliLaunchTarget | null {
@@ -72,12 +75,12 @@ function maybeLaunchFredCliTui(): boolean {
   });
 
   child.on('exit', (code) => {
-    process.exit(code ?? 0);
+    terminate(code ?? 0);
   });
 
   child.on('error', (error) => {
     console.error('Failed to launch fred chat:', error);
-    process.exit(1);
+    terminate(1);
   });
 
   return true;
@@ -426,6 +429,7 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     console.log('\nExiting. Please install the package manually and try again:');
     console.log(`   bun add ${packageName}\n`);
     terminate(0);
+    return false;
   }
 
   // User wants to install - install the package
@@ -450,7 +454,7 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     // This prevents the parent from continuing execution
     await new Promise<never>((_, reject) => {
       child.on('exit', (code) => {
-        terminate(code || 0);
+        terminate(code ?? 0);
       });
       child.on('error', (err) => {
         reject(err);
@@ -460,7 +464,10 @@ async function ensureProviderPackageInstalled(): Promise<boolean> {
     console.error(`\n   Installation failed. Please try installing manually:`);
     console.error(`   bun add ${packageName}\n`);
     terminate(1);
+    return false;
   }
+
+  return false;
 }
 
 /**

@@ -140,7 +140,7 @@ export function buildReplayToolMocks(artifact: EvaluationArtifact): ReplayToolMo
     toolExecutors.set(toolId, async (args: unknown) => {
       const call = queue.calls[queue.index];
       if (!call) {
-        throw new MissingToolMockResponseError(toolId, queue.index);
+        throw new MissingToolMockResponseError(toolId, queue.index + 1);
       }
 
       if (call.args !== undefined) {

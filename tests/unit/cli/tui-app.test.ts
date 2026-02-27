@@ -804,6 +804,44 @@ describe('TUI App (OpenTUI integration)', () => {
       expect(app.getState().streaming.isStreaming).toBe(true);
     });
 
+    test('queue keeps draining when first queued item is a non-streaming slash command', async () => {
+      let submittedTexts: string[] = [];
+      await createTestApp({
+        onSubmit: (text) => { submittedTexts.push(text); },
+      });
+
+      // Start initial stream
+      app.processKey(makeKey({ name: 'f' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'r' }));
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 't' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      // Queue /sidebar (does not start stream) and then a normal message.
+      for (const ch of '/sidebar') {
+        app.processKey(makeKey({ name: ch, sequence: ch }));
+      }
+      app.processKey(makeKey({ name: 'enter' }));
+
+      app.processKey(makeKey({ name: 's' }));
+      app.processKey(makeKey({ name: 'e' }));
+      app.processKey(makeKey({ name: 'c' }));
+      app.processKey(makeKey({ name: 'o' }));
+      app.processKey(makeKey({ name: 'n' }));
+      app.processKey(makeKey({ name: 'd' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().input.pendingSubmissions).toHaveLength(2);
+
+      app.completeAssistantStream();
+
+      await waitFor(() => submittedTexts.length === 2);
+      expect(submittedTexts).toEqual(['first', 'second']);
+      expect(app.getState().input.pendingSubmissions).toHaveLength(0);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+    });
+
     test('queued submissions drain in FIFO order', async () => {
       let submittedTexts: string[] = [];
       await createTestApp({
