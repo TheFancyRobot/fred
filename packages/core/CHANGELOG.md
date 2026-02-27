@@ -1,5 +1,11 @@
 # @fred/core
 
+## 0.2.2
+
+### Patch Changes
+
+- Release `@fancyrobot/fred` as `0.2.2` for the v0.2.2 milestone cut from PR #33.
+
 ## 0.2.1
 
 ### Patch Changes
