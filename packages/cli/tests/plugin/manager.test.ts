@@ -16,7 +16,7 @@ function makePlugin(id: string, compatibility?: Partial<FredCliPlugin['manifest'
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0',
+        requiresFredCli: '^0.2.0 || ^0.3.0',
         ...compatibility,
       },
     },
@@ -74,6 +74,23 @@ describe('loadPluginsFromConfig', () => {
     });
 
     expect(loadedPaths).toEqual([localPluginPath]);
+  });
+
+  test('accepts plugins widened for 0.3.x compatibility ranges', () => {
+    const { configPath } = makeConfigFixture();
+
+    const result = loadPluginsFromConfig(['@scope/dual-range'], configPath, {
+      fredCliVersion: '0.3.0',
+      resolveModule: () => '/virtual/dual-range/index.ts',
+      loadModule: () => ({
+        default: makePlugin('@scope/dual-range', {
+          requiresFredCli: '^0.2.0 || ^0.3.0',
+        }),
+      }),
+    });
+
+    expect(result.plugins).toHaveLength(1);
+    expect(result.plugins[0]?.pluginId).toBe('@scope/dual-range');
   });
 
   test('reports invalid semver range as plugin validation issue', () => {
