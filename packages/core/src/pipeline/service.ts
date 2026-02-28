@@ -1021,7 +1021,7 @@ class PipelineServiceImpl implements PipelineService {
       return yield* Effect.fail(new PipelineExecutionError({
         pipelineId: id,
         step: 0,
-        cause: new Error('Graph execution not yet migrated to Effect fibers')
+        cause: new Error('Graph execution path requires Effect fiber implementation')
       }));
     });
   }
