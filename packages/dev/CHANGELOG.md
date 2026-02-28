@@ -1,5 +1,11 @@
 # @fred/dev
 
+## 0.1.5
+
+### Patch Changes
+
+- [#39](https://github.com/TheFancyRobot/fred/pull/39) [`8033cce`](https://github.com/TheFancyRobot/fred/commit/8033cce497ea6c053554416e4f4073e1b0f13fe6) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship accumulated dev tooling improvements used during local development.
+
 ## 0.1.4
 
 ### Patch Changes

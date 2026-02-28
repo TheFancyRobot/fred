@@ -90,7 +90,7 @@
     },
     "packages/dev": {
       "name": "@fancyrobot/fred-dev",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "dependencies": {
         "@fancyrobot/fred": "workspace:^",
         "chokidar": "^5.0.0",
