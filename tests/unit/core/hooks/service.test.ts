@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect } from 'effect';
-import { HookManagerService, HookManagerServiceLive } from '../../../../packages/core/src/hooks/service';
+import { HookExecutionError, HookManagerService, HookManagerServiceLive } from '../../../../packages/core/src/hooks/service';
 import type { HookType, HookEvent } from '../../../../packages/core/src/hooks/types';
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, HookManagerService>) =>
@@ -91,6 +91,28 @@ describe('HookManagerService', () => {
       expect(result[0].data).toBe('first');
       expect(result[1].data).toBe('third');
     });
+
+    test('does not surface HookExecutionError for per-handler failures', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* HookManagerService;
+          yield* service.registerHook('beforeStep', async () => ({ data: 'kept' }));
+          yield* service.registerHook('beforeStep', async () => {
+            throw new Error('boom');
+          });
+
+          const event: HookEvent = {
+            type: 'beforeStep',
+            data: { stepIndex: 1, pipelineId: 'test' },
+          };
+
+          return yield* service.executeHooks('beforeStep', event);
+        })
+      );
+
+      expect(result).toEqual([{ data: 'kept' }]);
+      expect(result.some((value) => value instanceof HookExecutionError)).toBe(false);
+    });
   });
 
   describe('executeHooksAndMerge', () => {
@@ -160,6 +182,28 @@ describe('HookManagerService', () => {
         })
       );
       expect(result.metadata).toEqual({ x: 1, y: 2 });
+    });
+
+    test('continues merge flow when an intermediate handler throws', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* HookManagerService;
+          yield* service.registerHook('beforeStep', async () => ({ context: { a: 1 } }));
+          yield* service.registerHook('beforeStep', async () => {
+            throw new Error('handler-failure');
+          });
+          yield* service.registerHook('beforeStep', async () => ({ context: { b: 2 }, metadata: { m: true } }));
+
+          const event: HookEvent = {
+            type: 'beforeStep',
+            data: { stepIndex: 0, pipelineId: 'test' },
+          };
+          return yield* service.executeHooksAndMerge('beforeStep', event);
+        })
+      );
+
+      expect(result.context).toEqual({ a: 1, b: 2 });
+      expect(result.metadata).toEqual({ m: true });
     });
   });
 
@@ -251,7 +295,8 @@ describe('HookManagerService', () => {
           return yield* service.getRegisteredHookTypes();
         })
       );
-      expect(result.sort()).toEqual(['afterStep', 'beforeStep'].sort());
+      const expected: HookType[] = ['afterStep', 'beforeStep'];
+      expect(result.sort()).toEqual(expected.sort());
     });
   });
 

@@ -50,13 +50,19 @@ describe('ContextStorageService', () => {
     });
 
     test('fails with ContextNotFoundError in strict mode', async () => {
-      const result = await Effect.runPromiseExit(
+      const error = await Effect.runPromise(
         Effect.gen(function* () {
           const service = yield* ContextStorageService;
           return yield* service.getContext('nonexistent', { strict: true });
-        }).pipe(Effect.provide(ContextStorageServiceLive))
+        }).pipe(
+          Effect.provide(ContextStorageServiceLive),
+          Effect.flip
+        )
       );
-      expect(result._tag).toBe('Failure');
+
+      expect(error).toBeInstanceOf(ContextNotFoundError);
+      expect(error._tag).toBe('ContextNotFoundError');
+      expect(error.conversationId).toBe('nonexistent');
     });
   });
 
@@ -120,6 +126,17 @@ describe('ContextStorageService', () => {
       );
       expect(result).toBeNull();
     });
+
+    test('is a no-op when context does not exist', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ContextStorageService;
+          yield* service.clearContext('missing-id');
+          return yield* service.getContextById('missing-id');
+        })
+      );
+      expect(result).toBeNull();
+    });
   });
 
   describe('resetContext', () => {
@@ -142,6 +159,29 @@ describe('ContextStorageService', () => {
         })
       );
       expect(result).toBe(false);
+    });
+  });
+
+  describe('setContextPolicy', () => {
+    test('applies and preserves policy caps deterministically across repeated updates', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ContextStorageService;
+          yield* service.getContext('policy-id');
+
+          yield* service.setContextPolicy('policy-id', { maxMessages: 2, maxChars: 4 });
+          yield* service.setContextPolicy('policy-id', { maxMessages: 2, maxChars: 4 });
+
+          yield* service.addMessage('policy-id', { role: 'user', content: 'ab' });
+          yield* service.addMessage('policy-id', { role: 'assistant', content: 'cd' });
+          yield* service.addMessage('policy-id', { role: 'user', content: 'ef' });
+
+          return yield* service.getHistory('policy-id');
+        })
+      );
+
+      expect(result.length).toBe(2);
+      expect(result.map((message) => message.content)).toEqual(['cd', 'ef']);
     });
   });
 });
