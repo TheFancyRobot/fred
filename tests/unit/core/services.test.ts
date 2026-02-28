@@ -267,3 +267,217 @@ describe('Leaf routing composition', () => {
     expect(result).toBe('none');
   });
 });
+
+/**
+ * Phase 42 Integration Tests
+ *
+ * These tests verify that standalone PipelineService and MessageProcessorService
+ * integrate correctly in the composed Effect layer environment without
+ * imperative delegation seams.
+ */
+describe('Phase 42 Standalone Service Integration', () => {
+  describe('PipelineService standalone behavior', () => {
+    test('provides executePipelineV2 method in composed layers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          // Verify method exists and returns an Effect
+          const effect = service.executePipelineV2('non-existent', 'test');
+          // executePipelineV2 should return an Effect that fails for non-existent pipeline
+          const result = yield* Effect.either(effect);
+          return result;
+        }).pipe(Effect.provide(FredLayers))
+      );
+
+      // Should fail with PipelineExecutionError for non-existent pipeline
+      expect(result._tag).toBe('Left');
+    });
+
+    test('provides resume method in composed layers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          // Verify method exists and returns an Effect
+          const effect = service.resume('non-existent-run-id');
+          // resume should return an Effect that fails for non-existent run
+          const result = yield* Effect.either(effect);
+          return result;
+        }).pipe(Effect.provide(FredLayers))
+      );
+
+      // Should fail with ResumeCheckpointNotFoundError for non-existent run
+      expect(result._tag).toBe('Left');
+    });
+
+    test('provides resumeWithHumanInput method in composed layers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          // Verify method exists and returns an Effect
+          const effect = service.resumeWithHumanInput('non-existent-run-id', {
+            humanInput: 'test input',
+          });
+          // resumeWithHumanInput should return an Effect that fails for non-existent run
+          const result = yield* Effect.either(effect);
+          return result;
+        }).pipe(Effect.provide(FredLayers))
+      );
+
+      // Should fail with ResumeCheckpointNotFoundError for non-existent run
+      expect(result._tag).toBe('Left');
+    });
+
+    test('V2 pipeline methods are available without manager delegation', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Verify all V2 methods exist and are functions
+          return {
+            hasCreatePipelineV2: typeof service.createPipelineV2 === 'function',
+            hasGetPipelineV2: typeof service.getPipelineV2 === 'function',
+            hasHasPipelineV2: typeof service.hasPipelineV2 === 'function',
+            hasGetAllPipelinesV2: typeof service.getAllPipelinesV2 === 'function',
+            hasExecutePipelineV2: typeof service.executePipelineV2 === 'function',
+          };
+        }).pipe(Effect.provide(FredLayers))
+      );
+
+      expect(result.hasCreatePipelineV2).toBe(true);
+      expect(result.hasGetPipelineV2).toBe(true);
+      expect(result.hasHasPipelineV2).toBe(true);
+      expect(result.hasGetAllPipelinesV2).toBe(true);
+      expect(result.hasExecutePipelineV2).toBe(true);
+    });
+
+    test('resume methods are available without manager delegation', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Verify resume methods exist and are functions
+          return {
+            hasResume: typeof service.resume === 'function',
+            hasResumeWithHumanInput: typeof service.resumeWithHumanInput === 'function',
+          };
+        }).pipe(Effect.provide(FredLayers))
+      );
+
+      expect(result.hasResume).toBe(true);
+      expect(result.hasResumeWithHumanInput).toBe(true);
+    });
+  });
+
+  describe('MessageProcessorService standalone behavior', () => {
+    test('provides processMessage method in composed layers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* MessageProcessorService;
+          // Verify method exists and returns an Effect
+          const effect = service.processMessage('test message');
+          const result = yield* Effect.either(effect);
+          return result;
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      // Should succeed or fail gracefully (not throw)
+      expect(['Left', 'Right']).toContain(result._tag);
+    });
+
+    test('provides streamMessage method in composed layers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* MessageProcessorService;
+          // Verify method exists and returns a Stream
+          const stream = service.streamMessage('test message');
+          // Stream should be a valid Stream object
+          return typeof stream !== 'undefined';
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      expect(result).toBe(true);
+    });
+
+    test('provides routeMessage method without manager delegation', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* MessageProcessorService;
+          // Verify method exists
+          const effect = service.routeMessage('test message');
+          const route = yield* effect;
+          return route;
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      // Should return a valid RouteResult
+      expect(['agent', 'pipeline', 'intent', 'none']).toContain(result.type);
+    });
+
+    test('MessageProcessorService methods are available without manager delegation', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* MessageProcessorService;
+
+          // Verify all key methods exist and are functions
+          return {
+            hasProcessMessage: typeof service.processMessage === 'function',
+            hasStreamMessage: typeof service.streamMessage === 'function',
+            hasRouteMessage: typeof service.routeMessage === 'function',
+            hasGetConfig: typeof service.getConfig === 'function',
+          };
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      expect(result.hasProcessMessage).toBe(true);
+      expect(result.hasStreamMessage).toBe(true);
+      expect(result.hasRouteMessage).toBe(true);
+      expect(result.hasGetConfig).toBe(true);
+    });
+  });
+
+  describe('Service composition compatibility', () => {
+    test('PipelineService and MessageProcessorService work together in FredLayers', async () => {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const pipelineService = yield* PipelineService;
+          const processorService = yield* MessageProcessorService;
+
+          // Both services should be accessible in the same context
+          const pipelines = yield* pipelineService.getAllPipelines();
+          const config = yield* processorService.getConfig();
+
+          return {
+            pipelineCount: pipelines.length,
+            hasConfig: config !== undefined,
+          };
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      expect(result.pipelineCount).toBe(0);
+      expect(result.hasConfig).toBe(true);
+    });
+
+    test('standalone services do not require imperative Fred class', async () => {
+      // This test verifies that services work without the Fred class wrapper
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const pipelineService = yield* PipelineService;
+          const processorService = yield* MessageProcessorService;
+
+          // Direct service access without Fred class
+          const hasV2Pipeline = yield* pipelineService.hasPipelineV2('test');
+          const routeResult = yield* processorService.routeMessage('test');
+
+          return {
+            hasV2Pipeline,
+            routeType: routeResult.type,
+          };
+        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      );
+
+      // Services work independently
+      expect(result.hasV2Pipeline).toBe(false);
+      expect(['agent', 'pipeline', 'intent', 'none']).toContain(result.routeType);
+    });
+  });
+});
