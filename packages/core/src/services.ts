@@ -79,6 +79,20 @@ class InMemoryCheckpointStorage implements CheckpointStorage {
     );
   }
 
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    let latest: Checkpoint | null = null;
+    for (const checkpoints of this.checkpoints.values()) {
+      for (const cp of checkpoints) {
+        if (cp.pipelineId === pipelineId) {
+          if (!latest || cp.updatedAt > latest.updatedAt) {
+            latest = cp;
+          }
+        }
+      }
+    }
+    return latest;
+  }
+
   async updateStatus(runId: string, step: number, status: CheckpointStatus): Promise<void> {
     const checkpoints = this.checkpoints.get(runId);
     if (checkpoints) {
@@ -195,6 +209,9 @@ const CheckpointServiceLive = Layer.effect(
       deleteRun: (runId) => Effect.promise(() => inMemoryStorage.deleteRun(runId)),
 
       deleteExpired: () => Effect.promise(() => inMemoryStorage.deleteExpired()),
+
+      getLatestByPipelineId: (pipelineId) =>
+        Effect.promise(() => inMemoryStorage.getLatestByPipelineId(pipelineId)),
 
       getStorage: () => Effect.succeed(inMemoryStorage),
     };
