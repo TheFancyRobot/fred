@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect, Layer } from 'effect';
 import { ContextStorageService, ContextStorageServiceLive } from '../../../../packages/core/src/context/service';
-import { ContextNotFoundError } from '../../../../packages/core/src/context/errors';
+import { ContextNotFoundError, ContextStorageError } from '../../../../packages/core/src/context/errors';
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, ContextStorageService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(ContextStorageServiceLive)));
@@ -63,6 +63,7 @@ describe('ContextStorageService', () => {
       expect(error).toBeInstanceOf(ContextNotFoundError);
       expect(error._tag).toBe('ContextNotFoundError');
       expect(error.conversationId).toBe('nonexistent');
+      expect(error.message).toContain('Context not found for conversation: nonexistent');
     });
   });
 
@@ -92,6 +93,22 @@ describe('ContextStorageService', () => {
       );
       expect(result.length).toBe(1);
       expect(result[0].role).toBe('user');
+    });
+
+    test('returns typed ContextStorageError when strict policy blocks implicit context creation', async () => {
+      const error = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ContextStorageService;
+          yield* service.setDefaultPolicy({ strict: true });
+          yield* service.addMessage('missing-id', { role: 'user', content: 'hello' });
+        }).pipe(Effect.flip)
+      );
+
+      expect(error).toBeInstanceOf(ContextStorageError);
+      expect(error._tag).toBe('ContextStorageError');
+      expect(error.operation).toBe('addMessage');
+      expect(error.message).toBe('Failed to add message to context');
+      expect(error.cause).toBeInstanceOf(ContextNotFoundError);
     });
   });
 
@@ -182,6 +199,22 @@ describe('ContextStorageService', () => {
 
       expect(result.length).toBe(2);
       expect(result.map((message) => message.content)).toEqual(['cd', 'ef']);
+    });
+
+    test('returns typed ContextStorageError when strict policy update targets missing context', async () => {
+      const error = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ContextStorageService;
+          yield* service.setDefaultPolicy({ strict: true });
+          yield* service.setContextPolicy('missing-context', { maxMessages: 5 });
+        }).pipe(Effect.flip)
+      );
+
+      expect(error).toBeInstanceOf(ContextStorageError);
+      expect(error._tag).toBe('ContextStorageError');
+      expect(error.operation).toBe('setContextPolicy');
+      expect(error.message).toBe('Failed to update context policy');
+      expect(error.cause).toBeInstanceOf(ContextNotFoundError);
     });
   });
 });

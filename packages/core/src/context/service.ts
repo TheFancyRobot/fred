@@ -163,7 +163,10 @@ class ContextStorageServiceImpl implements ContextStorageService {
       }
 
       if (strict && conversationId) {
-        return yield* Effect.fail(new ContextNotFoundError({ conversationId }));
+        return yield* Effect.fail(new ContextNotFoundError({
+          conversationId,
+          message: `Context not found for conversation: ${conversationId}`,
+        }));
       }
 
       const metadata = yield* Ref.get(self.defaultMetadata);
@@ -204,10 +207,7 @@ class ContextStorageServiceImpl implements ContextStorageService {
       context.metadata.updatedAt = new Date();
       yield* self.storage.set(conversationId, context);
     }).pipe(
-      Effect.mapError((e) => new ContextStorageError({
-        operation: 'addMessage',
-        cause: e,
-      }))
+      Effect.mapError((cause) => self.toStorageError('addMessage', cause))
     );
   }
 
@@ -226,10 +226,7 @@ class ContextStorageServiceImpl implements ContextStorageService {
       context.metadata.updatedAt = new Date();
       yield* self.storage.set(conversationId, context);
     }).pipe(
-      Effect.mapError((e) => new ContextStorageError({
-        operation: 'addMessages',
-        cause: e,
-      }))
+      Effect.mapError((cause) => self.toStorageError('addMessages', cause))
     );
   }
 
@@ -255,10 +252,7 @@ class ContextStorageServiceImpl implements ContextStorageService {
       };
       yield* self.storage.set(conversationId, context);
     }).pipe(
-      Effect.mapError((e) => new ContextStorageError({
-        operation: 'updateMetadata',
-        cause: e,
-      }))
+      Effect.mapError((cause) => self.toStorageError('updateMetadata', cause))
     );
   }
 
@@ -301,11 +295,31 @@ class ContextStorageServiceImpl implements ContextStorageService {
       self.applyCaps(context);
       yield* self.storage.set(conversationId, context);
     }).pipe(
-      Effect.mapError((e) => new ContextStorageError({
-        operation: 'setContextPolicy',
-        cause: e,
-      }))
+      Effect.mapError((cause) => self.toStorageError('setContextPolicy', cause))
     );
+  }
+
+  private toStorageError(operation: string, cause: unknown): ContextStorageError {
+    return new ContextStorageError({
+      operation,
+      message: this.storageErrorMessage(operation),
+      cause,
+    });
+  }
+
+  private storageErrorMessage(operation: string): string {
+    switch (operation) {
+      case 'addMessage':
+        return 'Failed to add message to context';
+      case 'addMessages':
+        return 'Failed to add messages to context';
+      case 'updateMetadata':
+        return 'Failed to update context metadata';
+      case 'setContextPolicy':
+        return 'Failed to update context policy';
+      default:
+        return 'Context storage operation failed';
+    }
   }
 
   private applyCaps(context: ConversationContext): void {

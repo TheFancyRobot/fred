@@ -5,6 +5,7 @@ import { Data } from 'effect';
  */
 export class ContextNotFoundError extends Data.TaggedError("ContextNotFoundError")<{
   readonly conversationId: string;
+  readonly message: string;
 }> {}
 
 /**
@@ -12,6 +13,7 @@ export class ContextNotFoundError extends Data.TaggedError("ContextNotFoundError
  */
 export class ContextStorageError extends Data.TaggedError("ContextStorageError")<{
   readonly operation: string;
+  readonly message: string;
   readonly cause: unknown;
 }> {}
 
