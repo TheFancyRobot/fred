@@ -54,7 +54,7 @@ const MATCH_TYPE_SCORES: Record<MatchType, number> = {
 
 type RouteMatchWithOrder = RouteMatch & { order: number };
 
-class MessageRouterServiceImpl implements MessageRouterService {
+class StandaloneRoutingServiceImpl implements MessageRouterService {
   constructor(private readonly config: RoutingConfig) {}
 
   route(
@@ -402,7 +402,7 @@ export const MessageRouterServiceLive = Layer.effect(
   MessageRouterService,
   Effect.gen(function* () {
     const config = yield* MessageRouterConfig;
-    return new MessageRouterServiceImpl(config);
+    return new StandaloneRoutingServiceImpl(config);
   })
 );
 
