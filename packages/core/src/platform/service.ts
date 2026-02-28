@@ -24,7 +24,7 @@ export interface ProviderRegistryService {
   /**
    * Register a pre-built provider definition directly
    */
-  registerDefinition(definition: ProviderDefinition): Effect.Effect<void>;
+  registerDefinition(definition: ProviderDefinition): Effect.Effect<void, ProviderRegistrationError>;
 
   /**
    * Get a model from a registered provider
@@ -114,13 +114,40 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
     });
   }
 
-  registerDefinition(definition: ProviderDefinition): Effect.Effect<void> {
+  registerDefinition(definition: ProviderDefinition): Effect.Effect<void, ProviderRegistrationError> {
     const self = this;
     return Effect.gen(function* () {
       const providers = yield* Ref.get(self.providers);
+
+      const normalizedId = definition.id.toLowerCase();
+      const normalizedAliases = definition.aliases.map((alias) => alias.toLowerCase());
+      const keysToRegister = [normalizedId, ...normalizedAliases];
+      const seenKeys = new Set<string>();
+
+      for (const key of keysToRegister) {
+        if (seenKeys.has(key)) {
+          return yield* Effect.fail(new ProviderRegistrationError({
+            providerId: definition.id,
+            cause: new Error(`Cannot register provider "${definition.id}": duplicate key "${key}" in definition`)
+          }));
+        }
+        seenKeys.add(key);
+
+        const existing = providers.get(key);
+        if (existing) {
+          const conflictType = key === normalizedId ? 'id' : 'alias';
+          return yield* Effect.fail(new ProviderRegistrationError({
+            providerId: definition.id,
+            cause: new Error(
+              `Cannot register provider "${definition.id}": ${conflictType} "${key}" is already registered to provider "${existing.id}"`
+            )
+          }));
+        }
+      }
+
       const newProviders = new Map(providers);
       // Store with lowercase keys for case-insensitive lookup
-      newProviders.set(definition.id.toLowerCase(), definition);
+      newProviders.set(normalizedId, definition);
       for (const alias of definition.aliases) {
         newProviders.set(alias.toLowerCase(), definition);
       }
