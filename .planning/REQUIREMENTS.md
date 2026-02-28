@@ -1,55 +1,90 @@
-# Requirements: Fred TUI Visual Polish
+# Requirements: Imperative-to-Effect Migration
 
-**Defined:** 2026-02-16
+**Defined:** 2026-02-21
 **Core Value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
 
-## v0.2.2 Requirements
+## v0.3.0 Requirements
 
-Requirements for TUI visual polish milestone. Redesign the Fred TUI appearance to use contrast-based region separation, muted color palette, information-dense sidebar, and minimal chrome — inspired by modern terminal UIs like OpenCode.
+Requirements for the Imperative-to-Effect migration milestone. Eliminate the dual imperative/Effect API surface by making Effect services the primary (and only) implementations, removing ~3,000-4,000 lines of duplicated wrapper code.
 
-### Theme & Palette System
+### Effect Service Completeness
 
-- [x] **VISUAL-01**: TUI uses a centralized theme/palette system instead of inline hex color strings
-- [x] **VISUAL-02**: Theme defines named semantic colors (e.g. `fg.primary`, `fg.muted`, `bg.base`, `bg.surface`, `bg.elevated`, `accent.active`, `accent.success`, `accent.error`)
-- [x] **VISUAL-03**: All TUI components consume colors from the theme system, not hardcoded values
+- [x] **EFCT-01**: ToolRegistryService is a fully functional standalone service that does not delegate to ToolRegistry
+- [x] **EFCT-02**: AgentService is a fully functional standalone service that does not delegate to AgentManager
+- [ ] **EFCT-03**: PipelineService is a fully functional standalone service that does not delegate to PipelineManager
+- [x] **EFCT-04**: ContextStorageService is a fully functional standalone service that does not delegate to ContextManager
+- [x] **EFCT-05**: HookManagerService is a fully functional standalone service that does not delegate to HookManager
+- [x] **EFCT-06**: ProviderRegistryService is a fully functional standalone service that does not delegate to ProviderRegistry
+- [ ] **EFCT-07**: MessageProcessorService is a fully functional standalone service that does not delegate to MessageProcessor
+- [x] **EFCT-08**: MessageRouterService is a fully functional standalone service that does not delegate to MessageRouter
+- [x] **EFCT-09**: IntentMatcherService and IntentRouterService are fully functional standalone services
 
-### Layout & Contrast Separation
+### Pipeline Stub Completion
 
-- [x] **VISUAL-04**: Region separation uses background shade contrast instead of box-drawing border characters (no `╭╮╰╯│─┌┐└┘`)
-- [x] **VISUAL-05**: Sidebar, transcript, and input areas are visually distinct through background color differences
-- [x] **VISUAL-06**: Layout supports a borderless aesthetic with padding-based spacing between regions
+- [ ] **PIPE-01**: PipelineService.executeV2Pipeline returns working Effect (not `Effect.fail("not yet migrated")`)
+- [ ] **PIPE-02**: PipelineService.resume returns working Effect (not `Effect.fail("not yet migrated")`)
+- [ ] **PIPE-03**: PipelineService.resumeWithHumanInput returns working Effect (not `Effect.fail("not yet migrated")`)
 
-### Sidebar Redesign
+### Fred Class Migration
 
-- [x] **VISUAL-07**: Sidebar displays collapsible sections with `▼`/`▶` markers for session list and metadata
-- [x] **VISUAL-08**: Sidebar shows compact, information-dense metadata (session count, model, token stats)
-- [x] **VISUAL-09**: User can toggle sidebar visibility with a keyboard hotkey
-- [x] **VISUAL-10**: User can toggle sidebar visibility with a `/sidebar` slash command
-- [x] **VISUAL-11**: Sidebar toggle state persists within the session
+- [ ] **FRED-01**: Fred class constructs and manages an Effect runtime instead of imperative class instances
+- [ ] **FRED-02**: Fred.processMessage delegates to Effect MessageProcessorService via runtime
+- [ ] **FRED-03**: Fred.streamMessage delegates to Effect MessageProcessorService via runtime
+- [ ] **FRED-04**: Fred.routeMessage delegates to Effect routing services via runtime
+- [ ] **FRED-05**: Fred.executePipeline delegates to Effect PipelineService via runtime
+- [ ] **FRED-06**: Fred.registerAgent delegates to Effect AgentService via runtime
+- [ ] **FRED-07**: Fred.registerTool delegates to Effect ToolRegistryService via runtime
+- [ ] **FRED-08**: Fred.setToolPolicies delegates to Effect services (already partially done)
+- [ ] **FRED-09**: Fred class no longer imports or instantiates any imperative manager class
 
-### Transcript & Message Rendering
+### Imperative Class Removal
 
-- [x] **VISUAL-12**: Assistant messages render with muted styling distinct from user messages
-- [x] **VISUAL-13**: Tool calls and task results render as inline expandable blocks with `└` tree connectors
-- [x] **VISUAL-14**: Active/streaming content uses a distinct accent color (e.g. orange/amber) to indicate liveness
+- [ ] **RMVL-01**: `tool/registry.ts` (ToolRegistry class) is deleted
+- [ ] **RMVL-02**: `agent/manager.ts` (AgentManager class) is deleted
+- [ ] **RMVL-03**: `pipeline/manager.ts` (PipelineManager class) is deleted
+- [ ] **RMVL-04**: `context/manager.ts` (ContextManager class) is deleted
+- [ ] **RMVL-05**: `hooks/manager.ts` (HookManager class) is deleted
+- [ ] **RMVL-06**: `platform/registry.ts` (ProviderRegistry class) is deleted
+- [ ] **RMVL-07**: `message-processor/processor.ts` imperative wrapper methods removed (processMessage, routeMessage, streamMessage Promise wrappers)
+- [ ] **RMVL-08**: No remaining `new ToolRegistry()`, `new AgentManager()`, `new PipelineManager()`, `new ContextManager()`, `new HookManager()`, or `new ProviderRegistry()` calls exist in the codebase
 
-### Input & Status Bar
+### Consumer Migration
 
-- [x] **VISUAL-15**: Input area uses minimal chrome — cursor with subtle left border accent, no decorative box
-- [x] **VISUAL-16**: Bottom status bar displays keyboard shortcut labels as compact badges
-- [x] **VISUAL-17**: Status bar uses muted background that contrasts with transcript and input areas
+- [ ] **CONS-01**: `packages/dev/src/dev-chat.ts` uses Effect-based API (no imperative Fred class methods or direct manager access)
+- [ ] **CONS-02**: `packages/cli/src/commands/chat.ts` uses Effect-based API
+- [ ] **CONS-03**: `packages/cli/src/commands/run.ts` uses Effect-based API
+- [ ] **CONS-04**: All consumers use `Effect.runPromise` or `Effect.runFork` at the boundary only (no Effect.runPromise scattered through business logic)
+
+### Public API Surface
+
+- [ ] **API-01**: `exports.ts` no longer exports ToolRegistry, AgentManager, ContextManager, HookManager, or MessageRouter imperative classes
+- [ ] **API-02**: `exports.ts` exports Effect service tags (ToolRegistryService, AgentService, PipelineService, etc.) for consumer dependency injection
+- [ ] **API-03**: `services.ts` Layer composition provides all services through a single composable Layer
+- [ ] **API-04**: Breaking changes documented in CHANGELOG (this is a major version bump)
+
+### Build & Test Integrity
+
+- [ ] **TEST-01**: All existing unit tests pass after migration (tests updated to use Effect services where needed)
+- [ ] **TEST-02**: `bun run build` succeeds with zero TypeScript errors introduced by migration
+- [ ] **TEST-03**: `bun test` passes with no regressions
+- [ ] **TEST-04**: Pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer reference) are resolved or documented
 
 ## Future Requirements
 
-Deferred beyond v0.2.2. Tracked but not in current roadmap.
+Deferred beyond v0.3.0. Tracked but not in current roadmap.
 
-### TUI Visual Advanced
+### Effect Advanced
 
-- **VISUAL-18**: User can switch between light and dark themes
-- **VISUAL-19**: User can define custom theme via config file
-- **VISUAL-20**: Theme supports 256-color and truecolor terminal detection with graceful fallback
-- **VISUAL-21**: Animated transitions between sidebar show/hide states
-- **VISUAL-22**: Syntax-highlighted code blocks in transcript messages
+- **EFCT-10**: Effect-native streaming with Stream combinators replacing callback-based streaming
+- **EFCT-11**: Effect Scope-based resource management for provider connections and MCP clients
+- **EFCT-12**: Effect Schedule-based retry policies for transient provider failures
+- **EFCT-13**: Full Effect-native test harness replacing Promise-based test mocks
+
+### API Ergonomics
+
+- **ERGO-01**: Convenience `fred()` factory function that builds and provides all Layers
+- **ERGO-02**: Effect-native config loader using Effect Config module
+- **ERGO-03**: Type-safe pipeline builder API using Effect's pipe/flow combinators
 
 ## Out of Scope
 
@@ -57,11 +92,14 @@ Explicitly excluded for this milestone. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Light theme | Dark-first; light theme deferred to VISUAL-18 |
-| Custom user themes via config | Deferred to VISUAL-19; hardcoded palette first |
-| Mouse interaction | Separate concern; tracked as TUI-18 in v0.2.1 future reqs |
-| Markdown rendering improvements | Separate concern; focus is on layout/color/chrome |
-| New functional TUI features | This milestone is purely visual; no new capabilities beyond sidebar toggle |
+| Promise-based backward compatibility shim | This is a breaking change milestone; no compatibility layer |
+| New features or capabilities | Migration only; feature parity is the goal |
+| Provider pack API changes | Provider packs already use Effect; no changes needed |
+| Eval framework migration | Eval system is independent; defer to future milestone |
+| MCP client refactoring | MCP integration works; defer structural changes |
+| Streaming architecture overhaul | Keep existing streaming patterns; defer to EFCT-10 |
+| New CLI commands | CLI commands are migrated, not added |
+| TUI visual changes | TUI is visual-complete from v0.2.2 |
 
 ## Traceability
 
@@ -69,29 +107,53 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VISUAL-01 | Phase 37 | Done |
-| VISUAL-02 | Phase 37 | Done |
-| VISUAL-03 | Phase 37 | Done |
-| VISUAL-04 | Phase 37 | Done |
-| VISUAL-05 | Phase 37 | Done |
-| VISUAL-06 | Phase 37 | Done |
-| VISUAL-07 | Phase 38 | Complete |
-| VISUAL-08 | Phase 38 | Complete |
-| VISUAL-09 | Phase 38 | Complete |
-| VISUAL-10 | Phase 38 | Complete |
-| VISUAL-11 | Phase 38 | Complete |
-| VISUAL-12 | Phase 39 | Complete |
-| VISUAL-13 | Phase 39 | Complete |
-| VISUAL-14 | Phase 39 | Complete |
-| VISUAL-15 | Phase 40 | Complete |
-| VISUAL-16 | Phase 40 | Complete |
-| VISUAL-17 | Phase 40 | Complete |
+| EFCT-01 | Phase 41 | Complete |
+| EFCT-02 | Phase 41 | Complete |
+| EFCT-03 | Phase 42 | Pending |
+| EFCT-04 | Phase 41 | Complete |
+| EFCT-05 | Phase 41 | Complete |
+| EFCT-06 | Phase 41 | Complete |
+| EFCT-07 | Phase 42 | Pending |
+| EFCT-08 | Phase 41 | Complete |
+| EFCT-09 | Phase 41 | Complete |
+| PIPE-01 | Phase 42 | Pending |
+| PIPE-02 | Phase 42 | Pending |
+| PIPE-03 | Phase 42 | Pending |
+| FRED-01 | Phase 43 | Pending |
+| FRED-02 | Phase 43 | Pending |
+| FRED-03 | Phase 43 | Pending |
+| FRED-04 | Phase 43 | Pending |
+| FRED-05 | Phase 43 | Pending |
+| FRED-06 | Phase 43 | Pending |
+| FRED-07 | Phase 43 | Pending |
+| FRED-08 | Phase 43 | Pending |
+| FRED-09 | Phase 43 | Pending |
+| RMVL-01 | Phase 44 | Pending |
+| RMVL-02 | Phase 44 | Pending |
+| RMVL-03 | Phase 44 | Pending |
+| RMVL-04 | Phase 44 | Pending |
+| RMVL-05 | Phase 44 | Pending |
+| RMVL-06 | Phase 44 | Pending |
+| RMVL-07 | Phase 44 | Pending |
+| RMVL-08 | Phase 44 | Pending |
+| CONS-01 | Phase 44 | Pending |
+| CONS-02 | Phase 44 | Pending |
+| CONS-03 | Phase 44 | Pending |
+| CONS-04 | Phase 44 | Pending |
+| API-01 | Phase 45 | Pending |
+| API-02 | Phase 45 | Pending |
+| API-03 | Phase 45 | Pending |
+| API-04 | Phase 45 | Pending |
+| TEST-01 | Phase 45 | Pending |
+| TEST-02 | Phase 45 | Pending |
+| TEST-03 | Phase 45 | Pending |
+| TEST-04 | Phase 45 | Pending |
 
 **Coverage:**
-- v0.2.2 requirements: 17 total
-- Mapped to phases: 17
-- Unmapped: 0
+- v0.3.0 requirements: 41 total
+- Mapped to phases: 41
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-02-16*
-*Last updated: 2026-02-22 — All VISUAL-01 through VISUAL-17 completed (v0.2.2 shipped)*
+*Requirements defined: 2026-02-21*
+*Last updated: 2026-02-28 after Phase 41 completion and verification*
