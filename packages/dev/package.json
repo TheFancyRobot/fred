@@ -1,11 +1,14 @@
 {
   "name": "@fancyrobot/fred-dev",
   "version": "0.1.4",
-  "private": true,
   "description": "Fred AI framework development tools",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
