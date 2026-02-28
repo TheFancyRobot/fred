@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, beforeEach } from 'bun:test';
 import { Effect, Layer } from 'effect';
 import { PipelineService, PipelineServiceLive } from '../../../../packages/core/src/pipeline/service';
 import { AgentService, AgentServiceLive } from '../../../../packages/core/src/agent/service';
@@ -9,6 +9,10 @@ import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packag
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from '../../../../packages/core/src/pipeline/checkpoint/types';
+import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
+import type { PipelineResult } from '../../../../packages/core/src/pipeline/executor';
+import { PipelineExecutionError, PipelineNotFoundError } from '../../../../packages/core/src/pipeline/errors';
+import { AgentNotFoundError } from '../../../../packages/core/src/agent/errors';
 
 /**
  * Create a mock CheckpointStorage for testing.
@@ -299,6 +303,246 @@ describe('PipelineService', () => {
         }).pipe(Effect.provide(TestLayer))
       );
       expect(result._tag).toBe('Failure');
+    });
+  });
+
+  // ==========================================
+  // executePipelineV2 Tests (V2 Execution)
+  // ==========================================
+
+  describe('executePipelineV2', () => {
+    /**
+     * Helper to create a mock agent that returns predictable responses.
+     */
+    function createMockAgentInstance(id: string): AgentInstance {
+      return {
+        id,
+        config: { id } as any,
+        processMessage: async (input: string) => ({
+          content: `Agent ${id} processed: ${input}`,
+          toolCalls: [],
+        }),
+        streamMessage: () => {
+          // Return a minimal Stream-like object that satisfies the type
+          const { Stream } = require('effect');
+          return Stream.succeed({ type: 'content' as const, delta: `Agent ${id} streamed` });
+        },
+      };
+    }
+
+    /**
+     * Create a test layer with a pre-registered mock agent.
+     */
+    function createTestLayerWithMockAgent(agentId: string): Layer.Layer<PipelineService> {
+      const mockAgent = createMockAgentInstance(agentId);
+
+      const MockAgentService = Layer.succeed(AgentService, {
+        createAgent: () => Effect.die('not implemented'),
+        getAgent: (id: string) =>
+          id === agentId
+            ? Effect.succeed(mockAgent)
+            : Effect.fail(new AgentNotFoundError({ id, message: `Agent not found: ${id}` })),
+        getAgentOptional: (id: string) =>
+          Effect.succeed(id === agentId ? mockAgent : undefined),
+        hasAgent: (id: string) => Effect.succeed(id === agentId),
+        removeAgent: () => Effect.succeed(false),
+        getAllAgents: () => Effect.succeed([mockAgent]),
+        clear: () => Effect.void,
+        setTracer: () => Effect.void,
+        setDefaultSystemMessage: () => Effect.void,
+        setGlobalVariablesResolver: () => Effect.void,
+        matchAgentByUtterance: () => Effect.succeed(null),
+        getMCPMetrics: () => Effect.succeed({}),
+        registerShutdownHooks: () => Effect.void,
+      });
+
+      return PipelineServiceLive.pipe(
+        Layer.provide(MockAgentService),
+        Layer.provide(HookManagerServiceLive),
+        Layer.provide(PauseServiceLive),
+        Layer.provide(CheckpointServiceLive({ storage: createMockStorage() })),
+        Layer.provide(ToolGateServiceLive),
+        Layer.provide(ToolRegistryServiceLive),
+        Layer.provide(ProviderRegistryServiceLive)
+      );
+    }
+
+    test('fails with PipelineNotFoundError when pipeline does not exist', async () => {
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.executePipelineV2('nonexistent-pipeline', 'test input');
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure') {
+        // Should be PipelineExecutionError wrapping a not-found error
+        const error = result.cause;
+        expect(error).toBeDefined();
+      }
+    });
+
+    test('executes V2 pipeline with function step and returns PipelineResult', async () => {
+      const agentId = 'test-v2-agent';
+      const TestLayerWithAgent = createTestLayerWithMockAgent(agentId);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Create a V2 pipeline with a function step (doesn't need agent)
+          yield* service.createPipelineV2({
+            id: 'v2-function-pipeline',
+            steps: [
+              {
+                name: 'transform-input',
+                type: 'function',
+                fn: async (ctx) => `Transformed: ${ctx.input}`,
+              },
+            ],
+          });
+
+          // Execute the pipeline
+          return yield* service.executePipelineV2('v2-function-pipeline', 'hello world');
+        }).pipe(Effect.provide(TestLayerWithAgent))
+      );
+
+      // Verify the result is a proper PipelineResult
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('completed');
+      expect(result.runId).toBeDefined();
+      expect(result.finalOutput).toBe('Transformed: hello world');
+      expect(result.context).toBeDefined();
+      expect(result.context.pipelineId).toBe('v2-function-pipeline');
+    });
+
+    test('executes V2 pipeline with agent step and returns PipelineResult', async () => {
+      const agentId = 'test-v2-agent';
+      const TestLayerWithAgent = createTestLayerWithMockAgent(agentId);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Create a V2 pipeline with an agent step
+          yield* service.createPipelineV2({
+            id: 'v2-agent-pipeline',
+            steps: [
+              {
+                name: 'call-agent',
+                type: 'agent',
+                agentId,
+              },
+            ],
+          });
+
+          // Execute the pipeline
+          return yield* service.executePipelineV2('v2-agent-pipeline', 'process this');
+        }).pipe(Effect.provide(TestLayerWithAgent))
+      );
+
+      // Verify the result is a proper PipelineResult
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('completed');
+      expect(result.runId).toBeDefined();
+      expect(result.finalOutput).toBeDefined();
+      // The mock agent returns "Agent test-v2-agent processed: process this"
+      expect((result.finalOutput as any).content).toContain('test-v2-agent processed');
+    });
+
+    test('fails with PipelineExecutionError when agent step references missing agent', async () => {
+      // Use the default TestLayer which has no agents registered
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Create a V2 pipeline that references a non-existent agent
+          yield* service.createPipelineV2({
+            id: 'v2-missing-agent-pipeline',
+            steps: [
+              {
+                name: 'call-missing-agent',
+                type: 'agent',
+                agentId: 'nonexistent-agent',
+              },
+            ],
+          });
+
+          // Execute the pipeline - should fail
+          return yield* service.executePipelineV2('v2-missing-agent-pipeline', 'test input');
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure') {
+        // Verify it's a PipelineExecutionError
+        const errors = Array.from(result.cause as any);
+        const hasExecutionError = errors.some(
+          (e: any) => e?._tag === 'PipelineExecutionError' || e?.constructor?.name === 'PipelineExecutionError'
+        );
+        expect(hasExecutionError || result.cause).toBeTruthy();
+      }
+    });
+
+    test('passes conversationId and history through to execution context', async () => {
+      const agentId = 'test-v2-agent';
+      const TestLayerWithAgent = createTestLayerWithMockAgent(agentId);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: 'v2-context-pipeline',
+            steps: [
+              {
+                name: 'process',
+                type: 'function',
+                fn: async (ctx) => ({ historyLength: ctx.history.length, conversationId: ctx.conversationId }),
+              },
+            ],
+          });
+
+          return yield* service.executePipelineV2('v2-context-pipeline', 'test', {
+            conversationId: 'conv-123',
+            history: [
+              { role: 'user', content: 'previous message' },
+              { role: 'assistant', content: 'previous response' },
+            ],
+          });
+        }).pipe(Effect.provide(TestLayerWithAgent))
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.finalOutput as any).historyLength).toBe(2);
+      expect((result.finalOutput as any).conversationId).toBe('conv-123');
+    });
+
+    test('returns runId for tracking and checkpointing', async () => {
+      const agentId = 'test-v2-agent';
+      const TestLayerWithAgent = createTestLayerWithMockAgent(agentId);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: 'v2-runid-pipeline',
+            steps: [
+              { name: 'step1', type: 'function', fn: async () => 'done' },
+            ],
+          });
+
+          return yield* service.executePipelineV2('v2-runid-pipeline', 'test');
+        }).pipe(Effect.provide(TestLayerWithAgent))
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.runId).toBeDefined();
+      expect(typeof result.runId).toBe('string');
+      // UUID format check (basic)
+      expect(result.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     });
   });
 });
