@@ -5,6 +5,9 @@ import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
   AgentCreationError,
+  getAgentNotFoundMessage,
+  getAgentAlreadyExistsMessage,
+  getAgentCreationMessage,
   type AgentError
 } from './errors';
 import { AgentFactory } from './factory';
@@ -116,12 +119,16 @@ class AgentServiceImpl implements AgentService {
       const agents = yield* Ref.get(self.agents);
 
       if (agents.has(config.id)) {
-        return yield* Effect.fail(new AgentAlreadyExistsError({ id: config.id }));
+        return yield* Effect.fail(new AgentAlreadyExistsError({
+          id: config.id,
+          message: getAgentAlreadyExistsMessage(config.id),
+        }));
       }
 
       const providerDef = yield* self.providerRegistryService.getDefinition(config.platform).pipe(
         Effect.mapError((error) => new AgentCreationError({
           id: config.id,
+          message: getAgentCreationMessage(config.id),
           cause: error
         }))
       );
@@ -155,7 +162,10 @@ class AgentServiceImpl implements AgentService {
 
       const inserted = yield* self.registerIfAbsent(instance);
       if (!inserted) {
-        return yield* Effect.fail(new AgentAlreadyExistsError({ id: config.id }));
+        return yield* Effect.fail(new AgentAlreadyExistsError({
+          id: config.id,
+          message: getAgentAlreadyExistsMessage(config.id),
+        }));
       }
 
       return instance;
@@ -187,6 +197,7 @@ class AgentServiceImpl implements AgentService {
       catch: (cause) =>
         new AgentCreationError({
           id: agentId,
+          message: getAgentCreationMessage(agentId),
           cause,
         }),
     });
@@ -206,6 +217,7 @@ class AgentServiceImpl implements AgentService {
       catch: (cause) =>
         new AgentCreationError({
           id: config.id,
+          message: getAgentCreationMessage(config.id),
           cause,
         }),
     });
@@ -217,7 +229,10 @@ class AgentServiceImpl implements AgentService {
       const agents = yield* Ref.get(self.agents);
       const agent = agents.get(id);
       if (!agent) {
-        return yield* Effect.fail(new AgentNotFoundError({ id }));
+        return yield* Effect.fail(new AgentNotFoundError({
+          id,
+          message: getAgentNotFoundMessage(id),
+        }));
       }
       return agent;
     });

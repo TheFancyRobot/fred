@@ -4,7 +4,14 @@ import { AgentService, AgentServiceLive } from '../../../../packages/core/src/ag
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
-import { AgentNotFoundError, AgentAlreadyExistsError, AgentCreationError } from '../../../../packages/core/src/agent/errors';
+import {
+  AgentNotFoundError,
+  AgentAlreadyExistsError,
+  AgentCreationError,
+  getAgentAlreadyExistsMessage,
+  getAgentCreationMessage,
+  getAgentNotFoundMessage,
+} from '../../../../packages/core/src/agent/errors';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 
@@ -68,6 +75,7 @@ describe('AgentService', () => {
       if (result._tag === 'Left') {
         expect(result.left).toBeInstanceOf(AgentNotFoundError);
         expect(result.left.id).toBe('non-existent');
+        expect(result.left.message).toBe(getAgentNotFoundMessage('non-existent'));
       }
     });
   });
@@ -105,6 +113,7 @@ describe('AgentService', () => {
       if (result._tag === 'Left') {
         expect(result.left).toBeInstanceOf(AgentAlreadyExistsError);
         expect(result.left.id).toBe('duplicate');
+        expect(result.left.message).toBe(getAgentAlreadyExistsMessage('duplicate'));
       }
     });
 
@@ -120,7 +129,40 @@ describe('AgentService', () => {
       if (result._tag === 'Left') {
         expect(result.left).toBeInstanceOf(AgentCreationError);
         expect(result.left.id).toBe('missing-provider');
+        expect(result.left.message).toBe(getAgentCreationMessage('missing-provider'));
+        expect(result.left.cause).toBeDefined();
       }
+    });
+
+    it('does not partially register agent when creation fails', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          const service = yield* AgentService;
+
+          const failed = yield* service.createAgent(createAgentConfig('flaky')).pipe(Effect.either);
+          const hasAfterFailure = yield* service.hasAgent('flaky');
+
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+          const created = yield* service.createAgent(createAgentConfig('flaky'));
+          const hasAfterSuccess = yield* service.hasAgent('flaky');
+
+          return {
+            failed,
+            hasAfterFailure,
+            createdId: created.id,
+            hasAfterSuccess,
+          };
+        })
+      );
+
+      expect(result.failed._tag).toBe('Left');
+      if (result.failed._tag === 'Left') {
+        expect(result.failed.left).toBeInstanceOf(AgentCreationError);
+      }
+      expect(result.hasAfterFailure).toBe(false);
+      expect(result.createdId).toBe('flaky');
+      expect(result.hasAfterSuccess).toBe(true);
     });
   });
 

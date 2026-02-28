@@ -1,10 +1,15 @@
 import { Data } from 'effect';
 
+export const getAgentNotFoundMessage = (id: string): string => `Agent \"${id}\" was not found`;
+export const getAgentAlreadyExistsMessage = (id: string): string => `Agent \"${id}\" is already registered`;
+export const getAgentCreationMessage = (id: string): string => `Failed to create agent \"${id}\"`;
+
 /**
  * Error thrown when an agent is not found by ID.
  */
 export class AgentNotFoundError extends Data.TaggedError("AgentNotFoundError")<{
   readonly id: string;
+  readonly message?: string;
 }> {}
 
 /**
@@ -12,6 +17,7 @@ export class AgentNotFoundError extends Data.TaggedError("AgentNotFoundError")<{
  */
 export class AgentAlreadyExistsError extends Data.TaggedError("AgentAlreadyExistsError")<{
   readonly id: string;
+  readonly message?: string;
 }> {}
 
 /**
@@ -19,6 +25,7 @@ export class AgentAlreadyExistsError extends Data.TaggedError("AgentAlreadyExist
  */
 export class AgentCreationError extends Data.TaggedError("AgentCreationError")<{
   readonly id: string;
+  readonly message?: string;
   readonly cause: unknown;
 }> {}
 
