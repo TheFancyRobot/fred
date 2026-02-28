@@ -1,5 +1,15 @@
 # @fred/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- [#35](https://github.com/TheFancyRobot/fred/pull/35) [`b199aec`](https://github.com/TheFancyRobot/fred/commit/b199aec547598b0e1b67c72b34e0afe6bbee70ec) Thanks [@sincspecv](https://github.com/sincspecv)! - Release CLI/TUI visual polish and reliability improvements as v0.3.0 through
+  the standard Changesets flow.
+
+  This release also adds plugin compatibility guidance and test coverage for the
+  `0.3.x` transition.
+
 ## 0.2.2
 
 ### Patch Changes
