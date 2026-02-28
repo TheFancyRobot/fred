@@ -1,12 +1,5 @@
 # @fred/dev
 
-## 0.1.4
-
-### Patch Changes
-
-- Align versioning with v0.2.2 dev-tooling updates used by the CLI/TUI milestone,
-  including launcher/default prompt adjustments and follow-up reliability fixes.
-
 ## 0.1.3
 
 ### Patch Changes
