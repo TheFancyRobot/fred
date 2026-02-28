@@ -3,8 +3,8 @@
 "@fancyrobot/fred-dev": patch
 ---
 
-Backfill releases for packages with code changes since `@fancyrobot/fred@0.2.1`
-that were not included in the recent CLI-only release.
+Ship accumulated core framework updates and dev tooling improvements.
 
-This updates the core framework package and dev tooling package release lines
-without changing provider package versions.
+Core includes runtime, routing, pipeline, tracing, and workflow enhancements.
+Dev tooling includes chat defaults/workflow-context updates used during local
+development.
