@@ -11,19 +11,19 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 
 - [x] **EFCT-01**: ToolRegistryService is a fully functional standalone service that does not delegate to ToolRegistry
 - [x] **EFCT-02**: AgentService is a fully functional standalone service that does not delegate to AgentManager
-- [ ] **EFCT-03**: PipelineService is a fully functional standalone service that does not delegate to PipelineManager
+- [x] **EFCT-03**: PipelineService is a fully functional standalone service that does not delegate to PipelineManager
 - [x] **EFCT-04**: ContextStorageService is a fully functional standalone service that does not delegate to ContextManager
 - [x] **EFCT-05**: HookManagerService is a fully functional standalone service that does not delegate to HookManager
 - [x] **EFCT-06**: ProviderRegistryService is a fully functional standalone service that does not delegate to ProviderRegistry
-- [ ] **EFCT-07**: MessageProcessorService is a fully functional standalone service that does not delegate to MessageProcessor
+- [x] **EFCT-07**: MessageProcessorService is a fully functional standalone service that does not delegate to MessageProcessor
 - [x] **EFCT-08**: MessageRouterService is a fully functional standalone service that does not delegate to MessageRouter
 - [x] **EFCT-09**: IntentMatcherService and IntentRouterService are fully functional standalone services
 
 ### Pipeline Stub Completion
 
-- [ ] **PIPE-01**: PipelineService.executeV2Pipeline returns working Effect (not `Effect.fail("not yet migrated")`)
-- [ ] **PIPE-02**: PipelineService.resume returns working Effect (not `Effect.fail("not yet migrated")`)
-- [ ] **PIPE-03**: PipelineService.resumeWithHumanInput returns working Effect (not `Effect.fail("not yet migrated")`)
+- [x] **PIPE-01**: PipelineService.executeV2Pipeline returns working Effect (not `Effect.fail("not yet migrated")`)
+- [x] **PIPE-02**: PipelineService.resume returns working Effect (not `Effect.fail("not yet migrated")`)
+- [x] **PIPE-03**: PipelineService.resumeWithHumanInput returns working Effect (not `Effect.fail("not yet migrated")`)
 
 ### Fred Class Migration
 
@@ -109,16 +109,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | EFCT-01 | Phase 41 | Complete |
 | EFCT-02 | Phase 41 | Complete |
-| EFCT-03 | Phase 42 | Pending |
+| EFCT-03 | Phase 42 | Complete |
 | EFCT-04 | Phase 41 | Complete |
 | EFCT-05 | Phase 41 | Complete |
 | EFCT-06 | Phase 41 | Complete |
-| EFCT-07 | Phase 42 | Pending |
+| EFCT-07 | Phase 42 | Complete |
 | EFCT-08 | Phase 41 | Complete |
 | EFCT-09 | Phase 41 | Complete |
-| PIPE-01 | Phase 42 | Pending |
-| PIPE-02 | Phase 42 | Pending |
-| PIPE-03 | Phase 42 | Pending |
+| PIPE-01 | Phase 42 | Complete |
+| PIPE-02 | Phase 42 | Complete |
+| PIPE-03 | Phase 42 | Complete |
 | FRED-01 | Phase 43 | Pending |
 | FRED-02 | Phase 43 | Pending |
 | FRED-03 | Phase 43 | Pending |
@@ -156,4 +156,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-28 after Phase 41 completion and verification*
+*Last updated: 2026-02-28 after Phase 42 completion and verification*

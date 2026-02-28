@@ -57,10 +57,10 @@ Plans:
   5. Pipeline and message processing tests pass against the standalone services
 
 Plans:
-- [ ] 42-01-PLAN.md — Cut over PipelineService executePipelineV2 and remove manager type coupling
-- [ ] 42-02-PLAN.md — Implement standalone resume and resumeWithHumanInput state machine semantics
-- [ ] 42-03-PLAN.md — Harden MessageProcessorService streaming and route failure contracts
-- [ ] 42-04-PLAN.md — Add migration guard/integration checks and finalize Phase 42 verification suite
+- [x] 42-01-PLAN.md — Cut over PipelineService executePipelineV2 and remove manager type coupling
+- [x] 42-02-PLAN.md — Implement standalone resume and resumeWithHumanInput state machine semantics
+- [x] 42-03-PLAN.md — Harden MessageProcessorService streaming and route failure contracts
+- [x] 42-04-PLAN.md — Add migration guard/integration checks and finalize Phase 42 verification suite
 
 ### Phase 43: Fred Class Migration
 **Goal**: The Fred class facade constructs and delegates to the Effect runtime instead of imperative manager instances, becoming a thin Effect-backed API surface
@@ -176,7 +176,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
-| 42. Pipeline & MessageProcessor Completion | 0/4 | Not started | — |
+| 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 0/? | Not started | — |
 | 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
@@ -215,4 +215,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-28 — Phase 41 completed and verified (15/15 must-haves)*
+*Last updated: 2026-02-28 — Phase 42 completed and verified (5/5 must-haves)*
