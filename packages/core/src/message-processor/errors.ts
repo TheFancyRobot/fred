@@ -21,11 +21,38 @@ export class NoRouteFoundError extends Data.TaggedError('NoRouteFoundError')<{
 }> {}
 
 /**
+ * Route context metadata included in RouteExecutionError for diagnostics
+ */
+export interface RouteContext {
+  /** The agent ID if routing selected an agent */
+  readonly agentId?: string;
+  /** The intent ID if routing matched an intent */
+  readonly intentId?: string;
+  /** The pipeline ID if routing matched a pipeline */
+  readonly pipelineId?: string;
+  /** The method used for route selection */
+  readonly selectionType?:
+    | 'agent.utterance'
+    | 'intent.matching'
+    | 'pipeline.utterance'
+    | 'default.agent'
+    | 'message.router.rule'
+    | 'message.router.fallback'
+    | 'unknown';
+}
+
+/**
  * Error when route execution fails
+ * Includes route context metadata for diagnostics when routing has already
+ * selected a target (agent, pipeline, or intent).
  */
 export class RouteExecutionError extends Data.TaggedError('RouteExecutionError')<{
+  /** The type of route that was being executed */
   readonly routeType: string;
+  /** The underlying cause of the failure */
   readonly cause: unknown;
+  /** Route context metadata - populated when routing selected a target */
+  readonly routeContext?: RouteContext;
 }> {}
 
 /**

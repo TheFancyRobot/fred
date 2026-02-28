@@ -14,6 +14,7 @@ import {
   ConversationIdRequiredError,
   AgentNotFoundError,
   MaxHandoffDepthError,
+  type RouteContext,
 } from '../../../../packages/core/src/message-processor/errors';
 import {
   isToolFailureRecord,
@@ -47,6 +48,30 @@ describe('MessageProcessorService Error Types', () => {
     expect(error.cause).toBe(cause);
   });
 
+  test('RouteExecutionError includes route context metadata when provided', () => {
+    const cause = new Error('Agent execution failed');
+    const error = new RouteExecutionError({
+      routeType: 'agent',
+      cause,
+      routeContext: {
+        agentId: 'finance-agent',
+        selectionType: 'intent.matching',
+        intentId: 'finance-intent',
+      },
+    });
+    expect(error._tag).toBe('RouteExecutionError');
+    expect(error.routeType).toBe('agent');
+    expect(error.routeContext?.agentId).toBe('finance-agent');
+    expect(error.routeContext?.selectionType).toBe('intent.matching');
+    expect(error.routeContext?.intentId).toBe('finance-intent');
+  });
+
+  test('RouteExecutionError route context is optional for backward compatibility', () => {
+    const cause = new Error('Unknown routing failure');
+    const error = new RouteExecutionError({ routeType: 'unknown', cause });
+    expect(error.routeContext).toBeUndefined();
+  });
+
   test('HandoffError creates correct structure', () => {
     const cause = new Error('Target not found');
     const error = new HandoffError({ fromAgentId: 'agent-a', toAgentId: 'agent-b', cause });
@@ -72,6 +97,32 @@ describe('MessageProcessorService Error Types', () => {
     expect(error._tag).toBe('MaxHandoffDepthError');
     expect(error.depth).toBe(10);
     expect(error.maxDepth).toBe(10);
+  });
+
+  test('RouteContext type captures routing metadata for error context', () => {
+    // Verify RouteContext type structure for agent routing
+    const agentRouteContext: RouteContext = {
+      agentId: 'sales-agent',
+      selectionType: 'agent.utterance',
+    };
+    expect(agentRouteContext.agentId).toBe('sales-agent');
+    expect(agentRouteContext.selectionType).toBe('agent.utterance');
+
+    // Verify RouteContext type structure for intent routing
+    const intentRouteContext: RouteContext = {
+      agentId: 'finance-agent',
+      intentId: 'finance-intent',
+      selectionType: 'intent.matching',
+    };
+    expect(intentRouteContext.intentId).toBe('finance-intent');
+    expect(intentRouteContext.agentId).toBe('finance-agent');
+
+    // Verify RouteContext type structure for pipeline routing
+    const pipelineRouteContext: RouteContext = {
+      pipelineId: 'approval-workflow',
+      selectionType: 'pipeline.utterance',
+    };
+    expect(pipelineRouteContext.pipelineId).toBe('approval-workflow');
   });
 });
 
