@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 42 — Pipeline & MessageProcessor Completion (next)
-Plan: —
-Status: Phase 41 complete and verified, ready for phase 42 planning
-Last activity: 2026-02-28 - Verified phase 41 passed (15/15 must-haves)
+Phase: 42 — Pipeline & MessageProcessor Completion (in progress)
+Plan: 3 of 4 complete (42-03)
+Status: In progress - PIPE-01, PIPE-02, PIPE-03 complete
+Last activity: 2026-02-28 - Completed 42-03-PLAN.md (Stream contracts)
 
-Progress: 4 milestones shipped + v0.3.0 phase 41 complete (178 total plans)
+Progress: 4 milestones shipped + v0.3.0 phase 42 in progress (179 total plans)
 
 ## Performance Metrics
 
@@ -71,6 +71,10 @@ None currently.
 | 41-05 | MessageRouterService now owns rule matching/ranking/fallback in service-layer Effect logic | Closes imperative router delegation seam while preserving deterministic routing contracts |
 | 41-05 | Fred base layers stay unchanged while standalone intent/router composition is exposed as opt-in exports | Preserves MessageProcessor optional dependency behavior without forced requirements |
 | 41-05 | Standalone router fallback cascade is explicit (`defaultAgent` -> `fallbackAgents` -> first rule agent -> typed failure) | Maintains deterministic fallback outcomes in config-only service composition |
+| 42-03 | MessageProcessorService uses `Ref` for mutable state across stream operations | State survives stream transformations without buffering entire stream |
+| 42-03 | No `Effect.runPromise` in MessageProcessorService streaming path | Pure Effect composition without runtime boundary escapes |
+| 42-03 | No `Stream.runCollect` in live stream paths - events flow without buffering | Preserves strict ordering and partial outputs before terminal failures |
+| 42-03 | `RouteExecutionError` carries `agentId` and `routeType` for debugging | Post-routing failures include route context metadata |
 
 ### Quick Tasks Completed
 
@@ -81,12 +85,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-28 06:27:05Z
-Stopped at: Phase 41 complete and verified; next is phase 42 planning
-Resume file: .planning/ROADMAP.md
+Last session: 2026-02-28 21:30:00Z
+Stopped at: Completed 42-03-PLAN.md (Stream contracts)
+Resume file: .planning/STATE.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-28 — Phase 41 verified complete*
+*Last updated: 2026-02-28 — Phase 42 in progress (3/4 plans complete)*
