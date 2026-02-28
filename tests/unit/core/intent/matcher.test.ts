@@ -144,6 +144,19 @@ describe('IntentMatcher', () => {
       expect(match).not.toBeNull();
       expect(match?.intent.id).toBe('greeting-1');
     });
+
+    test('should remain deterministic for first-match-wins ambiguity across repeated calls', async () => {
+      const matcher = await createTestMatcher();
+      const intent1 = createIntent('greeting-1', ['hello']);
+      const intent2 = createIntent('greeting-2', ['hello']);
+      await Effect.runPromise(matcher.registerIntents([intent1, intent2]));
+
+      const matches = await Promise.all(
+        Array.from({ length: 10 }, () => Effect.runPromise(matcher.matchIntent('hello')))
+      );
+
+      expect(matches.every((match) => match?.intent.id === 'greeting-1')).toBe(true);
+    });
   });
 
   describe('matchIntent - regex matching', () => {

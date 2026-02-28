@@ -27,7 +27,8 @@ describe('IntentRouter', () => {
     setDefaultSystemMessage: () => Effect.succeed(undefined),
     setGlobalVariablesResolver: () => Effect.succeed(undefined),
     matchAgentByUtterance: () => Effect.succeed(null),
-    getMcpMetrics: () => Effect.succeed({ connections: 0, tools: 0, resources: 0, prompts: 0, connectionDetails: [] }),
+    getMCPMetrics: () => Effect.succeed({ connections: 0, tools: 0, resources: 0, prompts: 0, connectionDetails: [] }),
+    registerShutdownHooks: () => Effect.succeed(undefined),
   });
 
   // Helper to create router using factory
@@ -149,13 +150,10 @@ describe('IntentRouter', () => {
       const match = createIntentMatch('test-intent', 'function', 'test');
       match.intent.action.type = 'nonexistent' as any;
 
-      const exit = await Effect.runPromiseExit(router.routeIntent(match, 'test'));
-      expect(Exit.isFailure(exit)).toBe(true);
-
-      if (Exit.isFailure(exit)) {
-        const error = exit.cause;
-        // The error should be ActionHandlerNotFoundError
-        expect(error).toBeDefined();
+      const result = await Effect.runPromise(router.routeIntent(match, 'test').pipe(Effect.either));
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Left') {
+        expect(result.left._tag).toBe('ActionHandlerNotFoundError');
       }
     });
 
@@ -210,16 +208,22 @@ describe('IntentRouter', () => {
     test('should fail when no default agent set', async () => {
       const router = await createTestRouter();
 
-      const exit = await Effect.runPromiseExit(router.routeToDefaultAgent('test'));
-      expect(Exit.isFailure(exit)).toBe(true);
+      const result = await Effect.runPromise(router.routeToDefaultAgent('test').pipe(Effect.either));
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Left') {
+        expect(result.left._tag).toBe('DefaultAgentNotConfiguredError');
+      }
     });
 
     test('should fail when default agent not found', async () => {
       const router = await createTestRouter();
       await Effect.runPromise(router.setDefaultAgent('nonexistent-agent'));
 
-      const exit = await Effect.runPromiseExit(router.routeToDefaultAgent('test'));
-      expect(Exit.isFailure(exit)).toBe(true);
+      const result = await Effect.runPromise(router.routeToDefaultAgent('test').pipe(Effect.either));
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Left') {
+        expect(result.left._tag).toBe('IntentRouteError');
+      }
     });
   });
 
