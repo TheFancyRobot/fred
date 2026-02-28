@@ -16,7 +16,7 @@ function makePlugin(id: string, compatibility?: Partial<FredCliPlugin['manifest'
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0',
+        requiresFredCli: '^0.2.0 || ^0.3.0',
         ...compatibility,
       },
     },

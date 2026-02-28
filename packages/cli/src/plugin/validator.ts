@@ -27,7 +27,7 @@ export function validateLoadedPlugins(
         pluginId: declaration.id,
         declarationSource: declaration.declarationSource,
         message: `Plugin "${declaration.id}" has an invalid requiresFredCli range: "${compatibility.requiresFredCli}".`,
-        fix: 'Use a valid semver range for manifest.compatibility.requiresFredCli (for example: ^0.2.0).',
+        fix: 'Use a valid semver range for manifest.compatibility.requiresFredCli (for example: ^0.2.0 || ^0.3.0).',
       });
       continue;
     }

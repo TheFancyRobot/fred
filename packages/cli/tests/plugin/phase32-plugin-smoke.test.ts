@@ -47,7 +47,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0'
+        requiresFredCli: '^0.2.0 || ^0.3.0'
       }
     },
     commands: [
@@ -73,7 +73,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0'
+        requiresFredCli: '^0.2.0 || ^0.3.0'
       }
     },
     commands: [
@@ -99,7 +99,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0'
+        requiresFredCli: '^0.2.0 || ^0.3.0'
       }
     },
     commands: [
@@ -167,7 +167,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0',
+        requiresFredCli: '^0.2.0 || ^0.3.0',
         deprecated: {
           since: '0.1.0',
           message: 'legacy API usage',

@@ -255,6 +255,13 @@ Plugin commands are accessible as `fred greet` and slash commands as `/my-plugin
 
 Plugins are validated at startup using semver compatibility checks. If validation fails, the CLI reports structured diagnostics and exits with code 12.
 
+If your plugin currently pins `requiresFredCli: '^0.2.0'`, widen it before adopting
+`@fancyrobot/fred-cli@0.3.x`:
+
+```ts
+requiresFredCli: '^0.2.0 || ^0.3.0'
+```
+
 ## Global Options
 
 | Flag | Description |
