@@ -1,15 +1,15 @@
 import { Context, Effect, Layer, Ref } from 'effect';
 import type { AgentConfig, AgentInstance } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
-import type { ProviderRegistryService as ProviderRegistryServiceType } from '../platform/service';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
   AgentCreationError,
-  AgentExecutionError,
   type AgentError
 } from './errors';
 import { AgentFactory } from './factory';
+import { ToolRegistry } from '../tool/registry';
+import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
 import { ToolGateService } from '../tool-gate/service';
@@ -106,35 +106,7 @@ class AgentServiceImpl implements AgentService {
     private toolGateService: typeof ToolGateService.Service,
     private tracer?: Tracer
   ) {
-    // AgentFactory is still used internally for actual agent creation logic
-    // Full conversion of AgentFactory would be a separate task
-    // For now, we need to create it with a ToolRegistry instance
-    // We'll use a promise-based wrapper to get tools from the service
-    const legacyToolRegistry = {
-      registerTool: () => {},
-      getTool: (id: string) => undefined,
-      getTools: (ids: string[]) => [],
-      getAllTools: () => [],
-      hasTool: (id: string) => false,
-      removeTool: (id: string) => false,
-      clear: () => {},
-      get size() { return 0; },
-      normalizeTools: async (ids: string[]) => {
-        // Get tools from service synchronously for AgentFactory
-        const tools = await Effect.runPromise(
-          toolRegistryService.normalizeTools(ids)
-        );
-        return tools;
-      },
-      toAISDKTools: async (ids: string[]) => {
-        const tools = await Effect.runPromise(
-          toolRegistryService.toAISDKTools(ids)
-        );
-        return tools;
-      },
-    };
-
-    this.factory = new AgentFactory(legacyToolRegistry as any, tracer);
+    this.factory = new AgentFactory(new ToolRegistry(), tracer);
     this.factory.setToolGateService(toolGateService);
   }
 
@@ -147,7 +119,6 @@ class AgentServiceImpl implements AgentService {
         return yield* Effect.fail(new AgentAlreadyExistsError({ id: config.id }));
       }
 
-      // Get provider definition from registry
       const providerDef = yield* self.providerRegistryService.getDefinition(config.platform).pipe(
         Effect.mapError((error) => new AgentCreationError({
           id: config.id,
@@ -155,7 +126,6 @@ class AgentServiceImpl implements AgentService {
         }))
       );
 
-      // Resolve config with default system message
       let resolvedTools = config.tools;
       if (config.tools && config.tools.length > 0) {
         const assignedTools = yield* self.toolRegistryService.getTools(config.tools);
@@ -171,7 +141,9 @@ class AgentServiceImpl implements AgentService {
         systemMessage: config.systemMessage ?? self.defaultSystemMessage,
       };
 
-      // Create agent using factory - wrapped in Effect.async for proper fiber semantics
+      const allTools = yield* self.toolRegistryService.getAllTools();
+      yield* self.syncFactoryTools(allTools, config.id);
+
       const agentProcessor = yield* self.createAgentFromFactory(resolvedConfig, providerDef);
 
       const instance: AgentInstance = {
@@ -181,11 +153,42 @@ class AgentServiceImpl implements AgentService {
         streamMessage: agentProcessor.streamMessage,
       } as AgentInstance;
 
-      const newAgents = new Map(agents);
-      newAgents.set(config.id, instance);
-      yield* Ref.set(self.agents, newAgents);
+      const inserted = yield* self.registerIfAbsent(instance);
+      if (!inserted) {
+        return yield* Effect.fail(new AgentAlreadyExistsError({ id: config.id }));
+      }
 
       return instance;
+    });
+  }
+
+  private registerIfAbsent(instance: AgentInstance): Effect.Effect<boolean> {
+    const self = this;
+    return Ref.modify(self.agents, (agents) => {
+      if (agents.has(instance.id)) {
+        return [false, agents] as const;
+      }
+
+      const updated = new Map(agents);
+      updated.set(instance.id, instance);
+      return [true, updated] as const;
+    });
+  }
+
+  private syncFactoryTools(tools: Tool[], agentId: string): Effect.Effect<void, AgentCreationError> {
+    const self = this;
+
+    return Effect.try({
+      try: () => {
+        const registry = new ToolRegistry();
+        registry.registerTools(tools);
+        self.factory.setToolRegistry(registry);
+      },
+      catch: (cause) =>
+        new AgentCreationError({
+          id: agentId,
+          cause,
+        }),
     });
   }
 
@@ -197,16 +200,14 @@ class AgentServiceImpl implements AgentService {
     providerDef: ProviderDefinition
   ): Effect.Effect<{ processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] }, AgentCreationError> {
     const self = this;
-    return Effect.async<
-      { processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] },
-      AgentCreationError
-    >((resume) => {
-      self.factory.createAgent(config, providerDef)
-        .then((result) => resume(Effect.succeed(result)))
-        .catch((error) => resume(Effect.fail(new AgentCreationError({
+
+    return Effect.tryPromise({
+      try: () => self.factory.createAgent(config, providerDef),
+      catch: (cause) =>
+        new AgentCreationError({
           id: config.id,
-          cause: error
-        }))));
+          cause,
+        }),
     });
   }
 
@@ -258,11 +259,9 @@ class AgentServiceImpl implements AgentService {
    */
   private cleanupAgentMCPClients(agentId: string): Effect.Effect<void> {
     const self = this;
-    return Effect.async<void>((resume) => {
-      self.factory.cleanupMCPClients(agentId)
-        .then(() => resume(Effect.succeed(void 0)))
-        .catch(() => resume(Effect.succeed(void 0))); // Best-effort cleanup
-    });
+    return Effect.tryPromise(() => self.factory.cleanupMCPClients(agentId)).pipe(
+      Effect.catchAll(() => Effect.void)
+    );
   }
 
   getAllAgents(): Effect.Effect<AgentInstance[]> {
@@ -286,11 +285,9 @@ class AgentServiceImpl implements AgentService {
    */
   private cleanupAllMCPClientsEffect(): Effect.Effect<void> {
     const self = this;
-    return Effect.async<void>((resume) => {
-      self.factory.cleanupAllMCPClients()
-        .then(() => resume(Effect.succeed(void 0)))
-        .catch(() => resume(Effect.succeed(void 0))); // Best-effort cleanup
-    });
+    return Effect.tryPromise(() => self.factory.cleanupAllMCPClients()).pipe(
+      Effect.catchAll(() => Effect.void)
+    );
   }
 
   setTracer(tracer?: Tracer): Effect.Effect<void> {
@@ -391,11 +388,9 @@ class AgentServiceImpl implements AgentService {
     message: string,
     utterances: string[]
   ): Effect.Effect<{ matched: boolean; confidence: number; utterance?: string }> {
-    return Effect.async((resume) => {
-      matcher(message, utterances)
-        .then((result) => resume(Effect.succeed(result)))
-        .catch(() => resume(Effect.succeed({ matched: false, confidence: 0 }))); // Treat errors as no match
-    });
+    return Effect.tryPromise(() => matcher(message, utterances)).pipe(
+      Effect.catchAll(() => Effect.succeed({ matched: false, confidence: 0 }))
+    );
   }
 
   getMCPMetrics(): Effect.Effect<any> {

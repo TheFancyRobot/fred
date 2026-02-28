@@ -193,6 +193,10 @@ export class AgentFactory {
     this.tracer = tracer;
   }
 
+  setToolRegistry(toolRegistry: ToolRegistry): void {
+    this.toolRegistry = toolRegistry;
+  }
+
   setGlobalVariablesResolver(resolver: () => Record<string, string | number | boolean>): void {
     this.globalVariablesResolver = resolver;
   }
