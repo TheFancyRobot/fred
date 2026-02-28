@@ -23,6 +23,9 @@ import { CheckpointService } from './checkpoint/service';
 import { PauseService } from './pause/service';
 import { validateGraphWorkflow } from './graph-validator';
 import { validateId, validatePipelineAgentCount } from '../utils/validation';
+import { executePipelineV2 as executePipelineV2Impl, type ExtendedExecutionOptions } from './executor';
+import type { AgentManager } from '../agent/manager';
+import type { HookManager } from '../hooks/manager';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -556,12 +559,80 @@ class PipelineServiceImpl implements PipelineService {
     input: string,
     options?: { conversationId?: string; history?: Array<{ role: string; content: string }> }
   ): Effect.Effect<PipelineResult, PipelineExecutionError> {
-    // Delegate to existing executor - full conversion would be a larger task
-    return Effect.fail(new PipelineExecutionError({
-      pipelineId,
-      step: 0,
-      cause: new Error('V2 pipeline execution not yet migrated to Effect')
-    }));
+    const self = this;
+    return Effect.gen(function* () {
+      // Get V2 pipeline config from service state
+      const config = yield* self.getPipelineV2(pipelineId).pipe(
+        Effect.mapError(() => new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: new Error(`V2 Pipeline not found: ${pipelineId}`)
+        }))
+      );
+
+      // Create imperative agent adapter from AgentService
+      const agentAdapter = self.createAgentAdapter();
+
+      // Build executor options with adapters
+      const executorOptions: ExtendedExecutionOptions = {
+        agentManager: agentAdapter,
+        conversationId: options?.conversationId,
+        history: options?.history,
+      };
+
+      // Execute via Effect.tryPromise wrapper
+      const result = yield* Effect.tryPromise({
+        try: () => executePipelineV2Impl(config, input, executorOptions),
+        catch: (error) => new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: error instanceof Error ? error : new Error(String(error))
+        })
+      });
+
+      // If executor returned a failed result, fail the Effect
+      if (!result.success && result.status === 'failed') {
+        return yield* Effect.fail(new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: result.error ?? new Error('Pipeline execution failed')
+        }));
+      }
+
+      return result;
+    });
+  }
+
+  /**
+   * Create an imperative AgentManager adapter from AgentService.
+   * This allows the executor to work with the Effect-based service.
+   */
+  private createAgentAdapter(): AgentManager {
+    const self = this;
+    return {
+      getAgent: (id: string) => {
+        // Synchronous lookup - we need to use Effect.runPromiseSync or cache agents
+        // For now, we create a lazy agent wrapper that resolves on demand
+        return {
+          id,
+          config: { id } as any,
+          processMessage: async (message: string, history?: AgentMessage[]) => {
+            const agent = await Effect.runPromise(
+              self.agentService.getAgent(id)
+            );
+            return agent.processMessage(message, history);
+          },
+        };
+      },
+      hasAgent: (id: string) => {
+        // Synchronous check - run Effect synchronously
+        try {
+          return Effect.runSync(self.agentService.hasAgent(id));
+        } catch {
+          return false;
+        }
+      },
+    } as AgentManager;
   }
 
   // Resume methods - simplified, full implementation reuses existing logic
