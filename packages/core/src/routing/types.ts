@@ -55,6 +55,12 @@ export interface RoutingConfig {
   /** Fallback agent when no rule matches */
   defaultAgent: string;
 
+  /**
+   * Ordered fallback agents when no default agent is configured.
+   * First non-empty entry is used.
+   */
+  fallbackAgents?: string[];
+
   /** Routing rules (checked in specificity order) */
   rules: RoutingRule[];
 

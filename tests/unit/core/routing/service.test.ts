@@ -1,30 +1,13 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect, Layer } from 'effect';
-import { MessageRouterService } from '../../../../packages/core/src/routing/service';
-import { MessageRouter } from '../../../../packages/core/src/routing/router';
+import {
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
+} from '../../../../packages/core/src/routing/service';
 import type { RoutingConfig } from '../../../../packages/core/src/routing/types';
-import { AgentManager } from '../../../../packages/core/src/agent/manager';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
-import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
 
-function createAgentManager(agentIds: string[]): AgentManager {
-  const manager = new AgentManager(new ToolRegistry());
-  const agents = (manager as any).agents as Map<string, AgentInstance>;
-
-  for (const id of agentIds) {
-    agents.set(id, {
-      id,
-      config: { id, platform: 'test', model: 'test', systemMessage: 'test' },
-      processMessage: async () => ({ content: 'ok' }),
-    } as AgentInstance);
-  }
-
-  return manager;
-}
-
-function serviceLayer(config: RoutingConfig, agentIds: string[]): Layer.Layer<MessageRouterService> {
-  const router = new MessageRouter(createAgentManager(agentIds), undefined, config);
-  return Layer.succeed(MessageRouterService, router);
+function serviceLayer(config: RoutingConfig): Layer.Layer<MessageRouterService> {
+  return MessageRouterServiceLiveWithConfig(config);
 }
 
 describe('MessageRouterService (layer contracts)', () => {
@@ -44,7 +27,7 @@ describe('MessageRouterService (layer contracts)', () => {
           Array.from({ length: 5 }, () => service.route('status update'))
         );
       }).pipe(
-        Effect.provide(serviceLayer(config, ['fallback', 'agent-first', 'agent-second']))
+        Effect.provide(serviceLayer(config))
       )
     );
 
@@ -78,7 +61,7 @@ describe('MessageRouterService (layer contracts)', () => {
         const service = yield* MessageRouterService;
         return yield* service.route('show invoice summary', { tier: 'enterprise' });
       }).pipe(
-        Effect.provide(serviceLayer(config, ['fallback', 'agent-pattern', 'agent-meta-pattern']))
+        Effect.provide(serviceLayer(config))
       )
     );
 
@@ -98,7 +81,7 @@ describe('MessageRouterService (layer contracts)', () => {
         const service = yield* MessageRouterService;
         return yield* service.route('no configured pattern here');
       }).pipe(
-        Effect.provide(serviceLayer(withDefault, ['default-agent', 'specialist']))
+        Effect.provide(serviceLayer(withDefault))
       )
     );
 
@@ -115,7 +98,7 @@ describe('MessageRouterService (layer contracts)', () => {
         const service = yield* MessageRouterService;
         return yield* service.route('still no match');
       }).pipe(
-        Effect.provide(serviceLayer(noDefault, []))
+        Effect.provide(serviceLayer(noDefault))
       )
     );
 
@@ -138,7 +121,7 @@ describe('MessageRouterService (layer contracts)', () => {
         const dryRun = yield* service.testRoute('route me');
         return { decision, dryRun };
       }).pipe(
-        Effect.provide(serviceLayer(config, ['fallback', 'agent-exact', 'agent-regex']))
+        Effect.provide(serviceLayer(config))
       )
     );
 
