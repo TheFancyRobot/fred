@@ -10,6 +10,8 @@ import { describe, test, expect } from 'bun:test';
 import { Effect, Runtime } from 'effect';
 import {
   FredLayers,
+  FredLayersWithIntentRouting,
+  makeFredLayersWithLeafRouting,
   createScopedFredRuntime,
   ToolRegistryService,
   AgentService,
@@ -19,6 +21,9 @@ import {
   HookManagerService,
   CheckpointService,
   PauseService,
+  IntentMatcherService,
+  IntentRouterService,
+  MessageProcessorService,
 } from '../../../packages/core/src/services';
 
 describe('FredLayers', () => {
@@ -214,5 +219,51 @@ describe('Service isolation', () => {
 
     expect(count1Before).toBe(0);
     expect(count2Before).toBe(0);
+  });
+});
+
+describe('Leaf routing composition', () => {
+  test('FredLayersWithIntentRouting provides standalone intent services', async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const matcher = yield* IntentMatcherService;
+        const router = yield* IntentRouterService;
+        const processor = yield* MessageProcessorService;
+
+        const intents = yield* matcher.getIntents();
+        const config = yield* processor.getConfig();
+
+        return {
+          intents,
+          hasRouter: typeof router.routeIntent === 'function',
+          memoryDefaults: config.memoryDefaults,
+        };
+      }).pipe(Effect.provide(FredLayersWithIntentRouting))
+    );
+
+    expect(result.intents).toEqual([]);
+    expect(result.hasRouter).toBe(true);
+    expect(result.memoryDefaults).toEqual({});
+  });
+
+  test('makeFredLayersWithLeafRouting composes MessageRouterService without breaking processor', async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        const route = yield* processor.routeMessage('no-match message');
+        return route.type;
+      }).pipe(
+        Effect.provide(
+          makeFredLayersWithLeafRouting({
+            defaultAgent: 'default-agent',
+            rules: [],
+          })
+        )
+      )
+    );
+
+    // MessageRouterService is optional; when present, processor still resolves
+    // to an explicit none result when the selected agent is unavailable.
+    expect(result).toBe('none');
   });
 });

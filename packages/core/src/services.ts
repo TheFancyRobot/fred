@@ -22,9 +22,13 @@ import { PipelineService, PipelineServiceLive } from './pipeline/service';
 import { MessageProcessorService, MessageProcessorServiceLive } from './message-processor/service';
 import { IntentMatcherService, IntentMatcherServiceLive } from './intent/service';
 import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
-import { MessageRouterService } from './routing/service';
+import {
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
+} from './routing/service';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
+import type { RoutingConfig } from './routing/types';
 
 /**
  * Core Fred service types included in FredLayers.
@@ -268,6 +272,14 @@ const messageProcessorLayer = MessageProcessorServiceLive.pipe(
 );
 
 /**
+ * Standalone intent layers (optional for MessageProcessorService).
+ */
+const intentLayer = Layer.mergeAll(
+  IntentMatcherServiceLive,
+  IntentRouterServiceLive.pipe(Layer.provide(agentLayer))
+);
+
+/**
  * Complete Fred layers - all services composed
  *
  * Dependency graph:
@@ -303,6 +315,30 @@ export const FredLayers = Layer.mergeAll(
   pipelineLayer,
   messageProcessorLayer
 );
+
+/**
+ * Fred layers with standalone intent services composed in.
+ *
+ * MessageProcessorService reads these services via optional dependency lookup,
+ * so this layer can be used when intent-based routing is needed without
+ * changing base FredLayers behavior.
+ */
+export const FredLayersWithIntentRouting = Layer.mergeAll(
+  FredLayers,
+  intentLayer
+);
+
+/**
+ * Build Fred layers with standalone intent services and MessageRouterService.
+ *
+ * MessageRouterService remains opt-in because MessageProcessorService treats it
+ * as optional and only consumes it when explicitly provided.
+ */
+export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
+  Layer.mergeAll(
+    FredLayersWithIntentRouting,
+    MessageRouterServiceLiveWithConfig(routerConfig)
+  );
 
 /**
  * Create a Fred runtime with all services.
@@ -367,6 +403,7 @@ export {
   IntentRouterService,
   IntentRouterServiceLive,
   MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
   ObservabilityService,
   ObservabilityServiceLive,
 };

@@ -23,6 +23,7 @@ import { AgentService } from '../../../../packages/core/src/agent/service';
 import { PipelineService } from '../../../../packages/core/src/pipeline/service';
 import { ContextStorageService } from '../../../../packages/core/src/context/service';
 import { IntentMatcherService, IntentRouterService } from '../../../../packages/core/src/intent/service';
+import { MessageRouterService } from '../../../../packages/core/src/routing/service';
 
 describe('MessageProcessorService Error Types', () => {
   test('MessageValidationError creates correct structure', () => {
@@ -285,6 +286,112 @@ describe('MessageProcessorService Routing', () => {
     );
 
     expect(exit._tag).toBe('Failure');
+  });
+
+  test('routeMessage uses optional intent services when provided', async () => {
+    const routedAgent = {
+      id: 'intent-agent',
+      config: { id: 'intent-agent', platform: 'openai', model: 'gpt-4', systemMessage: 'test' },
+      processMessage: async () => ({ content: 'ok' }),
+    } as any;
+
+    const agentLayer = Layer.succeed(AgentService, {
+      ...mockAgentService,
+      getAgentOptional: (id: string) =>
+        Effect.succeed(id === 'intent-agent' ? routedAgent : undefined),
+    } as AgentService);
+
+    const intentMatcherLayer = Layer.succeed(IntentMatcherService, {
+      registerIntents: () => Effect.void,
+      getIntents: () => Effect.succeed([]),
+      clear: () => Effect.void,
+      matchIntent: () =>
+        Effect.succeed({
+          intent: {
+            id: 'intent-id',
+            utterances: ['budget'],
+            action: { type: 'agent', target: 'intent-agent' },
+          },
+          confidence: 1,
+          matchType: 'exact',
+        } as any),
+    } as IntentMatcherService);
+
+    const intentRouterLayer = Layer.succeed(IntentRouterService, {
+      routeIntent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
+      routeToDefaultAgent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
+      setDefaultAgent: () => Effect.void,
+    } as IntentRouterService);
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* MessageProcessorService;
+        return yield* service.routeMessage('budget request');
+      }).pipe(
+        Effect.provide(MessageProcessorServiceLive),
+        Effect.provide(
+          Layer.mergeAll(
+            agentLayer,
+            Layer.succeed(PipelineService, mockPipelineService),
+            Layer.succeed(ContextStorageService, mockContextStorage),
+            intentMatcherLayer,
+            intentRouterLayer
+          )
+        )
+      )
+    );
+
+    expect(result.type).toBe('agent');
+    expect(result.agentId).toBe('intent-agent');
+  });
+
+  test('routeMessage uses optional message router when provided', async () => {
+    const routedAgent = {
+      id: 'router-agent',
+      config: { id: 'router-agent', platform: 'openai', model: 'gpt-4', systemMessage: 'test' },
+      processMessage: async () => ({ content: 'ok' }),
+    } as any;
+
+    const agentLayer = Layer.succeed(AgentService, {
+      ...mockAgentService,
+      getAgentOptional: (id: string) =>
+        Effect.succeed(id === 'router-agent' ? routedAgent : undefined),
+    } as AgentService);
+
+    const messageRouterLayer = Layer.succeed(MessageRouterService, {
+      route: () =>
+        Effect.succeed({
+          agent: 'router-agent',
+          fallback: false,
+          matchType: 'keyword',
+        }),
+      testRoute: () =>
+        Effect.succeed({
+          agent: 'router-agent',
+          fallback: false,
+          matchType: 'keyword',
+        }),
+    } as MessageRouterService);
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* MessageProcessorService;
+        return yield* service.routeMessage('router first');
+      }).pipe(
+        Effect.provide(MessageProcessorServiceLive),
+        Effect.provide(
+          Layer.mergeAll(
+            agentLayer,
+            Layer.succeed(PipelineService, mockPipelineService),
+            Layer.succeed(ContextStorageService, mockContextStorage),
+            messageRouterLayer
+          )
+        )
+      )
+    );
+
+    expect(result.type).toBe('agent');
+    expect(result.agentId).toBe('router-agent');
   });
 });
 
