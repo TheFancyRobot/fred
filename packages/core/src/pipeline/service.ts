@@ -9,7 +9,7 @@ import type { GraphWorkflowConfig } from './graph';
 import type { GraphExecutionResult } from './graph-executor';
 import type { GraphWorkflowBuilder } from './graph-builder';
 import type { AgentMessage, AgentResponse } from '../agent/agent';
-import type { ResumeOptions, ResumeResult } from './manager';
+import type { ResumeOptions, ResumeResult } from './resume';
 import type { HumanInputResumeOptions } from './pause/types';
 import {
   PipelineNotFoundError,
