@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect } from 'effect';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
-import { ToolNotFoundError, ToolAlreadyExistsError } from '../../../../packages/core/src/tool/errors';
+import { ToolNotFoundError, ToolAlreadyExistsError, ToolValidationError } from '../../../../packages/core/src/tool/errors';
 import type { Tool } from '../../../../packages/core/src/tool/tool';
 
 const createTestTool = (id: string): Tool => ({
@@ -55,6 +55,86 @@ describe('ToolRegistryService', () => {
         })
       );
       expect(result).toBe(3);
+    });
+
+    test('fails atomically when batch contains existing tool id', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ToolRegistryService;
+          yield* service.registerTool(createTestTool('existing'));
+
+          const duplicateAttempt = yield* service.registerTools([
+            createTestTool('new-1'),
+            createTestTool('existing'),
+            createTestTool('new-2')
+          ]).pipe(Effect.either);
+
+          const allTools = yield* service.getAllTools();
+          return { duplicateAttempt, allTools };
+        })
+      );
+
+      expect(result.duplicateAttempt._tag).toBe('Left');
+      if (result.duplicateAttempt._tag === 'Left') {
+        expect(result.duplicateAttempt.left._tag).toBe('ToolAlreadyExistsError');
+      }
+
+      expect(result.allTools.map((tool) => tool.id)).toEqual(['existing']);
+    });
+
+    test('fails atomically when batch contains duplicate ids in the same request', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ToolRegistryService;
+
+          const duplicateAttempt = yield* service.registerTools([
+            createTestTool('duplicate'),
+            createTestTool('duplicate')
+          ]).pipe(Effect.either);
+
+          const allTools = yield* service.getAllTools();
+          return { duplicateAttempt, allTools };
+        })
+      );
+
+      expect(result.duplicateAttempt._tag).toBe('Left');
+      if (result.duplicateAttempt._tag === 'Left') {
+        expect(result.duplicateAttempt.left._tag).toBe('ToolAlreadyExistsError');
+      }
+
+      expect(result.allTools).toEqual([]);
+    });
+
+    test('fails atomically when any tool in batch is invalid', async () => {
+      const invalidStrictTool = {
+        ...createTestTool('invalid-strict'),
+        strict: true,
+      } as Tool;
+
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ToolRegistryService;
+          yield* service.registerTool(createTestTool('existing'));
+
+          const invalidAttempt = yield* service.registerTools([
+            createTestTool('new-1'),
+            invalidStrictTool,
+            createTestTool('new-2')
+          ]).pipe(Effect.either);
+
+          const allTools = yield* service.getAllTools();
+          return { invalidAttempt, allTools };
+        })
+      );
+
+      expect(result.invalidAttempt._tag).toBe('Left');
+      if (result.invalidAttempt._tag === 'Left') {
+        const error = result.invalidAttempt.left as ToolValidationError;
+        expect(error._tag).toBe('ToolValidationError');
+        expect(error.message).toContain('input schema');
+      }
+
+      expect(result.allTools.map((tool) => tool.id)).toEqual(['existing']);
     });
   });
 

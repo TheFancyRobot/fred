@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect, Layer } from 'effect';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
-import { ProviderNotFoundError } from '../../../../packages/core/src/platform/errors';
+import { ProviderNotFoundError, ProviderRegistrationError } from '../../../../packages/core/src/platform/errors';
 import type { ProviderDefinition, ProviderConfig } from '../../../../packages/core/src/platform/provider';
 
 // Mock provider definition for testing
@@ -12,7 +12,7 @@ const createMockDefinition = (id: string, aliases: string[] = []): ProviderDefin
     modelDefaults: { model: 'test-model' }
   },
   getModel: (modelId, options) => Effect.succeed({} as any),
-  layer: Layer.empty,
+  layer: Layer.empty as unknown as Layer.Layer<any, any, any>,
 });
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, ProviderRegistryService>) =>
@@ -43,6 +43,66 @@ describe('ProviderRegistryService', () => {
       );
       expect(result.hasMain).toBe(true);
       expect(result.hasAlias).toBe(true);
+    });
+
+    test('fails with typed conflict when provider id already exists', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ProviderRegistryService;
+
+          yield* service.registerDefinition(createMockDefinition('openai', ['gpt']));
+
+          const duplicateAttempt = yield* (service.registerDefinition(
+            createMockDefinition('openai', ['chatgpt'])
+          ) as Effect.Effect<void, ProviderRegistrationError>).pipe(Effect.either);
+
+          const canonical = yield* service.getDefinition('openai');
+          const hasNewAlias = yield* service.hasProvider('chatgpt');
+
+          return { duplicateAttempt, canonical, hasNewAlias };
+        })
+      );
+
+      expect(result.duplicateAttempt._tag).toBe('Left');
+      if (result.duplicateAttempt._tag === 'Left') {
+        expect(result.duplicateAttempt.left._tag).toBe('ProviderRegistrationError');
+        const cause = result.duplicateAttempt.left.cause as Error;
+        expect(cause.message).toContain('already registered');
+      }
+
+      expect(result.canonical.id).toBe('openai');
+      expect(result.canonical.aliases).toEqual(['gpt']);
+      expect(result.hasNewAlias).toBe(false);
+    });
+
+    test('fails with typed conflict when alias collides with another provider key', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ProviderRegistryService;
+
+          yield* service.registerDefinition(createMockDefinition('openai', ['gpt']));
+
+          const aliasConflictAttempt = yield* (service.registerDefinition(
+            createMockDefinition('anthropic', ['gpt'])
+          ) as Effect.Effect<void, ProviderRegistrationError>).pipe(Effect.either);
+
+          const aliasOwner = yield* service.getDefinition('gpt');
+          const hasAnthropic = yield* service.hasProvider('anthropic');
+
+          return { aliasConflictAttempt, aliasOwner, hasAnthropic };
+        })
+      );
+
+      expect(result.aliasConflictAttempt._tag).toBe('Left');
+      if (result.aliasConflictAttempt._tag === 'Left') {
+        expect(result.aliasConflictAttempt.left._tag).toBe('ProviderRegistrationError');
+        const cause = result.aliasConflictAttempt.left.cause as Error;
+        expect(cause.message).toContain('alias');
+        expect(cause.message).toContain('already registered');
+      }
+
+      expect(result.aliasOwner.id).toBe('openai');
+      expect(result.hasAnthropic).toBe(false);
     });
   });
 
