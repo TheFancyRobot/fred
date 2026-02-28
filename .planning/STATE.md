@@ -2,18 +2,20 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-16)
+See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Route any message to the right agent and execute multi-step pipelines with shared context, without developers stitching orchestration together themselves.
-**Current focus:** Between milestones — ready for next milestone planning
+**Current focus:** v0.3.0 Imperative-to-Effect Migration
 **Last shipped:** v0.2.2 TUI Visual Polish (2026-02-22)
 
 ## Current Position
 
-Status: Idle (no active milestone)
-Last activity: 2026-02-22 - v0.2.2 audited, verified, and archived
+Phase: 41 of 45 (Leaf Service Independence)
+Plan: 1 of 5 in current phase
+Status: In progress
+Last activity: 2026-02-28 - Completed 41-01-PLAN.md
 
-Progress: 4 milestones shipped (173 total plans across all milestones)
+Progress: █████████░ 97% (173/177 plans)
 
 ## Performance Metrics
 
@@ -37,9 +39,26 @@ Progress: 4 milestones shipped (173 total plans across all milestones)
 - **Badge-based status bar** — stateless `buildStatusBadges()` pipeline with priority truncation
 - **Help modal + floating overlays** — absolute-positioned with zIndex layering, badge dimming during overlays
 
+### Dual API Architecture (v0.3.0 migration target)
+
+- **8 imperative wrapper classes** delegate from Fred class: ToolRegistry, AgentManager, PipelineManager, ContextManager, HookManager, ProviderRegistry, MessageProcessor, MessageRouter
+- **Corresponding Effect services** exist for all 8: ToolRegistryService, AgentService, PipelineService, ContextStorageService, HookManagerService, ProviderRegistryService, MessageProcessorService, MessageRouterService
+- **Fred class (756 lines)** uses imperative classes; Effect runtime barely touched (only `setToolPolicies()`)
+- **PipelineService has 3 stubs** returning `Effect.fail("not yet migrated to Effect")` for V2 execution, resume, graph execution
+- **All consumers** (dev-chat, CLI) use 100% imperative API via `fred.processMessage()`, `fred.streamMessage()`, etc.
+- **~3,000-4,000 lines of duplication** between imperative classes and Effect services
+
 ### Blockers/Concerns
 
 None currently.
+
+### Decisions (v0.3.0)
+
+| Phase | Decision | Rationale |
+|---|---|---|
+| 41-01 | `ToolRegistryService.registerTools` now stages full batch and writes state once | Guarantees atomic behavior with zero partial writes on duplicate/validation failure |
+| 41-01 | `ProviderRegistryService.registerDefinition` rejects duplicate IDs and alias collisions | Prevents silent overwrite and enforces conflict-safe mutation contracts |
+| 41-01 | Provider conflict paths use typed `ProviderRegistrationError` with readable message text | Keeps Effect-first typed error handling while improving diagnostics |
 
 ### Quick Tasks Completed
 
@@ -50,12 +69,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-22
-Stopped at: v0.2.2 milestone audited and archived
-Resume file: .planning/ROADMAP.md
+Last session: 2026-02-28 06:09:18Z
+Stopped at: Completed 41-01-PLAN.md
+Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-22 — v0.2.2 audited and archived*
+*Last updated: 2026-02-28 — Completed 41-01-PLAN.md*
