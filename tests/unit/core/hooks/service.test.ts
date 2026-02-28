@@ -1,10 +1,28 @@
 import { describe, test, expect } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import { HookExecutionError, HookManagerService, HookManagerServiceLive } from '../../../../packages/core/src/hooks/service';
+import { ObservabilityService } from '../../../../packages/core/src/observability/service';
 import type { HookType, HookEvent } from '../../../../packages/core/src/hooks/types';
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, HookManagerService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(HookManagerServiceLive)));
+
+const failingObservability = {
+  logStructured: () => Effect.fail(new Error('structured logging unavailable')),
+  recordHookEvent: () => Effect.void,
+  exportTrace: () => Effect.succeed(undefined),
+} as any;
+
+const runWithServiceAndObservability = <A, E>(effect: Effect.Effect<A, E, HookManagerService>) =>
+  Effect.runPromise(
+    effect.pipe(
+      Effect.provide(
+        HookManagerServiceLive.pipe(
+          Layer.provide(Layer.succeed(ObservabilityService, failingObservability))
+        )
+      )
+    )
+  );
 
 describe('HookManagerService', () => {
   describe('registerHook', () => {
@@ -112,6 +130,27 @@ describe('HookManagerService', () => {
 
       expect(result).toEqual([{ data: 'kept' }]);
       expect(result.some((value) => value instanceof HookExecutionError)).toBe(false);
+    });
+
+    test('maps service-level hook execution failures to HookExecutionError', async () => {
+      const error = await runWithServiceAndObservability(
+        Effect.gen(function* () {
+          const service = yield* HookManagerService;
+          yield* service.registerHook('beforeStep', async () => ({ data: 'ok' }));
+
+          const event: HookEvent = {
+            type: 'beforeStep',
+            data: { stepIndex: 0, pipelineId: 'pipeline' },
+          };
+
+          return yield* service.executeHooks('beforeStep', event);
+        }).pipe(Effect.flip)
+      );
+
+      expect(error).toBeInstanceOf(HookExecutionError);
+      expect(error._tag).toBe('HookExecutionError');
+      expect(error.hookType).toBe('beforeStep');
+      expect(error.message).toContain('Failed to execute hooks for type: beforeStep');
     });
   });
 

@@ -1,16 +1,15 @@
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Data, Effect, Layer, Ref } from 'effect';
 import type { HookType, HookEvent, HookResult, HookHandler } from './types';
 import { ObservabilityService } from '../observability/service';
 
 /**
  * Error thrown when hook execution encounters catastrophic failure
  */
-export class HookExecutionError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(message);
-    this.name = 'HookExecutionError';
-  }
-}
+export class HookExecutionError extends Data.TaggedError("HookExecutionError")<{
+  readonly hookType: HookType;
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Hook execution outcome for telemetry
@@ -78,7 +77,7 @@ export const HookManagerService = Context.GenericTag<HookManagerService>(
 class HookManagerServiceImpl implements HookManagerService {
   constructor(
     private hooks: Ref.Ref<Map<HookType, HookHandler[]>>,
-    private observability?: ObservabilityService
+    private observability?: Context.Tag.Service<ObservabilityService>
   ) {}
 
   registerHook(type: HookType, handler: HookHandler): Effect.Effect<void> {
@@ -190,12 +189,7 @@ class HookManagerServiceImpl implements HookManagerService {
         const result = yield* handlerEffect.pipe(
           Effect.catchAll((error) => {
             outcomes.error++;
-            // Log but continue - hooks should not block execution
-            if (process.env.NODE_ENV !== 'test') {
-              console.error(`Error executing hook ${type}:`, error);
-            }
-            // Return succeed with undefined to continue execution
-            return Effect.succeed(undefined);
+            return self.logHandlerFailure(type, i, error, event).pipe(Effect.as(undefined));
           })
         );
 
@@ -244,7 +238,13 @@ class HookManagerServiceImpl implements HookManagerService {
       }
 
       return results;
-    });
+    }).pipe(
+      Effect.mapError((cause) => new HookExecutionError({
+        hookType: type,
+        message: `Failed to execute hooks for type: ${type}`,
+        cause,
+      }))
+    );
   }
 
   executeHooksAndMerge(type: HookType, event: HookEvent): Effect.Effect<{
@@ -280,7 +280,40 @@ class HookManagerServiceImpl implements HookManagerService {
       }
 
       return merged;
-    });
+    }).pipe(
+      Effect.mapError((cause) => new HookExecutionError({
+        hookType: type,
+        message: `Failed to merge hook results for type: ${type}`,
+        cause,
+      }))
+    );
+  }
+
+  private logHandlerFailure(
+    type: HookType,
+    index: number,
+    error: unknown,
+    event: HookEvent
+  ): Effect.Effect<void> {
+    if (!this.observability) {
+      return Effect.void;
+    }
+
+    return this.observability.logStructured({
+      level: 'error',
+      message: `Hook handler failed: ${type}`,
+      metadata: {
+        'hook.type': type,
+        'hook.handlerIndex': index,
+        'hook.error': error instanceof Error ? error.message : String(error),
+        runId: event.runId,
+        conversationId: event.conversationId,
+        intentId: event.intentId,
+        agentId: event.agentId,
+        pipelineId: event.pipelineId,
+        stepName: event.stepName,
+      },
+    }).pipe(Effect.orElseSucceed(() => undefined));
   }
 
   clearHooks(type: HookType): Effect.Effect<void> {
