@@ -7,7 +7,15 @@ import type { Action, Intent, IntentMatch } from './intent';
 import type { AgentResponse, AgentMessage } from '../agent/agent';
 import { AgentService } from '../agent/service';
 import type { IntentMatchError, ActionHandlerNotFoundError, DefaultAgentNotConfiguredError, IntentRouteError } from './errors';
-import { ActionHandlerNotFoundError as ActionHandlerNotFoundErrorType, DefaultAgentNotConfiguredError as DefaultAgentNotConfiguredErrorType, IntentMatchError as IntentMatchErrorType, IntentRouteError as IntentRouteErrorType } from './errors';
+import {
+  ActionHandlerNotFoundError as ActionHandlerNotFoundErrorType,
+  DefaultAgentNotConfiguredError as DefaultAgentNotConfiguredErrorType,
+  IntentMatchError as IntentMatchErrorType,
+  IntentRouteError as IntentRouteErrorType,
+  getActionHandlerNotFoundMessage,
+  getDefaultAgentNotConfiguredMessage,
+  getIntentRouteErrorMessage,
+} from './errors';
 
 /**
  * Semantic matcher function type
@@ -241,6 +249,7 @@ class IntentRouterServiceImpl implements IntentRouterService {
         return yield* Effect.fail(
           new ActionHandlerNotFoundErrorType({
             actionType: match.intent.action.type,
+            message: getActionHandlerNotFoundMessage(match.intent.action.type),
           })
         );
       }
@@ -265,7 +274,7 @@ class IntentRouterServiceImpl implements IntentRouterService {
       if (!defaultAgentId) {
         return yield* Effect.fail(
           new DefaultAgentNotConfiguredErrorType({
-            message: 'No default agent configured. Set a default agent or ensure an intent matches.',
+            message: getDefaultAgentNotConfiguredMessage(),
           })
         );
       }
@@ -314,6 +323,7 @@ class IntentRouterServiceImpl implements IntentRouterService {
     return Effect.fail(
       new IntentRouteErrorType({
         intentId: match?.intent.id ?? 'unknown',
+        message: getIntentRouteErrorMessage(match?.intent.id ?? 'unknown'),
         cause: new Error(`Function action handler not implemented. Function: ${action.target}`),
       })
     );
@@ -334,6 +344,7 @@ class IntentRouterServiceImpl implements IntentRouterService {
         return yield* Effect.fail(
           new IntentRouteErrorType({
             intentId,
+            message: getIntentRouteErrorMessage(intentId),
             cause: new Error(`Agent not found: ${agentId}`),
           })
         );
@@ -344,6 +355,7 @@ class IntentRouterServiceImpl implements IntentRouterService {
         catch: (cause) =>
           new IntentRouteErrorType({
             intentId,
+            message: getIntentRouteErrorMessage(intentId),
             cause: cause instanceof Error ? cause : new Error(String(cause)),
           }),
       });

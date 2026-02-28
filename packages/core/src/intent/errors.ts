@@ -20,13 +20,14 @@ export class IntentNotFoundError extends Data.TaggedError("IntentNotFoundError")
  */
 export class ActionHandlerNotFoundError extends Data.TaggedError("ActionHandlerNotFoundError")<{
   readonly actionType: string;
+  readonly message?: string;
 }> {}
 
 /**
  * Error thrown when routing to default agent but none is configured.
  */
 export class DefaultAgentNotConfiguredError extends Data.TaggedError("DefaultAgentNotConfiguredError")<{
-  readonly message?: string;
+  readonly message: string;
 }> {}
 
 /**
@@ -34,8 +35,18 @@ export class DefaultAgentNotConfiguredError extends Data.TaggedError("DefaultAge
  */
 export class IntentRouteError extends Data.TaggedError("IntentRouteError")<{
   readonly intentId: string;
+  readonly message?: string;
   readonly cause: Error;
 }> {}
+
+export const getActionHandlerNotFoundMessage = (actionType: string): string =>
+  `No handler registered for action type: ${actionType}`;
+
+export const getDefaultAgentNotConfiguredMessage = (): string =>
+  'No default agent configured. Set a default agent or ensure an intent matches.';
+
+export const getIntentRouteErrorMessage = (intentId: string): string =>
+  `Failed to route intent: ${intentId}`;
 
 /**
  * Union type for all intent errors, enabling exhaustive catchTag handling.

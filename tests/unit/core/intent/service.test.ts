@@ -163,6 +163,7 @@ describe('Intent services', () => {
         expect(result.left._tag).toBe('ActionHandlerNotFoundError');
         if (result.left._tag === 'ActionHandlerNotFoundError') {
           expect(result.left.actionType).toBe('unknown');
+          expect(result.left.message).toContain('No handler registered');
         }
       }
     });
@@ -178,6 +179,9 @@ describe('Intent services', () => {
       expect(result._tag).toBe('Left');
       if (result._tag === 'Left') {
         expect(result.left._tag).toBe('DefaultAgentNotConfiguredError');
+        if (result.left._tag === 'DefaultAgentNotConfiguredError') {
+          expect(result.left.message).toContain('No default agent configured');
+        }
       }
     });
 
@@ -198,6 +202,7 @@ describe('Intent services', () => {
       if (result._tag === 'Left') {
         expect(result.left._tag).toBe('IntentRouteError');
         if (result.left._tag === 'IntentRouteError') {
+          expect(result.left.message).toContain('Failed to route intent');
           expect((result.left.cause as Error).message).toContain('Agent not found: does-not-exist');
         }
       }
@@ -219,6 +224,7 @@ describe('Intent services', () => {
         expect(result.left._tag).toBe('IntentRouteError');
         if (result.left._tag === 'IntentRouteError') {
           expect(result.left.intentId).toBe('default');
+          expect(result.left.message).toContain('Failed to route intent');
           expect((result.left.cause as Error).message).toBe('agent boom');
         }
       }
