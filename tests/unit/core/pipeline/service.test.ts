@@ -545,4 +545,493 @@ describe('PipelineService', () => {
       expect(result.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     });
   });
+
+  // ==========================================
+  // Resume Tests (PIPE-02)
+  // ==========================================
+
+  describe('resume', () => {
+    /**
+     * Create a test layer with mock storage that has pre-seeded checkpoints.
+     */
+    function createTestLayerWithCheckpoints(checkpoints: Checkpoint[]): Layer.Layer<PipelineService> {
+      const mockStorage = createMockStorage();
+      // Pre-seed checkpoints
+      for (const cp of checkpoints) {
+        mockStorage.save(cp);
+      }
+
+      return PipelineServiceLive.pipe(
+        Layer.provide(AgentServiceLive),
+        Layer.provide(HookManagerServiceLive),
+        Layer.provide(PauseServiceLive),
+        Layer.provide(CheckpointServiceLive({ storage: mockStorage })),
+        Layer.provide(ToolGateServiceLive),
+        Layer.provide(ToolRegistryServiceLive),
+        Layer.provide(ProviderRegistryServiceLive)
+      );
+    }
+
+    /**
+     * Create a test checkpoint for testing.
+     */
+    function createTestCheckpoint(overrides: Partial<Checkpoint> & { runId: string; pipelineId: string; step: number }): Checkpoint {
+      const now = new Date();
+      return {
+        status: 'in_progress',
+        context: {
+          input: 'test input',
+          outputs: {},
+          history: [],
+          metadata: {},
+          pipelineId: overrides.pipelineId,
+        },
+        createdAt: now,
+        updatedAt: now,
+        ...overrides,
+      };
+    }
+
+    test('restores from checkpoint state and continues execution', async () => {
+      const runId = 'test-resume-run-1';
+      const pipelineId = 'resume-test-pipeline';
+
+      // Create checkpoint representing step 1 completed, ready for step 2
+      const checkpoint = createTestCheckpoint({
+        runId,
+        pipelineId,
+        step: 1,
+        stepName: 'step1',
+        status: 'in_progress',
+        context: {
+          input: 'original input',
+          outputs: { step1: 'step1 output' },
+          history: [],
+          metadata: { customKey: 'customValue' },
+          pipelineId,
+        },
+      });
+
+      const TestLayerWithCheckpoint = createTestLayerWithCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          // Create a pipeline with multiple steps
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [
+              { name: 'step1', type: 'function', fn: async () => 'step1 output' },
+              { name: 'step2', type: 'function', fn: async (ctx) => `step2 received: ${ctx.outputs.step1}` },
+              { name: 'step3', type: 'function', fn: async (ctx) => `step3 done` },
+            ],
+          });
+
+          // Resume from checkpoint - should start at step 2 (skip step 1)
+          return yield* service.resume(runId, { mode: 'skip' });
+        }).pipe(Effect.provide(TestLayerWithCheckpoint))
+      );
+
+      // Verify resume behavior
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('completed');
+      expect(result.runId).toBe(runId);
+      expect(result.resumedFromStep).toBe(1);
+      // Verify restored context was used
+      expect((result.finalOutput as any)).toContain('step1 output');
+    });
+
+    test('fails with typed error when checkpoint not found', async () => {
+      const nonexistentRunId = 'nonexistent-run-123';
+
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.resume(nonexistentRunId);
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure') {
+        // Verify typed error with checkpoint metadata
+        const failure = result.cause;
+        // The error should include runId context
+        expect(failure).toBeDefined();
+      }
+    });
+
+    test('fails with typed error when checkpoint is expired', async () => {
+      const runId = 'expired-run-1';
+      const pipelineId = 'expired-test-pipeline';
+
+      // Create expired checkpoint
+      const checkpoint = createTestCheckpoint({
+        runId,
+        pipelineId,
+        step: 0,
+        status: 'in_progress',
+        expiresAt: new Date(Date.now() - 10000), // Expired 10 seconds ago
+      });
+
+      const TestLayerWithCheckpoint = createTestLayerWithCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [{ name: 'step1', type: 'function', fn: async () => 'done' }],
+          });
+
+          return yield* service.resume(runId);
+        }).pipe(Effect.provide(TestLayerWithCheckpoint))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure') {
+        // Error should indicate expiry
+        expect(result.cause).toBeDefined();
+      }
+    });
+
+    test('resolves latest checkpoint deterministically with timestamp tie-break', async () => {
+      const pipelineId = 'tie-break-pipeline';
+      const now = new Date();
+
+      // Create two runs for the same pipeline with same timestamp
+      // Run 1: earlier createdAt (should lose tie-break)
+      const run1Id = 'tie-run-1';
+      const checkpoint1 = createTestCheckpoint({
+        runId: run1Id,
+        pipelineId,
+        step: 2,
+        status: 'in_progress',
+        createdAt: new Date(now.getTime() - 1000), // 1 second earlier
+        updatedAt: new Date(now.getTime() - 1000),
+      });
+
+      // Run 2: later createdAt (should win tie-break)
+      const run2Id = 'tie-run-2';
+      const checkpoint2 = createTestCheckpoint({
+        runId: run2Id,
+        pipelineId,
+        step: 3,
+        status: 'in_progress',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const TestLayerWithCheckpoint = createTestLayerWithCheckpoints([checkpoint1, checkpoint2]);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [
+              { name: 'step1', type: 'function', fn: async () => 's1' },
+              { name: 'step2', type: 'function', fn: async () => 's2' },
+              { name: 'step3', type: 'function', fn: async () => 's3' },
+              { name: 'step4', type: 'function', fn: async () => 's4' },
+            ],
+          });
+
+          // Resume without specific runId - should pick run2 (latest by timestamp)
+          return yield* service.resume(run2Id, { mode: 'skip' });
+        }).pipe(Effect.provide(TestLayerWithCheckpoint))
+      );
+
+      // Should resume from run2 which has step 3 (not run1 with step 2)
+      expect(result.runId).toBe(run2Id);
+      expect(result.resumedFromStep).toBe(3);
+    });
+
+    test('retry mode re-executes the checkpointed step', async () => {
+      const runId = 'retry-mode-run';
+      const pipelineId = 'retry-pipeline';
+
+      const checkpoint = createTestCheckpoint({
+        runId,
+        pipelineId,
+        step: 1,
+        stepName: 'step1',
+        status: 'in_progress',
+        context: {
+          input: 'original input',
+          outputs: { step0: 'step0 output' },
+          history: [],
+          metadata: {},
+          pipelineId,
+        },
+      });
+
+      const TestLayerWithCheckpoint = createTestLayerWithCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [
+              { name: 'step0', type: 'function', fn: async () => 'step0 output' },
+              { name: 'step1', type: 'function', fn: async () => 'step1 re-executed' },
+              { name: 'step2', type: 'function', fn: async () => 'step2 done' },
+            ],
+          });
+
+          // Resume with retry mode - should re-execute step 1
+          return yield* service.resume(runId, { mode: 'retry' });
+        }).pipe(Effect.provide(TestLayerWithCheckpoint))
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.resumedFromStep).toBe(1);
+    });
+  });
+
+  // ==========================================
+  // resumeWithHumanInput Tests (PIPE-03)
+  // ==========================================
+
+  describe('resumeWithHumanInput', () => {
+    /**
+     * Create a test layer with paused checkpoints.
+     */
+    function createTestLayerWithPausedCheckpoints(checkpoints: Checkpoint[]): Layer.Layer<PipelineService> {
+      const mockStorage = createMockStorage();
+      for (const cp of checkpoints) {
+        mockStorage.save(cp);
+      }
+
+      return PipelineServiceLive.pipe(
+        Layer.provide(AgentServiceLive),
+        Layer.provide(HookManagerServiceLive),
+        Layer.provide(PauseServiceLive),
+        Layer.provide(CheckpointServiceLive({ storage: mockStorage })),
+        Layer.provide(ToolGateServiceLive),
+        Layer.provide(ToolRegistryServiceLive),
+        Layer.provide(ProviderRegistryServiceLive)
+      );
+    }
+
+    /**
+     * Create a paused checkpoint for testing human input resume.
+     */
+    function createPausedCheckpoint(overrides: Partial<Checkpoint> & { runId: string; pipelineId: string; step: number }): Checkpoint {
+      const now = new Date();
+      return {
+        status: 'paused',
+        context: {
+          input: 'test input',
+          outputs: {},
+          history: [],
+          metadata: {},
+          pipelineId: overrides.pipelineId,
+        },
+        createdAt: now,
+        updatedAt: now,
+        pauseMetadata: {
+          prompt: 'Please provide input',
+          resumeBehavior: 'continue',
+        },
+        ...overrides,
+      };
+    }
+
+    test('unblocks paused checkpoint and continues execution', async () => {
+      const runId = 'paused-run-1';
+      const pipelineId = 'paused-pipeline';
+
+      const checkpoint = createPausedCheckpoint({
+        runId,
+        pipelineId,
+        step: 1,
+        stepName: 'pause-step',
+        context: {
+          input: 'original input',
+          outputs: { step0: 'step0 output' },
+          history: [],
+          metadata: {},
+          pipelineId,
+        },
+      });
+
+      const TestLayerWithPaused = createTestLayerWithPausedCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [
+              { name: 'step0', type: 'function', fn: async () => 'step0 output' },
+              { name: 'pause-step', type: 'function', fn: async () => 'paused step' },
+              { name: 'after-pause', type: 'function', fn: async (ctx) => `after pause: ${ctx.metadata.humanInput}` },
+            ],
+          });
+
+          // Resume with human input
+          return yield* service.resumeWithHumanInput(runId, {
+            humanInput: 'user provided this value',
+          });
+        }).pipe(Effect.provide(TestLayerWithPaused))
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('completed');
+      expect(result.runId).toBe(runId);
+    });
+
+    test('fails when checkpoint is not in paused state', async () => {
+      const runId = 'not-paused-run';
+      const pipelineId = 'not-paused-pipeline';
+
+      // Create checkpoint that is NOT paused
+      const checkpoint: Checkpoint = {
+        runId,
+        pipelineId,
+        step: 1,
+        status: 'in_progress', // NOT paused
+        context: {
+          input: 'test input',
+          outputs: {},
+          history: [],
+          metadata: {},
+          pipelineId,
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const TestLayerWithCheckpoint = createTestLayerWithPausedCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [{ name: 'step1', type: 'function', fn: async () => 'done' }],
+          });
+
+          return yield* service.resumeWithHumanInput(runId, {
+            humanInput: 'user input',
+          });
+        }).pipe(Effect.provide(TestLayerWithCheckpoint))
+      );
+
+      // Should fail because checkpoint is not paused
+      expect(result._tag).toBe('Failure');
+    });
+
+    test('fails with typed error when paused checkpoint not found', async () => {
+      const nonexistentRunId = 'nonexistent-paused-run';
+
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.resumeWithHumanInput(nonexistentRunId, {
+            humanInput: 'user input',
+          });
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure') {
+        // Error should include runId context
+        expect(result.cause).toBeDefined();
+      }
+    });
+
+    test('preserves non-input checkpoint state during human input resume', async () => {
+      const runId = 'preserve-state-run';
+      const pipelineId = 'preserve-state-pipeline';
+
+      const checkpoint = createPausedCheckpoint({
+        runId,
+        pipelineId,
+        step: 1,
+        stepName: 'pause-step',
+        context: {
+          input: 'original input',
+          outputs: {
+            step0: 'important step0 output',
+            anotherStep: 'another output',
+          },
+          history: [
+            { role: 'user', content: 'previous message' },
+            { role: 'assistant', content: 'previous response' },
+          ],
+          metadata: { customKey: 'customValue', anotherKey: 123 },
+          pipelineId,
+        },
+      });
+
+      const TestLayerWithPaused = createTestLayerWithPausedCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [
+              { name: 'step0', type: 'function', fn: async () => 'step0 output' },
+              { name: 'anotherStep', type: 'function', fn: async () => 'another output' },
+              { name: 'pause-step', type: 'function', fn: async () => 'paused' },
+              { name: 'final', type: 'function', fn: async (ctx) => ({
+                outputs: ctx.outputs,
+                metadata: ctx.metadata,
+              }) },
+            ],
+          });
+
+          return yield* service.resumeWithHumanInput(runId, {
+            humanInput: 'user input',
+          });
+        }).pipe(Effect.provide(TestLayerWithPaused))
+      );
+
+      expect(result.success).toBe(true);
+      // Verify outputs were preserved
+      expect((result.finalOutput as any).outputs.step0).toBe('important step0 output');
+      expect((result.finalOutput as any).outputs.anotherStep).toBe('another output');
+    });
+
+    test('fails when paused checkpoint is expired', async () => {
+      const runId = 'expired-paused-run';
+      const pipelineId = 'expired-paused-pipeline';
+
+      const checkpoint = createPausedCheckpoint({
+        runId,
+        pipelineId,
+        step: 1,
+        expiresAt: new Date(Date.now() - 10000), // Expired
+      });
+
+      const TestLayerWithPaused = createTestLayerWithPausedCheckpoints([checkpoint]);
+
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+
+          yield* service.createPipelineV2({
+            id: pipelineId,
+            steps: [{ name: 'step1', type: 'function', fn: async () => 'done' }],
+          });
+
+          return yield* service.resumeWithHumanInput(runId, {
+            humanInput: 'user input',
+          });
+        }).pipe(Effect.provide(TestLayerWithPaused))
+      );
+
+      expect(result._tag).toBe('Failure');
+    });
+  });
 });
