@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, mock, spyOn } from 'bun:test';
-import { Effect, Exit } from 'effect';
+import { Cause, Effect, Exit, Option } from 'effect';
 import { MessageRouter } from '../../../../packages/core/src/routing/router';
 import { RoutingConfig, RoutingRule } from '../../../../packages/core/src/routing/types';
 import { AgentManager } from '../../../../packages/core/src/agent/manager';
@@ -581,14 +581,15 @@ describe('MessageRouter', () => {
 
       // Run multiple times to ensure determinism
       const results = await Promise.all([
-        router.route('test'),
-        router.route('test'),
-        router.route('test'),
+        Effect.runPromise(router.route('test')),
+        Effect.runPromise(router.route('test')),
+        Effect.runPromise(router.route('test')),
       ]);
 
       // All results should be the same
       expect(results[0].agent).toBe(results[1].agent);
       expect(results[1].agent).toBe(results[2].agent);
+      expect(results[0].rule?.id).toBe('rule-a');
     });
   });
 
@@ -670,9 +671,13 @@ describe('MessageRouter', () => {
       const exit = await Effect.runPromiseExit(router.route('any message'));
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        expect(String(exit.cause.error)).toContain(
-          'No agents available for routing. Register at least one agent.'
-        );
+        const failure = Cause.failureOption(exit.cause);
+        expect(Option.isSome(failure)).toBe(true);
+        if (Option.isSome(failure)) {
+          expect(failure.value.message).toContain(
+            'No agents available for routing. Register at least one agent.'
+          );
+        }
       }
     });
   });
