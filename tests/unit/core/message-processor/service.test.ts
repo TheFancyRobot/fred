@@ -649,10 +649,7 @@ describe('MessageProcessorService stream contracts', () => {
   test('streamMessage preserves partial outputs before terminal stream error', async () => {
     const { Stream, Effect } = await import('effect');
 
-    // Track which events were emitted before the error
-    let partialTextBeforeError = '';
-    const runId = `run_${Date.now()}`;
-
+    // Create a mock agent that emits partial content then fails
     const mockAgent = {
       id: 'partial-error-agent',
       config: {
@@ -664,16 +661,22 @@ describe('MessageProcessorService stream contracts', () => {
       },
       processMessage: async () => ({ content: 'fallback' }),
       streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
+        const runId = `run_${Date.now()}`;
         const threadId = opts?.threadId;
         let seq = 0;
 
-        // Emit partial content then fail
-        return Stream.fromIterable([
+        // First emit some partial content
+        const partialEvents = [
           { type: 'run-start', sequence: ++seq, emittedAt: Date.now(), runId, threadId, startedAt: Date.now(), input: { message, previousMessages: [] } },
           { type: 'token', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, delta: 'Partial ', accumulated: 'Partial ' },
-          { type: 'token', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, delta: 'content', accumulated: 'Partial content' },
-        ]).pipe(
-          Stream.concat(Stream.fail(new RouteExecutionError({ routeType: 'agent', cause: new Error('Simulated stream failure') })))
+          { type: 'token', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, delta: 'content ', accumulated: 'Partial content ' },
+        ];
+
+        // Then fail the stream
+        return Stream.fromIterable(partialEvents).pipe(
+          Stream.concat(
+            Stream.fail(new RouteExecutionError({ routeType: 'agent', cause: new Error('Simulated stream failure') }))
+          )
         );
       },
     } as any;
