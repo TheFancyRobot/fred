@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 41 of 45 (Leaf Service Independence)
-Plan: 4 of 5 in current phase
-Status: In progress
-Last activity: 2026-02-28 - Completed 41-04-PLAN.md
+Plan: 5 of 5 in current phase
+Status: Phase complete
+Last activity: 2026-02-28 - Completed 41-05-PLAN.md
 
-Progress: ██████████ 99% (176/177 plans)
+Progress: ██████████ 100% (177/177 plans)
 
 ## Performance Metrics
 
@@ -68,6 +68,9 @@ None currently.
 | 41-04 | IntentMatcherService and IntentRouterService now execute standalone Effect logic in service layers | Removes wrapper delegation while preserving public service APIs |
 | 41-04 | Intent ambiguity resolution is deterministic first-match-wins with explicit tie-break ordering | Locks ordering-sensitive behavior for stable downstream routing outcomes |
 | 41-04 | Routing failures use normalized typed intent errors with preserved causes | Keeps caller-facing contracts explicit while retaining debugging context |
+| 41-05 | MessageRouterService now owns rule matching/ranking/fallback in service-layer Effect logic | Closes imperative router delegation seam while preserving deterministic routing contracts |
+| 41-05 | Fred base layers stay unchanged while standalone intent/router composition is exposed as opt-in exports | Preserves MessageProcessor optional dependency behavior without forced requirements |
+| 41-05 | Standalone router fallback cascade is explicit (`defaultAgent` -> `fallbackAgents` -> first rule agent -> typed failure) | Maintains deterministic fallback outcomes in config-only service composition |
 
 ### Quick Tasks Completed
 
@@ -78,12 +81,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-28 06:18:55Z
-Stopped at: Completed 41-04-PLAN.md
+Last session: 2026-02-28 06:27:05Z
+Stopped at: Completed 41-05-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-28 — Completed 41-04-PLAN.md*
+*Last updated: 2026-02-28 — Completed 41-05-PLAN.md*
