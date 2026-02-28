@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 41 of 45 (Leaf Service Independence)
-Plan: 1 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-28 - Completed 41-01-PLAN.md
+Last activity: 2026-02-28 - Completed 41-04-PLAN.md
 
-Progress: █████████░ 97% (173/177 plans)
+Progress: ██████████ 99% (176/177 plans)
 
 ## Performance Metrics
 
@@ -59,6 +59,15 @@ None currently.
 | 41-01 | `ToolRegistryService.registerTools` now stages full batch and writes state once | Guarantees atomic behavior with zero partial writes on duplicate/validation failure |
 | 41-01 | `ProviderRegistryService.registerDefinition` rejects duplicate IDs and alias collisions | Prevents silent overwrite and enforces conflict-safe mutation contracts |
 | 41-01 | Provider conflict paths use typed `ProviderRegistrationError` with readable message text | Keeps Effect-first typed error handling while improving diagnostics |
+| 41-02 | Context strict-mode misses now include caller-safe typed `ContextNotFoundError` messages | Keeps explicit not-found contracts while improving downstream diagnostics |
+| 41-02 | Context mutation failures map to operation-specific `ContextStorageError` with retained causes | Normalizes failure surface for callers without losing debugging detail |
+| 41-02 | Hook handler failures remain non-blocking while service-level failures map to tagged `HookExecutionError` | Preserves runtime parity and removes ad-hoc generic error leakage |
+| 41-03 | AgentService syncs a concrete `ToolRegistry` into AgentFactory at create-time | Eliminates service-path runtime escapes while preserving existing factory behavior |
+| 41-03 | Agent creation errors use stable default message text and retain original causes | Keeps typed caller-facing contracts concise without losing diagnostic context |
+| 41-03 | Agent registration finalizes through atomic `Ref.modify` insertion | Guarantees failed creates do not partially register agent state |
+| 41-04 | IntentMatcherService and IntentRouterService now execute standalone Effect logic in service layers | Removes wrapper delegation while preserving public service APIs |
+| 41-04 | Intent ambiguity resolution is deterministic first-match-wins with explicit tie-break ordering | Locks ordering-sensitive behavior for stable downstream routing outcomes |
+| 41-04 | Routing failures use normalized typed intent errors with preserved causes | Keeps caller-facing contracts explicit while retaining debugging context |
 
 ### Quick Tasks Completed
 
@@ -69,12 +78,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-28 06:09:18Z
-Stopped at: Completed 41-01-PLAN.md
+Last session: 2026-02-28 06:18:55Z
+Stopped at: Completed 41-04-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-28 — Completed 41-01-PLAN.md*
+*Last updated: 2026-02-28 — Completed 41-04-PLAN.md*
