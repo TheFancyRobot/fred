@@ -115,9 +115,20 @@ class ToolRegistryServiceImpl implements ToolRegistryService {
   registerTools(tools: Tool[]): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError> {
     const self = this;
     return Effect.gen(function* () {
+      const currentTools = yield* Ref.get(self.tools);
+      const nextTools = new Map(currentTools);
+
       for (const tool of tools) {
-        yield* self.registerTool(tool);
+        if (nextTools.has(tool.id)) {
+          return yield* Effect.fail(new ToolAlreadyExistsError({ id: tool.id }));
+        }
+
+        const toolWithCapabilities = withInferredCapabilities(tool);
+        yield* validateToolSchemaEffect(toolWithCapabilities);
+        nextTools.set(tool.id, toolWithCapabilities);
       }
+
+      yield* Ref.set(self.tools, nextTools);
     });
   }
 
