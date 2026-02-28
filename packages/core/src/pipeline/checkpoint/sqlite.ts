@@ -349,6 +349,40 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
   }
 
   /**
+   * Get the latest checkpoint for a pipeline (highest step, timestamp tie-break).
+   * Returns the checkpoint with the highest step number, using created_at as a tie-breaker.
+   * Excludes expired checkpoints.
+   */
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    this.ensureInitialized();
+
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      SELECT run_id, pipeline_id, step, status, context, created_at, updated_at, expires_at, step_name, pause_metadata
+      FROM checkpoints
+      WHERE pipeline_id = ? AND (expires_at IS NULL OR expires_at > ?)
+      ORDER BY step DESC, created_at DESC
+      LIMIT 1
+    `);
+
+    const row = stmt.get(pipelineId, now) as CheckpointRow | null;
+
+    if (!row) {
+      return null;
+    }
+
+    try {
+      return this.rowToCheckpoint(row);
+    } catch (err) {
+      console.warn(
+        `[SqliteCheckpointStorage] Warning: Failed to deserialize checkpoint for pipeline ${pipelineId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
+      return null;
+    }
+  }
+
+  /**
    * Close the database connection.
    */
   async close(): Promise<void> {

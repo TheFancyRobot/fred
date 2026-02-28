@@ -71,6 +71,15 @@ export interface CheckpointService {
   getLatestCheckpoint(runId: string): Effect.Effect<Checkpoint, CheckpointNotFoundError>;
 
   /**
+   * Get the latest checkpoint for a pipeline (highest step, timestamp tie-break).
+   * Used by resume to find the most recent resumable checkpoint for a pipeline.
+   *
+   * @param pipelineId - The pipeline identifier
+   * @returns The latest checkpoint for the pipeline or null if none exists
+   */
+  getLatestByPipelineId(pipelineId: string): Effect.Effect<Checkpoint | null>;
+
+  /**
    * Get a specific checkpoint by run ID and step.
    *
    * @param runId - The run identifier
@@ -184,6 +193,14 @@ class CheckpointServiceImpl implements CheckpointService {
     });
   }
 
+  getLatestByPipelineId(pipelineId: string): Effect.Effect<Checkpoint | null> {
+    const self = this;
+    return Effect.gen(function* () {
+      const checkpoint = yield* self.storageGetLatestByPipelineId(pipelineId);
+      return checkpoint;
+    });
+  }
+
   getCheckpoint(runId: string, step: number): Effect.Effect<Checkpoint, CheckpointNotFoundError> {
     const self = this;
     return Effect.gen(function* () {
@@ -232,6 +249,15 @@ class CheckpointServiceImpl implements CheckpointService {
     const self = this;
     return Effect.async<Checkpoint | null>((resume) => {
       self.storage.getLatest(runId)
+        .then((result) => resume(Effect.succeed(result)))
+        .catch((error) => resume(Effect.die(error)));
+    });
+  }
+
+  private storageGetLatestByPipelineId(pipelineId: string): Effect.Effect<Checkpoint | null> {
+    const self = this;
+    return Effect.async<Checkpoint | null>((resume) => {
+      self.storage.getLatestByPipelineId(pipelineId)
         .then((result) => resume(Effect.succeed(result)))
         .catch((error) => resume(Effect.die(error)));
     });

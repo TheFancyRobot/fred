@@ -77,6 +77,18 @@ function createMockStorage(): CheckpointStorage {
       return checkpoints.filter(c => c.status === status);
     },
 
+    async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+      const filtered = checkpoints
+        .filter(c => c.pipelineId === pipelineId)
+        .filter(c => !c.expiresAt || c.expiresAt > new Date())
+        .sort((a, b) => {
+          // Sort by step DESC, then by createdAt DESC for tie-break
+          if (b.step !== a.step) return b.step - a.step;
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
+      return filtered[0] ?? null;
+    },
+
     async close(): Promise<void> {
       checkpoints.length = 0;
     },
