@@ -636,7 +636,7 @@ describe('PipelineService', () => {
             steps: [
               { name: 'step1', type: 'function', fn: async () => 'step1 output' },
               { name: 'step2', type: 'function', fn: async (ctx) => `step2 received: ${ctx.outputs.step1}` },
-              { name: 'step3', type: 'function', fn: async (ctx) => `step3 done` },
+              { name: 'step3', type: 'function', fn: async (ctx) => ({ final: ctx.outputs, metadata: ctx.metadata }) },
             ],
           });
 
@@ -650,8 +650,9 @@ describe('PipelineService', () => {
       expect(result.status).toBe('completed');
       expect(result.runId).toBe(runId);
       expect(result.resumedFromStep).toBe(1);
-      // Verify restored context was used
-      expect((result.finalOutput as any)).toContain('step1 output');
+      // Verify restored context was used (outputs from checkpoint preserved)
+      expect((result.finalOutput as any).final.step1).toBe('step1 output');
+      expect((result.finalOutput as any).metadata.customKey).toBe('customValue');
     });
 
     test('fails with typed error when checkpoint not found', async () => {
