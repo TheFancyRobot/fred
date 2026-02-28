@@ -48,12 +48,19 @@ Plans:
 **Goal**: The two most complex services — PipelineService and MessageProcessorService — become fully standalone with all stub methods replaced by working implementations
 **Depends on**: Phase 41 (pipeline and processor depend on leaf services)
 **Requirements**: EFCT-03, EFCT-07, PIPE-01, PIPE-02, PIPE-03
+**Plans**: 4 plans
 **Success Criteria** (what must be TRUE):
   1. `PipelineService.executeV2Pipeline` executes V2 pipelines to completion through Effect (no `Effect.fail("not yet migrated")` stub)
   2. `PipelineService.resume` and `PipelineService.resumeWithHumanInput` restore checkpoint state and continue execution through Effect
   3. PipelineService has zero imports from `pipeline/manager.ts` — all 1,062 lines of PipelineManager orchestration logic are ported
   4. MessageProcessorService processes and streams messages without delegating to imperative `MessageProcessor` methods
   5. Pipeline and message processing tests pass against the standalone services
+
+Plans:
+- [ ] 42-01-PLAN.md — Cut over PipelineService executePipelineV2 and remove manager type coupling
+- [ ] 42-02-PLAN.md — Implement standalone resume and resumeWithHumanInput state machine semantics
+- [ ] 42-03-PLAN.md — Harden MessageProcessorService streaming and route failure contracts
+- [ ] 42-04-PLAN.md — Add migration guard/integration checks and finalize Phase 42 verification suite
 
 ### Phase 43: Fred Class Migration
 **Goal**: The Fred class facade constructs and delegates to the Effect runtime instead of imperative manager instances, becoming a thin Effect-backed API surface
@@ -169,7 +176,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
-| 42. Pipeline & MessageProcessor Completion | 0/? | Not started | — |
+| 42. Pipeline & MessageProcessor Completion | 0/4 | Not started | — |
 | 43. Fred Class Migration | 0/? | Not started | — |
 | 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |

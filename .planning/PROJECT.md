@@ -40,14 +40,21 @@ Route any message to the right agent and execute multi-step pipelines with share
 - ✓ **DX-04**: Command parity between TUI and non-interactive CLI mode — v0.2.1
 - ✓ **DX-05**: Extensible CLI plugin architecture for project-specific tooling — v0.2.1
 
-### Active (v0.2.2)
+- ✓ **VISUAL-01**: Centralized theme/palette system — v0.2.2
+- ✓ **VISUAL-02**: Semantic color tokens — v0.2.2
+- ✓ **VISUAL-03**: All TUI components use theme system — v0.2.2
+- ✓ **VISUAL-04**: Contrast-based region separation (no box-drawing borders) — v0.2.2
+- ✓ **VISUAL-05**: Background shade differentiation for sidebar/transcript/input — v0.2.2
+- ✓ **VISUAL-06**: Borderless aesthetic with padding-based spacing — v0.2.2
 
-- [ ] **VISUAL-01**: Centralized theme/palette system
-- [ ] **VISUAL-02**: Semantic color tokens
-- [ ] **VISUAL-03**: All TUI components use theme system
-- [ ] **VISUAL-04**: Contrast-based region separation (no box-drawing borders)
-- [ ] **VISUAL-05**: Background shade differentiation for sidebar/transcript/input
-- [ ] **VISUAL-06**: Borderless aesthetic with padding-based spacing
+### Active (v0.3.0)
+
+- [ ] **EFCT-01**: Effect services are the primary implementations for all core subsystems
+- [ ] **EFCT-02**: Fred class delegates to Effect services instead of imperative wrapper classes
+- [ ] **EFCT-03**: Imperative wrapper classes removed (ToolRegistry, AgentManager, PipelineManager, ContextManager, HookManager, ProviderRegistry)
+- [ ] **EFCT-04**: PipelineService stubs completed (V2 execution, resume, graph execution)
+- [ ] **EFCT-05**: Consumers (dev-chat, CLI) updated to use Effect-based API
+- [ ] **EFCT-06**: Public exports updated to remove imperative class exports
 
 ### Out of Scope
 
@@ -63,15 +70,15 @@ Route any message to the right agent and execute multi-step pipelines with share
 
 ## Current State
 
-**Shipped:** v0.2.1 (2026-02-16)
-- 39/39 v0.2.1 requirements complete (31 initial + 8 gap-closure across phases 33-36)
-- 10 phases delivered (27-36), 31 plans executed
-- Key artifacts: `packages/cli/src/tui/app.ts`, `packages/cli/src/tui/state.ts`
-- ~5.32 min/plan average, ~2.75 hours total execution
+**Shipped:** v0.2.2 (2026-02-22)
+- 17/17 v0.2.2 requirements complete (VISUAL-01 through VISUAL-17)
+- 4 phases delivered (37-40), 13 plans executed
+- Centralized theme system, borderless contrast layout, collapsible sidebar
+- TUI bug fixes: cursor blink, transcript flicker, /exit command
 
 **Architecture:**
 - Monorepo with Bun workspaces
-- Effect-based internals with dual Promise/Effect APIs
+- Effect-based internals with dual Promise/Effect APIs (v0.3.0 target: Effect-only)
 - 5 built-in provider packs (OpenAI, Anthropic, Google, Groq, OpenRouter)
 - SQL persistence (Postgres/SQLite)
 - Checkpoint/resume with human-in-the-loop
@@ -79,12 +86,12 @@ Route any message to the right agent and execute multi-step pipelines with share
 - Production-grade CLI (`fred run`, `fred init`, `fred list`, `fred config validate`)
 - OpenTUI-based TUI with streaming, session management, and plugin architecture
 
-**Next Milestone Goals (v0.2.2):**
-- Centralized theme/palette system replacing inline hex colors
-- Contrast-based region separation (borderless aesthetic)
-- Information-dense collapsible sidebar
-- Muted assistant styling with inline tool blocks
-- Minimal input chrome and compact status bar badges
+**Next Milestone Goals (v0.3.0):**
+- Eliminate dual imperative/Effect API surface (~3,000-4,000 lines of duplicated code)
+- Make Effect services the primary and only implementations
+- Rework Fred class to delegate to Effect services
+- Complete PipelineService stubs
+- Update all consumers (dev-chat, CLI) to Effect-based API
 
 ## Context
 
@@ -102,20 +109,35 @@ Route any message to the right agent and execute multi-step pipelines with share
 - **AI SDK**: Full Effect replacement — no Vercel AI SDK dependencies
 - **Persistence**: In-memory by default; SQL optional — no persistence without explicit adapter
 
-## Current Milestone: v0.2.2 TUI Visual Polish
+## Current Milestone: v0.3.0 Imperative-to-Effect Migration
 
-**Goal:** Redesign the Fred TUI appearance to use contrast-based region separation, muted color palette, information-dense sidebar, and minimal chrome — inspired by modern terminal UIs like OpenCode.
+**Goal:** Eliminate the dual imperative/Effect API surface by making Effect services the primary (and only) implementations, removing ~3,000-4,000 lines of duplicated wrapper code.
 
 **Target features:**
+- Effect services as sole implementations for all core subsystems
+- Fred class reworked to delegate to Effect services via runtime
+- Imperative wrapper classes removed (ToolRegistry, AgentManager, PipelineManager, etc.)
+- PipelineService stubs completed with full working implementations
+- All consumers (dev-chat, CLI) migrated to Effect-based API
+- Clean public API surface with Effect-only exports
+
+## Previous Milestone: v0.2.2 TUI Visual Polish
+
+**Status:** Shipped 2026-02-22
+**Archive:** `.planning/milestones/v0.2.2-ROADMAP.md`, `.planning/milestones/v0.2.2-REQUIREMENTS.md`
+
+**Delivered:**
 - Centralized theme/palette system with semantic color tokens
-- Borderless contrast-based region separation (no box-drawing characters)
+- Borderless contrast-based region separation
 - Information-dense collapsible sidebar with hotkey/slash command toggle
-- Muted assistant styling with inline expandable tool blocks and streaming accent
+- Muted assistant styling with inline expandable tool blocks
 - Minimal input chrome and compact status bar badges
+- Help modal, slash overlay, and badge dimming
 
-## Previous Milestone: v0.2.1 CLI/TUI Developer Experience
+<details>
+<summary>Previous: v0.2.1 CLI/TUI Developer Experience</summary>
 
-**Status:** ✅ Shipped 2026-02-16
+**Status:** Shipped 2026-02-16
 **Archive:** `.planning/milestones/v0.2.1-ROADMAP.md`, `.planning/milestones/v0.2.1-REQUIREMENTS.md`
 
 **Delivered:**
@@ -126,6 +148,8 @@ Route any message to the right agent and execute multi-step pipelines with share
 - Debugging commands for intent testing, route analysis, MCP server management
 - Extensible plugin architecture with typed contract, CLI commands, TUI slash commands
 - Runtime hardening: JSON channel consistency, terminal lifecycle wiring, Bun mock isolation
+
+</details>
 
 <details>
 <summary>Previous: v0.2.0 Observability & Safety</summary>
@@ -151,12 +175,14 @@ Route any message to the right agent and execute multi-step pipelines with share
 | Provider packs via Effect | Align provider integrations with Effect ecosystem | ✓ Good — 5 packs, clean abstractions |
 | SQL support (Postgres + SQLite) | Cover production and local/dev needs | ✓ Good — Both adapters working |
 | Effect Schema for tool validation | Better type safety and runtime validation | ✓ Good — All tools validated |
-| Dual API (Promise + Effect) | Maintain Promise ease, offer Effect power | ✓ Good — Smooth migration path |
+| Dual API (Promise + Effect) | Maintain Promise ease, offer Effect power | ⚠️ Revisit — v0.3.0 removes imperative layer |
 | Independent versioning | Separate package evolution | ✓ Good — Flexible releases |
 | Monorepo with Changesets | Version management and changelogs | ✓ Good — Automated publishing |
 | OpenTUI for TUI framework | User preference; TypeScript-native terminal UI | ✓ Good — Full TUI shipped with @opentui/core |
 | fred chat as primary interactive entry | Cleaner semantics; `fred` and `fred tui` as aliases | ✓ Good — Consistent launch contract |
 | Plugin typed contract via entry point | Stable API surface for third-party extensions | ✓ Good — npm-compatible plugin loading |
 
+| Effect-only API (removing Promise wrappers) | Dual API adds ~4k lines of duplication; Effect is proven stable | — Pending |
+
 ---
-*Last updated: 2026-02-16 after v0.2.1 milestone*
+*Last updated: 2026-02-21 after v0.3.0 milestone start*

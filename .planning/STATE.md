@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 42 — Pipeline & MessageProcessor Completion (in progress)
-Plan: 3 of 4 complete (42-03)
-Status: In progress - PIPE-01, PIPE-02, PIPE-03 complete
-Last activity: 2026-02-28 - Completed 42-03-PLAN.md (Stream contracts)
+Plan: 4 of 4 complete (42-04)
+Status: Phase 42 complete - All PIPE-* requirements satisfied
+Last activity: 2026-02-28 - Completed 42-02-PLAN.md (Resume state machine)
 
 Progress: 4 milestones shipped + v0.3.0 phase 42 in progress (179 total plans)
 
@@ -44,7 +44,8 @@ Progress: 4 milestones shipped + v0.3.0 phase 42 in progress (179 total plans)
 - **8 imperative wrapper classes** delegate from Fred class: ToolRegistry, AgentManager, PipelineManager, ContextManager, HookManager, ProviderRegistry, MessageProcessor, MessageRouter
 - **Corresponding Effect services** exist for all 8: ToolRegistryService, AgentService, PipelineService, ContextStorageService, HookManagerService, ProviderRegistryService, MessageProcessorService, MessageRouterService
 - **Fred class (756 lines)** uses imperative classes; Effect runtime barely touched (only `setToolPolicies()`)
-- **PipelineService has 3 stubs** returning `Effect.fail("not yet migrated to Effect")` for V2 execution, resume, graph execution
+- **PipelineService resume methods now implemented** - `resume()` and `resumeWithHumanInput()` are standalone Effect state machines
+- **PipelineService graph execution stub remains** - graph methods still return "not yet migrated to Effect fibers"
 - **All consumers** (dev-chat, CLI) use 100% imperative API via `fred.processMessage()`, `fred.streamMessage()`, etc.
 - **~3,000-4,000 lines of duplication** between imperative classes and Effect services
 
@@ -75,6 +76,11 @@ None currently.
 | 42-03 | No `Effect.runPromise` in MessageProcessorService streaming path | Pure Effect composition without runtime boundary escapes |
 | 42-03 | No `Stream.runCollect` in live stream paths - events flow without buffering | Preserves strict ordering and partial outputs before terminal failures |
 | 42-03 | `RouteExecutionError` carries `agentId` and `routeType` for debugging | Post-routing failures include route context metadata |
+| 42-02 | Resume restores checkpoint context as source of truth | Eliminates state recomputation and guarantees deterministic continuation |
+| 42-02 | Typed resume errors carry runId/pipelineId/step for diagnostics | Rich error context without string parsing |
+| 42-02 | `resumeWithHumanInput` requires paused status (strict gate) | Prevents accidental resumption of non-paused checkpoints |
+| 42-02 | Best-effort step resolution via stepName fallback | Graceful handling when pipeline steps change between runs |
+| 42-02 | Skip mode at last step returns completed result | Handles edge case where all steps already executed |
 
 ### Quick Tasks Completed
 
@@ -85,12 +91,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-28 21:30:00Z
-Stopped at: Completed 42-03-PLAN.md (Stream contracts)
+Last session: 2026-02-28 22:00:00Z
+Stopped at: Completed 42-02-PLAN.md (Resume state machine)
 Resume file: .planning/STATE.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-28 — Phase 42 in progress (3/4 plans complete)*
+*Last updated: 2026-02-28 — Phase 42 complete (4/4 plans)*
