@@ -1,5 +1,16 @@
 # @fred/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- Release the CLI changes shipped in v0.2.2 as a minor update.
+
+  This includes the TUI visual polish milestone work (theme tokens, borderless
+  contrast layout, sidebar redesign/toggle, transcript and tool block rendering,
+  input/status/help overlay polish), plus follow-up reliability fixes for
+  streaming, XML filtering, key handling, and tool output rendering.
+
 ## 0.2.2
 
 ### Patch Changes
