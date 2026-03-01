@@ -15,11 +15,8 @@ export {
   isBuiltinPack,
 } from './platform/packs';
 export * from './config/types';
-export { ToolRegistry } from './tool/registry';
-export { AgentManager } from './agent/manager';
 export { IntentMatcher } from './intent/matcher';
 export { IntentRouter } from './intent/router';
-export { ContextManager } from './context/manager';
 export * from './context/context';
 export * from './context/session';
 export { SqliteContextStorage } from './context/storage/sqlite';
@@ -50,9 +47,7 @@ export type {
 } from './pipeline/pause/types';
 export { createCalculatorTool } from './tool/calculator';
 
-export { HookManager } from './hooks/manager';
 export * from './hooks/types';
-export { MessageRouter } from './routing/router';
 export * from './routing/types';
 export {
   generateRoutingExplanation,
