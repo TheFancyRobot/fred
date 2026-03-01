@@ -6,52 +6,57 @@
 <domain>
 ## Phase Boundary
 
-Finalize the public API to export only Effect services, ensure Layer composition is complete, document all breaking changes for the v0.3.0 migration, and verify the full test suite passes cleanly. This is the final phase of the imperative-to-Effect migration milestone.
+Clean up public exports to remove imperative classes, expose only Effect services + types + utilities, compose the final Layer, document all v0.3.0 breaking changes, and verify the full test suite and build pass cleanly. This is the verification gate for the v0.3.0 Effect migration milestone.
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### Export contract design
-- Both `@fred/core` and `@fred/core/services` import paths should work for Effect service tags
-- Remove the 5 imperative class exports from `exports.ts`: `ToolRegistry`, `AgentManager`, `ContextManager`, `HookManager`, `MessageRouter`
-- Light cleanup of `exports.ts`: organize remaining exports into clearer groups (types, services, utilities) without adding/removing non-migration exports
-- Claude's discretion on whether `exports.ts` or `services.ts` is the primary entry point internally
-- Claude's discretion on whether to keep or remove the `@fred/core/effect` path (check if anything imports from it)
+### Export surface design
+- Main export (`@fancyrobot/fred`) includes Effect service tags, commonly-used types, and utility functions — removes only imperative classes
+- Fred class AND Effect runtime creation (`createFredRuntime`, `FredLayers`) both exported — transition period where consumers can use either
+- Eval/test framework exports (GoldenTraceRecorder, TestCase, assertions, etc.) move to `@fancyrobot/fred/eval` sub-path; update CLI test.ts imports accordingly
+- Storage implementations (SqliteContextStorage, PostgresContextStorage, CheckpointStorage) move to sub-paths (e.g., `@fancyrobot/fred/context/sqlite`); update consumer imports
+- Observability export organization: research implementation patterns in other Effect-based libraries and use that research as guidance for where observability exports live
+- Package.json `"exports"` field must be added/updated to explicitly control which paths consumers can import — prevent accidental deep imports into internals
+- Built-in tools (createCalculatorTool) move to sub-path within `@fancyrobot/fred/tools` as intermediate step
 
-### Migration documentation
-- Full v0.3.0 CHANGELOG covering all breaking changes from the entire migration (Phases 41-45), not just Phase 45
-- Summary format with 2-3 before/after code snippets for the most common consumer patterns (creating agents, running pipelines, registering tools)
-- Claude's discretion on CHANGELOG file location (repo root vs package-level) and version header format (`v0.3.0` vs `[Unreleased]`)
+### Breaking change documentation
+- CHANGELOG uses changesets format with before/after code examples showing migration paths
+- Version: 0.3.0
+- Covers the entire v0.3.0 milestone (phases 41-45) as one cohesive breaking change release
+- Audience: external consumers — docs must be clear for someone unfamiliar with the migration context
+- Changesets for all affected packages: @fred/core (breaking), @fred/cli, @fred/dev (patch/minor for import path updates)
+- No "why this change" motivation section — just the facts: what changed, what replaces it, code examples
 
-### Pre-existing LSP error resolution
-- Goal: fix all pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer references)
-- Claude judges per case: fix if safe, document if risky/requires major refactoring beyond phase scope
-- If any remain unfixed: both inline TODO/FIXME comments at the code locations AND a Known Issues section in the CHANGELOG
-- Verification: `tsc --noEmit` required as an explicit verification step (not just `bun build`)
+### Backward compatibility policy
+- Clean break: remove imperative exports entirely, no deprecation shims
+- Phase 44 must be verified complete before Phase 45 starts — no straggler consumer imports of imperative classes
+- Block removal of any imperative class that has NO Effect service equivalent — every removal must have a migration path
+- WorkflowManager MUST have an Effect service equivalent; if not already implemented, create it in this phase
+- Audit type-only exports: keep only types that consumers actually use or that map to Effect service APIs; remove orphaned types tied to imperative classes
 
-### Test update strategy
-- Migrate tests to use Effect services rather than imperative classes — tests become reference examples of the new API
-- Delete imperative class tests that have equivalent coverage in service tests (remove dead weight)
-- All tests that exist after cleanup must pass — zero failures
-- Add a new API smoke test that imports from public entry points and verifies `FredLayers` constructs and runs a basic Effect
+### Pre-existing error resolution
+- Fix ALL pre-existing LSP errors: Effect yield errors in index.ts, tracing import errors, config/initializer reference — no known issues left
+- Fix and verify: Phase 45 actively fixes any broken tests caused by the migration, not just verifies they pass
+- Verify build output: `bun run build` succeeds AND verify dist output has correct exports with a smoke test importing from the built package
+- Verify boundary guard test: confirm `phase-44-boundary-guard.test.ts` passes with no new Effect.runPromise violations
+- Phase 45 handles interface tweaks needed to fix LSP errors — even if they touch service interfaces
+- Remove ALL @ts-ignore and @ts-expect-error workaround annotations added during the migration; fix underlying type issues
 
 ### Claude's Discretion
-- Entry point structure (which file is primary, how re-exports are organized)
-- `@fred/core/effect` path: keep or consolidate
-- CHANGELOG location and version header format
-- Per-error judgment on fix vs document for risky LSP errors
+- Provider pack export location (main vs sub-path) — determine based on consumer usage patterns
+- Build scope (all packages vs core + consumers) — determine based on dependency graph
+- Exact sub-path naming conventions for moved exports
 
 </decisions>
 
 <specifics>
 ## Specific Ideas
 
-- Consumer should be able to import Effect service tags directly from `@fred/core` (not forced into a sub-path)
-- CHANGELOG should tell the full v0.3.0 story, not just Phase 45's changes — consumers upgrading need the complete picture
-- Clean slate: aim to fix all LSP errors, only document as last resort
-- API smoke test should be a real integration test (import, construct layers, run an Effect) not just a type-level check
+- Built-in tools should eventually live in a dedicated `@fancyrobot/fred-tools` package (deferred — see below)
+- External consumers need clear before/after code examples in the CHANGELOG
 
 </specifics>
 
@@ -59,27 +64,29 @@ Finalize the public API to export only Effect services, ensure Layer composition
 ## Existing Code Insights
 
 ### Reusable Assets
-- `packages/core/src/services.ts`: Already has complete `FredLayers` composition with all services, `FredRuntime` type, `createFredRuntime()`, and all service re-exports
-- `packages/core/src/effect/services.ts`: Secondary re-export of all services from `@fred/core/effect` path
-- `packages/core/src/exports.ts`: Current public API surface — still exports 5 imperative classes alongside types, eval, observability, stream exports
+- `services.ts`: Already has complete FredLayers composition with wave-based dependency ordering, FredRuntime type, createFredRuntime, createScopedFredRuntime, and re-exports of all Effect services
+- `exports.ts`: Current public API surface — 109 lines mixing imperative and Effect exports; this is the primary file to refactor
+- Boundary guard test (`tests/unit/core/migration/phase-44-boundary-guard.test.ts`): Automated enforcement of Effect.runPromise placement
 
 ### Established Patterns
-- Layer composition in `services.ts` uses wave-based dependency graph (Wave 1: base → Wave 5: MessageProcessor)
-- Service tags follow `XxxService` / `XxxServiceLive` naming convention
-- Package exports use `package.json` `exports` field for sub-path routing
+- Effect service pattern: each domain has `service.ts` with Context.Tag + Live layer (e.g., `ToolRegistryService` + `ToolRegistryServiceLive`)
+- Sub-path imports already exist: `@fancyrobot/fred/mcp/registry` is used by CLI
+- Changesets already configured in the monorepo for versioning
 
 ### Integration Points
-- `exports.ts` is the main barrel file for `@fred/core`
-- `services.ts` is the Layer composition and runtime entry point
-- `effect/services.ts` provides an alternative import path
-- Consumers: `packages/dev/src/dev-chat.ts`, `packages/cli/src/commands/chat.ts`, `packages/cli/src/commands/run.ts`
+- Consumer packages (`@fred/cli`, `@fred/dev`) import from `@fancyrobot/fred` — all imports must be updated when exports change
+- `dev/server/chat/handlers.ts` imports `ContextManager` directly — must be migrated before exports cleanup
+- `cli/src/eval.ts` imports eval types — must update to new sub-path
+- `cli/src/test.ts` imports test framework types — must update to new sub-path
+- Package.json needs `"exports"` field to formalize the new import surface
 
 </code_context>
 
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope
+- `@fancyrobot/fred-tools` package: Dedicated package for built-in tools (calculator, etc.) as Effect-based tools — future phase
+- Motivation/architecture documentation: A blog post or README section explaining the why behind the Effect migration — not CHANGELOG content
 
 </deferred>
 
