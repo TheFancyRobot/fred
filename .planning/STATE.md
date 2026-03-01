@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T17:17:09Z"
+last_updated: "2026-03-01T17:23:43Z"
 progress:
   total_phases: 48
   completed_phases: 44
   total_plans: 193
-  completed_plans: 190
+  completed_plans: 191
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 3 of 6 in current phase
+Plan: 5 of 6 in current phase
 Status: In progress
-Last activity: 2026-03-01 - Completed 44-04-PLAN.md
+Last activity: 2026-03-01 - Completed 44-05-PLAN.md
 
-Progress: ████████████████████ 98% (190/193 plans)
+Progress: ████████████████████ 99% (191/193 plans)
 
 ## Performance Metrics
 
@@ -115,6 +115,7 @@ None currently.
 | 44-02 | Dev chat consumers now use structural context capability interfaces instead of `ContextManager` class types | Keeps consumer code aligned with Effect-backed Fred proxy while preparing imperative class deletion |
 | 44-03 | MessageProcessor and AgentFactory internals now depend on Effect-first structural contracts instead of legacy Promise wrappers and ToolRegistry class coupling | Unblocks manager file deletion by removing internal class-type and wrapper seams while preserving behavior |
 | 44-04 | Pipeline executor/router internals now use structural manager interfaces instead of importing manager class types | Removes compile-time coupling needed for upcoming manager file deletions while preserving runtime behavior |
+| 44-05 | Imperative managers/wrappers are deleted in dependency order with a pre-deletion safety tag and immediate export cleanup | Preserves rollback safety while completing the core dead-code removal milestone for Phase 44 |
 
 ### Quick Tasks Completed
 
@@ -125,12 +126,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-01T17:17:09Z
-Stopped at: Completed 44-04-PLAN.md
+Last session: 2026-03-01T17:23:43Z
+Stopped at: Completed 44-05-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-04 internal manager-type decoupling plan*
+*Last updated: 2026-03-01 — Completed 44-05 imperative manager deletion plan*
