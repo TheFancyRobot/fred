@@ -373,7 +373,7 @@ describe('TUI Layout', () => {
       const content = renderSidebarContent(state, true);
       expect(content.lines[0]).toBe('[Command Palette]');
       expect(content.lines[1]).toContain('focus');
-      expect(content.lines.join('\n')).toContain('Focus Next Pane');
+      expect(content.lines.join('\n')).toContain('focus next pane');
     });
 
     test('degrades status output for compact widths', () => {

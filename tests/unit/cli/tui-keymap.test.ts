@@ -644,7 +644,7 @@ describe('TUI Keymap', () => {
 
       expect(state.commandPalette.query).toBe('ScRoLl');
       expect(state.commandPalette.filteredActions.length).toBeGreaterThan(0);
-      expect(state.commandPalette.filteredActions[0]?.label).toContain('Scroll');
+      expect(state.commandPalette.filteredActions[0]?.label).toContain('scroll');
 
       const labels = state.commandPalette.filteredActions.map((action) => action.label);
       const sorted = [...labels].sort((a, b) => a.localeCompare(b));

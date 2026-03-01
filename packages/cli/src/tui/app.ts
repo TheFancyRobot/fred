@@ -1146,6 +1146,9 @@ export class FredTuiApp {
       case 'delete-session':
         this.state = openDeleteConfirm(this.state, this.state.sessions.selectedId);
         break;
+      case 'exit':
+        this.events.onQuit?.();
+        return;
       default:
         break;
     }

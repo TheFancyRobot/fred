@@ -391,7 +391,7 @@ export function setStartupWarning(state: TuiState, warning: string | null): TuiS
 const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   {
     id: 'focus-next-pane',
-    label: 'Focus Next Pane',
+    label: 'focus next pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['tab', 'focus', 'pane', 'next'],
@@ -399,7 +399,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'focus-previous-pane',
-    label: 'Focus Previous Pane',
+    label: 'focus previous pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['shift', 'tab', 'focus', 'pane', 'prev'],
@@ -407,7 +407,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-input-pane',
-    label: 'Jump to Input Pane',
+    label: 'jump to input pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['input', 'composer', 'focus'],
@@ -415,7 +415,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-sidebar-pane',
-    label: 'Jump to Sidebar Pane',
+    label: 'jump to sidebar pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['sidebar', 'sessions', 'focus'],
@@ -423,7 +423,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-transcript-pane',
-    label: 'Jump to Transcript Pane',
+    label: 'jump to transcript pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['transcript', 'chat', 'focus'],
@@ -431,7 +431,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'clear-input',
-    label: 'Clear Input',
+    label: 'clear input',
     group: 'input',
     scopes: ['input'],
     keywords: ['clear', 'reset', 'composer'],
@@ -439,7 +439,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'scroll-transcript-down',
-    label: 'Scroll Transcript Down',
+    label: 'scroll transcript down',
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'down', 'transcript'],
@@ -447,7 +447,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'scroll-transcript-up',
-    label: 'Scroll Transcript Up',
+    label: 'scroll transcript up',
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'up', 'transcript'],
@@ -455,7 +455,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'select-next-session',
-    label: 'Select Next Session',
+    label: 'select next session',
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'next', 'sidebar'],
@@ -463,7 +463,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'select-previous-session',
-    label: 'Select Previous Session',
+    label: 'select previous session',
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'previous', 'sidebar'],
@@ -471,7 +471,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'create-session',
-    label: 'New Session',
+    label: 'new session',
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'new', 'create'],
@@ -479,7 +479,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'delete-session',
-    label: 'Delete Session',
+    label: 'delete session',
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'delete', 'remove'],
@@ -487,10 +487,18 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'submit-input',
-    label: 'Submit Input',
+    label: 'submit input',
     group: 'input',
     scopes: ['input'],
     keywords: ['submit', 'send', 'input'],
+    kind: 'builtin',
+  },
+  {
+    id: 'exit',
+    label: 'exit',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['exit', 'quit', 'close', 'bye'],
     kind: 'builtin',
   },
 ];

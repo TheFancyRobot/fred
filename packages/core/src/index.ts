@@ -31,6 +31,7 @@ import type { ProcessingOptions, MemoryDefaults } from './message-processor/type
 import type { RouteResult } from './message-processor/types';
 import { ConfigInitializer, type FredLike } from './config/initializer';
 import type {
+  ContextStorage,
   SessionDetails,
   SessionExportJson,
   SessionExportMarkdown,
@@ -107,6 +108,8 @@ export class Fred {
   // Pending context state for pre-runtime replay
   private pendingContextPolicy: any = null;
   private pendingStorageAdapter: unknown = null;
+  // Persistent reference to the storage adapter for session listing
+  private activeStorageAdapter: ContextStorage | null = null;
 
   // Effect runtime for service execution (lazy initialized)
   private runtime: FredRuntime | null = null;
@@ -918,6 +921,7 @@ export class Fred {
         );
       },
       setStorage: (storage: unknown) => {
+        self.activeStorageAdapter = storage as ContextStorage;
         if (!self.runtime) {
           self.pendingStorageAdapter = storage;
           return;
@@ -945,6 +949,22 @@ export class Fred {
           }),
           'Failed to add messages'
         ),
+      getContext: (conversationId: string) =>
+        self.runEffect(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            return yield* context.getContext(conversationId);
+          }),
+          'Failed to get context'
+        ),
+      updateMetadata: (conversationId: string, metadata: Record<string, unknown>) =>
+        self.runEffect(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            yield* context.updateMetadata(conversationId, metadata as any);
+          }),
+          'Failed to update metadata'
+        ),
       clearContext: (conversationId: string) =>
         self.runEffect(
           Effect.gen(function* () {
@@ -964,6 +984,9 @@ export class Fred {
   // --- Session Management ---
 
   async listSessions(): Promise<SessionSummary[]> {
+    if (this.activeStorageAdapter) {
+      return this.activeStorageAdapter.listSessions();
+    }
     return [];
   }
 
