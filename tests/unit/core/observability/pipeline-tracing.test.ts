@@ -9,12 +9,12 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { executePipelineV2 } from '../../../../packages/core/src/pipeline/executor';
 import { executeGraphWorkflow } from '../../../../packages/core/src/pipeline/graph-executor';
-import { AgentManager } from '../../../../packages/core/src/agent/manager';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import { Tracer, Span } from '../../../../packages/core/src/tracing';
+import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import type { PipelineConfigV2 } from '../../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../../packages/core/src/pipeline/graph';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 
 /**
  * Mock tracer for capturing span events and attributes
@@ -91,15 +91,19 @@ class MockTracer implements Tracer {
 
 describe('Pipeline Tracing', () => {
   let tracer: MockTracer;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let agentFactory: AgentFactory;
-  let agentManager: AgentManager;
+  let agentManager: AgentManagerLike;
 
   beforeEach(() => {
     tracer = new MockTracer();
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     agentFactory = new AgentFactory(toolRegistry, tracer);
-    agentManager = new AgentManager(agentFactory);
+    const agents = new Map<string, any>();
+    agentManager = {
+      getAgent: (id: string) => agents.get(id),
+      hasAgent: (id: string) => agents.has(id),
+    };
   });
 
   describe('Sequential Pipeline Spans', () => {

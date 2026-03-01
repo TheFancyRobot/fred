@@ -11,9 +11,9 @@
 import { describe, it, expect, beforeEach, mock, spyOn } from 'bun:test';
 import { executePipelineV2 } from '../../../../packages/core/src/pipeline/executor';
 import type { ExtendedExecutionOptions } from '../../../../packages/core/src/pipeline/executor';
+import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import type { PipelineConfigV2 } from '../../../../packages/core/src/pipeline/pipeline';
 import type { PipelineContext } from '../../../../packages/core/src/pipeline/context';
-import type { AgentManager } from '../../../../packages/core/src/agent/manager';
 import type { CheckpointManager } from '../../../../packages/core/src/pipeline/checkpoint/manager';
 
 // -----------------------------------------------------------------------------
@@ -30,10 +30,11 @@ function createMockAgent() {
   };
 }
 
-function createMockAgentManager(): AgentManager {
+function createMockAgentManager(): AgentManagerLike {
   const agent = createMockAgent();
   return {
     getAgent: mock((id: string) => (id === 'test-agent' ? agent : undefined)),
+    hasAgent: mock((id: string) => id === 'test-agent'),
   } as any;
 }
 
