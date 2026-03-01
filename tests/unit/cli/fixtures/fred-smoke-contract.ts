@@ -214,6 +214,34 @@ export function createMockFredClass(options: MockFredClassOptions = {}) {
       return contextManager;
     }
 
+    setStorage(storage: unknown) {
+      contextManager.setStorage(storage);
+    }
+
+    generateConversationId() {
+      return contextManager.generateConversationId();
+    }
+
+    listSessions() {
+      return contextManager.listSessions();
+    }
+
+    getContext(id: string) {
+      return contextManager.getContext(id);
+    }
+
+    updateMetadata(id: string, metadata: Record<string, unknown>) {
+      return contextManager.updateMetadata(id, metadata);
+    }
+
+    getSession(id: string) {
+      return contextManager.getSession(id);
+    }
+
+    deleteSession(id: string) {
+      return contextManager.deleteSession(id);
+    }
+
     getDefaultAgentId() {
       return this.defaultAgentId;
     }
@@ -247,5 +275,4 @@ export function createMockFredClass(options: MockFredClassOptions = {}) {
     }
   };
 }
-
 

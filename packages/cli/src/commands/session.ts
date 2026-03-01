@@ -8,7 +8,7 @@ import { writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { createInterface } from 'node:readline/promises';
 import { Fred } from '@fancyrobot/fred';
-import type { SessionDetails, SessionSummary, SessionExportJson, SessionExportMarkdown } from '@fancyrobot/fred';
+import type { SessionDetails, SessionSummary } from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
@@ -163,83 +163,6 @@ const getSessionDetailsOrFail = (
   return Effect.succeed(session);
 };
 
-type LegacySessionApi = {
-  listSessions?: () => Promise<SessionSummary[]>;
-  getSession?: (id: string) => Promise<SessionDetails | null>;
-  exportSession?: (id: string, format: SessionExportFormat) => Promise<SessionExportJson | SessionExportMarkdown | string | null>;
-  deleteSession?: (id: string) => Promise<void>;
-};
-
-const GET_CONTEXT_MANAGER = 'getContext' + 'Manager';
-
-const getLegacySessionApi = (fred: Fred): LegacySessionApi | null => {
-  const accessor = (fred as any)[GET_CONTEXT_MANAGER];
-  if (typeof accessor !== 'function') {
-    return null;
-  }
-  return accessor.call(fred) as LegacySessionApi;
-};
-
-const listSessionsWithFallback = async (fred: Fred): Promise<SessionSummary[]> => {
-  const sessions = await fred.listSessions();
-  if (sessions.length > 0) {
-    return sessions;
-  }
-
-  const legacy = getLegacySessionApi(fred);
-  if (legacy?.listSessions) {
-    return legacy.listSessions();
-  }
-
-  return sessions;
-};
-
-const getSessionWithFallback = async (fred: Fred, id: string): Promise<SessionDetails | null> => {
-  const session = await fred.getSession(id);
-  if (session) {
-    return session;
-  }
-
-  const legacy = getLegacySessionApi(fred);
-  if (legacy?.getSession) {
-    return legacy.getSession(id);
-  }
-
-  return null;
-};
-
-const exportSessionWithFallback = async (
-  fred: Fred,
-  id: string,
-  format: SessionExportFormat,
-): Promise<SessionExportJson | SessionExportMarkdown | string | null> => {
-  const exported = await fred.exportSession(id, format);
-  if (exported) {
-    return exported;
-  }
-
-  const legacy = getLegacySessionApi(fred);
-  if (legacy?.exportSession) {
-    return legacy.exportSession(id, format);
-  }
-
-  return null;
-};
-
-const deleteSessionWithFallback = async (fred: Fred, id: string): Promise<void> => {
-  try {
-    await fred.deleteSession(id);
-    return;
-  } catch {
-    const legacy = getLegacySessionApi(fred);
-    if (legacy?.deleteSession) {
-      await legacy.deleteSession(id);
-      return;
-    }
-    throw new Error(`Session deletion failed: ${id}`);
-  }
-};
-
 /**
  * Internal Effect program for the session command.
  */
@@ -269,10 +192,10 @@ const sessionCommandEffect = (
       );
     }
 
-    switch (subcommand) {
+      switch (subcommand) {
       case 'list': {
         const sessions = yield* Effect.tryPromise({
-          try: () => listSessionsWithFallback(fred),
+          try: () => fred.listSessions(),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -300,14 +223,14 @@ const sessionCommandEffect = (
         }
 
         const rawDetails = yield* Effect.tryPromise({
-          try: () => getSessionWithFallback(fred, id),
+          try: () => fred.getSession(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const details = yield* getSessionDetailsOrFail(rawDetails, id);
 
         const exportResult = yield* Effect.tryPromise({
-          try: () => exportSessionWithFallback(fred, id, 'markdown'),
+          try: () => fred.exportSession(id, 'markdown'),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -332,14 +255,14 @@ const sessionCommandEffect = (
         const format = yield* parseFormat(options.format ?? (options.json === true ? 'json' : undefined));
 
         const rawSession = yield* Effect.tryPromise({
-          try: () => getSessionWithFallback(fred, id),
+          try: () => fred.getSession(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const session = yield* getSessionDetailsOrFail(rawSession, id);
 
         const exportResult = yield* Effect.tryPromise({
-          try: () => exportSessionWithFallback(fred, id, format),
+          try: () => fred.exportSession(id, format),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -382,7 +305,7 @@ const sessionCommandEffect = (
         const missing: string[] = [];
         for (const id of ids) {
           const session = yield* Effect.tryPromise({
-            try: () => getSessionWithFallback(fred, id),
+            try: () => fred.getSession(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });
@@ -415,7 +338,7 @@ const sessionCommandEffect = (
 
         for (const id of ids) {
           yield* Effect.tryPromise({
-            try: () => deleteSessionWithFallback(fred, id),
+            try: () => fred.deleteSession(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });
