@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { Effect, Runtime } from 'effect';
+import { Effect, Runtime, Stream } from 'effect';
 import {
   FredLayers,
   FredLayersWithIntentRouting,
@@ -24,6 +24,8 @@ import {
   IntentMatcherService,
   IntentRouterService,
   MessageProcessorService,
+  MessageRouterService,
+  ToolGateService,
 } from '../../../packages/core/src/services';
 import type { Tool } from '../../../packages/core/src/tool/tool';
 
@@ -551,6 +553,279 @@ describe('Phase 43 Fred facade', () => {
         );
 
         expect(serviceSize).toBeGreaterThan(0);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('streamMessage delegates through MessageProcessorService streamMessage', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* MessageProcessorService;
+            const original = service.streamMessage;
+
+            (service as { streamMessage: typeof service.streamMessage }).streamMessage = () => {
+              calls += 1;
+              return Stream.empty;
+            };
+
+            return () => {
+              (service as { streamMessage: typeof service.streamMessage }).streamMessage = original;
+            };
+          })
+        );
+
+        const stream = fred.streamMessage('phase-43-stream-check');
+        await stream.toArray();
+        restore();
+
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('routeMessage delegates through MessageProcessorService routeMessage', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* MessageProcessorService;
+            const original = service.routeMessage;
+
+            (service as { routeMessage: typeof service.routeMessage }).routeMessage = () => {
+              calls += 1;
+              return Effect.succeed({ type: 'none' } as any);
+            };
+
+            return () => {
+              (service as { routeMessage: typeof service.routeMessage }).routeMessage = original;
+            };
+          })
+        );
+
+        const result = await fred.routeMessage('phase-43-route-check');
+        restore();
+
+        expect(result.type).toBe('none');
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('executePipeline delegates through PipelineService executePipeline', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* PipelineService;
+            const original = service.executePipeline;
+
+            (service as { executePipeline: typeof service.executePipeline }).executePipeline = () => {
+              calls += 1;
+              return Effect.succeed({ content: 'phase-43-pipeline' } as any);
+            };
+
+            return () => {
+              (service as { executePipeline: typeof service.executePipeline }).executePipeline = original;
+            };
+          })
+        );
+
+        const result = await fred.executePipeline('phase-43-pipeline-id', 'hello');
+        restore();
+
+        expect(result.content).toBe('phase-43-pipeline');
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('registerAgent delegates through AgentService createAgent', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* AgentService;
+            const original = service.createAgent;
+
+            (service as { createAgent: typeof service.createAgent }).createAgent = (config) => {
+              calls += 1;
+              return Effect.succeed({
+                id: config.id,
+                config,
+                processMessage: async () => ({ content: 'phase-43-agent' }),
+                streamMessage: () => Stream.empty,
+              } as any);
+            };
+
+            return () => {
+              (service as { createAgent: typeof service.createAgent }).createAgent = original;
+            };
+          })
+        );
+
+        const agent = await fred.registerAgent({
+          id: `phase-43-agent-${Math.random()}`,
+          systemMessage: 'test',
+          platform: 'openai',
+          model: 'gpt-4o-mini',
+        } as any);
+        restore();
+
+        expect(agent.id.startsWith('phase-43-agent-')).toBe(true);
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('setToolPolicies delegates through ToolGateService reloadPolicies', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* ToolGateService;
+            const original = service.reloadPolicies;
+
+            (service as { reloadPolicies: typeof service.reloadPolicies }).reloadPolicies = (policies) => {
+              calls += 1;
+              return Effect.void;
+            };
+
+            return () => {
+              (service as { reloadPolicies: typeof service.reloadPolicies }).reloadPolicies = original;
+            };
+          })
+        );
+
+        await fred.setToolPolicies(undefined);
+        restore();
+
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('testRoute and routing.explain delegate through MessageRouterService', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        fred.configureRouting({ defaultAgent: 'phase-43-default', rules: [] });
+        const runtime = await fred.getRuntime();
+        let calls = 0;
+
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* MessageRouterService;
+            const original = service.testRoute;
+
+            (service as { testRoute: typeof service.testRoute }).testRoute = () => {
+              calls += 1;
+              return Effect.succeed({
+                agent: 'phase-43-default',
+                fallback: true,
+                explanation: {
+                  winner: {
+                    targetId: 'phase-43-default',
+                    targetName: 'phase-43-default',
+                    confidence: 0.5,
+                  },
+                  alternatives: [],
+                  calibration: {
+                    rawScore: 0.5,
+                    calibratedScore: 0.5,
+                    calibrated: false,
+                  },
+                  reasoning: {
+                    topFactors: [],
+                    confidenceBand: 'medium',
+                    fallbackUsed: true,
+                  },
+                },
+              } as any);
+            };
+
+            return () => {
+              (service as { testRoute: typeof service.testRoute }).testRoute = original;
+            };
+          })
+        );
+
+        const decision = await fred.testRoute('phase-43-test-route');
+        const explanation = await fred.routing.explain('phase-43-explain-route');
+        restore();
+
+        expect(decision?.agent).toBe('phase-43-default');
+        expect(explanation?.winner.targetId).toBe('phase-43-default');
+        expect(calls).toBe(2);
       } finally {
         await fred.shutdown();
       }
