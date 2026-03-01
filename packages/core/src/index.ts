@@ -104,6 +104,10 @@ export class Fred {
   private readonly mcpServerRegistry: MCPServerRegistry;
   private readonly mcpResourceService: MCPResourceService;
 
+  // Pending context state for pre-runtime replay
+  private pendingContextPolicy: any = null;
+  private pendingStorageAdapter: unknown = null;
+
   // Effect runtime for service execution (lazy initialized)
   private runtime: FredRuntime | null = null;
   private runtimePromise: Promise<FredRuntime> | null = null;
@@ -208,6 +212,17 @@ export class Fred {
         yield* agentService.setGlobalVariablesResolver(() => globalVariables);
 
         yield* processor.updateConfig(config);
+
+        // Replay pending context configuration
+        const contextService = yield* ContextStorageService;
+        if (self.pendingContextPolicy) {
+          yield* contextService.setDefaultPolicy(self.pendingContextPolicy);
+          self.pendingContextPolicy = null;
+        }
+        if (self.pendingStorageAdapter) {
+          yield* contextService.replaceStorage(self.pendingStorageAdapter as any);
+          self.pendingStorageAdapter = null;
+        }
       })
     );
   }
@@ -865,39 +880,77 @@ export class Fred {
   // --- Context Management ---
 
   ['getContext' + 'Manager'](): any {
-    if (!this.runtime) {
-      throw new Error('Context manager is available after runtime initialization.');
-    }
-
-    const runtime = this.runtime;
+    const self = this;
     return {
-      generateConversationId: () =>
-        Runtime.runSync(runtime)(
+      generateConversationId: () => {
+        if (!self.runtime) {
+          return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        }
+        return Runtime.runSync(self.runtime)(
           Effect.gen(function* () {
             const context = yield* ContextStorageService;
             return yield* context.generateConversationId();
           })
-        ),
+        );
+      },
       setDefaultPolicy: (policy: {
         maxMessages?: number;
         maxChars?: number;
         strict?: boolean;
         isolated?: boolean;
-      }) =>
-        Runtime.runSync(runtime)(
+      }) => {
+        if (!self.runtime) {
+          self.pendingContextPolicy = policy;
+          return;
+        }
+        Runtime.runSync(self.runtime)(
           Effect.gen(function* () {
             const context = yield* ContextStorageService;
             yield* context.setDefaultPolicy(policy);
           })
-        ),
-      setStorage: () => {
-        throw new Error('Custom storage adapters are not supported in Effect-backed context service.');
+        );
       },
-      listSessions: () => this.listSessions(),
-      getSession: (conversationId: string) => this.getSession(conversationId),
+      setStorage: (storage: unknown) => {
+        if (!self.runtime) {
+          self.pendingStorageAdapter = storage;
+          return;
+        }
+        Runtime.runSync(self.runtime)(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            yield* context.replaceStorage(storage as any);
+          })
+        );
+      },
+      getHistory: (conversationId: string) =>
+        self.runEffect(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            return yield* context.getHistory(conversationId);
+          }),
+          'Failed to get conversation history'
+        ),
+      addMessages: (conversationId: string, messages: any[]) =>
+        self.runEffect(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            yield* context.addMessages(conversationId, messages);
+          }),
+          'Failed to add messages'
+        ),
+      clearContext: (conversationId: string) =>
+        self.runEffect(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            yield* context.clearContext(conversationId);
+          }),
+          'Failed to clear context'
+        ),
+      listSessions: () => self.listSessions(),
+      getSession: (conversationId: string) => self.getSession(conversationId),
       exportSession: (conversationId: string, format: 'json' | 'markdown' = 'json') =>
-        this.exportSession(conversationId, format),
-      deleteSession: (conversationId: string) => this.deleteSession(conversationId),
+        self.exportSession(conversationId, format),
+      deleteSession: (conversationId: string) => self.deleteSession(conversationId),
     };
   }
 
@@ -1085,6 +1138,9 @@ export class Fred {
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;
     this.invalidateRuntime('memory defaults updated from config');
+
+    // Ensure runtime is built before ConfigInitializer accesses service proxies
+    await this.ensureRuntime();
 
     // Delegate to config initializer
     await this.configInitializer.initialize(this as unknown as FredLike, configPath, options);

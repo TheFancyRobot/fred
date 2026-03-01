@@ -88,6 +88,11 @@ export interface ContextStorageService {
     conversationId: string,
     policy: ConversationPolicy
   ): Effect.Effect<void, ContextStorageError>;
+
+  /**
+   * Replace the storage adapter at runtime (e.g. swap in-memory for SQLite/Postgres).
+   */
+  replaceStorage(adapter: ContextStorage): Effect.Effect<void>;
 }
 
 export const ContextStorageService = Context.GenericTag<ContextStorageService>(
@@ -134,11 +139,46 @@ class InMemoryStorage {
 }
 
 /**
+ * Wraps a Promise-based ContextStorage into the internal Effect-based storage interface.
+ */
+class ExternalStorageAdapter {
+  constructor(private adapter: ContextStorage) {}
+
+  get(id: string): Effect.Effect<ConversationContext | null> {
+    return Effect.tryPromise({
+      try: () => this.adapter.get(id),
+      catch: (error) => error,
+    }).pipe(Effect.orElseSucceed(() => null));
+  }
+
+  set(id: string, context: ConversationContext): Effect.Effect<void> {
+    return Effect.tryPromise({
+      try: () => this.adapter.set(id, context),
+      catch: (error) => error,
+    }).pipe(Effect.catchAll(() => Effect.void));
+  }
+
+  delete(id: string): Effect.Effect<void> {
+    return Effect.tryPromise({
+      try: () => this.adapter.delete(id),
+      catch: (error) => error,
+    }).pipe(Effect.catchAll(() => Effect.void));
+  }
+
+  clear(): Effect.Effect<void> {
+    return Effect.tryPromise({
+      try: () => this.adapter.clear(),
+      catch: (error) => error,
+    }).pipe(Effect.catchAll(() => Effect.void));
+  }
+}
+
+/**
  * Implementation of ContextStorageService
  */
 class ContextStorageServiceImpl implements ContextStorageService {
   constructor(
-    private storage: InMemoryStorage,
+    private storage: InMemoryStorage | ExternalStorageAdapter,
     private defaultMetadata: Ref.Ref<Partial<ConversationMetadata>>,
     private defaultPolicy: Ref.Ref<ConversationPolicy>
   ) {}
@@ -297,6 +337,12 @@ class ContextStorageServiceImpl implements ContextStorageService {
     }).pipe(
       Effect.mapError((cause) => self.toStorageError('setContextPolicy', cause))
     );
+  }
+
+  replaceStorage(adapter: ContextStorage): Effect.Effect<void> {
+    return Effect.sync(() => {
+      (this as any).storage = new ExternalStorageAdapter(adapter);
+    });
   }
 
   private toStorageError(operation: string, cause: unknown): ContextStorageError {
