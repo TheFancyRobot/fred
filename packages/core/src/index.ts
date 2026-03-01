@@ -22,9 +22,10 @@ import { HookManager } from './hooks';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
-import { Effect, Runtime, Layer } from 'effect';
+import { Effect, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
+import { createStreamResultFromIterable } from './stream/result';
 import { MessageRouter } from './routing/router';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
 import { WorkflowManager } from './workflow/manager';
@@ -47,6 +48,8 @@ import type {
 } from './context/context';
 import {
   FredLayers,
+  createFredRuntimeWithOptions,
+  type FredLayerOptions,
   type FredRuntime,
   type FredServices,
   ToolRegistryService,
@@ -56,6 +59,8 @@ import {
   ProviderRegistryService,
   HookManagerService,
   ToolGateService,
+  MessageProcessorService,
+  MessageRouterService,
 } from './services';
 import { normalizeRunRecord, normalizeLegacyGoldenTrace } from './eval/normalizer';
 import { FileTraceStorageLive } from './eval/storage';
@@ -86,30 +91,34 @@ import type { MCPGlobalServerConfig } from './config/types';
  * The public API remains Promise-based for ease of use.
  */
 export class Fred implements FredLike {
-  private toolRegistry: ToolRegistry;
-  private agentManager: AgentManager;
-  private providerRegistry: ProviderRegistry;
-  private pipelineManager: PipelineManager;
-  private intentMatcher: IntentMatcher;
-  private intentRouter: IntentRouter;
+  private toolRegistry?: ToolRegistry;
+  private agentManager?: AgentManager;
+  private providerRegistry?: ProviderRegistry;
+  private pipelineManager?: PipelineManager;
+  private intentMatcher?: IntentMatcher;
+  private intentRouter?: IntentRouter;
   private defaultAgentId?: string;
-  private contextManager: ContextManager;
+  private contextManager?: ContextManager;
   private memoryDefaults: MemoryDefaults = {};
-  private hookManager: HookManager;
+  private hookManager?: HookManager;
   private tracer?: Tracer;
-  private messageRouter?: MessageRouter;
+  private routingConfig?: RoutingConfig;
   private workflowManager?: WorkflowManager;
   private observabilityLayers?: ObservabilityLayers;
+  private observabilityConfig?: ObservabilityConfig;
   private globalVariables: Map<string, VariableFactory> = new Map();
+  private runtimeGeneration = 0;
+  private readonly toolSnapshot = new Map<string, Tool>();
+  private readonly builtInToolIds = new Set<string>();
 
   // Extracted services
-  private providerService: ProviderService;
-  private messageProcessor: MessageProcessor;
-  private configInitializer: ConfigInitializer;
+  private providerService?: ProviderService;
+  private messageProcessor?: MessageProcessor;
+  private readonly configInitializer: ConfigInitializer;
 
   // MCP integration
-  private mcpServerRegistry: MCPServerRegistry;
-  private mcpResourceService: MCPResourceService;
+  private readonly mcpServerRegistry: MCPServerRegistry;
+  private readonly mcpResourceService: MCPResourceService;
 
   // Effect runtime for service execution (lazy initialized)
   private runtime: FredRuntime | null = null;
@@ -134,50 +143,15 @@ export class Fred implements FredLike {
   }
 
   constructor(tracer?: Tracer) {
-    this.toolRegistry = new ToolRegistry();
     this.tracer = tracer;
-    this.providerRegistry = new ProviderRegistry();
-    this.agentManager = new AgentManager(this.toolRegistry, tracer);
-    this.intentMatcher = createIntentMatcherSync();
-    this.intentRouter = createIntentRouterSync(this.agentManager);
-    this.contextManager = new ContextManager();
-    this.pipelineManager = new PipelineManager(this.agentManager, tracer, this.contextManager);
-    this.hookManager = new HookManager();
-
-    // Initialize extracted services
-    this.providerService = new ProviderService(this.providerRegistry, this.agentManager);
-    this.messageProcessor = new MessageProcessor({
-      contextManager: this.contextManager,
-      agentManager: this.agentManager,
-      pipelineManager: this.pipelineManager,
-      intentMatcher: this.intentMatcher,
-      intentRouter: this.intentRouter,
-      tracer: this.tracer,
-      messageRouter: this.messageRouter,
-      memoryDefaults: this.memoryDefaults,
-      defaultAgentId: this.defaultAgentId,
-      hookManager: this.hookManager,
-      observabilityService: undefined, // Will be set via configureObservability if needed
-    });
     this.configInitializer = new ConfigInitializer();
 
     // Initialize MCP registry and resource service
     this.mcpServerRegistry = new MCPServerRegistry();
     this.mcpResourceService = new MCPResourceService(this.mcpServerRegistry);
 
-    // Wire MCP registry into agent factory
-    this.agentManager.getAgentFactory().setMCPServerRegistry(this.mcpServerRegistry);
-
-    // Set tracer on hook manager if provided
-    if (this.tracer) {
-      this.hookManager.setTracer(this.tracer);
-    }
-
     // Register built-in tools
     this.registerBuiltInTools();
-
-    // Register shutdown hooks for MCP client cleanup
-    this.agentManager.registerShutdownHooks();
 
     // Deprecation warning for direct construction
     // Only warn in development to avoid noise in production
@@ -190,6 +164,86 @@ export class Fred implements FredLike {
     }
   }
 
+  private getRuntimeLayerOptionsSnapshot(): FredLayerOptions {
+    return {
+      routingConfig: this.routingConfig,
+      observabilityLayers: this.observabilityLayers,
+    };
+  }
+
+  private invalidateRuntime(): void {
+    this.runtimeGeneration += 1;
+    this.runtime = null;
+    this.runtimePromise = null;
+  }
+
+  private async applyRuntimeState(runtime: FredRuntime): Promise<void> {
+    const tools = Array.from(this.toolSnapshot.values()).filter(
+      (tool) => !this.builtInToolIds.has(tool.id)
+    );
+    const config = {
+      defaultAgentId: this.defaultAgentId,
+      memoryDefaults: this.memoryDefaults,
+      tracer: this.tracer,
+    };
+
+    await Runtime.runPromise(runtime)(
+      Effect.gen(function* () {
+        const toolRegistryService = yield* ToolRegistryService;
+        const processor = yield* MessageProcessorService;
+
+        if (tools.length > 0) {
+          yield* toolRegistryService.registerTools(tools);
+        }
+
+        yield* processor.updateConfig(config);
+      })
+    );
+  }
+
+  private ensureLegacyCompat(): void {
+    if (this.toolRegistry && this.agentManager && this.providerRegistry && this.pipelineManager && this.intentMatcher && this.intentRouter && this.contextManager && this.hookManager && this.providerService && this.messageProcessor) {
+      return;
+    }
+
+    this.toolRegistry = new ToolRegistry();
+    this.providerRegistry = new ProviderRegistry();
+    this.agentManager = new AgentManager(this.toolRegistry, this.tracer);
+    this.intentMatcher = createIntentMatcherSync();
+    this.intentRouter = createIntentRouterSync(this.agentManager);
+    this.contextManager = new ContextManager();
+    this.pipelineManager = new PipelineManager(this.agentManager, this.tracer, this.contextManager);
+    this.hookManager = new HookManager();
+
+    this.providerService = new ProviderService(this.providerRegistry, this.agentManager);
+    this.messageProcessor = new MessageProcessor({
+      contextManager: this.contextManager,
+      agentManager: this.agentManager,
+      pipelineManager: this.pipelineManager,
+      intentMatcher: this.intentMatcher,
+      intentRouter: this.intentRouter,
+      tracer: this.tracer,
+      messageRouter: undefined,
+      memoryDefaults: this.memoryDefaults,
+      defaultAgentId: this.defaultAgentId,
+      hookManager: this.hookManager,
+      observabilityService: undefined,
+    });
+
+    this.agentManager.getAgentFactory().setMCPServerRegistry(this.mcpServerRegistry);
+
+    if (this.tracer) {
+      this.hookManager.setTracer(this.tracer);
+    }
+
+    for (const tool of this.toolSnapshot.values()) {
+      this.toolRegistry.registerTool(tool);
+    }
+
+    this.agentManager.registerShutdownHooks();
+    this.updateGlobalVariablesResolver();
+  }
+
   /**
    * Ensure Effect runtime is initialized (lazy initialization).
    *
@@ -200,13 +254,35 @@ export class Fred implements FredLike {
     if (this.runtime) return this.runtime;
 
     if (!this.runtimePromise) {
-      this.runtimePromise = Effect.runPromise(
-        Effect.scoped(Layer.toRuntime(FredLayers))
-      );
+      const generation = this.runtimeGeneration;
+      const layerOptions = this.getRuntimeLayerOptionsSnapshot();
+
+      this.runtimePromise = (async () => {
+        try {
+          const runtime = await Effect.runPromise(
+            Effect.scoped(createFredRuntimeWithOptions(layerOptions))
+          );
+
+          await this.applyRuntimeState(runtime);
+
+          if (generation !== this.runtimeGeneration) {
+            this.runtimePromise = null;
+            return this.ensureRuntime();
+          }
+
+          this.runtime = runtime;
+          return runtime;
+        } catch (error) {
+          if (generation === this.runtimeGeneration) {
+            this.runtime = null;
+            this.runtimePromise = null;
+          }
+          throw error;
+        }
+      })();
     }
 
-    this.runtime = await this.runtimePromise;
-    return this.runtime;
+    return this.runtimePromise;
   }
 
   /**
@@ -256,8 +332,9 @@ export class Fred implements FredLike {
    */
   private registerBuiltInTools(): void {
     const calculatorTool = createCalculatorTool();
-    // Cast to Tool for registry compatibility (registry uses Tool<unknown, unknown, unknown>)
-    this.toolRegistry.registerTool(calculatorTool as unknown as Tool);
+    const tool = calculatorTool as unknown as Tool;
+    this.builtInToolIds.add(tool.id);
+    this.toolSnapshot.set(tool.id, tool);
   }
 
   /**
@@ -265,11 +342,10 @@ export class Fred implements FredLike {
    */
   enableTracing(tracer?: Tracer): void {
     this.tracer = tracer || new NoOpTracer();
-    this.agentManager.setTracer(this.tracer);
-    this.pipelineManager.setTracer(this.tracer);
-    this.pipelineManager.setContextManager(this.contextManager);
-    this.hookManager.setTracer(this.tracer);
-    this.messageProcessor.updateDeps({ tracer: this.tracer });
+    if (this.hookManager) {
+      this.hookManager.setTracer(this.tracer);
+    }
+    this.invalidateRuntime();
   }
 
   // --- Global Variables ---
@@ -301,6 +377,10 @@ export class Fred implements FredLike {
   }
 
   private updateGlobalVariablesResolver(): void {
+    if (!this.agentManager) {
+      return;
+    }
+
     this.agentManager.setGlobalVariablesResolver(() => {
       const result: Record<string, string | number | boolean> = {};
       for (const [name, factory] of this.globalVariables.entries()) {
@@ -313,86 +393,145 @@ export class Fred implements FredLike {
   // --- Provider Management (delegated to ProviderService) ---
 
   registerProvider(platform: string, provider: ProviderDefinition): void {
-    this.providerService.registerProvider(platform, provider);
+    this.ensureLegacyCompat();
+    this.providerService!.registerProvider(platform, provider);
   }
 
   listProviders(): string[] {
-    return this.providerService.listProviders();
+    this.ensureLegacyCompat();
+    return this.providerService!.listProviders();
   }
 
   hasProvider(providerId: string): boolean {
-    return this.providerService.hasProvider(providerId);
+    this.ensureLegacyCompat();
+    return this.providerService!.hasProvider(providerId);
   }
 
   async useProvider(platform: string, config?: ProviderConfig): Promise<ProviderDefinition> {
-    return this.providerService.useProvider(platform, config);
+    this.ensureLegacyCompat();
+    return this.providerService!.useProvider(platform, config);
   }
 
   async registerProviderPack(idOrPackage: string, config: ProviderConfig = {}): Promise<void> {
-    return this.providerService.registerProviderPack(idOrPackage, config);
+    this.ensureLegacyCompat();
+    return this.providerService!.registerProviderPack(idOrPackage, config);
   }
 
   async registerProviderFactory(factory: EffectProviderFactory, config: ProviderConfig = {}): Promise<void> {
-    return this.providerService.registerProviderFactory(factory, config);
+    this.ensureLegacyCompat();
+    return this.providerService!.registerProviderFactory(factory, config);
   }
 
   async registerDefaultProviders(config?: ProviderConfigInput): Promise<void> {
-    return this.providerService.registerDefaultProviders(config);
+    this.ensureLegacyCompat();
+    return this.providerService!.registerDefaultProviders(config);
   }
 
   // --- Tool Management ---
 
   registerTool(tool: Tool): void {
-    this.toolRegistry.registerTool(tool);
+    this.toolSnapshot.set(tool.id, tool);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const tools = yield* ToolRegistryService;
+        yield* tools.registerTool(tool);
+      })
+    );
   }
 
   registerTools(tools: Tool[]): void {
-    this.toolRegistry.registerTools(tools);
+    for (const tool of tools) {
+      this.toolSnapshot.set(tool.id, tool);
+    }
+
+    if (!this.runtime || tools.length === 0) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistryService;
+        yield* registry.registerTools(tools);
+      })
+    );
   }
 
   getTool(id: string): Tool | undefined {
-    return this.toolRegistry.getTool(id);
+    if (this.runtime) {
+      const tools = Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistryService;
+          return yield* registry.getAllTools();
+        })
+      );
+      return tools.find((tool) => tool.id === id);
+    }
+
+    return this.toolSnapshot.get(id);
   }
 
   getTools(): Tool[] {
-    return this.toolRegistry.getAllTools();
+    if (this.runtime) {
+      return Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistryService;
+          return yield* registry.getAllTools();
+        })
+      );
+    }
+
+    return Array.from(this.toolSnapshot.values());
   }
 
   // --- Intent Management ---
 
   registerIntent(intent: Intent): void {
-    this.intentMatcher.registerIntents([intent]);
+    this.ensureLegacyCompat();
+    Effect.runSync(this.intentMatcher!.registerIntents([intent]));
   }
 
   registerIntents(intents: Intent[]): void {
-    this.intentMatcher.registerIntents(intents);
+    this.ensureLegacyCompat();
+    Effect.runSync(this.intentMatcher!.registerIntents(intents));
   }
 
   getIntents(): Intent[] {
-    return this.intentMatcher.getIntents();
+    this.ensureLegacyCompat();
+    return this.intentMatcher!.getIntents();
   }
 
   // --- Agent Management ---
 
   async createAgent(config: AgentConfig): Promise<AgentInstance> {
-    return this.agentManager.createAgent(config);
+    this.ensureLegacyCompat();
+    return this.agentManager!.createAgent(config);
   }
 
   getAgent(id: string): AgentInstance | undefined {
-    return this.agentManager.getAgent(id);
+    this.ensureLegacyCompat();
+    return this.agentManager!.getAgent(id);
   }
 
   getAgents(): AgentInstance[] {
-    return this.agentManager.getAllAgents();
+    this.ensureLegacyCompat();
+    return this.agentManager!.getAllAgents();
   }
 
   setDefaultAgent(agentId: string): void {
-    if (!this.agentManager.hasAgent(agentId)) {
+    this.ensureLegacyCompat();
+
+    if (!this.agentManager!.hasAgent(agentId)) {
       throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
     }
+
     this.defaultAgentId = agentId;
-    this.intentRouter.setDefaultAgent(agentId);
-    this.messageProcessor.updateDeps({ defaultAgentId: agentId });
+    Effect.runSync(this.intentRouter!.setDefaultAgent(agentId));
+    this.invalidateRuntime();
   }
 
   getDefaultAgentId(): string | undefined {
@@ -402,31 +541,46 @@ export class Fred implements FredLike {
   // --- Pipeline Management ---
 
   async createPipeline(config: PipelineConfig): Promise<PipelineInstance> {
-    return this.pipelineManager.createPipeline(config);
+    this.ensureLegacyCompat();
+    return this.pipelineManager!.createPipeline(config);
   }
 
   getPipeline(id: string): PipelineInstance | undefined {
-    return this.pipelineManager.getPipeline(id);
+    this.ensureLegacyCompat();
+    return this.pipelineManager!.getPipeline(id);
   }
 
   getAllPipelines(): PipelineInstance[] {
-    return this.pipelineManager.getAllPipelines();
+    this.ensureLegacyCompat();
+    return this.pipelineManager!.getAllPipelines();
   }
 
   removePipeline(id: string): boolean {
-    return this.pipelineManager.removePipeline(id);
+    this.ensureLegacyCompat();
+    return this.pipelineManager!.removePipeline(id);
   }
 
   // --- Routing Configuration ---
 
   configureRouting(config: RoutingConfig): void {
-    this.messageRouter = new MessageRouter(this.agentManager, this.hookManager, config);
-    this.messageProcessor.updateDeps({ messageRouter: this.messageRouter });
+    this.routingConfig = {
+      ...config,
+      rules: [...config.rules],
+      fallbackAgents: config.fallbackAgents ? [...config.fallbackAgents] : undefined,
+    };
+    this.invalidateRuntime();
   }
 
   async testRoute(message: string, metadata?: Record<string, unknown>): Promise<RoutingDecision | null> {
-    if (!this.messageRouter) return null;
-    return Effect.runPromise(this.messageRouter.testRoute(message, metadata ?? {}));
+    if (!this.routingConfig) return null;
+
+    return this.runEffect(
+      Effect.gen(function* () {
+        const router = yield* MessageRouterService;
+        return yield* router.testRoute(message, metadata ?? {});
+      }),
+      'Failed to test route'
+    );
   }
 
   /**
@@ -446,9 +600,13 @@ export class Fred implements FredLike {
         message: string,
         metadata?: Record<string, unknown>
       ): Promise<import('./routing/types').RoutingExplanation | null> => {
-        if (!this.messageRouter) return null;
-        const decision = await Effect.runPromise(
-          this.messageRouter.testRoute(message, metadata ?? {})
+        if (!this.routingConfig) return null;
+        const decision = await this.runEffect(
+          Effect.gen(function* () {
+            const router = yield* MessageRouterService;
+            return yield* router.testRoute(message, metadata ?? {});
+          }),
+          'Failed to explain route'
         );
         return decision?.explanation ?? null;
       },
@@ -475,83 +633,127 @@ export class Fred implements FredLike {
   // --- Message Processing (delegated to MessageProcessor) ---
 
   async processMessage(message: string, options?: ProcessingOptions): Promise<AgentResponse | null> {
-    return this.messageProcessor.processMessage(message, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.processMessage(message, options);
+      }),
+      'Failed to process message'
+    );
   }
 
   streamMessage(message: string, options?: ProcessingOptions): StreamResult {
-    return this.messageProcessor.streamMessage(message, options);
+    const streamPromise = this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return processor.streamMessage(message, options).pipe(
+          Stream.mapError((error) =>
+            error instanceof Error ? error : new Error(String(error))
+          )
+        );
+      }),
+      'Failed to stream message'
+    );
+
+    return createStreamResultFromIterable({
+      async *[Symbol.asyncIterator](): AsyncGenerator<StreamEvent, void, unknown> {
+        const stream = await streamPromise;
+        for await (const event of Stream.toAsyncIterable(stream)) {
+          yield event;
+        }
+      },
+    });
   }
 
   async processChatMessage(
     messages: Array<{ role: string; content: string }>,
     options?: ProcessingOptions
   ): Promise<AgentResponse | null> {
-    return this.messageProcessor.processChatMessage(messages, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.processChatMessage(messages, options);
+      }),
+      'Failed to process chat message'
+    );
   }
 
   // --- Context Management ---
 
   getContextManager(): ContextManager {
-    return this.contextManager;
+    this.ensureLegacyCompat();
+    return this.contextManager!;
   }
 
   // --- Session Management ---
 
   async listSessions(): Promise<SessionSummary[]> {
-    return this.contextManager.listSessions();
+    this.ensureLegacyCompat();
+    return this.contextManager!.listSessions();
   }
 
   async getSession(conversationId: string): Promise<SessionDetails | null> {
-    return this.contextManager.getSession(conversationId);
+    this.ensureLegacyCompat();
+    return this.contextManager!.getSession(conversationId);
   }
 
   async exportSession(
     conversationId: string,
     format: 'json' | 'markdown' = 'json'
   ): Promise<SessionExportJson | SessionExportMarkdown | null> {
-    return this.contextManager.exportSession(conversationId, format);
+    this.ensureLegacyCompat();
+    return this.contextManager!.exportSession(conversationId, format);
   }
 
   async deleteSession(conversationId: string): Promise<void> {
-    await this.contextManager.deleteSession(conversationId);
+    this.ensureLegacyCompat();
+    await this.contextManager!.deleteSession(conversationId);
   }
 
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
-    this.hookManager.registerHook(type, handler);
+    this.ensureLegacyCompat();
+    this.hookManager!.registerHook(type, handler);
   }
 
   unregisterHook(type: HookType, handler: HookHandler): boolean {
-    return this.hookManager.unregisterHook(type, handler);
+    this.ensureLegacyCompat();
+    return this.hookManager!.unregisterHook(type, handler);
   }
 
   getHookManager(): HookManager {
-    return this.hookManager;
+    this.ensureLegacyCompat();
+    return this.hookManager!;
   }
 
   // --- Pause/Resume Management ---
 
   async getPendingPause(runId: string): Promise<PendingPause | null> {
-    const pauseManager = this.pipelineManager.getPauseManager();
+    this.ensureLegacyCompat();
+    const pauseManager = this.pipelineManager!.getPauseManager();
     if (!pauseManager) return null;
     return pauseManager.getPendingPause(runId);
   }
 
   async listPendingPauses(): Promise<PendingPause[]> {
-    const pauseManager = this.pipelineManager.getPauseManager();
+    this.ensureLegacyCompat();
+    const pauseManager = this.pipelineManager!.getPauseManager();
     if (!pauseManager) return [];
     return pauseManager.listPendingPauses();
   }
 
   async resume(runId: string, options: HumanInputResumeOptions): Promise<ResumeResult> {
-    return this.pipelineManager.resumeWithHumanInput(runId, options);
+    this.ensureLegacyCompat();
+    return this.pipelineManager!.resumeWithHumanInput(runId, options);
   }
 
   // --- Observability ---
 
   configureObservability(config: ObservabilityConfig): void {
+    this.observabilityConfig = config;
     this.observabilityLayers = buildObservabilityLayers(config);
+    this.invalidateRuntime();
   }
 
   async setToolPolicies(policies: ToolPoliciesConfig | undefined): Promise<void> {
@@ -580,7 +782,7 @@ export class Fred implements FredLike {
     // Get memory defaults before initialization
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;
-    this.messageProcessor.updateDeps({ memoryDefaults });
+    this.invalidateRuntime();
 
     // Delegate to config initializer
     await this.configInitializer.initialize(this, configPath, options);
@@ -589,19 +791,23 @@ export class Fred implements FredLike {
   // --- Accessor methods for FredLike interface ---
 
   getAgentManager(): AgentManager {
-    return this.agentManager;
+    this.ensureLegacyCompat();
+    return this.agentManager!;
   }
 
   getPipelineManager(): PipelineManager {
-    return this.pipelineManager;
+    this.ensureLegacyCompat();
+    return this.pipelineManager!;
   }
 
   getProviderRegistry(): ProviderRegistry {
-    return this.providerRegistry;
+    this.ensureLegacyCompat();
+    return this.providerRegistry!;
   }
 
   getProviderService(): ProviderService {
-    return this.providerService;
+    this.ensureLegacyCompat();
+    return this.providerService!;
   }
 
   getMCPServerRegistry(): MCPServerRegistry {
@@ -682,12 +888,13 @@ export class Fred implements FredLike {
     await Effect.runPromise(this.mcpServerRegistry.shutdown());
 
     // Cleanup existing class-based resources (includes legacy MCP clients)
-    await this.agentManager.clear();
+    if (this.agentManager) {
+      await this.agentManager.clear();
+    }
 
     // Runtime cleanup happens automatically via Effect.scoped
     // when the runtime was created. Reset state for potential reuse.
-    this.runtime = null;
-    this.runtimePromise = null;
+    this.invalidateRuntime();
   }
 }
 
