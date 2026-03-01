@@ -11,10 +11,45 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./eval": {
+      "types": "./src/eval/public.ts",
+      "import": "./src/eval/public.ts",
+      "default": "./src/eval/public.ts"
+    },
+    "./context/sqlite": {
+      "types": "./src/context/storage/sqlite.ts",
+      "import": "./src/context/storage/sqlite.ts",
+      "default": "./src/context/storage/sqlite.ts"
+    },
+    "./context/postgres": {
+      "types": "./src/context/storage/postgres.ts",
+      "import": "./src/context/storage/postgres.ts",
+      "default": "./src/context/storage/postgres.ts"
+    },
+    "./tools": {
+      "types": "./src/tool/calculator.ts",
+      "import": "./src/tool/calculator.ts",
+      "default": "./src/tool/calculator.ts"
+    },
     "./effect": {
       "types": "./src/effect/index.ts",
       "import": "./src/effect/index.ts",
       "default": "./src/effect/index.ts"
+    },
+    "./mcp/types": {
+      "types": "./src/mcp/types.ts",
+      "import": "./src/mcp/types.ts",
+      "default": "./src/mcp/types.ts"
+    },
+    "./mcp/registry": {
+      "types": "./src/mcp/registry.ts",
+      "import": "./src/mcp/registry.ts",
+      "default": "./src/mcp/registry.ts"
+    },
+    "./tool/tool": {
+      "types": "./src/tool/tool.ts",
+      "import": "./src/tool/tool.ts",
+      "default": "./src/tool/tool.ts"
     }
   },
   "scripts": {
