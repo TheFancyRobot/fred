@@ -195,9 +195,9 @@ async function promptYesNo(question: string): Promise<boolean> {
   }
 
   // Use Bun's native prompt() which handles terminal I/O correctly
-  // @ts-ignore - Bun global
-  if (typeof prompt === 'function') {
-    const answer = prompt(`${question} (y/n): `);
+  const bunPrompt = typeof globalThis.prompt === 'function' ? globalThis.prompt : null;
+  if (bunPrompt) {
+    const answer = bunPrompt(`${question} (y/n): `);
     if (answer === null) return false; // Ctrl+C or EOF
     const trimmed = answer.trim().toLowerCase();
     return trimmed === 'y' || trimmed === 'yes';
@@ -1537,8 +1537,8 @@ export function startDevChat(setupHook?: (fred: Fred) => Promise<void>): void {
 }
 
 // Run if this is the main module
-// @ts-ignore - Bun global
-if (import.meta.main) {
+const isMainModule = 'main' in import.meta && (import.meta as ImportMeta & { main?: boolean }).main === true;
+if (isMainModule) {
   if (!maybeLaunchFredCliTui()) {
     const runner = new DevChatRunner();
 
