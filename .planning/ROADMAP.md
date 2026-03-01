@@ -86,7 +86,7 @@ Plans:
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
 **Depends on**: Phase 43 (Fred and all services must be Effect-only before deletion is safe)
 **Requirements**: RMVL-01, RMVL-02, RMVL-03, RMVL-04, RMVL-05, RMVL-06, RMVL-07, RMVL-08, CONS-01, CONS-02, CONS-03, CONS-04
-**Plans**: 9 plans
+**Plans**: 10 plans
 **Success Criteria** (what must be TRUE):
   1. Files `tool/registry.ts`, `agent/manager.ts`, `pipeline/manager.ts`, `context/manager.ts`, `hooks/manager.ts`, and `platform/registry.ts` are deleted from the repository
   2. `message-processor/processor.ts` has no remaining Promise-wrapper methods (`processMessage`, `routeMessage`, `streamMessage` imperative variants removed)
@@ -104,7 +104,7 @@ Plans:
 - [x] 44-07-PLAN.md — Delete 8 obsolete test files, fix 3 targeted tests, remove git tag, fix server display
 - [x] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
 - [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
-- [ ] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
+- [x] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
@@ -199,7 +199,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
-| 44. Imperative Layer Removal & Consumer Migration | 9/9 | Complete | 2026-03-01 |
+| 44. Imperative Layer Removal & Consumer Migration | 10/10 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
 ---
@@ -236,4 +236,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 44 complete (44-07 through 44-09 gap closure plans executed)*
+*Last updated: 2026-03-01 — Phase 44 complete (44-07 through 44-10 gap closure plans executed)*

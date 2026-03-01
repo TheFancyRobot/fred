@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T18:14:23Z"
+last_updated: "2026-03-01T18:35:43Z"
 progress:
   total_phases: 48
-  completed_phases: 43
-  total_plans: 196
-  completed_plans: 196
+  completed_phases: 44
+  total_plans: 197
+  completed_plans: 197
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 9 of 9 in current phase
+Plan: 10 of 10 in current phase
 Status: Phase complete
-Last activity: 2026-03-01 - Completed 44-09-PLAN.md
+Last activity: 2026-03-01 - Completed 44-10-PLAN.md
 
-Progress: ████████████████████ 100% (196/196 plans)
+Progress: ████████████████████ 100% (197/197 plans)
 
 ## Performance Metrics
 
@@ -65,7 +65,7 @@ Progress: ████████████████████ 100% (196
 
 ### Blockers/Concerns
 
-- Phase 44 import-gap closure is complete; Phase 45 still needs full-suite/API-surface verification and cleanup before release.
+- Phase 44 is complete including the final stale barrel export cleanup; Phase 45 still needs public API surface verification and release cleanup.
 
 ### Decisions (v0.3.0)
 
@@ -120,6 +120,7 @@ Progress: ████████████████████ 100% (196
 | 44-07 | Obsolete deleted-manager test suites are removed while targeted survivors are migrated to Fred public APIs and structural contracts | Closes UAT blocker imports incrementally without reintroducing imperative seams |
 | 44-08 | AgentFactory test suites now use shared ToolRegistryLike structural mocks from `tests/unit/helpers` instead of deleted ToolRegistry class imports | Keeps post-deletion tests green while enforcing structural constructor contracts used by production AgentFactory |
 | 44-09 | Remaining survivor tests now use structural AgentManagerLike/ToolRegistryLike mocks and Fred-like map fixtures instead of deleted manager classes | Completes Phase 44 test import cleanup and resolves all 19 UAT-diagnosed deleted-manager import breaks |
+| 44-10 | Pipeline barrel export no longer re-exports deleted `./manager` module and is validated by targeted plus full-suite tests | Closes final Phase 44 stale import gap that caused handoff/module-resolution failures |
 
 ### Quick Tasks Completed
 
@@ -130,12 +131,12 @@ Progress: ████████████████████ 100% (196
 
 ## Session Continuity
 
-Last session: 2026-03-01T18:14:23Z
-Stopped at: Completed 44-09-PLAN.md
+Last session: 2026-03-01T18:35:43Z
+Stopped at: Completed 44-10-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-09 remaining deleted-manager test import migration plan*
+*Last updated: 2026-03-01 — Completed 44-10 stale pipeline manager barrel export gap-closure plan*
