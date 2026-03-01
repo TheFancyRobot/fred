@@ -121,20 +121,17 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
 
       const normalizedId = definition.id.toLowerCase();
       const normalizedAliases = definition.aliases.map((alias) => alias.toLowerCase());
-      const keysToRegister = [normalizedId, ...normalizedAliases];
-      const seenKeys = new Set<string>();
+      // Deduplicate: aliases matching the id are harmless
+      const keysToRegister = [...new Set([normalizedId, ...normalizedAliases])];
 
       for (const key of keysToRegister) {
-        if (seenKeys.has(key)) {
-          return yield* Effect.fail(new ProviderRegistrationError({
-            providerId: definition.id,
-            cause: new Error(`Cannot register provider "${definition.id}": duplicate key "${key}" in definition`)
-          }));
-        }
-        seenKeys.add(key);
 
         const existing = providers.get(key);
         if (existing) {
+          // Idempotent: re-registering the same provider is a no-op
+          if (existing.id.toLowerCase() === normalizedId) {
+            return;
+          }
           const conflictType = key === normalizedId ? 'id' : 'alias';
           return yield* Effect.fail(new ProviderRegistrationError({
             providerId: definition.id,

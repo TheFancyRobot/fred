@@ -45,7 +45,7 @@ describe('ProviderRegistryService', () => {
       expect(result.hasAlias).toBe(true);
     });
 
-    test('fails with typed conflict when provider id already exists', async () => {
+    test('is idempotent when re-registering the same provider id', async () => {
       const result = await runWithService(
         Effect.gen(function* () {
           const service = yield* ProviderRegistryService;
@@ -63,15 +63,13 @@ describe('ProviderRegistryService', () => {
         })
       );
 
-      expect(result.duplicateAttempt._tag).toBe('Left');
-      if (result.duplicateAttempt._tag === 'Left') {
-        expect(result.duplicateAttempt.left._tag).toBe('ProviderRegistrationError');
-        const cause = result.duplicateAttempt.left.cause as Error;
-        expect(cause.message).toContain('already registered');
-      }
+      // Idempotent: re-registering the same provider id is a no-op (not an error)
+      expect(result.duplicateAttempt._tag).toBe('Right');
 
+      // Original registration unchanged
       expect(result.canonical.id).toBe('openai');
       expect(result.canonical.aliases).toEqual(['gpt']);
+      // New aliases from the duplicate attempt are NOT applied (no-op)
       expect(result.hasNewAlias).toBe(false);
     });
 
