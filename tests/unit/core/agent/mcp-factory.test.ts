@@ -1,21 +1,21 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { Effect } from 'effect';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import type { MCPServerRegistry } from '../../../../packages/core/src/mcp/registry';
 import type { Tool } from '../../../../packages/core/src/tool/tool';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 import * as Schema from 'effect/Schema';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 
 describe('AgentFactory - MCP Registry Integration', () => {
   let factory: AgentFactory;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockRegistry: MCPServerRegistry;
   let mockProvider: ProviderDefinition;
 
   beforeEach(() => {
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     factory = new AgentFactory(toolRegistry);
 
     // Mock ProviderDefinition
@@ -182,7 +182,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
     await factory.createAgent(config, mockProvider);
 
     // Verify namespace format
-    const tool = toolRegistry.getTool('github/create_issue');
+    const tool = toolRegistry.getTools(['github/create_issue'])[0];
     expect(tool).toBeDefined();
     expect(tool?.id).toBe('github/create_issue');
     expect(tool?.name).toBe('github/create_issue');
@@ -190,7 +190,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
 
   it('should skip MCP tool discovery when registry not set', async () => {
     // Create new factory without registry
-    const factoryNoRegistry = new AgentFactory(new ToolRegistry());
+    const factoryNoRegistry = new AgentFactory(createMockToolRegistry());
 
     const config: AgentConfig = {
       id: 'test-agent',

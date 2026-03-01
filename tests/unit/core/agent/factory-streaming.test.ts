@@ -2,17 +2,17 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { Effect, Layer, Stream } from 'effect';
 import { LanguageModel, Prompt, Tool, Toolkit } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import { createMockProvider } from '../../../unit/helpers/mock-provider';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 import type { StreamEvent } from '../../../../packages/core/src/stream/events';
 
 describe('AgentFactory streamMessage integration', () => {
   let factory: AgentFactory;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockProvider: ReturnType<typeof createMockProvider>;
 
   beforeEach(() => {
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     factory = new AgentFactory(toolRegistry);
     mockProvider = createMockProvider('openai');
   });
