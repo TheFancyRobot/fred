@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-45
+- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46
 
 ---
 
@@ -127,6 +127,14 @@ Plans:
 - [x] 45-02-PLAN.md — Add sub-path exports (eval, context, tools), update package.json, migrate consumer imports
 - [x] 45-03-PLAN.md — Create v0.3.0 changeset, fix type errors, run full verification sweep
 
+### Phase 46: Showcase Examples & Framework Differentiation
+**Goal**: Delete existing examples and replace with 12 progressive examples that form a learning path — from quickstart to evaluation harness. Each example demonstrates a distinct Fred capability (intent routing, pipelines, hooks, MCP, config-driven agents, etc.) using the v0.3.0 Effect-based public API. Research competing frameworks to ensure examples highlight differentiators.
+**Depends on**: Phase 45 (examples must use the final public API surface)
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd/plan-phase 46 to break down)
+
 ---
 
 ## Phase Dependencies
@@ -141,6 +149,8 @@ Phase 43 (Fred Class)
 Phase 44 (Deletion & Consumers)
     ↓
 Phase 45 (API & Verification)
+    ↓
+Phase 46 (Showcase Examples)
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -183,8 +193,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | CONS-02 | 44 | CLI chat.ts uses Effect API |
 | CONS-03 | 44 | CLI run.ts uses Effect API |
 | CONS-04 | 44 | Effect.runPromise at boundaries only |
-| API-01 | 45 | exports.ts removes imperative exports |
-| API-02 | 45 | exports.ts exports Effect service tags |
+| API-01 | 45 | 4/5 | In Progress|  | 45 | exports.ts exports Effect service tags |
 | API-03 | 45 | services.ts Layer provides all services |
 | API-04 | 45 | Breaking changes in CHANGELOG |
 | TEST-01 | 45 | All unit tests pass |
@@ -201,7 +210,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 46
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -210,6 +219,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
+| 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
 
 ---
 
@@ -245,4 +255,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 45 plans executed; verification reported gaps (4/6 truths verified)*
+*Last updated: 2026-03-01 — Phase 46 added: Showcase Examples & Framework Differentiation*

@@ -59,14 +59,14 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 
 - [ ] **API-01**: `exports.ts` no longer exports ToolRegistry, AgentManager, ContextManager, HookManager, or MessageRouter imperative classes
 - [ ] **API-02**: `exports.ts` exports Effect service tags (ToolRegistryService, AgentService, PipelineService, etc.) for consumer dependency injection
-- [ ] **API-03**: `services.ts` Layer composition provides all services through a single composable Layer
+- [x] **API-03**: `services.ts` Layer composition provides all services through a single composable Layer
 - [ ] **API-04**: Breaking changes documented in CHANGELOG (this is a major version bump)
 
 ### Build & Test Integrity
 
-- [ ] **TEST-01**: All existing unit tests pass after migration (tests updated to use Effect services where needed)
-- [ ] **TEST-02**: `bun run build` succeeds with zero TypeScript errors introduced by migration
-- [ ] **TEST-03**: `bun test` passes with no regressions
+- [x] **TEST-01**: All existing unit tests pass after migration (tests updated to use Effect services where needed)
+- [x] **TEST-02**: `bun run build` succeeds with zero TypeScript errors introduced by migration
+- [x] **TEST-03**: `bun test` passes with no regressions
 - [ ] **TEST-04**: Pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer reference) are resolved or documented
 
 ## Future Requirements
@@ -142,11 +142,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-04 | Phase 44 | Pending |
 | API-01 | Phase 45 | Pending |
 | API-02 | Phase 45 | Pending |
-| API-03 | Phase 45 | Pending |
+| API-03 | Phase 45 | Complete |
 | API-04 | Phase 45 | Pending |
-| TEST-01 | Phase 45 | Pending |
-| TEST-02 | Phase 45 | Pending |
-| TEST-03 | Phase 45 | Pending |
+| TEST-01 | Phase 45 | Complete |
+| TEST-02 | Phase 45 | Complete |
+| TEST-03 | Phase 45 | Complete |
 | TEST-04 | Phase 45 | Pending |
 
 **Coverage:**

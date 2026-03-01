@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-03-01T21:04:08Z"
+status: unknown
+last_updated: "2026-03-01T21:30:23.099Z"
 progress:
-  total_phases: 48
-  completed_phases: 44
-  total_plans: 203
-  completed_plans: 203
+  total_phases: 51
+  completed_phases: 45
+  total_plans: 205
+  completed_plans: 204
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 45 of 45 (Public API Surface & Verification)
-Plan: 3 of 3 in current phase
-Status: Verification gaps found
-Last activity: 2026-03-01 - Verified Phase 45 and identified 2 gap areas
+Phase: 45 of 46 (Public API Surface & Verification)
+Plan: 5 of 5 in current phase
+Status: Executing gap plans
+Last activity: 2026-03-01 - Completed 45-04 canonical FredLayers plan
 
-Progress: ████████████████████ 100% (203/203 plans)
+Progress: ████████████████████ 100% (204/205 plans)
 
 ## Performance Metrics
 
@@ -41,6 +41,7 @@ Progress: ████████████████████ 100% (203
 | v0.2.0 Observability & Safety | 32 | ~4.2 min | 2 days |
 | v0.2.0 Effect Migration + Monorepo | 86 | ~3.9 min | 13 days |
 | v0.3.0 Imperative-to-Effect (Phase 43) | 6 | ~5 min | ~28 min |
+| Phase 45 P04 | 4min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -65,7 +66,11 @@ Progress: ████████████████████ 100% (203
 
 ### Blockers/Concerns
 
-- Phase 45 verification reported two blockers: `exports.ts` is still a mixed barrel (not Effect-service-only) and there is no single type-safe canonical all-services layer (`FredServices` mismatch in strict typecheck).
+- Phase 45 verification reported two blockers: `exports.ts` is still a mixed barrel (not Effect-service-only) and ~~there is no single type-safe canonical all-services layer~~ (resolved in 45-04: FredLayers now provides all 14 FredServices tags).
+
+### Roadmap Evolution
+
+- Phase 46 added: Showcase Examples & Framework Differentiation — replace existing examples with new ones demonstrating Fred's unique capabilities; research competing frameworks for differentiators
 
 ### Decisions (v0.3.0)
 
@@ -131,6 +136,7 @@ Progress: ████████████████████ 100% (203
 | 45-02 | CLI eval/test/chat consumers use split sub-path imports (`@fancyrobot/fred/eval`, `@fancyrobot/fred/context/sqlite`) with main-path compatibility retained | Establishes organized API usage without breaking current main entrypoint consumers |
 | 45-03 | v0.3.0 breaking changes are documented in a dedicated changeset with migration before/after examples and release verification evidence | Gives external consumers a single migration source while closing API-04 and final verification requirements |
 | 45-verify | Phase verification scored 4/6 and flagged API-surface and canonical-layer gaps for follow-up planning | Prevents premature phase closeout and drives `/gsd/plan-phase 45 --gaps` loop |
+| 45-04 | FredLayers includes all 14 FredServices tags with default no-op MessageRouterService and Layer.merge for config override | Closes Gap 2 (API-03) by providing a single canonical all-services layer without type assertions |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -140,12 +146,12 @@ Progress: ████████████████████ 100% (203
 
 ## Session Continuity
 
-Last session: 2026-03-01T21:04:08Z
-Stopped at: Phase 45 verification reported gaps (4/6 truths verified)
+Last session: 2026-03-01T21:28:55Z
+Stopped at: Completed 45-04-PLAN.md (canonical FredLayers)
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Phase 45 plans executed; verification reported gaps requiring closure planning*
+*Last updated: 2026-03-01 — Phase 46 added to roadmap: Showcase Examples & Framework Differentiation*
