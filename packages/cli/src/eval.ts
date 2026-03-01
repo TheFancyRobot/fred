@@ -2,23 +2,25 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 import {
+  Fred,
+  ObservabilityServiceLive,
+  evaluation,
+} from '@fancyrobot/fred';
+import {
   EvaluationRunNotFoundError,
   EvaluationService,
   EvaluationServiceLive,
   FileTraceStorageLive,
-  Fred,
-  ObservabilityServiceLive,
   TraceStorageService,
   compare,
   createReplayOrchestrator,
-  evaluation,
   type EvaluationArtifact,
   type GoldenTrace,
   type ReplayRuntimeAdapter,
   type SuiteCaseExecutionResult,
   type SuiteManifest,
   validateEvaluationArtifact,
-} from '@fancyrobot/fred';
+} from '@fancyrobot/fred/eval';
 import { Effect, Layer } from 'effect';
 
 export type EvalOutputFormat = 'text' | 'json';

@@ -1,8 +1,8 @@
 import { readdir, readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 import { existsSync } from 'fs';
-import { Fred } from '@fancyrobot/fred';
-import { NoOpTracer, GoldenTraceRecorder, loadGoldenTrace, runTestCase, formatTestResults, TestCase } from '@fancyrobot/fred';
+import { Fred, NoOpTracer } from '@fancyrobot/fred';
+import { GoldenTraceRecorder, loadGoldenTrace, runTestCase, formatTestResults, type TestCase } from '@fancyrobot/fred/eval';
 import { createHash } from 'crypto';
 
 /**

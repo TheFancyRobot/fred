@@ -4,7 +4,8 @@
  */
 
 import { Effect } from 'effect';
-import { Fred, SqliteContextStorage } from '@fancyrobot/fred';
+import { Fred } from '@fancyrobot/fred';
+import { SqliteContextStorage } from '@fancyrobot/fred/context/sqlite';
 import {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider as detectAvailableProviderFromDev,
