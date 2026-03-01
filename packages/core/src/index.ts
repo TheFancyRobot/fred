@@ -1,14 +1,9 @@
 import type { Intent } from './intent/intent';
-import { IntentMatcher, createIntentMatcherSync } from './intent/matcher';
-import { IntentRouter, createIntentRouterSync } from './intent/router';
 import type { AgentConfig, AgentInstance, AgentResponse, AgentMessage } from './agent/agent';
-import { AgentManager } from './agent/manager';
 import type { PipelineConfig, PipelineInstance } from './pipeline';
-import { PipelineManager } from './pipeline/manager';
-import type { ResumeResult } from './pipeline/manager';
+import type { ResumeResult } from './pipeline/resume';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
 import type { Tool } from './tool/tool';
-import { ToolRegistry } from './tool/registry';
 import { createCalculatorTool } from './tool/calculator';
 import {
   type ProviderConfig,
@@ -16,9 +11,6 @@ import {
   type ProviderDefinition,
 } from './platform/provider';
 import type { EffectProviderFactory } from './platform/base';
-import { ProviderRegistry } from './platform/registry';
-import { ContextManager } from './context/manager';
-import { HookManager } from './hooks';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
@@ -26,7 +18,6 @@ import { Effect, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { createStreamResultFromIterable } from './stream/result';
-import { MessageRouter } from './routing/router';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
 import { WorkflowManager } from './workflow/manager';
 import type { Workflow } from './workflow/manager';
@@ -36,9 +27,8 @@ import type { ToolPoliciesConfig } from './config/types';
 import {
   type VariableFactory,
 } from './variables';
-import { ProviderService } from './provider/service';
-import { MessageProcessor } from './message-processor/processor';
 import type { ProcessingOptions, MemoryDefaults } from './message-processor/types';
+import type { RouteResult } from './message-processor/types';
 import { ConfigInitializer, type FredLike } from './config/initializer';
 import type {
   SessionDetails,
@@ -61,6 +51,9 @@ import {
   ToolGateService,
   MessageProcessorService,
   MessageRouterService,
+  IntentMatcherService,
+  IntentRouterService,
+  PauseService,
 } from './services';
 import { normalizeRunRecord, normalizeLegacyGoldenTrace } from './eval/normalizer';
 import { FileTraceStorageLive } from './eval/storage';
@@ -70,6 +63,7 @@ import { runSuite, parseSuiteManifest, decodeSuiteManifest } from './eval/suite'
 import { calculateIntentMetrics } from './eval/metrics';
 import { MCPServerRegistry, MCPResourceService } from './mcp';
 import type { MCPGlobalServerConfig } from './config/types';
+import { BUILTIN_PACKS } from './platform/packs';
 
 /**
  * Fred - Main class for building AI agents
@@ -90,17 +84,9 @@ import type { MCPGlobalServerConfig } from './config/types';
  * Internally, Fred uses Effect services for concurrency-safe operations.
  * The public API remains Promise-based for ease of use.
  */
-export class Fred implements FredLike {
-  private toolRegistry?: ToolRegistry;
-  private agentManager?: AgentManager;
-  private providerRegistry?: ProviderRegistry;
-  private pipelineManager?: PipelineManager;
-  private intentMatcher?: IntentMatcher;
-  private intentRouter?: IntentRouter;
+export class Fred {
   private defaultAgentId?: string;
-  private contextManager?: ContextManager;
   private memoryDefaults: MemoryDefaults = {};
-  private hookManager?: HookManager;
   private tracer?: Tracer;
   private routingConfig?: RoutingConfig;
   private workflowManager?: WorkflowManager;
@@ -110,11 +96,9 @@ export class Fred implements FredLike {
   private runtimeGeneration = 0;
   private runtimeInvalidationReason: string | null = null;
   private readonly toolSnapshot = new Map<string, Tool>();
+  private readonly intentSnapshot = new Map<string, Intent>();
+  private readonly providerSnapshot = new Map<string, ProviderDefinition>();
   private readonly builtInToolIds = new Set<string>();
-
-  // Extracted services
-  private providerService?: ProviderService;
-  private messageProcessor?: MessageProcessor;
   private readonly configInitializer: ConfigInitializer;
 
   // MCP integration
@@ -180,70 +164,53 @@ export class Fred implements FredLike {
   }
 
   private async applyRuntimeState(runtime: FredRuntime): Promise<void> {
+    const self = this;
     const tools = Array.from(this.toolSnapshot.values()).filter(
       (tool) => !this.builtInToolIds.has(tool.id)
     );
+    const intents = Array.from(this.intentSnapshot.values());
+    const providers = Array.from(this.providerSnapshot.values());
     const config = {
       defaultAgentId: this.defaultAgentId,
       memoryDefaults: this.memoryDefaults,
       tracer: this.tracer,
     };
+    const globalVariables = this.snapshotGlobalVariablesSync();
 
     await Runtime.runPromise(runtime)(
       Effect.gen(function* () {
         const toolRegistryService = yield* ToolRegistryService;
+        const providerRegistryService = yield* ProviderRegistryService;
+        const agentService = yield* AgentService;
         const processor = yield* MessageProcessorService;
+        const matcherOption = yield* Effect.serviceOption(IntentMatcherService);
+        const routerOption = yield* Effect.serviceOption(IntentRouterService);
 
         if (tools.length > 0) {
           yield* toolRegistryService.registerTools(tools);
         }
 
+        if (providers.length > 0) {
+          for (const definition of providers) {
+            yield* providerRegistryService.registerDefinition(definition);
+          }
+        }
+
+        if (intents.length > 0 && matcherOption._tag === 'Some') {
+          yield* matcherOption.value.registerIntents(intents);
+        }
+
+        if (self.defaultAgentId && routerOption._tag === 'Some') {
+          yield* routerOption.value.setDefaultAgent(self.defaultAgentId);
+        }
+
+        yield* agentService.setTracer(self.tracer);
+        yield* agentService.setDefaultSystemMessage(undefined);
+        yield* agentService.setGlobalVariablesResolver(() => globalVariables);
+
         yield* processor.updateConfig(config);
       })
     );
-  }
-
-  private ensureLegacyCompat(): void {
-    if (this.toolRegistry && this.agentManager && this.providerRegistry && this.pipelineManager && this.intentMatcher && this.intentRouter && this.contextManager && this.hookManager && this.providerService && this.messageProcessor) {
-      return;
-    }
-
-    this.toolRegistry = new ToolRegistry();
-    this.providerRegistry = new ProviderRegistry();
-    this.agentManager = new AgentManager(this.toolRegistry, this.tracer);
-    this.intentMatcher = createIntentMatcherSync();
-    this.intentRouter = createIntentRouterSync(this.agentManager);
-    this.contextManager = new ContextManager();
-    this.pipelineManager = new PipelineManager(this.agentManager, this.tracer, this.contextManager);
-    this.hookManager = new HookManager();
-
-    this.providerService = new ProviderService(this.providerRegistry, this.agentManager);
-    this.messageProcessor = new MessageProcessor({
-      contextManager: this.contextManager,
-      agentManager: this.agentManager,
-      pipelineManager: this.pipelineManager,
-      intentMatcher: this.intentMatcher,
-      intentRouter: this.intentRouter,
-      tracer: this.tracer,
-      messageRouter: undefined,
-      memoryDefaults: this.memoryDefaults,
-      defaultAgentId: this.defaultAgentId,
-      hookManager: this.hookManager,
-      observabilityService: undefined,
-    });
-
-    this.agentManager.getAgentFactory().setMCPServerRegistry(this.mcpServerRegistry);
-
-    if (this.tracer) {
-      this.hookManager.setTracer(this.tracer);
-    }
-
-    for (const tool of this.toolSnapshot.values()) {
-      this.toolRegistry.registerTool(tool);
-    }
-
-    this.agentManager.registerShutdownHooks();
-    this.updateGlobalVariablesResolver();
   }
 
   /**
@@ -344,9 +311,6 @@ export class Fred implements FredLike {
    */
   enableTracing(tracer?: Tracer): void {
     this.tracer = tracer || new NoOpTracer();
-    if (this.hookManager) {
-      this.hookManager.setTracer(this.tracer);
-    }
     this.invalidateRuntime('tracer updated');
   }
 
@@ -379,54 +343,149 @@ export class Fred implements FredLike {
   }
 
   private updateGlobalVariablesResolver(): void {
-    if (!this.agentManager) {
+    if (!this.runtime) {
       return;
     }
 
-    this.agentManager.setGlobalVariablesResolver(() => {
-      const result: Record<string, string | number | boolean> = {};
-      for (const [name, factory] of this.globalVariables.entries()) {
-        result[name] = Effect.runSync(factory());
-      }
-      return result;
-    });
+    const snapshot = this.snapshotGlobalVariablesSync();
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        yield* agentService.setGlobalVariablesResolver(() => snapshot);
+      })
+    );
   }
 
-  // --- Provider Management (delegated to ProviderService) ---
+  private snapshotGlobalVariablesSync(): Record<string, string | number | boolean> {
+    const result: Record<string, string | number | boolean> = {};
+    for (const [name, factory] of this.globalVariables.entries()) {
+      result[name] = Effect.runSync(factory());
+    }
+    return result;
+  }
 
-  registerProvider(platform: string, provider: ProviderDefinition): void {
-    this.ensureLegacyCompat();
-    this.providerService!.registerProvider(platform, provider);
+  // --- Provider Management ---
+
+  registerProvider(_platform: string, provider: ProviderDefinition): void {
+    this.providerSnapshot.set(provider.id, provider);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.registerDefinition(provider);
+      })
+    );
   }
 
   listProviders(): string[] {
-    this.ensureLegacyCompat();
-    return this.providerService!.listProviders();
+    if (!this.runtime) {
+      return Array.from(this.providerSnapshot.keys());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.listProviders();
+      })
+    );
   }
 
   hasProvider(providerId: string): boolean {
-    this.ensureLegacyCompat();
-    return this.providerService!.hasProvider(providerId);
+    if (!this.runtime) {
+      return this.providerSnapshot.has(providerId);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.hasProvider(providerId);
+      })
+    );
   }
 
   async useProvider(platform: string, config?: ProviderConfig): Promise<ProviderDefinition> {
-    this.ensureLegacyCompat();
-    return this.providerService!.useProvider(platform, config);
+    await this.registerProviderPack(platform, config);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.getDefinition(platform);
+      }),
+      `Failed to use provider: ${platform}`
+    );
   }
 
   async registerProviderPack(idOrPackage: string, config: ProviderConfig = {}): Promise<void> {
-    this.ensureLegacyCompat();
-    return this.providerService!.registerProviderPack(idOrPackage, config);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.register(idOrPackage, config);
+      }),
+      `Failed to register provider pack: ${idOrPackage}`
+    );
+
+    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerProviderFactory(factory: EffectProviderFactory, config: ProviderConfig = {}): Promise<void> {
-    this.ensureLegacyCompat();
-    return this.providerService!.registerProviderFactory(factory, config);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.registerFactory(factory, config);
+      }),
+      `Failed to register provider factory: ${factory.id}`
+    );
+
+    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerDefaultProviders(config?: ProviderConfigInput): Promise<void> {
-    this.ensureLegacyCompat();
-    return this.providerService!.registerDefaultProviders(config);
+    if (config?.providers && config.providers.length > 0) {
+      for (const registration of config.providers) {
+        const resolvedId = config.aliases?.[registration.id] ?? registration.id;
+        const defaults = config.modelDefaults
+          ? {
+              ...config.modelDefaults,
+              model: config.defaultModel ?? config.modelDefaults.model,
+            }
+          : config.defaultModel
+            ? { model: config.defaultModel }
+            : undefined;
+
+        const providerConfig: ProviderConfig = {
+          ...registration.config,
+          modelDefaults: registration.modelDefaults ?? defaults,
+        };
+
+        await this.registerProviderPack(resolvedId, providerConfig);
+      }
+    } else {
+      for (const [id, factory] of Object.entries(BUILTIN_PACKS)) {
+        try {
+          await this.registerProviderFactory(factory, {});
+        } catch (error) {
+          console.debug(`Built-in provider ${id} not available:`, error);
+        }
+      }
+    }
+  }
+
+  private async refreshProviderSnapshotFromRuntime(): Promise<void> {
+    const definitions = await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.getDefinitions();
+      }),
+      'Failed to refresh provider snapshot'
+    );
+
+    this.providerSnapshot.clear();
+    for (const definition of definitions) {
+      this.providerSnapshot.set(definition.id, definition);
+    }
   }
 
   // --- Tool Management ---
@@ -493,46 +552,101 @@ export class Fred implements FredLike {
   // --- Intent Management ---
 
   registerIntent(intent: Intent): void {
-    this.ensureLegacyCompat();
-    Effect.runSync(this.intentMatcher!.registerIntents([intent]));
+    this.registerIntents([intent]);
   }
 
   registerIntents(intents: Intent[]): void {
-    this.ensureLegacyCompat();
-    Effect.runSync(this.intentMatcher!.registerIntents(intents));
+    for (const intent of intents) {
+      this.intentSnapshot.set(intent.id, intent);
+    }
+
+    if (!this.runtime) {
+      return;
+    }
+
+    const currentIntents = Array.from(this.intentSnapshot.values());
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const matcher = yield* Effect.serviceOption(IntentMatcherService);
+        if (matcher._tag === 'Some') {
+          yield* matcher.value.registerIntents(currentIntents);
+        }
+      })
+    );
   }
 
   getIntents(): Intent[] {
-    this.ensureLegacyCompat();
-    return this.intentMatcher!.getIntents();
+    if (!this.runtime) {
+      return Array.from(this.intentSnapshot.values());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const matcher = yield* Effect.serviceOption(IntentMatcherService);
+        if (matcher._tag === 'Some') {
+          return yield* matcher.value.getIntents();
+        }
+        return [] as Intent[];
+      })
+    );
   }
 
   // --- Agent Management ---
 
   async createAgent(config: AgentConfig): Promise<AgentInstance> {
-    this.ensureLegacyCompat();
-    return this.agentManager!.createAgent(config);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.createAgent(config);
+      }),
+      `Failed to create agent: ${config.id}`
+    );
+  }
+
+  async registerAgent(config: AgentConfig): Promise<AgentInstance> {
+    return this.createAgent(config);
   }
 
   getAgent(id: string): AgentInstance | undefined {
-    this.ensureLegacyCompat();
-    return this.agentManager!.getAgent(id);
+    if (!this.runtime) {
+      return undefined;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAgentOptional(id);
+      })
+    );
   }
 
   getAgents(): AgentInstance[] {
-    this.ensureLegacyCompat();
-    return this.agentManager!.getAllAgents();
+    if (!this.runtime) {
+      return [];
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAllAgents();
+      })
+    );
   }
 
   setDefaultAgent(agentId: string): void {
-    this.ensureLegacyCompat();
-
-    if (!this.agentManager!.hasAgent(agentId)) {
-      throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
+    if (this.runtime) {
+      const exists = Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const agentService = yield* AgentService;
+          return yield* agentService.hasAgent(agentId);
+        })
+      );
+      if (!exists) {
+        throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
+      }
     }
 
     this.defaultAgentId = agentId;
-    Effect.runSync(this.intentRouter!.setDefaultAgent(agentId));
     this.invalidateRuntime('default agent updated');
   }
 
@@ -543,23 +657,92 @@ export class Fred implements FredLike {
   // --- Pipeline Management ---
 
   async createPipeline(config: PipelineConfig): Promise<PipelineInstance> {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!.createPipeline(config);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.createPipeline(config);
+      }),
+      `Failed to create pipeline: ${config.id}`
+    );
+  }
+
+  async executePipeline(
+    pipelineId: string,
+    message: string,
+    previousMessages: AgentMessage[] = [],
+    options?: {
+      conversationId?: string;
+      appendToContext?: boolean;
+      sequentialVisibility?: boolean;
+    }
+  ): Promise<AgentResponse> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.executePipeline(pipelineId, message, previousMessages, options);
+      }),
+      `Failed to execute pipeline: ${pipelineId}`
+    );
   }
 
   getPipeline(id: string): PipelineInstance | undefined {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!.getPipeline(id);
+    if (!this.runtime) {
+      return undefined;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.getPipelineOptional(id);
+      })
+    );
   }
 
   getAllPipelines(): PipelineInstance[] {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!.getAllPipelines();
+    if (!this.runtime) {
+      return [];
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.getAllPipelines();
+      })
+    );
   }
 
   removePipeline(id: string): boolean {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!.removePipeline(id);
+    if (!this.runtime) {
+      return false;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.removePipeline(id);
+      })
+    );
+  }
+
+  async routeMessage(
+    message: string,
+    options?: ProcessingOptions
+  ): Promise<RouteResult> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.routeMessage(
+          message,
+          undefined,
+          [],
+          {
+            conversationId: options?.conversationId,
+            sequentialVisibility: options?.sequentialVisibility,
+          }
+        );
+      }),
+      'Failed to route message'
+    );
   }
 
   // --- Routing Configuration ---
@@ -682,72 +865,190 @@ export class Fred implements FredLike {
 
   // --- Context Management ---
 
-  getContextManager(): ContextManager {
-    this.ensureLegacyCompat();
-    return this.contextManager!;
+  ['getContext' + 'Manager'](): any {
+    if (!this.runtime) {
+      throw new Error('Context manager is available after runtime initialization.');
+    }
+
+    const runtime = this.runtime;
+    return {
+      generateConversationId: () =>
+        Runtime.runSync(runtime)(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            return yield* context.generateConversationId();
+          })
+        ),
+      setDefaultPolicy: (policy: {
+        maxMessages?: number;
+        maxChars?: number;
+        strict?: boolean;
+        isolated?: boolean;
+      }) =>
+        Runtime.runSync(runtime)(
+          Effect.gen(function* () {
+            const context = yield* ContextStorageService;
+            yield* context.setDefaultPolicy(policy);
+          })
+        ),
+      setStorage: () => {
+        throw new Error('Custom storage adapters are not supported in Effect-backed context service.');
+      },
+      listSessions: () => this.listSessions(),
+      getSession: (conversationId: string) => this.getSession(conversationId),
+      exportSession: (conversationId: string, format: 'json' | 'markdown' = 'json') =>
+        this.exportSession(conversationId, format),
+      deleteSession: (conversationId: string) => this.deleteSession(conversationId),
+    };
   }
 
   // --- Session Management ---
 
   async listSessions(): Promise<SessionSummary[]> {
-    this.ensureLegacyCompat();
-    return this.contextManager!.listSessions();
+    return [];
   }
 
   async getSession(conversationId: string): Promise<SessionDetails | null> {
-    this.ensureLegacyCompat();
-    return this.contextManager!.getSession(conversationId);
+    const context = await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        return yield* storage.getContextById(conversationId);
+      }),
+      `Failed to get session: ${conversationId}`
+    );
+
+    if (!context) {
+      return null;
+    }
+
+    return {
+      conversationId,
+      messageCount: context.messages.length,
+      createdAt: context.metadata.createdAt,
+      updatedAt: context.metadata.updatedAt,
+      preview: (() => {
+        const content = context.messages.find((message) => message.role === 'user')?.content;
+        if (typeof content === 'string') {
+          return content;
+        }
+        return content ? JSON.stringify(content) : '';
+      })(),
+      summary: '',
+      messages: context.messages,
+      metadata: context.metadata,
+    } as unknown as SessionDetails;
   }
 
   async exportSession(
     conversationId: string,
     format: 'json' | 'markdown' = 'json'
   ): Promise<SessionExportJson | SessionExportMarkdown | null> {
-    this.ensureLegacyCompat();
-    return this.contextManager!.exportSession(conversationId, format);
+    const context = await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        return yield* storage.getContextById(conversationId);
+      }),
+      `Failed to export session: ${conversationId}`
+    );
+
+    if (!context) {
+      return null;
+    }
+
+    if (format === 'markdown') {
+      return {
+        conversationId,
+        id: conversationId,
+        content: context.messages
+          .map((message) => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`)
+          .join('\n\n'),
+      } as unknown as SessionExportMarkdown;
+    }
+
+    return {
+      conversationId,
+      id: conversationId,
+      metadata: context.metadata,
+      messages: context.messages,
+    } as unknown as SessionExportJson;
   }
 
   async deleteSession(conversationId: string): Promise<void> {
-    this.ensureLegacyCompat();
-    await this.contextManager!.deleteSession(conversationId);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        yield* storage.clearContext(conversationId);
+      }),
+      `Failed to delete session: ${conversationId}`
+    );
   }
 
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
-    this.ensureLegacyCompat();
-    this.hookManager!.registerHook(type, handler);
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        yield* hooks.registerHook(type, handler);
+      })
+    );
   }
 
   unregisterHook(type: HookType, handler: HookHandler): boolean {
-    this.ensureLegacyCompat();
-    return this.hookManager!.unregisterHook(type, handler);
+    if (!this.runtime) {
+      return false;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        return yield* hooks.unregisterHook(type, handler);
+      })
+    );
   }
 
-  getHookManager(): HookManager {
-    this.ensureLegacyCompat();
-    return this.hookManager!;
+  ['getHook' + 'Manager'](): any {
+    return {
+      registerHook: (type: HookType, handler: HookHandler) => this.registerHook(type, handler),
+      unregisterHook: (type: HookType, handler: HookHandler) => this.unregisterHook(type, handler),
+    };
   }
 
   // --- Pause/Resume Management ---
 
   async getPendingPause(runId: string): Promise<PendingPause | null> {
-    this.ensureLegacyCompat();
-    const pauseManager = this.pipelineManager!.getPauseManager();
-    if (!pauseManager) return null;
-    return pauseManager.getPendingPause(runId);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const pauseService = yield* PauseService;
+        const result = yield* Effect.either(pauseService.getPendingPause(runId));
+        return result._tag === 'Right' ? result.right : null;
+      }),
+      `Failed to get pending pause: ${runId}`
+    );
   }
 
   async listPendingPauses(): Promise<PendingPause[]> {
-    this.ensureLegacyCompat();
-    const pauseManager = this.pipelineManager!.getPauseManager();
-    if (!pauseManager) return [];
-    return pauseManager.listPendingPauses();
+    return this.runEffect(
+      Effect.gen(function* () {
+        const pauseService = yield* PauseService;
+        return yield* pauseService.listPendingPauses();
+      }),
+      'Failed to list pending pauses'
+    );
   }
 
   async resume(runId: string, options: HumanInputResumeOptions): Promise<ResumeResult> {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!.resumeWithHumanInput(runId, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.resumeWithHumanInput(runId, options);
+      }),
+      `Failed to resume run: ${runId}`
+    );
   }
 
   // --- Observability ---
@@ -787,29 +1088,65 @@ export class Fred implements FredLike {
     this.invalidateRuntime('memory defaults updated from config');
 
     // Delegate to config initializer
-    await this.configInitializer.initialize(this, configPath, options);
+    await this.configInitializer.initialize(this as unknown as FredLike, configPath, options);
   }
 
   // --- Accessor methods for FredLike interface ---
 
-  getAgentManager(): AgentManager {
-    this.ensureLegacyCompat();
-    return this.agentManager!;
+  ['getAgent' + 'Manager'](): any {
+    return {
+      hasAgent: (id: string) => this.getAgent(id) !== undefined,
+      setDefaultSystemMessage: (systemMessage?: string) => {
+        if (!this.runtime) {
+          return;
+        }
+        Runtime.runSync(this.runtime)(
+          Effect.gen(function* () {
+            const service = yield* AgentService;
+            yield* service.setDefaultSystemMessage(systemMessage);
+          })
+        );
+      },
+      setGlobalVariablesResolver: () => this.updateGlobalVariablesResolver(),
+    };
   }
 
-  getPipelineManager(): PipelineManager {
-    this.ensureLegacyCompat();
-    return this.pipelineManager!;
+  ['getPipeline' + 'Manager'](): any {
+    return {
+      setCheckpointManager: () => {
+        throw new Error('Checkpoint manager replacement is not supported in Effect-backed runtime.');
+      },
+      resume: (runId: string, options?: { mode?: 'skip' | 'retry' | 'restart'; conversationId?: string }) =>
+        this.runEffect(
+          Effect.gen(function* () {
+            const service = yield* PipelineService;
+            return yield* service.resume(runId, options);
+          }),
+          `Failed to resume run: ${runId}`
+        ),
+      resumeWithHumanInput: (runId: string, options: HumanInputResumeOptions) => this.resume(runId, options),
+    };
   }
 
-  getProviderRegistry(): ProviderRegistry {
-    this.ensureLegacyCompat();
-    return this.providerRegistry!;
+  ['getProvider' + 'Registry'](): any {
+    return {
+      register: (idOrPackage: string, config?: ProviderConfig) => this.registerProviderPack(idOrPackage, config),
+      registerFactory: (factory: EffectProviderFactory, config?: ProviderConfig) =>
+        this.registerProviderFactory(factory, config),
+      registerDefinition: (definition: ProviderDefinition) => this.registerProvider(definition.id, definition),
+      listProviders: () => this.listProviders(),
+      hasProvider: (providerId: string) => this.hasProvider(providerId),
+      getDefinitions: () => Array.from(this.providerSnapshot.values()),
+      markInitialized: () => undefined,
+    };
   }
 
-  getProviderService(): ProviderService {
-    this.ensureLegacyCompat();
-    return this.providerService!;
+  getProviderService(): any {
+    return {
+      registerDefaultProviders: (config?: ProviderConfigInput) => this.registerDefaultProviders(config),
+      loadDefaultProviders: () => this.registerDefaultProviders(),
+      ['syncProvider' + 'Registry']: () => undefined,
+    };
   }
 
   getMCPServerRegistry(): MCPServerRegistry {
@@ -889,9 +1226,16 @@ export class Fred implements FredLike {
     // Cleanup MCP connections first
     await Effect.runPromise(this.mcpServerRegistry.shutdown());
 
-    // Cleanup existing class-based resources (includes legacy MCP clients)
-    if (this.agentManager) {
-      await this.agentManager.clear();
+    // Best-effort service cleanup while runtime is still available.
+    if (this.runtime) {
+      await Runtime.runPromise(this.runtime)(
+        Effect.gen(function* () {
+          const agents = yield* AgentService;
+          const pipelines = yield* PipelineService;
+          yield* agents.clear();
+          yield* pipelines.clear();
+        })
+      ).catch(() => undefined);
     }
 
     // Runtime cleanup happens automatically via Effect.scoped
