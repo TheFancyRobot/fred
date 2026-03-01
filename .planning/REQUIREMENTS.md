@@ -27,15 +27,15 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 
 ### Fred Class Migration
 
-- [ ] **FRED-01**: Fred class constructs and manages an Effect runtime instead of imperative class instances
-- [ ] **FRED-02**: Fred.processMessage delegates to Effect MessageProcessorService via runtime
-- [ ] **FRED-03**: Fred.streamMessage delegates to Effect MessageProcessorService via runtime
-- [ ] **FRED-04**: Fred.routeMessage delegates to Effect routing services via runtime
-- [ ] **FRED-05**: Fred.executePipeline delegates to Effect PipelineService via runtime
-- [ ] **FRED-06**: Fred.registerAgent delegates to Effect AgentService via runtime
-- [ ] **FRED-07**: Fred.registerTool delegates to Effect ToolRegistryService via runtime
-- [ ] **FRED-08**: Fred.setToolPolicies delegates to Effect services (already partially done)
-- [ ] **FRED-09**: Fred class no longer imports or instantiates any imperative manager class
+- [x] **FRED-01**: Fred class constructs and manages an Effect runtime instead of imperative class instances
+- [x] **FRED-02**: Fred.processMessage delegates to Effect MessageProcessorService via runtime
+- [x] **FRED-03**: Fred.streamMessage delegates to Effect MessageProcessorService via runtime
+- [x] **FRED-04**: Fred.routeMessage delegates to Effect routing services via runtime
+- [x] **FRED-05**: Fred.executePipeline delegates to Effect PipelineService via runtime
+- [x] **FRED-06**: Fred.registerAgent delegates to Effect AgentService via runtime
+- [x] **FRED-07**: Fred.registerTool delegates to Effect ToolRegistryService via runtime
+- [x] **FRED-08**: Fred.setToolPolicies delegates to Effect services (already partially done)
+- [x] **FRED-09**: Fred class no longer imports or instantiates any imperative manager class
 
 ### Imperative Class Removal
 
@@ -119,15 +119,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-01 | Phase 42 | Complete |
 | PIPE-02 | Phase 42 | Complete |
 | PIPE-03 | Phase 42 | Complete |
-| FRED-01 | Phase 43 | Pending |
-| FRED-02 | Phase 43 | Pending |
-| FRED-03 | Phase 43 | Pending |
-| FRED-04 | Phase 43 | Pending |
-| FRED-05 | Phase 43 | Pending |
-| FRED-06 | Phase 43 | Pending |
-| FRED-07 | Phase 43 | Pending |
-| FRED-08 | Phase 43 | Pending |
-| FRED-09 | Phase 43 | Pending |
+| FRED-01 | Phase 43 | Complete |
+| FRED-02 | Phase 43 | Complete |
+| FRED-03 | Phase 43 | Complete |
+| FRED-04 | Phase 43 | Complete |
+| FRED-05 | Phase 43 | Complete |
+| FRED-06 | Phase 43 | Complete |
+| FRED-07 | Phase 43 | Complete |
+| FRED-08 | Phase 43 | Complete |
+| FRED-09 | Phase 43 | Complete |
 | RMVL-01 | Phase 44 | Pending |
 | RMVL-02 | Phase 44 | Pending |
 | RMVL-03 | Phase 44 | Pending |
