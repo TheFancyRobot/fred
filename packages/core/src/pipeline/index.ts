@@ -1,5 +1,4 @@
 export * from './pipeline';
-export * from './manager';
 export * from './steps';
 export * from './builder';
 export * from './context';
