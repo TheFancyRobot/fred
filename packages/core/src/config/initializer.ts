@@ -1,4 +1,6 @@
 import { Context } from 'effect';
+import { existsSync } from 'fs';
+import { dirname, resolve } from 'path';
 import type { Tool } from '../tool/tool';
 import type { ProviderConfigInput } from '../platform/provider';
 import {
@@ -6,6 +8,7 @@ import {
   validateConfig,
   extractIntents,
   extractAgents,
+  validateNoAmbiguousPromptFiles,
   extractPipelines,
   extractWorkflows,
   extractProviders,
@@ -14,6 +17,7 @@ import {
   extractMCPServers,
 } from './loader';
 import { loadPromptFile } from '../utils/prompt-loader';
+import { loadAgentFiles } from '../agent/file-loader';
 import type { ToolPoliciesConfig } from './types';
 import { PostgresContextStorage } from '../context/storage/postgres';
 import { SqliteContextStorage } from '../context/storage/sqlite';
@@ -179,9 +183,34 @@ export class ConfigInitializer {
       fred.registerIntents(intents);
     }
 
-    // Create agents (resolve prompt files relative to config path)
-    const agents = extractAgents(config, configPath);
-    for (const agentConfig of agents) {
+    // Create agents (load order: .md files -> config agents)
+    const discoveredAgentDirs = config.agentDirs ?? (() => {
+      const defaultAgentsDir = resolve(dirname(configPath), './agents');
+      return existsSync(defaultAgentsDir) ? ['./agents'] : [];
+    })();
+
+    const fileAgents = discoveredAgentDirs.length > 0
+      ? loadAgentFiles(discoveredAgentDirs, dirname(configPath))
+      : [];
+
+    validateNoAmbiguousPromptFiles(config.agents ?? [], configPath);
+    const configAgents = extractAgents(config, configPath);
+
+    const allAgentIds = new Set<string>();
+    for (const agentConfig of [...fileAgents, ...configAgents]) {
+      if (allAgentIds.has(agentConfig.id)) {
+        throw new Error(
+          `Duplicate agent ID "${agentConfig.id}" found across agent sources. Agent IDs must be unique across .md files, config agents, and programmatic registrations.`
+        );
+      }
+      allAgentIds.add(agentConfig.id);
+    }
+
+    for (const agentConfig of fileAgents) {
+      await fred.createAgent(agentConfig);
+    }
+
+    for (const agentConfig of configAgents) {
       await fred.createAgent(agentConfig);
     }
 

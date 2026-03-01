@@ -85,7 +85,7 @@ const createFredMock = (): { fred: FredLike; createdAgents: AgentConfig[] } => {
       return {
         id: config.id,
         config,
-        processMessage: async () => ({ response: '' }),
+        processMessage: async () => ({ content: '' }),
       } as AgentInstance;
     },
     createPipeline: async () => ({ id: 'pipeline' } as any),

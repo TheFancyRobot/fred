@@ -342,6 +342,10 @@ export interface ToolPoliciesConfig {
 export interface FrameworkConfig {
   intents?: Intent[];
   agents?: AgentConfig[];
+  /** Directories to scan for .md agent definition files.
+   *  Defaults to ['./agents'] if that directory exists.
+   *  Paths are relative to the config file or CWD. */
+  agentDirs?: string[];
   pipelines?: PipelineConfig[];
   /** Extended pipelines with step types (Phase 5+) */
   pipelinesV2?: Record<string, ExtendedPipelineConfig>;
