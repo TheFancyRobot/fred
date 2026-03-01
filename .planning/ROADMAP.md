@@ -86,7 +86,7 @@ Plans:
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
 **Depends on**: Phase 43 (Fred and all services must be Effect-only before deletion is safe)
 **Requirements**: RMVL-01, RMVL-02, RMVL-03, RMVL-04, RMVL-05, RMVL-06, RMVL-07, RMVL-08, CONS-01, CONS-02, CONS-03, CONS-04
-**Plans**: 10 plans
+**Plans**: 11 plans
 **Success Criteria** (what must be TRUE):
   1. Files `tool/registry.ts`, `agent/manager.ts`, `pipeline/manager.ts`, `context/manager.ts`, `hooks/manager.ts`, and `platform/registry.ts` are deleted from the repository
   2. `message-processor/processor.ts` has no remaining Promise-wrapper methods (`processMessage`, `routeMessage`, `streamMessage` imperative variants removed)
@@ -105,6 +105,7 @@ Plans:
 - [x] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
 - [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
 - [x] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
+- [ ] 44-11-PLAN.md — Delete dead MessageProcessor class and clean barrel re-export
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
