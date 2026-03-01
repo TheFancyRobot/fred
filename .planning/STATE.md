@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T17:28:37Z"
+last_updated: "2026-03-01T18:09:17Z"
 progress:
   total_phases: 48
-  completed_phases: 44
-  total_plans: 193
-  completed_plans: 192
+  completed_phases: 43
+  total_plans: 196
+  completed_plans: 195
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 6 of 6 in current phase
-Status: Phase complete
-Last activity: 2026-03-01 - Completed 44-06-PLAN.md
+Plan: 8 of 9 in current phase
+Status: In progress
+Last activity: 2026-03-01 - Completed 44-08-PLAN.md
 
-Progress: ████████████████████ 99% (192/193 plans)
+Progress: ████████████████████ 99% (195/196 plans)
 
 ## Performance Metrics
 
@@ -117,6 +117,8 @@ Progress: ████████████████████ 99% (192/
 | 44-04 | Pipeline executor/router internals now use structural manager interfaces instead of importing manager class types | Removes compile-time coupling needed for upcoming manager file deletions while preserving runtime behavior |
 | 44-05 | Imperative managers/wrappers are deleted in dependency order with a pre-deletion safety tag and immediate export cleanup | Preserves rollback safety while completing the core dead-code removal milestone for Phase 44 |
 | 44-06 | Runtime boundary enforcement is codified via guard tests and CLAUDE.md policy, with explicit audited exceptions | Prevents silent `runPromise` boundary regressions while keeping known pre-existing exceptions visible for future cleanup |
+| 44-07 | Obsolete deleted-manager test suites are removed while targeted survivors are migrated to Fred public APIs and structural contracts | Closes UAT blocker imports incrementally without reintroducing imperative seams |
+| 44-08 | AgentFactory test suites now use shared ToolRegistryLike structural mocks from `tests/unit/helpers` instead of deleted ToolRegistry class imports | Keeps post-deletion tests green while enforcing structural constructor contracts used by production AgentFactory |
 
 ### Quick Tasks Completed
 
@@ -127,12 +129,12 @@ Progress: ████████████████████ 99% (192/
 
 ## Session Continuity
 
-Last session: 2026-03-01T17:28:37Z
-Stopped at: Completed 44-06-PLAN.md
+Last session: 2026-03-01T18:09:17Z
+Stopped at: Completed 44-08-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-06 boundary guard and verification plan*
+*Last updated: 2026-03-01 — Completed 44-08 agent factory ToolRegistryLike test migration plan*
