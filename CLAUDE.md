@@ -92,6 +92,18 @@ const modelEffect = provider.getModel(config.model, { temperature: 0.7 });
 const model = await Effect.runPromise(modelEffect);
 ```
 
+**Effect Runtime Boundary Pattern**: A runtime boundary is where Effect programs are converted to Promises via `Effect.runPromise` or `Runtime.runPromise`.
+- Acceptable boundaries:
+  - Application entry points (CLI command handlers, server startup)
+  - Fred public API methods in `packages/core/src/index.ts` (single consumer boundary)
+  - Infrastructure/runtime factories such as `packages/core/src/services.ts`
+- Not acceptable:
+  - Core business logic services calling `Effect.runPromise` internally
+  - Helper functions that contain domain logic and should stay pure Effect
+  - Error recovery built around `try/catch` at runPromise call sites instead of Effect error composition (`Effect.catchTag`, `Effect.catchAll`)
+- Known pre-existing exceptions are tracked in `tests/unit/core/migration/phase-44-boundary-guard.test.ts` and are explicitly audited for future cleanup.
+- Enforcement is automated: the boundary guard test fails if new `Effect.runPromise`/`Runtime.runPromise` usage appears outside approved boundary/exception files.
+
 **Message Normalization**: Messages use `@effect/ai` Prompt encoding (`Prompt.MessageEncoded`). Normalize via `packages/core/src/messages.ts`:
 ```typescript
 import { normalizeMessage, normalizeMessages } from '@fred/core/messages';
