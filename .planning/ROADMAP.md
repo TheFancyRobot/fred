@@ -113,6 +113,7 @@ Plans:
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
 **Depends on**: Phase 44 (all imperative code removed; consumers migrated)
 **Requirements**: API-01, API-02, API-03, API-04, TEST-01, TEST-02, TEST-03, TEST-04
+**Plans**: 3 plans
 **Success Criteria** (what must be TRUE):
   1. `exports.ts` no longer exports ToolRegistry, AgentManager, ContextManager, HookManager, or MessageRouter — only Effect service tags
   2. `services.ts` provides a single composable Layer that wires all services for consumer dependency injection
@@ -120,6 +121,11 @@ Plans:
   4. `bun test` passes with no regressions — all unit tests updated to use Effect services where needed
   5. CHANGELOG documents the breaking changes: removed imperative classes, new Effect-only API surface, migration guidance
   6. Pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer reference) are resolved or explicitly documented
+
+Plans:
+- [ ] 45-01-PLAN.md — Create WorkflowService, clean imperative exports, add missing service tag re-exports
+- [ ] 45-02-PLAN.md — Add sub-path exports (eval, context, tools), update package.json, migrate consumer imports
+- [ ] 45-03-PLAN.md — Create v0.3.0 changeset, fix type errors, run full verification sweep
 
 ---
 
@@ -202,8 +208,8 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
-| 44. Imperative Layer Removal & Consumer Migration | 11/13 | In Progress | 2026-03-01 |
-| 45. Public API Surface & Verification | 0/? | Not started | — |
+| 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
+| 45. Public API Surface & Verification | 0/3 | Not started | — |
 
 ---
 
