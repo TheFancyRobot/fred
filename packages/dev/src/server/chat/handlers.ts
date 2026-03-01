@@ -1,16 +1,23 @@
-import { Fred, ContextManager, toOpenAIStream, StreamEvent } from '@fancyrobot/fred';
-import { ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChunk, ChatMessage } from './chat';
+import { Fred, toOpenAIStream } from '@fancyrobot/fred';
+import type { StreamEvent } from '@fancyrobot/fred';
+import type { ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChunk } from './chat';
 import { Stream } from 'effect';
 import type { Prompt } from '@effect/ai';
+
+interface ChatContextService {
+  generateConversationId(): string;
+  getHistory(conversationId: string): Promise<Prompt.MessageEncoded[]>;
+  addMessage(conversationId: string, message: Prompt.MessageEncoded): Promise<void>;
+}
 
 /**
  * Chat API handlers
  */
 export class ChatHandlers {
   private fred: Fred;
-  private contextManager: ContextManager;
+  private contextManager: ChatContextService;
 
-  constructor(fred: Fred, contextManager: ContextManager) {
+  constructor(fred: Fred, contextManager: ChatContextService) {
     this.fred = fred;
     this.contextManager = contextManager;
   }
