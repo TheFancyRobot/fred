@@ -66,12 +66,19 @@ Plans:
 **Goal**: The Fred class facade constructs and delegates to the Effect runtime instead of imperative manager instances, becoming a thin Effect-backed API surface
 **Depends on**: Phase 42 (Fred delegates to all services; they must be standalone first)
 **Requirements**: FRED-01, FRED-02, FRED-03, FRED-04, FRED-05, FRED-06, FRED-07, FRED-08, FRED-09
+**Plans**: 4 plans
 **Success Criteria** (what must be TRUE):
   1. Fred constructor builds an Effect runtime with composed service Layers instead of instantiating imperative classes
   2. `fred.processMessage()` and `fred.streamMessage()` delegate to MessageProcessorService via `Effect.runPromise` at the boundary
   3. `fred.routeMessage()`, `fred.executePipeline()`, `fred.registerAgent()`, `fred.registerTool()`, and `fred.setToolPolicies()` all delegate to their respective Effect services
   4. Fred class source has zero imports of ToolRegistry, AgentManager, PipelineManager, ContextManager, HookManager, ProviderRegistry, or MessageRouter
   5. All existing integration and smoke tests that use the Fred class continue to pass
+
+Plans:
+- [x] 43-01-PLAN.md — Add migration guardrails and Fred facade delegation tests
+- [x] 43-02-PLAN.md — Cut over Fred constructor/runtime lifecycle to Effect-first composition
+- [x] 43-03-PLAN.md — Migrate required Fred method delegation to Effect services and remove forbidden imports
+- [x] 43-04-PLAN.md — Adapt initializer/routing compatibility seams and run final Phase 43 verification suite
 
 ### Phase 44: Imperative Layer Removal & Consumer Migration
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
@@ -177,7 +184,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 |-------|----------------|--------|-----------|
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
-| 43. Fred Class Migration | 0/? | Not started | — |
+| 43. Fred Class Migration | 4/4 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
@@ -215,4 +222,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-02-28 — Phase 42 completed and verified (5/5 must-haves)*
+*Last updated: 2026-03-01 — Phase 43 complete (compatibility seams + final verification suite)*

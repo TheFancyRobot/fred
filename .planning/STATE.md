@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 43 — Fred Class Migration (next)
-Plan: —
-Status: Phase 42 completed and verified, ready for phase 43 planning
-Last activity: 2026-02-28 - Verified phase 42 passed (5/5 must-haves)
+Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
+Plan: Not started (0 of ? in current phase)
+Status: In progress
+Last activity: 2026-03-01 - Completed 43-04-PLAN.md
 
-Progress: 4 milestones shipped + v0.3.0 phases 41-42 complete (182 total plans)
+Progress: ████████████████████ 100% (185/185 plans)
 
 ## Performance Metrics
 
@@ -43,7 +43,7 @@ Progress: 4 milestones shipped + v0.3.0 phases 41-42 complete (182 total plans)
 
 - **8 imperative wrapper classes** delegate from Fred class: ToolRegistry, AgentManager, PipelineManager, ContextManager, HookManager, ProviderRegistry, MessageProcessor, MessageRouter
 - **Corresponding Effect services** exist for all 8: ToolRegistryService, AgentService, PipelineService, ContextStorageService, HookManagerService, ProviderRegistryService, MessageProcessorService, MessageRouterService
-- **Fred class (756 lines)** uses imperative classes; Effect runtime barely touched (only `setToolPolicies()`)
+- **Fred facade** now delegates message/routing/tool/agent/pipeline boundaries through runtime services; compatibility seams remain for next-plan cleanup
 - **PipelineService resume methods now implemented** - `resume()` and `resumeWithHumanInput()` are standalone Effect state machines
 - **PipelineService graph execution stub remains** - graph methods still return "not yet migrated to Effect fibers"
 - **All consumers** (dev-chat, CLI) use 100% imperative API via `fred.processMessage()`, `fred.streamMessage()`, etc.
@@ -81,6 +81,17 @@ None currently.
 | 42-02 | `resumeWithHumanInput` requires paused status (strict gate) | Prevents accidental resumption of non-paused checkpoints |
 | 42-02 | Best-effort step resolution via stepName fallback | Graceful handling when pipeline steps change between runs |
 | 42-02 | Skip mode at last step returns completed result | Handles edge case where all steps already executed |
+| 43-01 | Phase 43 static guards enforce no forbidden Fred imports/new seams by explicit symbol checks | Makes seam regressions immediately visible with clear failure attribution |
+| 43-01 | Fred facade boundary tests run against both `Fred.create()` and `new Fred()` paths | Locks constructor/factory parity while migration moves delegation to runtime services |
+| 43-02 | Fred runtime composition is option-driven via service-layer helpers (`createFredRuntimeWithOptions`) | Keeps runtime wiring centralized and reusable while supporting optional routing/observability inputs |
+| 43-02 | Runtime-sensitive config updates invalidate and rebuild runtime instead of mutating dependencies in place | Prevents stale runtime state and keeps lifecycle semantics deterministic after config changes/shutdown |
+| 43-02 | Runtime bootstrap replays class snapshots (tools/default agent/memory/tracer) after runtime creation | Preserves eager/lazy constructor parity while moving lifecycle control to Effect runtime state |
+| 43-03 | Fred facade now exposes roadmap aliases (`routeMessage`, `executePipeline`, `registerAgent`) and delegates these through runtime services | Satisfies FRED-04/FRED-05/FRED-06 call-surface requirements without reintroducing manager seams |
+| 43-03 | Provider/intent/tool snapshots replay into runtime service state during bootstrap | Preserves pre-runtime registration behavior while keeping runtime execution service-backed |
+| 43-03 | Forbidden-symbol scan in `index.ts` is constrained to service-tag references only | Locks static migration compliance for FRED-09 and prevents imperative seam regressions |
+| 43-04 | ConfigInitializer `FredLike` now depends on local capability interfaces instead of imperative manager class types | Keeps initialization seam compatible with Effect-backed Fred facade without class coupling |
+| 43-04 | Routing and explain integration tests now use only public Fred API setup paths | Removes private field mutation and direct `MessageRouter` construction from migration coverage |
+| 43-04 | Final Phase 43 verification suite includes services/routing/static guards plus CLI smoke contracts | Confirms facade migration readiness before starting imperative layer removal |
 
 ### Quick Tasks Completed
 
@@ -91,12 +102,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-02-28 22:23:10Z
-Stopped at: Verified phase 42 passed (5/5 must-haves)
+Last session: 2026-03-01 01:43:36Z
+Stopped at: Completed 43-04-PLAN.md
 Resume file: .planning/STATE.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-02-28 — Phase 42 verified complete, phase 43 next*
+*Last updated: 2026-03-01 — Completed 43-04 compatibility seams and phase verification*
