@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T21:45:27.856Z"
+last_updated: "2026-03-01T22:40:29Z"
 progress:
   total_phases: 53
   completed_phases: 46
-  total_plans: 205
-  completed_plans: 205
+  total_plans: 208
+  completed_plans: 206
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 45 of 46 (Public API Surface & Verification)
-Plan: 5 of 5 in current phase (COMPLETE)
-Status: Phase 45 complete
-Last activity: 2026-03-01 - Completed 45-05 curated exports surface
+Phase: 45.1 of 46 (Combine Assistant Config and Prompt YAML Frontmatter)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-01 - Completed 45.1-01 core agent file loader
 
-Progress: ████████████████████ 100% (205/205 plans)
+Progress: ███████████████████░ 99% (206/208 plans)
 
 ## Performance Metrics
 
@@ -141,6 +141,7 @@ Progress: ████████████████████ 100% (205
 | 45-verify | Phase verification scored 4/6 and flagged API-surface and canonical-layer gaps for follow-up planning | Prevents premature phase closeout and drives `/gsd/plan-phase 45 --gaps` loop |
 | 45-04 | FredLayers includes all 14 FredServices tags with default no-op MessageRouterService and Layer.merge for config override | Closes Gap 2 (API-03) by providing a single canonical all-services layer without type assertions |
 | 45-05 | exports.ts uses explicit named exports organized by domain; all service tags consolidated in index.ts services block | Closes Gap 1 (API-02) by replacing wildcard barrel with curated surface and single service re-export location |
+| 45.1-01 | Markdown agent files are parsed only when frontmatter delimiters exist; plain `.md` files without delimiters are skipped | Preserves existing plain prompt-file behavior while enabling explicit standalone agent definitions |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -150,12 +151,12 @@ Progress: ████████████████████ 100% (205
 
 ## Session Continuity
 
-Last session: 2026-03-01T21:37:30Z
-Stopped at: Completed 45-05-PLAN.md (curated exports surface) - Phase 45 complete
+Last session: 2026-03-01T22:40:29Z
+Stopped at: Completed 45.1-01-PLAN.md (core agent file loader)
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Phase 45.2 inserted: Implement ETA for Templating Agent Prompts and Frontmatter*
+*Last updated: 2026-03-01 — Completed 45.1-01 core agent file loader and tests*
