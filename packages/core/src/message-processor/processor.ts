@@ -405,24 +405,6 @@ export class MessageProcessor {
   }
 
   /**
-   * Route a message to the appropriate handler (Promise-based, for backward compatibility)
-   */
-  async routeMessage(
-    message: string,
-    semanticMatcher?: SemanticMatcherFn,
-    previousMessages: AgentMessage[] = [],
-    options?: { conversationId?: string; sequentialVisibility?: boolean }
-  ): Promise<RouteResult> {
-    return Effect.runPromise(
-      this.routeMessageEffect(message, semanticMatcher, previousMessages, options).pipe(
-        Effect.catchTag('RouteExecutionError', (error) =>
-          Effect.die(error.cause instanceof Error ? error.cause : new Error(String(error.cause)))
-        )
-      )
-    );
-  }
-
-  /**
    * Process a user message through the intent system (Effect-based)
    */
   processMessageEffect(
@@ -878,40 +860,6 @@ export class MessageProcessor {
         })
       );
     });
-  }
-
-  /**
-   * Process a user message through the intent system (Promise-based, for backward compatibility)
-   */
-  async processMessage(
-    message: string,
-    options?: ProcessingOptions
-  ): Promise<AgentResponse | null> {
-    return Effect.runPromise(
-      this.processMessageEffect(message, options).pipe(
-        Effect.catchTag('MessageValidationError', (error) =>
-          Effect.die(new Error(error.details || error.message))
-        ),
-        Effect.catchTag('ConversationIdRequiredError', () =>
-          Effect.die(new Error('Conversation ID is required for this request'))
-        ),
-        Effect.catchTag('RouteExecutionError', (error) =>
-          Effect.die(error.cause instanceof Error ? error.cause : new Error(String(error.cause)))
-        ),
-        Effect.catchTag('HandoffError', (error) =>
-          Effect.die(error.cause instanceof Error ? error.cause : new Error(String(error.cause)))
-        ),
-        Effect.catchTag('NoRouteFoundError', () =>
-          Effect.succeed(null)
-        ),
-        Effect.catchTag('AgentNotFoundError', (error) =>
-          Effect.die(new Error(`Agent not found: ${error.agentId}`))
-        ),
-        Effect.catchTag('MaxHandoffDepthError', (error) =>
-          Effect.die(new Error(`Maximum handoff depth ${error.maxDepth} exceeded at depth ${error.depth}`))
-        )
-      )
-    );
   }
 
   /**
@@ -1449,24 +1397,6 @@ export class MessageProcessor {
     });
   }
 
-  /**
-   * Process OpenAI-compatible chat messages (Promise-based, for backward compatibility)
-   */
-  async processChatMessage(
-    messages: Array<{ role: string; content: string }>,
-    options?: ProcessingOptions
-  ): Promise<AgentResponse | null> {
-    return Effect.runPromise(
-      this.processChatMessageEffect(messages, options).pipe(
-        Effect.catchTag('ConversationIdRequiredError', () =>
-          Effect.die(new Error('Conversation ID is required for this request'))
-        ),
-        Effect.catchTag('MessageValidationError', (error) =>
-          Effect.die(new Error(error.message))
-        )
-      )
-    );
-  }
 }
 
 /**
