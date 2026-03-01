@@ -1454,8 +1454,9 @@ export * from './exports';
 // Re-export StreamResult types
 export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './stream/result';
 
-// Re-export Effect services for advanced users
+// Re-export Effect services and composition utilities
 export {
+  // Layer composition
   FredLayers,
   makeFredLayersWithLeafRouting,
   makeFredRuntimeLayer,
@@ -1464,28 +1465,37 @@ export {
   createFredRuntimeWithOptions,
   type FredRuntime,
   type FredServices,
+  // Service tags + Live layers (all 14 FredServices members)
   ToolRegistryService,
+  ToolRegistryServiceLive,
   ToolGateService,
   ToolGateServiceLive,
+  HookManagerService,
+  HookManagerServiceLive,
+  ProviderRegistryService,
+  ProviderRegistryServiceLive,
+  ContextStorageService,
+  ContextStorageServiceLive,
   AgentService,
+  AgentServiceLive,
   WorkflowService,
   WorkflowServiceLive,
-  PipelineService,
   CheckpointService,
   CheckpointServiceLive,
   PauseService,
   PauseServiceLive,
-  ContextStorageService,
-  ProviderRegistryService,
-  HookManagerService,
+  PipelineService,
+  PipelineServiceLive,
+  MessageProcessorService,
+  MessageProcessorServiceLive,
   IntentMatcherService,
   IntentMatcherServiceLive,
   IntentRouterService,
   IntentRouterServiceLive,
   MessageRouterService,
   MessageRouterServiceLiveWithConfig,
-  MessageProcessorService,
-  MessageProcessorServiceLive,
+  ObservabilityService,
+  ObservabilityServiceLive,
 } from './services';
 
 // Re-export MessageProcessor error types
