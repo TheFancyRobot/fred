@@ -33,16 +33,6 @@ interface AgentManagerLike {
   hasAgent(id: string): boolean;
 }
 
-interface ContextManagerLike {
-  setDefaultPolicy(policy: {
-    maxMessages?: number;
-    maxChars?: number;
-    strict?: boolean;
-    isolated?: boolean;
-  }): void;
-  setStorage(storage: unknown): void;
-}
-
 interface PipelineManagerLike {
   setCheckpointManager(manager: import('../pipeline/checkpoint').CheckpointManager): void;
 }
@@ -60,10 +50,16 @@ interface ProviderServiceLike {
 
 export interface FredLike {
   getAgentManager(): AgentManagerLike;
-  getContextManager(): ContextManagerLike;
   getPipelineManager(): PipelineManagerLike;
   getProviderRegistry(): ProviderRegistryLike;
   getProviderService(): ProviderServiceLike;
+  setDefaultPolicy(policy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  }): void;
+  setStorage(storage: unknown): void;
   registerTool(tool: Tool): void;
   registerIntents(intents: import('../intent/intent').Intent[]): void;
   createAgent(config: import('../agent/agent').AgentConfig): Promise<import('../agent/agent').AgentInstance>;
@@ -97,7 +93,6 @@ export class ConfigInitializer {
     options?: InitializerOptions
   ): Promise<void> {
     const agentManager = fred.getAgentManager();
-    const contextManager = fred.getContextManager();
     const pipelineManager = fred.getPipelineManager();
     const providerRegistry = fred.getProviderRegistry();
     const providerService = fred.getProviderService();
@@ -115,14 +110,14 @@ export class ConfigInitializer {
     // Configure memory defaults
     const memoryDefaults = config.memory;
     if (memoryDefaults?.policy) {
-      contextManager.setDefaultPolicy(memoryDefaults.policy);
+      fred.setDefaultPolicy(memoryDefaults.policy);
     }
 
     // Configure persistence adapter
     if (config.persistence) {
       await this.configurePersistence(
         config.persistence,
-        contextManager,
+        fred,
         pipelineManager
       );
     }
@@ -222,7 +217,7 @@ export class ConfigInitializer {
       adapter: 'postgres' | 'sqlite';
       checkpoint?: { enabled?: boolean; ttlMs?: number; cleanupIntervalMs?: number };
     },
-    contextManager: ContextManagerLike,
+    fred: Pick<FredLike, 'setStorage'>,
     pipelineManager: PipelineManagerLike
   ): Promise<void> {
     if (persistence.adapter === 'postgres') {
@@ -233,11 +228,11 @@ export class ConfigInitializer {
         );
       }
       const storage = new PostgresContextStorage({ connectionString });
-      contextManager.setStorage(storage);
+      fred.setStorage(storage);
     } else if (persistence.adapter === 'sqlite') {
       const path = process.env.FRED_SQLITE_PATH || './fred.db';
       const storage = new SqliteContextStorage({ path });
-      contextManager.setStorage(storage);
+      fred.setStorage(storage);
     }
 
     // Set up checkpoint storage if persistence enabled (default: true)

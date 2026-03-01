@@ -983,31 +983,6 @@ export class Fred {
     );
   }
 
-  ['getContext' + 'Manager'](): any {
-    const self = this;
-    return {
-      generateConversationId: () => self.generateConversationId(),
-      setDefaultPolicy: (policy: {
-        maxMessages?: number;
-        maxChars?: number;
-        strict?: boolean;
-        isolated?: boolean;
-      }) => self.setDefaultPolicy(policy),
-      setStorage: (storage: unknown) => self.setStorage(storage),
-      getHistory: (conversationId: string) => self.getHistory(conversationId),
-      addMessages: (conversationId: string, messages: any[]) => self.addMessages(conversationId, messages),
-      getContext: (conversationId: string) => self.getContext(conversationId),
-      updateMetadata: (conversationId: string, metadata: Record<string, unknown>) =>
-        self.updateMetadata(conversationId, metadata),
-      clearContext: (conversationId: string) => self.clearContext(conversationId),
-      listSessions: () => self.listSessions(),
-      getSession: (conversationId: string) => self.getSession(conversationId),
-      exportSession: (conversationId: string, format: 'json' | 'markdown' = 'json') =>
-        self.exportSession(conversationId, format),
-      deleteSession: (conversationId: string) => self.deleteSession(conversationId),
-    };
-  }
-
   // --- Session Management ---
 
   async listSessions(): Promise<SessionSummary[]> {

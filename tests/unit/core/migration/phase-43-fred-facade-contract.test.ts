@@ -132,23 +132,20 @@ describe('Boundary execution contracts', () => {
 });
 
 describe('Consumer compatibility contracts', () => {
-  test('getContextManager does not throw on lazy-init Fred instance', () => {
+  test('direct context methods exist on lazy-init Fred instance', () => {
     const fred = new Fred();
-    const cm = (fred as any)['getContext' + 'Manager']();
 
-    expect(cm).toBeDefined();
-    expect(typeof cm.generateConversationId).toBe('function');
-    expect(typeof cm.setDefaultPolicy).toBe('function');
-    expect(typeof cm.setStorage).toBe('function');
-    expect(typeof cm.getHistory).toBe('function');
-    expect(typeof cm.addMessages).toBe('function');
-    expect(typeof cm.clearContext).toBe('function');
+    expect(typeof fred.generateConversationId).toBe('function');
+    expect(typeof fred.setDefaultPolicy).toBe('function');
+    expect(typeof fred.setStorage).toBe('function');
+    expect(typeof fred.getHistory).toBe('function');
+    expect(typeof fred.addMessages).toBe('function');
+    expect(typeof fred.clearContext).toBe('function');
   });
 
   test('generateConversationId works pre-runtime', () => {
     const fred = new Fred();
-    const cm = (fred as any)['getContext' + 'Manager']();
-    const id = cm.generateConversationId();
+    const id = fred.generateConversationId();
 
     expect(typeof id).toBe('string');
     expect(id).toMatch(/^conv_\d+_[a-z0-9]+$/);
@@ -157,18 +154,15 @@ describe('Consumer compatibility contracts', () => {
   test('setDefaultPolicy stores policy pre-runtime for replay', () => {
     // Pre-runtime: should not throw
     const fred1 = new Fred();
-    const cm1 = (fred1 as any)['getContext' + 'Manager']();
-    expect(() => cm1.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
+    expect(() => fred1.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
 
     // With runtime: should also not throw (async create not awaited here, just verifying method exists)
     const fred2 = new Fred();
-    const cm2 = (fred2 as any)['getContext' + 'Manager']();
-    expect(() => cm2.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
+    expect(() => fred2.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
   });
 
   test('setStorage stores adapter pre-runtime for replay', () => {
     const fred = new Fred();
-    const cm = (fred as any)['getContext' + 'Manager']();
     const mockStorage = {
       get: async () => null,
       set: async () => {},
@@ -176,7 +170,7 @@ describe('Consumer compatibility contracts', () => {
       clear: async () => {},
       listSessions: async () => [],
     };
-    expect(() => cm.setStorage(mockStorage)).not.toThrow();
+    expect(() => fred.setStorage(mockStorage)).not.toThrow();
   });
 
   test('initializeFromConfig ensures runtime before delegating', () => {
