@@ -69,7 +69,8 @@ export class ServerApp {
       },
     });
 
-    console.log(`Server running on http://${hostname}:${port}`);
+    const displayHost = hostname === '0.0.0.0' ? 'localhost' : hostname;
+    console.log(`Server running on http://${displayHost}:${port}`);
   }
 
   /**
