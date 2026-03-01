@@ -73,6 +73,7 @@ describe('TUI plugin slash commands', () => {
 
     state = updateInputText(state, '/deploy');
     const typedSlash = state.input.slashSearch.filteredActions
+      .filter((action) => action.kind === 'plugin-slash')
       .map((action) => action.plugin?.canonicalName);
 
     expect(typedSlash).toEqual(paletteSlash);

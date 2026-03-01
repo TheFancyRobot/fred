@@ -237,39 +237,13 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.focusedPane).toBe('input');
   });
 
-  test('interactive startup with empty session list still opens chooser and Enter creates session', async () => {
+  test('empty session list skips chooser and auto-creates a session', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     await createTestApp({}, fixture);
-    await waitFor(() => app.getState().startup.chooser.isOpen);
-
-    expect(app.getState().startup.chooser.isOpen).toBe(true);
-    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
-
-    app.processKey(makeKey({ name: 'enter' }));
     await waitFor(() => app.getState().sessions.selectedId === 's-new');
 
     const state = app.getState();
     expect(state.startup.chooser.isOpen).toBe(false);
-    expect(state.sessions.selectedId).toBe('s-new');
-    expect(state.focusedPane).toBe('input');
-  });
-
-  test('resume chooser option routes to sidebar and can create session when none exist', async () => {
-    const fixture = createSessionServiceFixture({ includeExistingSessions: false });
-    await createTestApp({}, fixture);
-    await waitFor(() => app.getState().startup.chooser.isOpen);
-
-    app.processKey(makeKey({ name: 'up' }));
-    app.processKey(makeKey({ name: 'enter' }));
-    await waitFor(() => !app.getState().startup.chooser.isOpen);
-
-    expect(app.getState().startup.chooser.isOpen).toBe(false);
-    expect(app.getState().focusedPane).toBe('sidebar');
-
-    app.processKey(makeKey({ name: 'enter' }));
-    await waitFor(() => app.getState().sessions.selectedId === 's-new');
-
-    const state = app.getState();
     expect(state.sessions.selectedId).toBe('s-new');
     expect(state.focusedPane).toBe('input');
   });

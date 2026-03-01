@@ -318,7 +318,8 @@ export function shouldOpenStartupChooser(
   items: ReadonlyArray<SessionListItem>,
   initialSessionId: string | null | undefined,
 ): boolean {
-  return !initialSessionId;
+  if (initialSessionId) return false;
+  return items.length > 0;
 }
 
 export function openStartupChooser(state: TuiState): TuiState {
@@ -606,8 +607,7 @@ function getSlashSearchState(state: TuiState, text: string): TuiState['input']['
   }
 
   const normalizedQuery = trimmedStart.slice(1);
-  const pluginActions = state.commandPalette.actions.filter((action) => action.kind === 'plugin-slash');
-  const filteredActions = getFilteredPaletteActions(pluginActions, normalizedQuery, 'input');
+  const filteredActions = getFilteredPaletteActions(state.commandPalette.actions, normalizedQuery, 'input');
   return {
     isActive: true,
     query: normalizedQuery,

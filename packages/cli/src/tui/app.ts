@@ -253,6 +253,15 @@ export class FredTuiApp {
         return;
       }
 
+      // No previous sessions and no initialSessionId -- auto-create a session
+      if (items.length === 0 && !initialSessionId) {
+        const item = await createSession(this.sessionService);
+        this.state = addSession(this.state, item, { select: true });
+        this.state = setFocusedPane(this.state, 'input');
+        this.events.onStateChange?.(this.state);
+        return;
+      }
+
       const selectedId = this.state.sessions.selectedId;
       if (selectedId) {
         const messages = await loadSessionTranscript(this.sessionService, selectedId);

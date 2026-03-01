@@ -304,7 +304,8 @@ describe('TUI Session State', () => {
 
     expect(shouldOpenStartupChooser(sessions, null)).toBe(true);
     expect(shouldOpenStartupChooser(sessions, 's1')).toBe(false);
-    expect(shouldOpenStartupChooser([], null)).toBe(true);
+    // Empty session list should skip the chooser (nothing to resume)
+    expect(shouldOpenStartupChooser([], null)).toBe(false);
     expect(shouldOpenStartupChooser([], 's1')).toBe(false);
   });
 });
