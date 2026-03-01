@@ -86,12 +86,21 @@ Plans:
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
 **Depends on**: Phase 43 (Fred and all services must be Effect-only before deletion is safe)
 **Requirements**: RMVL-01, RMVL-02, RMVL-03, RMVL-04, RMVL-05, RMVL-06, RMVL-07, RMVL-08, CONS-01, CONS-02, CONS-03, CONS-04
+**Plans**: 6 plans
 **Success Criteria** (what must be TRUE):
   1. Files `tool/registry.ts`, `agent/manager.ts`, `pipeline/manager.ts`, `context/manager.ts`, `hooks/manager.ts`, and `platform/registry.ts` are deleted from the repository
   2. `message-processor/processor.ts` has no remaining Promise-wrapper methods (`processMessage`, `routeMessage`, `streamMessage` imperative variants removed)
   3. `grep -r "new ToolRegistry\|new AgentManager\|new PipelineManager\|new ContextManager\|new HookManager\|new ProviderRegistry" packages/` returns zero matches
   4. `dev-chat.ts`, `chat.ts`, and `run.ts` interact with Fred via Effect-based API — no direct imperative manager access
   5. `Effect.runPromise` / `Effect.runFork` calls appear only at application boundaries (entry points), not scattered through business logic
+
+Plans:
+- [ ] 44-01-PLAN.md — Migrate CLI consumers (chat.ts, session.ts, eval.ts, tui/session.ts) to Fred public API
+- [ ] 44-02-PLAN.md — Migrate dev-chat consumers (dev-chat.ts, server/app.ts, handlers.ts) to structural interfaces
+- [ ] 44-03-PLAN.md — Remove MessageProcessor Promise wrappers and decouple AgentFactory from ToolRegistry class
+- [ ] 44-04-PLAN.md — Clean internal references (executor, graph-executor, router, pipeline/service) from manager types
+- [ ] 44-05-PLAN.md — Create safety tag, delete 8 imperative files, clean exports.ts
+- [ ] 44-06-PLAN.md — Create boundary guard tests and run Phase 44 verification suite
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
