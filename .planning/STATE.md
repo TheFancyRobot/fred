@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T17:23:43Z"
+last_updated: "2026-03-01T17:28:37Z"
 progress:
   total_phases: 48
   completed_phases: 44
   total_plans: 193
-  completed_plans: 191
+  completed_plans: 192
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 5 of 6 in current phase
-Status: In progress
-Last activity: 2026-03-01 - Completed 44-05-PLAN.md
+Plan: 6 of 6 in current phase
+Status: Phase complete
+Last activity: 2026-03-01 - Completed 44-06-PLAN.md
 
-Progress: ████████████████████ 99% (191/193 plans)
+Progress: ████████████████████ 99% (192/193 plans)
 
 ## Performance Metrics
 
@@ -65,7 +65,7 @@ Progress: ████████████████████ 99% (191/
 
 ### Blockers/Concerns
 
-None currently.
+- Phase 44 intentionally leaves legacy tests that import deleted imperative manager files; full `bun test` remains red until Phase 45 test migration/cleanup completes.
 
 ### Decisions (v0.3.0)
 
@@ -116,6 +116,7 @@ None currently.
 | 44-03 | MessageProcessor and AgentFactory internals now depend on Effect-first structural contracts instead of legacy Promise wrappers and ToolRegistry class coupling | Unblocks manager file deletion by removing internal class-type and wrapper seams while preserving behavior |
 | 44-04 | Pipeline executor/router internals now use structural manager interfaces instead of importing manager class types | Removes compile-time coupling needed for upcoming manager file deletions while preserving runtime behavior |
 | 44-05 | Imperative managers/wrappers are deleted in dependency order with a pre-deletion safety tag and immediate export cleanup | Preserves rollback safety while completing the core dead-code removal milestone for Phase 44 |
+| 44-06 | Runtime boundary enforcement is codified via guard tests and CLAUDE.md policy, with explicit audited exceptions | Prevents silent `runPromise` boundary regressions while keeping known pre-existing exceptions visible for future cleanup |
 
 ### Quick Tasks Completed
 
@@ -126,12 +127,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-01T17:23:43Z
-Stopped at: Completed 44-05-PLAN.md
+Last session: 2026-03-01T17:28:37Z
+Stopped at: Completed 44-06-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-05 imperative manager deletion plan*
+*Last updated: 2026-03-01 — Completed 44-06 boundary guard and verification plan*
