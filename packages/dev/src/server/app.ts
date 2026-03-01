@@ -1,4 +1,5 @@
 import { Fred, sanitizeError } from '@fancyrobot/fred';
+import type { Prompt } from '@effect/ai';
 import { ServerHandlers } from './handlers';
 import { Router } from './routes';
 import { ChatRoutes } from './chat/routes';
@@ -19,8 +20,13 @@ export class ServerApp {
     this.handlers = new ServerHandlers(framework);
 
     // Initialize chat routes
-    const contextManager = framework.getContextManager();
-    const chatHandlers = new ChatHandlers(framework, contextManager);
+    const chatContextAdapter = {
+      generateConversationId: () => framework.generateConversationId(),
+      getHistory: (conversationId: string) => framework.getHistory(conversationId),
+      addMessage: (conversationId: string, message: Prompt.MessageEncoded) =>
+        framework.addMessages(conversationId, [message]),
+    };
+    const chatHandlers = new ChatHandlers(framework, chatContextAdapter);
     this.chatRoutes = new ChatRoutes(chatHandlers);
 
     this.router = new Router(this.handlers, this.chatRoutes);

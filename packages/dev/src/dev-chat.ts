@@ -16,13 +16,6 @@ type FredCliLaunchTarget = {
   args: string[];
 };
 
-type DevChatContextService = {
-  getHistory(conversationId: string): Promise<unknown[]>;
-  addMessages(conversationId: string, messages: unknown[]): Promise<void>;
-  clearContext(conversationId: string): Promise<void>;
-  generateConversationId(): string;
-};
-
 function terminate(code: number): void {
   process.exitCode = code;
   process.nextTick(() => {
@@ -498,13 +491,6 @@ class DevChatRunner {
     this.setupHook = setupHook;
   }
 
-  private getContextService(fred: Fred): DevChatContextService {
-    const fredWithContext = fred as unknown as {
-      getContextManager(): DevChatContextService;
-    };
-    return fredWithContext.getContextManager();
-  }
-
   /**
    * Cleanup resources
    */
@@ -705,19 +691,17 @@ class DevChatRunner {
 
       // Preserve conversation context if it exists
       if (this.fred && this.conversationId) {
-        const contextManager = this.getContextService(this.fred);
-        const history = await contextManager.getHistory(this.conversationId);
+        const history = await this.fred.getHistory(this.conversationId);
 
         if (history.length > 0) {
-          const newContextManager = this.getContextService(newFred);
-          await newContextManager.addMessages(this.conversationId, history);
+          await newFred.addMessages(this.conversationId, history);
           if (!this.isWaitingForInput) {
             console.log(`Preserved conversation context (${history.length} messages)`);
           }
         }
       } else if (!this.conversationId) {
         // Generate new conversation ID on first load
-        this.conversationId = this.getContextService(newFred).generateConversationId();
+        this.conversationId = newFred.generateConversationId();
       }
 
       this.fred = newFred;
@@ -1198,15 +1182,14 @@ class DevChatRunner {
 
       if (cmd === 'clear' || cmd === '/clear') {
         if (this.fred) {
-          const contextManager = this.getContextService(this.fred);
-          await contextManager.clearContext(this.conversationId!);
+          await this.fred.clearContext(this.conversationId!);
           // Generate new conversation ID via workflow context
           if (this.workflowContext) {
             const currentWorkflow = this.workflowContext.getCurrentWorkflow();
             this.workflowContext.switchWorkflow(currentWorkflow); // Regenerates thread ID
             this.conversationId = this.workflowContext.getThreadId();
           } else {
-            this.conversationId = this.getContextService(this.fred).generateConversationId();
+            this.conversationId = this.fred.generateConversationId();
           }
           console.log(`\nConversation cleared. New ID: ${this.conversationId}\n`);
         }
