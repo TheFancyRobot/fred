@@ -15,6 +15,7 @@ import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import { ContextStorageService, ContextStorageServiceLive } from './context/service';
 import { AgentService, AgentServiceLive } from './agent/service';
+import { WorkflowService, WorkflowServiceLive } from './workflow/service';
 import { CheckpointService } from './pipeline/checkpoint/service';
 import { CheckpointNotFoundError } from './pipeline/errors';
 import { PauseService, PauseServiceLive } from './pipeline/pause/service';
@@ -41,6 +42,7 @@ export type FredServices =
   | ProviderRegistryService
   | ContextStorageService
   | AgentService
+  | WorkflowService
   | CheckpointService
   | PauseService
   | PipelineService
@@ -268,6 +270,13 @@ const agentLayer = AgentServiceLive.pipe(
 );
 
 /**
+ * Workflow layer depends on Agent service for validation warnings.
+ */
+const workflowLayer = WorkflowServiceLive.pipe(
+  Layer.provide(agentLayer)
+);
+
+/**
  * Pipeline layer depends on Agent, Hook, Checkpoint, Pause
  * Wave 4: PipelineService
  */
@@ -333,6 +342,7 @@ export const FredLayers = Layer.mergeAll(
   coreLayer,
   pauseLayer,
   agentLayer,
+  workflowLayer,
   pipelineLayer,
   messageProcessorLayer
 );
@@ -444,6 +454,8 @@ export {
   ContextStorageServiceLive,
   AgentService,
   AgentServiceLive,
+  WorkflowService,
+  WorkflowServiceLive,
   CheckpointService,
   CheckpointServiceLive,
   PauseService,
