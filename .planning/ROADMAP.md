@@ -104,6 +104,7 @@ Plans:
 - [x] 44-07-PLAN.md — Delete 8 obsolete test files, fix 3 targeted tests, remove git tag, fix server display
 - [x] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
 - [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
+- [ ] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
