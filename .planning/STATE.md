@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T02:17:58.185Z"
+last_updated: "2026-03-01T05:12:14.000Z"
 progress:
   total_phases: 48
   completed_phases: 44
-  total_plans: 186
-  completed_plans: 186
+  total_plans: 187
+  completed_plans: 187
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
 Plan: Not started (0 of ? in current phase)
 Status: In progress
-Last activity: 2026-03-01 - Completed 43-05-PLAN.md (Phase 43 fully complete)
+Last activity: 2026-03-01 - Completed 43-06-PLAN.md (Phase 43 gap closure complete)
 
-Progress: ████████████████████ 100% (185/185 plans)
+Progress: ████████████████████ 100% (187/187 plans)
 
 ## Performance Metrics
 
@@ -40,7 +40,7 @@ Progress: ████████████████████ 100% (185
 | v0.2.1 CLI/TUI Dev Experience | 31 | ~5.32 min | — |
 | v0.2.0 Observability & Safety | 32 | ~4.2 min | 2 days |
 | v0.2.0 Effect Migration + Monorepo | 86 | ~3.9 min | 13 days |
-| v0.3.0 Imperative-to-Effect (Phase 43) | 5 | ~5 min | ~25 min |
+| v0.3.0 Imperative-to-Effect (Phase 43) | 6 | ~5 min | ~28 min |
 
 ## Accumulated Context
 
@@ -107,6 +107,9 @@ None currently.
 | 43-04 | Routing and explain integration tests now use only public Fred API setup paths | Removes private field mutation and direct `MessageRouter` construction from migration coverage |
 | 43-04 | Final Phase 43 verification suite includes services/routing/static guards plus CLI smoke contracts | Confirms facade migration readiness before starting imperative layer removal |
 | 43-05 | ROADMAP criteria were pre-applied during plan creation; contract tests use method-body extraction for precise assertions | Locks lazy runtime init and Runtime.runPromise boundary as explicit contracts |
+| 43-06 | getContextManager proxy returns safe pre-runtime stubs that queue state for replay, matching getAgentManager pattern | Closes consumer compatibility gap for lazy-init Fred without breaking Effect service contracts |
+| 43-06 | ExternalStorageAdapter wraps Promise-based ContextStorage into Effect interface for replaceStorage | Bridges legacy storage adapters into Effect-backed context service without runtime boundary escapes |
+| 43-06 | initializeFromConfig calls ensureRuntime() after invalidateRuntime to guarantee runtime before ConfigInitializer | Prevents "Context manager is available after runtime initialization" error in dev-chat and CLI |
 
 ### Quick Tasks Completed
 
@@ -117,12 +120,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-01T02:12:36Z
-Stopped at: Completed 43-05-PLAN.md (Phase 43 fully complete)
+Last session: 2026-03-01T05:12:14Z
+Stopped at: Completed 43-06-PLAN.md (Phase 43 gap closure complete)
 Resume file: .planning/STATE.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 43-05 gap closure and Phase 43 fully complete*
+*Last updated: 2026-03-01 — Completed 43-06 gap closure plan*
