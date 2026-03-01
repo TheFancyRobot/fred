@@ -27,6 +27,7 @@ import {
   MessageRouterServiceLiveWithConfig,
 } from './routing/service';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
+import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
 import type { RoutingConfig } from './routing/types';
 
@@ -44,6 +45,9 @@ export type FredServices =
   | PauseService
   | PipelineService
   | MessageProcessorService
+  | IntentMatcherService
+  | IntentRouterService
+  | MessageRouterService
   | ObservabilityService;
 
 /**
@@ -357,6 +361,39 @@ export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
     MessageRouterServiceLiveWithConfig(routerConfig)
   );
 
+export interface FredLayerOptions {
+  routingConfig?: RoutingConfig;
+  observabilityLayers?: ObservabilityLayers;
+}
+
+/**
+ * Compose Fred layers from runtime options.
+ */
+export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Layer<FredServices> => {
+  const base = options.routingConfig
+    ? makeFredLayersWithLeafRouting(options.routingConfig)
+    : FredLayers;
+
+  if (!options.observabilityLayers) {
+    return base as Layer.Layer<FredServices>;
+  }
+
+  return Layer.mergeAll(
+    base,
+    options.observabilityLayers.tracerLayer,
+    options.observabilityLayers.loggerLayer
+  ) as Layer.Layer<FredServices>;
+};
+
+/**
+ * Create a Fred runtime from runtime composition options.
+ */
+export const createFredRuntimeWithOptions = (
+  options: FredLayerOptions = {}
+): Effect.Effect<FredRuntime, never, Scope.Scope> => {
+  return Layer.toRuntime(makeFredRuntimeLayer(options));
+};
+
 /**
  * Create a Fred runtime with all services.
  *
@@ -374,7 +411,7 @@ export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
  * ```
  */
 export const createFredRuntime = (): Effect.Effect<FredRuntime, never, Scope.Scope> => {
-  return Layer.toRuntime(FredLayers);
+  return createFredRuntimeWithOptions();
 };
 
 /**
