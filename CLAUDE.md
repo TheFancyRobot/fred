@@ -182,6 +182,8 @@ This repository uses specialized skills. When working here, always prefer using 
 - If multiple skills apply, use the most specific one first, then supporting skills.
 - Document in your response which skill(s) you used and why.
 
+**Mandatory for all code changes:** This project is built entirely on Effect. Always use the `effect-ts` and `effect-best-practices` skills when making any code changes — not just Effect-specific tasks. These skills ensure correct service/layer patterns, proper error modeling, idiomatic Effect usage, and prevent anti-patterns from being introduced.
+
 ### Primary Skills For This Project
 
 #### `opentui`
