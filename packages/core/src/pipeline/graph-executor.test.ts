@@ -13,14 +13,13 @@ import {
   type GraphExecutionResult,
   type GraphExecutorOptions,
 } from './graph-executor';
+import type { AgentManagerLike, HookManagerLike } from './executor';
 import type { GraphWorkflowConfig, BranchCondition, GraphEdge } from './graph';
 import type { PipelineContext } from './context';
-import type { AgentManager } from '../agent/manager';
-import type { HookManager } from '../hooks/manager';
 import type { AgentResponse } from '../agent/agent';
 
 // Mock agent manager
-function createMockAgentManager(): AgentManager {
+function createMockAgentManager(): AgentManagerLike {
   const agents = new Map<string, any>();
 
   // Add mock agents
@@ -52,7 +51,7 @@ function createMockAgentManager(): AgentManager {
 }
 
 describe('Graph Executor', () => {
-  let agentManager: AgentManager;
+  let agentManager: AgentManagerLike;
   let options: GraphExecutorOptions;
 
   beforeEach(() => {
@@ -396,7 +395,7 @@ describe('Graph Executor', () => {
     });
 
     test('hook abort stops execution', async () => {
-      const mockHookManager: HookManager = {
+      const mockHookManager: HookManagerLike = {
         executeHooksAndMerge: async (type: string) => {
           if (type === 'beforePipeline') {
             return { abort: true, metadata: {} } as any;
