@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T21:30:23.099Z"
+last_updated: "2026-03-01T21:45:27.856Z"
 progress:
-  total_phases: 51
-  completed_phases: 45
+  total_phases: 53
+  completed_phases: 46
   total_plans: 205
-  completed_plans: 204
+  completed_plans: 205
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 45 of 46 (Public API Surface & Verification)
-Plan: 5 of 5 in current phase
-Status: Executing gap plans
-Last activity: 2026-03-01 - Completed 45-04 canonical FredLayers plan
+Plan: 5 of 5 in current phase (COMPLETE)
+Status: Phase 45 complete
+Last activity: 2026-03-01 - Completed 45-05 curated exports surface
 
-Progress: ████████████████████ 100% (204/205 plans)
+Progress: ████████████████████ 100% (205/205 plans)
 
 ## Performance Metrics
 
@@ -42,6 +42,7 @@ Progress: ████████████████████ 100% (204
 | v0.2.0 Effect Migration + Monorepo | 86 | ~3.9 min | 13 days |
 | v0.3.0 Imperative-to-Effect (Phase 43) | 6 | ~5 min | ~28 min |
 | Phase 45 P04 | 4min | 1 tasks | 3 files |
+| Phase 45 P05 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,11 +67,13 @@ Progress: ████████████████████ 100% (204
 
 ### Blockers/Concerns
 
-- Phase 45 verification reported two blockers: `exports.ts` is still a mixed barrel (not Effect-service-only) and ~~there is no single type-safe canonical all-services layer~~ (resolved in 45-04: FredLayers now provides all 14 FredServices tags).
+- ~~Phase 45 verification reported two blockers: `exports.ts` is still a mixed barrel (not Effect-service-only) and there is no single type-safe canonical all-services layer~~ (Both resolved: Gap 2 in 45-04, Gap 1 in 45-05)
 
 ### Roadmap Evolution
 
 - Phase 46 added: Showcase Examples & Framework Differentiation — replace existing examples with new ones demonstrating Fred's unique capabilities; research competing frameworks for differentiators
+- Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
+- Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
 
 ### Decisions (v0.3.0)
 
@@ -137,6 +140,7 @@ Progress: ████████████████████ 100% (204
 | 45-03 | v0.3.0 breaking changes are documented in a dedicated changeset with migration before/after examples and release verification evidence | Gives external consumers a single migration source while closing API-04 and final verification requirements |
 | 45-verify | Phase verification scored 4/6 and flagged API-surface and canonical-layer gaps for follow-up planning | Prevents premature phase closeout and drives `/gsd/plan-phase 45 --gaps` loop |
 | 45-04 | FredLayers includes all 14 FredServices tags with default no-op MessageRouterService and Layer.merge for config override | Closes Gap 2 (API-03) by providing a single canonical all-services layer without type assertions |
+| 45-05 | exports.ts uses explicit named exports organized by domain; all service tags consolidated in index.ts services block | Closes Gap 1 (API-02) by replacing wildcard barrel with curated surface and single service re-export location |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -146,12 +150,12 @@ Progress: ████████████████████ 100% (204
 
 ## Session Continuity
 
-Last session: 2026-03-01T21:28:55Z
-Stopped at: Completed 45-04-PLAN.md (canonical FredLayers)
+Last session: 2026-03-01T21:37:30Z
+Stopped at: Completed 45-05-PLAN.md (curated exports surface) - Phase 45 complete
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Phase 46 added to roadmap: Showcase Examples & Framework Differentiation*
+*Last updated: 2026-03-01 — Phase 45.2 inserted: Implement ETA for Templating Agent Prompts and Frontmatter*
