@@ -25,6 +25,7 @@ import {
   IntentRouterService,
   MessageProcessorService,
 } from '../../../packages/core/src/services';
+import type { Tool } from '../../../packages/core/src/tool/tool';
 
 describe('FredLayers', () => {
   test('composes all services without errors', async () => {
@@ -479,5 +480,107 @@ describe('Phase 42 Standalone Service Integration', () => {
       expect(result.hasV2Pipeline).toBe(false);
       expect(['agent', 'pipeline', 'intent', 'none']).toContain(result.routeType);
     });
+  });
+});
+
+describe('Phase 43 Fred facade', () => {
+  const makeBoundaryTool = (id: string): Tool => ({
+    id,
+    name: id,
+    description: 'Phase 43 boundary tool',
+    execute: async () => ({ ok: true }),
+  });
+
+  test('processMessage delegates through MessageProcessorService for Fred.create and new Fred', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+      let calls = 0;
+
+      try {
+        const runtime = await fred.getRuntime();
+        const restore = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const service = yield* MessageProcessorService;
+            const original = service.processMessage;
+
+            (service as { processMessage: typeof service.processMessage }).processMessage = (message, options) => {
+              calls += 1;
+              return Effect.succeed({ content: 'phase-43' });
+            };
+
+            return () => {
+              (service as { processMessage: typeof service.processMessage }).processMessage = original;
+            };
+          })
+        );
+
+        const result = await fred.processMessage('phase-43-boundary-check');
+        restore();
+
+        expect(result?.content).toBe('phase-43');
+        expect(calls).toBe(1);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('registerTool writes through ToolRegistryService runtime state', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        fred.registerTool(makeBoundaryTool(`phase-43-tool-${Math.random()}`));
+
+        const serviceSize = await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const tools = yield* ToolRegistryService;
+            return yield* tools.size();
+          })
+        );
+
+        expect(serviceSize).toBeGreaterThan(0);
+      } finally {
+        await fred.shutdown();
+      }
+    }
+  });
+
+  test('runtime ToolRegistryService registrations are visible via Fred.getTools', async () => {
+    const { Fred } = await import('../../../packages/core/src/index');
+
+    for (const createFred of [
+      () => Fred.create(),
+      async () => new Fred(),
+    ]) {
+      const fred = await createFred();
+
+      try {
+        const runtime = await fred.getRuntime();
+        const runtimeTool = makeBoundaryTool(`phase-43-runtime-tool-${Math.random()}`);
+
+        await Runtime.runPromise(runtime)(
+          Effect.gen(function* () {
+            const tools = yield* ToolRegistryService;
+            yield* tools.registerTool(runtimeTool);
+          })
+        );
+
+        expect(fred.getTools().some((tool) => tool.id === runtimeTool.id)).toBe(true);
+      } finally {
+        await fred.shutdown();
+      }
+    }
   });
 });
