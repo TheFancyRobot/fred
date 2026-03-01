@@ -2,68 +2,58 @@
  * Integration tests for routing explain() API and AgentResponse extension
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { Fred } from '../../../../packages/core/src/index';
-import { MessageRouter } from '../../../../packages/core/src/routing/router';
-import { AgentManager } from '../../../../packages/core/src/agent/manager';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
-import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
+import { createMockProvider } from '../../helpers/mock-provider';
+
+async function registerMockAgent(
+  fred: Fred,
+  agentId: string,
+  response: string
+): Promise<void> {
+  if (!fred.hasProvider('mock')) {
+    const provider = createMockProvider('mock');
+    fred.registerProvider('mock', { ...provider, aliases: [] });
+  }
+
+  const agent = await fred.registerAgent({
+    id: agentId,
+    platform: 'mock',
+    model: 'mock-model',
+    systemMessage: 'Mock agent',
+  } as any);
+
+  agent.processMessage = async () => ({ content: response });
+}
 
 describe('Routing Explain API Integration', () => {
   let fred: Fred;
-  let agentManager: AgentManager;
 
-  beforeEach(() => {
-    fred = new Fred();
-    agentManager = fred.getAgentManager();
+  beforeEach(async () => {
+    fred = await Fred.create();
 
-    // Manually add test agents
-    const agentsMap = (agentManager as any).agents as Map<string, AgentInstance>;
-    agentsMap.set('help-agent', {
-      id: 'help-agent',
-      config: {
-        id: 'help-agent',
-        platform: 'openai',
-        model: 'gpt-4',
-      },
-      processMessage: async () => ({ content: 'Help response' }),
+    fred.configureRouting({
+      defaultAgent: 'help-agent',
+      rules: [
+        {
+          id: 'help-rule',
+          agent: 'help-agent',
+          patterns: ['^help'],
+        },
+        {
+          id: 'math-rule',
+          agent: 'math-agent',
+          patterns: ['math|calculate|compute'],
+        },
+      ],
     });
 
-    agentsMap.set('math-agent', {
-      id: 'math-agent',
-      config: {
-        id: 'math-agent',
-        platform: 'openai',
-        model: 'gpt-4',
-      },
-      processMessage: async () => ({ content: 'Math response' }),
-    });
+    await registerMockAgent(fred, 'help-agent', 'Help response');
+    await registerMockAgent(fred, 'math-agent', 'Math response');
+  });
 
-    // Configure routing
-    (fred as any).messageRouter = new MessageRouter(
-      agentManager,
-      undefined, // No hook manager for these tests
-      {
-        defaultAgent: 'help-agent',
-        rules: [
-          {
-            id: 'help-rule',
-            agent: 'help-agent',
-            patterns: ['^help'],
-          },
-          {
-            id: 'math-rule',
-            agent: 'math-agent',
-            patterns: ['math|calculate|compute'],
-          },
-        ],
-      }
-    );
-
-    // Update message processor deps
-    (fred as any).messageProcessor.updateDeps({
-      messageRouter: (fred as any).messageRouter,
-    });
+  afterEach(async () => {
+    await fred.shutdown();
   });
 
   it('fred.routing.explain() returns RoutingExplanation for rule-matched message', async () => {
@@ -78,30 +68,31 @@ describe('Routing Explain API Integration', () => {
   });
 
   it('fred.routing.explain() returns explanation with alternatives', async () => {
-    // Message that could match multiple rules
     const explanation = await fred.routing.explain('help with math');
 
     expect(explanation).toBeDefined();
     expect(explanation!.winner).toBeDefined();
-    // Could match either rule - just verify we get alternatives
     expect(explanation!.alternatives).toBeDefined();
     expect(Array.isArray(explanation!.alternatives)).toBe(true);
   });
 
   it('fred.routing.explain() returns null when no router configured', async () => {
-    const fredNoRouter = new Fred();
-    const explanation = await fredNoRouter.routing.explain('test message');
-
-    expect(explanation).toBeNull();
+    const fredNoRouter = await Fred.create();
+    try {
+      const explanation = await fredNoRouter.routing.explain('test message');
+      expect(explanation).toBeNull();
+    } finally {
+      await fredNoRouter.shutdown();
+    }
   });
 
-  it('AgentResponse includes routingExplanation', async () => {
-    const response = await fred.processMessage('help me');
+  it('testRoute includes explanation metadata', async () => {
+    const decision = await fred.testRoute('help me');
 
-    expect(response).toBeDefined();
-    expect(response!.content).toBe('Help response');
-    expect(response!.routingExplanation).toBeDefined();
-    expect(response!.routingExplanation!.winner.targetId).toBe('help-agent');
+    expect(decision).toBeDefined();
+    expect(decision?.agent).toBe('help-agent');
+    expect(decision?.explanation).toBeDefined();
+    expect(decision?.explanation?.winner.targetId).toBe('help-agent');
   });
 
   it('explanation narrative contains routing details', async () => {
@@ -111,7 +102,6 @@ describe('Routing Explain API Integration', () => {
     expect(explanation!.narrative).toBeDefined();
     expect(typeof explanation!.narrative).toBe('string');
     expect(explanation!.narrative.length).toBeGreaterThan(0);
-    // Should contain key details
     expect(explanation!.narrative).toContain('help-agent');
   });
 
@@ -122,36 +112,26 @@ describe('Routing Explain API Integration', () => {
     expect(typeof explanation!.confidence).toBe('number');
     expect(explanation!.confidence).toBeGreaterThanOrEqual(0);
     expect(explanation!.confidence).toBeLessThanOrEqual(1);
-    // Verify no string labels like "HIGH" or "MEDIUM"
     expect(explanation!.narrative).not.toMatch(/\b(HIGH|MEDIUM|LOW)\b/);
   });
 
   it('explanation alternatives sorted by confidence descending', async () => {
-    // Configure multiple rules to get alternatives
-    (fred as any).messageRouter = new MessageRouter(
-      agentManager,
-      undefined,
-      {
-        defaultAgent: 'help-agent',
-        rules: [
-          {
-            id: 'rule-1',
-            agent: 'help-agent',
-            patterns: ['help'],
-            priority: 100,
-          },
-          {
-            id: 'rule-2',
-            agent: 'math-agent',
-            patterns: ['help'], // Same pattern, lower priority
-            priority: 50,
-          },
-        ],
-      }
-    );
-
-    (fred as any).messageProcessor.updateDeps({
-      messageRouter: (fred as any).messageRouter,
+    fred.configureRouting({
+      defaultAgent: 'help-agent',
+      rules: [
+        {
+          id: 'rule-1',
+          agent: 'help-agent',
+          patterns: ['help'],
+          priority: 100,
+        },
+        {
+          id: 'rule-2',
+          agent: 'math-agent',
+          patterns: ['help'],
+          priority: 50,
+        },
+      ],
     });
 
     const explanation = await fred.routing.explain('help me');
@@ -159,7 +139,6 @@ describe('Routing Explain API Integration', () => {
     expect(explanation).toBeDefined();
     expect(explanation!.alternatives.length).toBeGreaterThan(0);
 
-    // Verify sorted by confidence descending
     for (let i = 1; i < explanation!.alternatives.length; i++) {
       expect(explanation!.alternatives[i - 1].confidence).toBeGreaterThanOrEqual(
         explanation!.alternatives[i].confidence
