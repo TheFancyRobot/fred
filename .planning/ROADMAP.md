@@ -79,7 +79,7 @@ Plans:
 - [x] 43-02-PLAN.md — Cut over Fred constructor/runtime lifecycle to Effect-first composition
 - [x] 43-03-PLAN.md — Migrate required Fred method delegation to Effect services and remove forbidden imports
 - [x] 43-04-PLAN.md — Adapt initializer/routing compatibility seams and run final Phase 43 verification suite
-- [ ] 43-05-PLAN.md — Close verification gaps: align success criteria with intentional design and add contract tests
+- [x] 43-05-PLAN.md — Close verification gaps: align success criteria with intentional design and add contract tests
 
 ### Phase 44: Imperative Layer Removal & Consumer Migration
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
