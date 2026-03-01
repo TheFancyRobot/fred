@@ -66,7 +66,7 @@ Plans:
 **Goal**: The Fred class facade constructs and delegates to the Effect runtime instead of imperative manager instances, becoming a thin Effect-backed API surface
 **Depends on**: Phase 42 (Fred delegates to all services; they must be standalone first)
 **Requirements**: FRED-01, FRED-02, FRED-03, FRED-04, FRED-05, FRED-06, FRED-07, FRED-08, FRED-09
-**Plans**: 5 plans
+**Plans**: 6 plans
 **Success Criteria** (what must be TRUE):
   1. Fred manages an Effect runtime lifecycle with composed service Layers (constructor prepares state, `ensureRuntime()` builds runtime from layers, `Fred.create()` eagerly initializes) instead of instantiating imperative classes
   2. `fred.processMessage()` and `fred.streamMessage()` delegate to MessageProcessorService via `Runtime.runPromise` at the boundary (runtime-scoped execution)
@@ -80,6 +80,7 @@ Plans:
 - [x] 43-03-PLAN.md — Migrate required Fred method delegation to Effect services and remove forbidden imports
 - [x] 43-04-PLAN.md — Adapt initializer/routing compatibility seams and run final Phase 43 verification suite
 - [x] 43-05-PLAN.md — Close verification gaps: align success criteria with intentional design and add contract tests
+- [ ] 43-06-PLAN.md — Close UAT gap: fix pre-runtime getContextManager and setStorage for consumer compatibility
 
 ### Phase 44: Imperative Layer Removal & Consumer Migration
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
@@ -184,7 +185,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 |-------|----------------|--------|-----------|
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
-| 43. Fred Class Migration | 5/5 | Complete | 2026-03-01 |
+| 43. Fred Class Migration | 5/6 | UAT gap closure | — |
 | 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
@@ -222,4 +223,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 43 fully complete (5/5 plans, gap closure verified)*
+*Last updated: 2026-03-01 — Phase 43 UAT gap closure plan 43-06 created*
