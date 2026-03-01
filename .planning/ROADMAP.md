@@ -101,9 +101,9 @@ Plans:
 - [x] 44-04-PLAN.md — Clean internal references (executor, graph-executor, router, pipeline/service) from manager types
 - [x] 44-05-PLAN.md — Create safety tag, delete 8 imperative files, clean exports.ts
 - [x] 44-06-PLAN.md — Create boundary guard tests and run Phase 44 verification suite
-- [ ] 44-07-PLAN.md — Delete 8 obsolete test files, fix 3 targeted tests, remove git tag, fix server display
-- [ ] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
-- [ ] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
+- [x] 44-07-PLAN.md — Delete 8 obsolete test files, fix 3 targeted tests, remove git tag, fix server display
+- [x] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
+- [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
@@ -198,7 +198,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
-| 44. Imperative Layer Removal & Consumer Migration | 6/9 | Gap closure | — |
+| 44. Imperative Layer Removal & Consumer Migration | 9/9 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
 ---
@@ -235,4 +235,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 44 UAT gap closure plans created (44-07 through 44-09)*
+*Last updated: 2026-03-01 — Phase 44 complete (44-07 through 44-09 gap closure plans executed)*

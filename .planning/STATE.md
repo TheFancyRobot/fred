@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T18:09:17Z"
+last_updated: "2026-03-01T18:14:23Z"
 progress:
   total_phases: 48
   completed_phases: 43
   total_plans: 196
-  completed_plans: 195
+  completed_plans: 196
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 8 of 9 in current phase
-Status: In progress
-Last activity: 2026-03-01 - Completed 44-08-PLAN.md
+Plan: 9 of 9 in current phase
+Status: Phase complete
+Last activity: 2026-03-01 - Completed 44-09-PLAN.md
 
-Progress: ████████████████████ 99% (195/196 plans)
+Progress: ████████████████████ 100% (196/196 plans)
 
 ## Performance Metrics
 
@@ -65,7 +65,7 @@ Progress: ████████████████████ 99% (195/
 
 ### Blockers/Concerns
 
-- Phase 44 intentionally leaves legacy tests that import deleted imperative manager files; full `bun test` remains red until Phase 45 test migration/cleanup completes.
+- Phase 44 import-gap closure is complete; Phase 45 still needs full-suite/API-surface verification and cleanup before release.
 
 ### Decisions (v0.3.0)
 
@@ -119,6 +119,7 @@ Progress: ████████████████████ 99% (195/
 | 44-06 | Runtime boundary enforcement is codified via guard tests and CLAUDE.md policy, with explicit audited exceptions | Prevents silent `runPromise` boundary regressions while keeping known pre-existing exceptions visible for future cleanup |
 | 44-07 | Obsolete deleted-manager test suites are removed while targeted survivors are migrated to Fred public APIs and structural contracts | Closes UAT blocker imports incrementally without reintroducing imperative seams |
 | 44-08 | AgentFactory test suites now use shared ToolRegistryLike structural mocks from `tests/unit/helpers` instead of deleted ToolRegistry class imports | Keeps post-deletion tests green while enforcing structural constructor contracts used by production AgentFactory |
+| 44-09 | Remaining survivor tests now use structural AgentManagerLike/ToolRegistryLike mocks and Fred-like map fixtures instead of deleted manager classes | Completes Phase 44 test import cleanup and resolves all 19 UAT-diagnosed deleted-manager import breaks |
 
 ### Quick Tasks Completed
 
@@ -129,12 +130,12 @@ Progress: ████████████████████ 99% (195/
 
 ## Session Continuity
 
-Last session: 2026-03-01T18:09:17Z
-Stopped at: Completed 44-08-PLAN.md
+Last session: 2026-03-01T18:14:23Z
+Stopped at: Completed 44-09-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-08 agent factory ToolRegistryLike test migration plan*
+*Last updated: 2026-03-01 — Completed 44-09 remaining deleted-manager test import migration plan*
