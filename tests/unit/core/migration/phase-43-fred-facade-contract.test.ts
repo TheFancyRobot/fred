@@ -4,6 +4,8 @@
  * These tests lock migration constraints for Fred facade internals:
  * - packages/core/src/index.ts must not import imperative managers/registries/router
  * - Fred constructor/runtime setup must not instantiate those imperative classes
+ * - Runtime lifecycle uses lazy initialization via ensureRuntime (not in constructor)
+ * - Boundary execution uses Runtime.runPromise (runtime-scoped, not Effect.runPromise)
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -23,6 +25,34 @@ const FORBIDDEN_SYMBOLS = [
   'MessageRouter',
 ] as const;
 
+/**
+ * Extract a method body from source text by matching a method signature.
+ * Returns the full method body between the opening and closing braces.
+ */
+function extractMethodBody(source: string, methodSignature: RegExp): string {
+  const match = source.match(methodSignature);
+  if (!match || match.index === undefined) {
+    return '';
+  }
+
+  // Find the opening brace after the signature
+  let pos = match.index + match[0].length;
+  while (pos < source.length && source[pos] !== '{') pos++;
+  if (pos >= source.length) return '';
+
+  // Track brace depth to find the closing brace
+  let depth = 0;
+  const start = pos;
+  for (let i = pos; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') depth--;
+    if (depth === 0) {
+      return source.slice(start, i + 1);
+    }
+  }
+  return '';
+}
+
 describe('Phase 43 Static Migration Contracts', () => {
   test('Fred index does not import forbidden imperative seams', () => {
     const content = fs.readFileSync(FRED_INDEX_PATH, 'utf-8');
@@ -40,5 +70,62 @@ describe('Phase 43 Static Migration Contracts', () => {
       const constructionPattern = new RegExp(`\\bnew\\s+${symbol}\\s*\\(`);
       expect(constructionPattern.test(content)).toBe(false);
     }
+  });
+});
+
+describe('Runtime lifecycle contracts', () => {
+  const source = fs.readFileSync(FRED_INDEX_PATH, 'utf-8');
+
+  test('Fred source uses lazy runtime initialization via ensureRuntime', () => {
+    // ensureRuntime method must exist
+    expect(source).toMatch(/ensureRuntime/);
+
+    // Constructor must NOT contain createFredRuntimeWithOptions or Layer.toRuntime
+    const constructorBody = extractMethodBody(source, /constructor\s*\(tracer\?\s*:\s*Tracer\)/);
+    expect(constructorBody).not.toBe('');
+    expect(constructorBody).not.toMatch(/createFredRuntimeWithOptions/);
+    expect(constructorBody).not.toMatch(/Layer\.toRuntime/);
+
+    // ensureRuntime method definition must contain the runtime creation call
+    const ensureRuntimeBody = extractMethodBody(source, /private\s+async\s+ensureRuntime\s*\(\)/);
+    expect(ensureRuntimeBody).not.toBe('');
+    expect(ensureRuntimeBody).toMatch(/createFredRuntimeWithOptions/);
+  });
+
+  test('Fred.create() eagerly initializes runtime', () => {
+    // Fred.create static method must call ensureRuntime before returning
+    const createBody = extractMethodBody(source, /static\s+async\s+create\s*\(/);
+    expect(createBody).not.toBe('');
+    expect(createBody).toMatch(/ensureRuntime\s*\(\)/);
+  });
+});
+
+describe('Boundary execution contracts', () => {
+  const source = fs.readFileSync(FRED_INDEX_PATH, 'utf-8');
+
+  test('runEffect uses Runtime.runPromise for runtime-scoped execution', () => {
+    // Extract runEffect method body
+    const runEffectBody = extractMethodBody(source, /private\s+async\s+runEffect\s*</);
+    expect(runEffectBody).not.toBe('');
+
+    // Must use Runtime.runPromise(runtime) — runtime-scoped execution
+    expect(runEffectBody).toMatch(/Runtime\.runPromise\s*\(\s*runtime\s*\)/);
+
+    // Must NOT use Effect.runPromise for boundary execution
+    expect(runEffectBody).not.toMatch(/Effect\.runPromise/);
+  });
+
+  test('processMessage and streamMessage delegate through runEffect', () => {
+    // Extract processMessage method body
+    const processMessageBody = extractMethodBody(source, /async\s+processMessage\s*\(\s*message\s*:\s*string/);
+    expect(processMessageBody).not.toBe('');
+
+    // Extract streamMessage method body
+    const streamMessageBody = extractMethodBody(source, /streamMessage\s*\(\s*message\s*:\s*string/);
+    expect(streamMessageBody).not.toBe('');
+
+    // Both must delegate through runEffect (which internally uses Runtime.runPromise)
+    expect(processMessageBody).toMatch(/this\.runEffect/);
+    expect(streamMessageBody).toMatch(/this\.runEffect/);
   });
 });
