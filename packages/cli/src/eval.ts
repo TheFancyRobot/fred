@@ -231,7 +231,11 @@ function createFredReplayRuntime(): ReplayRuntimeAdapter {
     initializeFromConfig: async (configPath, options) => {
       await fred.initializeFromConfig(configPath, options);
     },
-    resumeFromCheckpoint: ({ runId, mode }) => fred.getPipelineManager().resume(runId, { mode }),
+    resumeFromCheckpoint: ({ runId, mode }) =>
+      fred.resume(runId, {
+        humanInput: '',
+        resumeBehavior: mode === 'skip' ? 'continue' : 'rerun',
+      }),
   };
 }
 
