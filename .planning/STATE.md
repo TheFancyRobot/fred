@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T19:06:14Z"
+last_updated: "2026-03-01T20:01:37Z"
 progress:
   total_phases: 48
   completed_phases: 44
-  total_plans: 198
-  completed_plans: 198
+  total_plans: 200
+  completed_plans: 199
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 11 of 11 in current phase
-Status: Phase complete
-Last activity: 2026-03-01 - Completed 44-11-PLAN.md
+Plan: 12 of 13 in current phase
+Status: In progress
+Last activity: 2026-03-01 - Completed 44-12-PLAN.md
 
-Progress: ████████████████████ 100% (198/198 plans)
+Progress: ███████████████████░ 99.5% (199/200 plans)
 
 ## Performance Metrics
 
@@ -65,7 +65,7 @@ Progress: ████████████████████ 100% (198
 
 ### Blockers/Concerns
 
-- Phase 44 is complete including the final stale barrel export cleanup; Phase 45 still needs public API surface verification and release cleanup.
+- Phase 44 is in final stretch; one remaining consumer migration plan (44-13) must complete before Phase 45 public API/release cleanup.
 
 ### Decisions (v0.3.0)
 
@@ -122,6 +122,7 @@ Progress: ████████████████████ 100% (198
 | 44-09 | Remaining survivor tests now use structural AgentManagerLike/ToolRegistryLike mocks and Fred-like map fixtures instead of deleted manager classes | Completes Phase 44 test import cleanup and resolves all 19 UAT-diagnosed deleted-manager import breaks |
 | 44-10 | Pipeline barrel export no longer re-exports deleted `./manager` module and is validated by targeted plus full-suite tests | Closes final Phase 44 stale import gap that caused handoff/module-resolution failures |
 | 44-11 | MessageProcessor dead class file is deleted and migration guard now enforces both file absence and no stale `export { MessageProcessor }` barrel re-export | Fully satisfies RMVL-07 by removing the final Promise-wrapper surface and prevents deleted-module export regressions |
+| 44-12 | Fred now exposes direct context/session public methods and CLI chat/session consumers use them without proxy/fallback accessors | Closes CLI consumer migration gap while preserving temporary compatibility shim for final phase cleanup |
 
 ### Quick Tasks Completed
 
@@ -132,12 +133,12 @@ Progress: ████████████████████ 100% (198
 
 ## Session Continuity
 
-Last session: 2026-03-01T19:06:14Z
-Stopped at: Completed 44-11-PLAN.md
+Last session: 2026-03-01T20:01:37Z
+Stopped at: Completed 44-12-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-11 dead MessageProcessor deletion and barrel cleanup plan*
+*Last updated: 2026-03-01 — Completed 44-12 Fred public context API and CLI consumer migration plan*
