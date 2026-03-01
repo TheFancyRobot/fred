@@ -86,7 +86,7 @@ Plans:
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
 **Depends on**: Phase 43 (Fred and all services must be Effect-only before deletion is safe)
 **Requirements**: RMVL-01, RMVL-02, RMVL-03, RMVL-04, RMVL-05, RMVL-06, RMVL-07, RMVL-08, CONS-01, CONS-02, CONS-03, CONS-04
-**Plans**: 6 plans
+**Plans**: 9 plans
 **Success Criteria** (what must be TRUE):
   1. Files `tool/registry.ts`, `agent/manager.ts`, `pipeline/manager.ts`, `context/manager.ts`, `hooks/manager.ts`, and `platform/registry.ts` are deleted from the repository
   2. `message-processor/processor.ts` has no remaining Promise-wrapper methods (`processMessage`, `routeMessage`, `streamMessage` imperative variants removed)
@@ -95,12 +95,15 @@ Plans:
   5. `Effect.runPromise` / `Effect.runFork` calls appear only at application boundaries (entry points), not scattered through business logic
 
 Plans:
-- [ ] 44-01-PLAN.md — Migrate CLI consumers (chat.ts, session.ts, eval.ts, tui/session.ts) to Fred public API
-- [ ] 44-02-PLAN.md — Migrate dev-chat consumers (dev-chat.ts, server/app.ts, handlers.ts) to structural interfaces
-- [ ] 44-03-PLAN.md — Remove MessageProcessor Promise wrappers and decouple AgentFactory from ToolRegistry class
-- [ ] 44-04-PLAN.md — Clean internal references (executor, graph-executor, router, pipeline/service) from manager types
-- [ ] 44-05-PLAN.md — Create safety tag, delete 8 imperative files, clean exports.ts
-- [ ] 44-06-PLAN.md — Create boundary guard tests and run Phase 44 verification suite
+- [x] 44-01-PLAN.md — Migrate CLI consumers (chat.ts, session.ts, eval.ts, tui/session.ts) to Fred public API
+- [x] 44-02-PLAN.md — Migrate dev-chat consumers (dev-chat.ts, server/app.ts, handlers.ts) to structural interfaces
+- [x] 44-03-PLAN.md — Remove MessageProcessor Promise wrappers and decouple AgentFactory from ToolRegistry class
+- [x] 44-04-PLAN.md — Clean internal references (executor, graph-executor, router, pipeline/service) from manager types
+- [x] 44-05-PLAN.md — Create safety tag, delete 8 imperative files, clean exports.ts
+- [x] 44-06-PLAN.md — Create boundary guard tests and run Phase 44 verification suite
+- [ ] 44-07-PLAN.md — Delete 8 obsolete test files, fix 3 targeted tests, remove git tag, fix server display
+- [ ] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
+- [ ] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
@@ -195,7 +198,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
-| 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
+| 44. Imperative Layer Removal & Consumer Migration | 6/9 | Gap closure | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
 ---
@@ -232,4 +235,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 43 gap closure complete (43-06 executed)*
+*Last updated: 2026-03-01 — Phase 44 UAT gap closure plans created (44-07 through 44-09)*
