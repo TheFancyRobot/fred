@@ -3,12 +3,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { AgentConfig, AgentInstance } from '../../../../packages/core/src/agent/agent';
+import type { AgentFileWatcher } from '../../../../packages/core/src/agent/file-watcher';
 import { AgentFileParseError } from '../../../../packages/core/src/agent/errors';
 import { ConfigInitializer, type FredLike } from '../../../../packages/core/src/config/initializer';
 import { validateConfig } from '../../../../packages/core/src/config/loader';
 import type { FrameworkConfig } from '../../../../packages/core/src/config/types';
 
 const tempDirs: string[] = [];
+const activeWatchers: AgentFileWatcher[] = [];
 
 const makeTempDir = (): string => {
   const directory = mkdtempSync(join(tmpdir(), 'fred-config-agent-files-'));
@@ -56,8 +58,15 @@ const createBaseAgent = (id: string, systemMessage = 'Config agent prompt'): Age
   systemMessage,
 });
 
-const createFredMock = (): { fred: FredLike; createdAgents: AgentConfig[] } => {
+const createFredMock = (): {
+  fred: FredLike;
+  createdAgents: AgentConfig[];
+  removedAgents: string[];
+  watcher?: AgentFileWatcher;
+} => {
   const createdAgents: AgentConfig[] = [];
+  const removedAgents: string[] = [];
+  let watcher: AgentFileWatcher | undefined;
 
   const fred: FredLike = {
     getAgentManager: () => ({
@@ -88,17 +97,36 @@ const createFredMock = (): { fred: FredLike; createdAgents: AgentConfig[] } => {
         processMessage: async () => ({ content: '' }),
       } as AgentInstance;
     },
+    removeAgent: async (id: string): Promise<boolean> => {
+      removedAgents.push(id);
+      return true;
+    },
     createPipeline: async () => ({ id: 'pipeline' } as any),
     configureRouting: () => {},
     configureWorkflows: () => {},
     configureObservability: () => {},
     setToolPolicies: async () => {},
+    setAgentFileWatcher: (value: AgentFileWatcher) => {
+      watcher = value;
+      activeWatchers.push(value);
+    },
   };
 
-  return { fred, createdAgents };
+  return {
+    fred,
+    createdAgents,
+    removedAgents,
+    get watcher() {
+      return watcher;
+    },
+  };
 };
 
 afterEach(() => {
+  for (const watcher of activeWatchers.splice(0)) {
+    watcher.close();
+  }
+
   for (const directory of tempDirs.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -308,5 +336,24 @@ This file is both a prompt and an agent definition.
     const { fred } = createFredMock();
 
     await expect(initializer.initialize(fred, configPath)).rejects.toBeInstanceOf(AgentFileParseError);
+  });
+
+  it('registers a file watcher after loading markdown agents', async () => {
+    const root = makeTempDir();
+    const agentDir = join(root, 'agents');
+    mkdirSync(agentDir, { recursive: true });
+    writeAgentDefinition(join(agentDir, 'watch-me.md'), 'watch-me');
+
+    const configPath = writeJsonConfig(root, {
+      agentDirs: ['./agents'],
+      agents: [createBaseAgent('config-agent')],
+    });
+
+    const initializer = new ConfigInitializer();
+    const mock = createFredMock();
+
+    await initializer.initialize(mock.fred, configPath);
+
+    expect(mock.watcher).toBeDefined();
   });
 });

@@ -1,5 +1,5 @@
 import { Context } from 'effect';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import type { Tool } from '../tool/tool';
 import type { ProviderConfigInput } from '../platform/provider';
@@ -17,7 +17,17 @@ import {
   extractMCPServers,
 } from './loader';
 import { loadPromptFile } from '../utils/prompt-loader';
-import { loadAgentFiles } from '../agent/file-loader';
+import {
+  discoverAgentFiles,
+  parseAgentFile,
+  toAgentConfig,
+  validateAgentFrontmatter,
+} from '../agent/file-loader';
+import {
+  AgentFileWatcher,
+  type AgentFileChangeHandler,
+} from '../agent/file-watcher';
+import type { AgentConfig } from '../agent/agent';
 import type { ToolPoliciesConfig } from './types';
 import { PostgresContextStorage } from '../context/storage/postgres';
 import { SqliteContextStorage } from '../context/storage/sqlite';
@@ -67,12 +77,19 @@ export interface FredLike {
   registerTool(tool: Tool): void;
   registerIntents(intents: import('../intent/intent').Intent[]): void;
   createAgent(config: import('../agent/agent').AgentConfig): Promise<import('../agent/agent').AgentInstance>;
+  removeAgent(id: string): Promise<boolean>;
   createPipeline(config: import('../pipeline').PipelineConfig): Promise<import('../pipeline').PipelineInstance>;
   configureRouting(config: import('../routing/types').RoutingConfig): void;
   configureWorkflows(workflows: import('../workflow/manager').Workflow[]): void;
   configureObservability(config: import('./types').ObservabilityConfig): void;
   setToolPolicies?(policies: ToolPoliciesConfig | undefined): Promise<void> | void;
   configureMCPServers?(configs: Array<import('./types').MCPGlobalServerConfig & { id: string }>): Promise<void>;
+  setAgentFileWatcher?(watcher: AgentFileWatcher): void;
+}
+
+interface LoadedAgentFile {
+  readonly filePath: string;
+  readonly config: AgentConfig;
 }
 
 /**
@@ -189,9 +206,23 @@ export class ConfigInitializer {
       return existsSync(defaultAgentsDir) ? ['./agents'] : [];
     })();
 
-    const fileAgents = discoveredAgentDirs.length > 0
-      ? loadAgentFiles(discoveredAgentDirs, dirname(configPath))
+    const fileAgentEntries = discoveredAgentDirs.length > 0
+      ? discoverAgentFiles(discoveredAgentDirs, dirname(configPath)).flatMap((filePath) => {
+        const content = readFileSync(filePath, 'utf-8');
+        const parsed = parseAgentFile(content, filePath);
+        if (parsed === null) {
+          return [];
+        }
+
+        validateAgentFrontmatter(parsed.frontmatter, filePath);
+        return [{
+          filePath,
+          config: toAgentConfig(parsed),
+        } satisfies LoadedAgentFile];
+      })
       : [];
+
+    const fileAgents = fileAgentEntries.map((entry) => entry.config);
 
     validateNoAmbiguousPromptFiles(config.agents ?? [], configPath);
     const configAgents = extractAgents(config, configPath);
@@ -212,6 +243,34 @@ export class ConfigInitializer {
 
     for (const agentConfig of configAgents) {
       await fred.createAgent(agentConfig);
+    }
+
+    if (discoveredAgentDirs.length > 0) {
+      const onFileChanged: AgentFileChangeHandler = async (event) => {
+        try {
+          if (event.previousId) {
+            await fred.removeAgent(event.previousId);
+          }
+
+          if (event.config) {
+            await fred.createAgent(event.config);
+            console.log(`[AgentFileWatcher] Reloaded agent "${event.config.id}" from ${event.filePath}`);
+          } else if (event.previousId) {
+            console.log(`[AgentFileWatcher] Removed agent "${event.previousId}" (file deleted or invalid)`);
+          }
+        } catch (error) {
+          console.warn(
+            `[AgentFileWatcher] Failed to reload agent from "${event.filePath}": ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      };
+
+      const watcher = new AgentFileWatcher(discoveredAgentDirs, dirname(configPath), onFileChanged);
+      for (const entry of fileAgentEntries) {
+        watcher.registerKnownAgent(entry.filePath, entry.config.id);
+      }
+      watcher.start();
+      fred.setAgentFileWatcher?.(watcher);
     }
 
     // Create pipelines (resolve prompt files in inline agents relative to config path)

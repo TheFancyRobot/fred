@@ -65,6 +65,7 @@ import { calculateIntentMetrics } from './eval/metrics';
 import { MCPServerRegistry, MCPResourceService } from './mcp';
 import type { MCPGlobalServerConfig } from './config/types';
 import { BUILTIN_PACKS } from './platform/packs';
+import { AgentFileWatcher } from './agent/file-watcher';
 
 /**
  * Fred - Main class for building AI agents
@@ -100,6 +101,7 @@ export class Fred {
   private readonly workflowSnapshot = new Map<string, Workflow>();
   private readonly builtInToolIds = new Set<string>();
   private readonly configInitializer: ConfigInitializer;
+  private agentFileWatcher?: AgentFileWatcher;
 
   // MCP integration
   private readonly mcpServerRegistry: MCPServerRegistry;
@@ -629,6 +631,21 @@ export class Fred {
       }),
       `Failed to create agent: ${config.id}`
     );
+  }
+
+  async removeAgent(id: string): Promise<boolean> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.removeAgent(id);
+      }),
+      `Failed to remove agent: ${id}`
+    );
+  }
+
+  setAgentFileWatcher(watcher: AgentFileWatcher): void {
+    this.agentFileWatcher?.close();
+    this.agentFileWatcher = watcher;
   }
 
   async registerAgent(config: AgentConfig): Promise<AgentInstance> {
@@ -1407,6 +1424,9 @@ export class Fred {
    * ```
    */
   async shutdown(): Promise<void> {
+    this.agentFileWatcher?.close();
+    this.agentFileWatcher = undefined;
+
     // Cleanup MCP connections first
     await Effect.runPromise(this.mcpServerRegistry.shutdown());
 
