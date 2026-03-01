@@ -15,8 +15,6 @@ export {
   isBuiltinPack,
 } from './platform/packs';
 export * from './config/types';
-export { IntentMatcher } from './intent/matcher';
-export { IntentRouter } from './intent/router';
 export * from './context/context';
 export * from './context/session';
 export { SqliteContextStorage } from './context/storage/sqlite';
@@ -26,15 +24,11 @@ export { PostgresContextStorage } from './context/storage/postgres';
 export {
   PostgresCheckpointStorage,
   SqliteCheckpointStorage,
-  CheckpointManager,
-  CheckpointCleanupTask,
 } from './pipeline/checkpoint';
 export type {
   CheckpointStorage,
   Checkpoint,
   CheckpointStatus,
-  CheckpointManagerOptions,
-  CheckpointCleanupOptions,
 } from './pipeline/checkpoint';
 
 // Pause types
@@ -54,8 +48,8 @@ export {
   buildNarrative,
   detectConcerns,
 } from './routing/explainer';
-export { WorkflowManager } from './workflow/manager';
 export type { Workflow } from './workflow/manager';
+export { WorkflowService, WorkflowServiceLive } from './workflow/service';
 export * from './tracing';
 export * from './eval/golden-trace';
 export * from './eval/artifact';

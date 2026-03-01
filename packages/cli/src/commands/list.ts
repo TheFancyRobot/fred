@@ -194,7 +194,7 @@ function listProviders(fred: Fred, options: Record<string, unknown>, io: ListCom
 }
 
 function listWorkflows(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const workflows = fred.getWorkflowManager()?.listWorkflows() ?? [];
+  const workflows = fred.listWorkflows();
 
   if (options.json === true) {
     const data = workflows.map((name) => ({ name }));

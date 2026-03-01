@@ -3,7 +3,7 @@
 import { BunRuntime } from '@effect/platform-bun';
 import { Effect } from 'effect';
 import { Fred } from '@fancyrobot/fred';
-import { WorkflowManager, getBuiltinPackIds } from '@fancyrobot/fred';
+import { getBuiltinPackIds } from '@fancyrobot/fred';
 import { WorkflowContext } from './workflow-context';
 import { resolve, join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -861,24 +861,29 @@ class DevChatRunner {
    * Handle workflow command
    */
   private async handleWorkflowCommand(args: string[]): Promise<void> {
-    const workflowManager = this.fred?.getWorkflowManager();
-    if (!workflowManager) {
+    const workflowService = this.fred;
+    if (!workflowService) {
+      console.log('No workflows configured\n');
+      return;
+    }
+
+    const available = workflowService.listWorkflows();
+    if (available.length === 0) {
       console.log('No workflows configured\n');
       return;
     }
 
     if (args.length === 0) {
       const current = this.workflowContext?.getCurrentWorkflow();
-      const available = workflowManager.listWorkflows();
       console.log(`\nCurrent workflow: ${current}`);
       console.log(`Available: ${available.join(', ')}\n`);
       return;
     }
 
     const newWorkflow = args[0];
-    if (!workflowManager.hasWorkflow(newWorkflow)) {
+    if (!workflowService.hasWorkflow(newWorkflow)) {
       console.log(`\nWorkflow "${newWorkflow}" not found`);
-      console.log(`   Available: ${workflowManager.listWorkflows().join(', ')}\n`);
+      console.log(`   Available: ${available.join(', ')}\n`);
       return;
     }
 
@@ -1085,8 +1090,7 @@ class DevChatRunner {
     }
 
     // Check for workflows and initialize workflow context
-    const workflowManager = this.fred.getWorkflowManager();
-    const workflows = workflowManager?.listWorkflows() ?? [];
+    const workflows = this.fred.listWorkflows();
 
     if (workflows.length > 1) {
       console.log('\nAvailable workflows:');
@@ -1095,7 +1099,7 @@ class DevChatRunner {
       const selected = await this.readLine();
       const workflowName = selected.trim() || workflows[0];
 
-      if (!workflowManager?.hasWorkflow(workflowName)) {
+      if (!this.fred.hasWorkflow(workflowName)) {
         console.log(`\nUnknown workflow "${workflowName}", using "${workflows[0]}"`);
         this.workflowContext = new WorkflowContext(workflows[0]);
       } else {

@@ -39,6 +39,11 @@ export {
 } from '../agent/service';
 
 export {
+  WorkflowService,
+  WorkflowServiceLive,
+} from '../workflow/service';
+
+export {
   CheckpointService,
 } from '../pipeline/checkpoint/service';
 

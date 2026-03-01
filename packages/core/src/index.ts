@@ -19,7 +19,6 @@ import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { createStreamResultFromIterable } from './stream/result';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
-import { WorkflowManager } from './workflow/manager';
 import type { Workflow } from './workflow/manager';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
 import type { ObservabilityConfig } from './config/types';
@@ -44,12 +43,13 @@ import {
   type FredRuntime,
   type FredServices,
   ToolRegistryService,
+  ToolGateService,
   AgentService,
+  WorkflowService,
   PipelineService,
   ContextStorageService,
   ProviderRegistryService,
   HookManagerService,
-  ToolGateService,
   MessageProcessorService,
   MessageRouterService,
   IntentMatcherService,
@@ -90,7 +90,6 @@ export class Fred {
   private memoryDefaults: MemoryDefaults = {};
   private tracer?: Tracer;
   private routingConfig?: RoutingConfig;
-  private workflowManager?: WorkflowManager;
   private observabilityLayers?: ObservabilityLayers;
   private observabilityConfig?: ObservabilityConfig;
   private globalVariables: Map<string, VariableFactory> = new Map();
@@ -98,6 +97,7 @@ export class Fred {
   private readonly toolSnapshot = new Map<string, Tool>();
   private readonly intentSnapshot = new Map<string, Intent>();
   private readonly providerSnapshot = new Map<string, ProviderDefinition>();
+  private readonly workflowSnapshot = new Map<string, Workflow>();
   private readonly builtInToolIds = new Set<string>();
   private readonly configInitializer: ConfigInitializer;
 
@@ -189,6 +189,7 @@ export class Fred {
         const providerRegistryService = yield* ProviderRegistryService;
         const agentService = yield* AgentService;
         const processor = yield* MessageProcessorService;
+        const workflowService = yield* WorkflowService;
         const matcherOption = yield* Effect.serviceOption(IntentMatcherService);
         const routerOption = yield* Effect.serviceOption(IntentRouterService);
 
@@ -204,6 +205,16 @@ export class Fred {
 
         if (intents.length > 0 && matcherOption._tag === 'Some') {
           yield* matcherOption.value.registerIntents(intents);
+        }
+
+        if (self.workflowSnapshot.size > 0) {
+          for (const workflow of self.workflowSnapshot.values()) {
+            yield* workflowService.addWorkflow(workflow.name, {
+              defaultAgent: workflow.defaultAgent,
+              agents: workflow.agents,
+              routing: workflow.routing,
+            });
+          }
         }
 
         if (self.defaultAgentId && routerOption._tag === 'Some') {
@@ -825,18 +836,104 @@ export class Fred {
   // --- Workflow Configuration ---
 
   configureWorkflows(workflows: Workflow[]): void {
-    this.workflowManager = new WorkflowManager(this);
+    this.workflowSnapshot.clear();
     for (const workflow of workflows) {
-      this.workflowManager.addWorkflow(workflow.name, {
+      this.addWorkflow(workflow.name, {
         defaultAgent: workflow.defaultAgent,
         agents: workflow.agents,
         routing: workflow.routing,
       });
     }
+
+    if (this.runtime) {
+      this.invalidateRuntime('workflow config updated');
+    }
   }
 
-  getWorkflowManager(): WorkflowManager | undefined {
-    return this.workflowManager;
+  addWorkflow(name: string, config: Omit<Workflow, 'name'>): void {
+    const workflow: Workflow = { name, ...config };
+    this.workflowSnapshot.set(name, workflow);
+    this.validateWorkflowSync(name, workflow);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        yield* service.addWorkflow(name, config);
+      })
+    );
+  }
+
+  getWorkflow(name: string): Workflow | undefined {
+    if (!this.runtime) {
+      return this.workflowSnapshot.get(name);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.getWorkflow(name);
+      })
+    );
+  }
+
+  listWorkflows(): string[] {
+    if (!this.runtime) {
+      return Array.from(this.workflowSnapshot.keys());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.listWorkflows();
+      })
+    );
+  }
+
+  hasWorkflow(name: string): boolean {
+    if (!this.runtime) {
+      return this.workflowSnapshot.has(name);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.hasWorkflow(name);
+      })
+    );
+  }
+
+  getWorkflowManager(): {
+    addWorkflow: (name: string, config: Omit<Workflow, 'name'>) => void;
+    getWorkflow: (name: string) => Workflow | undefined;
+    listWorkflows: () => string[];
+    hasWorkflow: (name: string) => boolean;
+  } {
+    return {
+      addWorkflow: (name, config) => this.addWorkflow(name, config),
+      getWorkflow: (name) => this.getWorkflow(name),
+      listWorkflows: () => this.listWorkflows(),
+      hasWorkflow: (name) => this.hasWorkflow(name),
+    };
+  }
+
+  private validateWorkflowSync(name: string, workflow: Workflow): void {
+    if (!this.getAgent(workflow.defaultAgent)) {
+      console.warn(
+        `[Workflow] Default agent "${workflow.defaultAgent}" not found in workflow "${name}"`
+      );
+    }
+
+    for (const agentId of workflow.agents) {
+      if (!this.getAgent(agentId)) {
+        console.warn(
+          `[Workflow] Agent "${agentId}" referenced in workflow "${name}" not found`
+        );
+      }
+    }
   }
 
   // --- Message Processing (delegated to MessageProcessor) ---
@@ -1360,14 +1457,34 @@ export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './str
 // Re-export Effect services for advanced users
 export {
   FredLayers,
+  FredLayersWithIntentRouting,
+  makeFredLayersWithLeafRouting,
+  makeFredRuntimeLayer,
+  createFredRuntime,
+  createScopedFredRuntime,
+  createFredRuntimeWithOptions,
   type FredRuntime,
   type FredServices,
   ToolRegistryService,
+  ToolGateService,
+  ToolGateServiceLive,
   AgentService,
+  WorkflowService,
+  WorkflowServiceLive,
   PipelineService,
+  CheckpointService,
+  CheckpointServiceLive,
+  PauseService,
+  PauseServiceLive,
   ContextStorageService,
   ProviderRegistryService,
   HookManagerService,
+  IntentMatcherService,
+  IntentMatcherServiceLive,
+  IntentRouterService,
+  IntentRouterServiceLive,
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
   MessageProcessorService,
   MessageProcessorServiceLive,
 } from './services';
