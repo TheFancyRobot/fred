@@ -32,9 +32,11 @@ import { CheckpointService } from './checkpoint/service';
 import { PauseService } from './pause/service';
 import { validateGraphWorkflow } from './graph-validator';
 import { validateId, validatePipelineAgentCount } from '../utils/validation';
-import { executePipelineV2 as executePipelineV2Impl, type ExtendedExecutionOptions } from './executor';
-import type { AgentManager } from '../agent/manager';
-import type { HookManager } from '../hooks/manager';
+import {
+  executePipelineV2 as executePipelineV2Impl,
+  type AgentManagerLike,
+  type ExtendedExecutionOptions,
+} from './executor';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -618,7 +620,7 @@ class PipelineServiceImpl implements PipelineService {
    * Create an imperative AgentManager adapter from AgentService.
    * This allows the executor to work with the Effect-based service.
    */
-  private createAgentAdapter(): AgentManager {
+  private createAgentAdapter(): AgentManagerLike {
     const self = this;
     return {
       getAgent: (id: string) => {
@@ -643,7 +645,7 @@ class PipelineServiceImpl implements PipelineService {
           return false;
         }
       },
-    } as AgentManager;
+    };
   }
 
   // ==========================================

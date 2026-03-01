@@ -11,7 +11,7 @@
  * Includes fallback cascade: default agent -> first registered agent -> error.
  */
 
-import {
+import type {
   RoutingConfig,
   RoutingRule,
   RouteMatch,
@@ -21,13 +21,24 @@ import {
   CalibrationMetadata,
   RoutingExplanation,
 } from './types';
-import { AgentManager } from '../agent/manager';
-import { HookManager } from '../hooks/manager';
+import type { AgentInstance } from '../agent/agent';
 import { Effect } from 'effect';
 import { NoAgentsAvailableError } from './errors';
 import { getCurrentCorrelationContext, getCorrelationContext } from '../observability/context';
 import type { HookEvent } from '../hooks/types';
 import { generateRoutingExplanation } from './explainer';
+
+/** Minimal agent manager interface for routing */
+interface RouterAgentManagerLike {
+  hasAgent(id: string): boolean;
+  getAllAgents(): AgentInstance[];
+}
+
+/** Minimal hook manager interface for routing */
+interface RouterHookManagerLike {
+  executeHooks(hookName: string, event: any): Promise<void>;
+  executeHooksAndMerge(hookName: string, event: any): Promise<any>;
+}
 
 /**
  * Specificity base scores by match type.
@@ -46,12 +57,12 @@ const MATCH_TYPE_SCORES: Record<MatchType, number> = {
  */
 export class MessageRouter {
   private readonly config: RoutingConfig;
-  private readonly agentManager: AgentManager;
-  private readonly hookManager?: HookManager;
+  private readonly agentManager: RouterAgentManagerLike;
+  private readonly hookManager?: RouterHookManagerLike;
 
   constructor(
-    agentManager: AgentManager,
-    hookManager: HookManager | undefined,
+    agentManager: RouterAgentManagerLike,
+    hookManager: RouterHookManagerLike | undefined,
     config: RoutingConfig,
   ) {
     this.agentManager = agentManager;

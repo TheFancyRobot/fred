@@ -34,6 +34,7 @@ import { ObservabilityService } from '../observability/service';
 /** Minimal agent manager interface for pipeline execution */
 export interface AgentManagerLike {
   getAgent(id: string): AgentInstance;
+  hasAgent(id: string): boolean;
 }
 
 /** Minimal hook manager interface for pipeline execution */
