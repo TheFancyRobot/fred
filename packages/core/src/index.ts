@@ -1457,7 +1457,6 @@ export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './str
 // Re-export Effect services for advanced users
 export {
   FredLayers,
-  FredLayersWithIntentRouting,
   makeFredLayersWithLeafRouting,
   makeFredRuntimeLayer,
   createFredRuntime,

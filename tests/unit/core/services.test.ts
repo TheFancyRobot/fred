@@ -10,7 +10,6 @@ import { describe, test, expect } from 'bun:test';
 import { Effect, Runtime, Stream } from 'effect';
 import {
   FredLayers,
-  FredLayersWithIntentRouting,
   makeFredLayersWithLeafRouting,
   createScopedFredRuntime,
   ToolRegistryService,
@@ -226,7 +225,7 @@ describe('Service isolation', () => {
 });
 
 describe('Leaf routing composition', () => {
-  test('FredLayersWithIntentRouting provides standalone intent services', async () => {
+  test('FredLayers provides intent and router services', async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const matcher = yield* IntentMatcherService;
@@ -241,7 +240,7 @@ describe('Leaf routing composition', () => {
           hasRouter: typeof router.routeIntent === 'function',
           memoryDefaults: config.memoryDefaults,
         };
-      }).pipe(Effect.provide(FredLayersWithIntentRouting))
+      }).pipe(Effect.provide(FredLayers))
     );
 
     expect(result.intents).toEqual([]);
@@ -380,7 +379,7 @@ describe('Phase 42 Standalone Service Integration', () => {
           const effect = service.processMessage('test message');
           const result = yield* Effect.either(effect);
           return result;
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       // Should succeed or fail gracefully (not throw)
@@ -395,7 +394,7 @@ describe('Phase 42 Standalone Service Integration', () => {
           const stream = service.streamMessage('test message');
           // Stream should be a valid Stream object
           return typeof stream !== 'undefined';
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       expect(result).toBe(true);
@@ -409,7 +408,7 @@ describe('Phase 42 Standalone Service Integration', () => {
           const effect = service.routeMessage('test message');
           const route = yield* effect;
           return route;
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       // Should return a valid RouteResult
@@ -428,7 +427,7 @@ describe('Phase 42 Standalone Service Integration', () => {
             hasRouteMessage: typeof service.routeMessage === 'function',
             hasGetConfig: typeof service.getConfig === 'function',
           };
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       expect(result.hasProcessMessage).toBe(true);
@@ -453,7 +452,7 @@ describe('Phase 42 Standalone Service Integration', () => {
             pipelineCount: pipelines.length,
             hasConfig: config !== undefined,
           };
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       expect(result.pipelineCount).toBe(0);
@@ -475,7 +474,7 @@ describe('Phase 42 Standalone Service Integration', () => {
             hasV2Pipeline,
             routeType: routeResult.type,
           };
-        }).pipe(Effect.provide(FredLayersWithIntentRouting))
+        }).pipe(Effect.provide(FredLayers))
       );
 
       // Services work independently

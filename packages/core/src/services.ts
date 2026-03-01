@@ -27,6 +27,7 @@ import {
   MessageRouterService,
   MessageRouterServiceLiveWithConfig,
 } from './routing/service';
+import { NoAgentsAvailableError } from './routing/errors';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
 import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
@@ -302,7 +303,8 @@ const messageProcessorLayer = MessageProcessorServiceLive.pipe(
 );
 
 /**
- * Standalone intent layers (optional for MessageProcessorService).
+ * Standalone intent layers.
+ * Wave 6: IntentMatcherService, IntentRouterService
  */
 const intentLayer = Layer.mergeAll(
   IntentMatcherServiceLive,
@@ -310,7 +312,19 @@ const intentLayer = Layer.mergeAll(
 );
 
 /**
- * Complete Fred layers - all services composed
+ * Default no-op MessageRouterService for base FredLayers.
+ * Returns NoAgentsAvailableError since no routing rules are configured.
+ * Override with MessageRouterServiceLiveWithConfig when routing is needed.
+ */
+const defaultRouterLayer = Layer.succeed(MessageRouterService, {
+  route: (_message: string, _metadata?: Record<string, unknown>) =>
+    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
+  testRoute: (_message: string, _metadata?: Record<string, unknown>) =>
+    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
+});
+
+/**
+ * Complete Fred layers - all 14 services composed
  *
  * Dependency graph:
  * ```
@@ -334,6 +348,11 @@ const intentLayer = Layer.mergeAll(
  *       |
  *       v
  * MessageProcessorService (Wave 5 - depends on Agent, Pipeline, Context)
+ *       |
+ *       v
+ * IntentMatcherService (Wave 6)
+ * IntentRouterService (Wave 6 - depends on Agent)
+ * MessageRouterService (Wave 6 - default no-op)
  * ```
  */
 export const FredLayers = Layer.mergeAll(
@@ -344,30 +363,21 @@ export const FredLayers = Layer.mergeAll(
   agentLayer,
   workflowLayer,
   pipelineLayer,
-  messageProcessorLayer
+  messageProcessorLayer,
+  intentLayer,
+  defaultRouterLayer
 );
 
 /**
- * Fred layers with standalone intent services composed in.
+ * Build Fred layers with a config-driven MessageRouterService.
  *
- * MessageProcessorService reads these services via optional dependency lookup,
- * so this layer can be used when intent-based routing is needed without
- * changing base FredLayers behavior.
- */
-export const FredLayersWithIntentRouting = Layer.mergeAll(
-  FredLayers,
-  intentLayer
-);
-
-/**
- * Build Fred layers with standalone intent services and MessageRouterService.
- *
- * MessageRouterService remains opt-in because MessageProcessorService treats it
- * as optional and only consumes it when explicitly provided.
+ * Composes FredLayers (which includes a default no-op router) with the
+ * config-driven MessageRouterService. Layer.merge gives the second (right)
+ * layer priority, so the config-driven router replaces the no-op default.
  */
 export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
-  Layer.mergeAll(
-    FredLayersWithIntentRouting,
+  Layer.merge(
+    FredLayers,
     MessageRouterServiceLiveWithConfig(routerConfig)
   );
 
@@ -385,14 +395,14 @@ export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Laye
     : FredLayers;
 
   if (!options.observabilityLayers) {
-    return base as Layer.Layer<FredServices>;
+    return base;
   }
 
   return Layer.mergeAll(
     base,
     options.observabilityLayers.tracerLayer,
     options.observabilityLayers.loggerLayer
-  ) as Layer.Layer<FredServices>;
+  );
 };
 
 /**
