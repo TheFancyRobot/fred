@@ -889,90 +889,117 @@ export class Fred {
 
   // --- Context Management ---
 
+  generateConversationId(): string {
+    if (!this.runtime) {
+      return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    }
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.generateConversationId();
+      })
+    );
+  }
+
+  setDefaultPolicy(policy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  }): void {
+    if (!this.runtime) {
+      this.pendingContextPolicy = policy;
+      return;
+    }
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.setDefaultPolicy(policy);
+      })
+    );
+  }
+
+  setStorage(storage: unknown): void {
+    this.activeStorageAdapter = storage as ContextStorage;
+    if (!this.runtime) {
+      this.pendingStorageAdapter = storage;
+      return;
+    }
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.replaceStorage(storage as any);
+      })
+    );
+  }
+
+  async getHistory(conversationId: string): Promise<any[]> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.getHistory(conversationId);
+      }),
+      'Failed to get conversation history'
+    );
+  }
+
+  async addMessages(conversationId: string, messages: any[]): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.addMessages(conversationId, messages);
+      }),
+      'Failed to add messages'
+    );
+  }
+
+  async getContext(conversationId: string): Promise<any> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.getContext(conversationId);
+      }),
+      'Failed to get context'
+    );
+  }
+
+  async updateMetadata(conversationId: string, metadata: Record<string, unknown>): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.updateMetadata(conversationId, metadata as any);
+      }),
+      'Failed to update metadata'
+    );
+  }
+
+  async clearContext(conversationId: string): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.clearContext(conversationId);
+      }),
+      'Failed to clear context'
+    );
+  }
+
   ['getContext' + 'Manager'](): any {
     const self = this;
     return {
-      generateConversationId: () => {
-        if (!self.runtime) {
-          return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        }
-        return Runtime.runSync(self.runtime)(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            return yield* context.generateConversationId();
-          })
-        );
-      },
+      generateConversationId: () => self.generateConversationId(),
       setDefaultPolicy: (policy: {
         maxMessages?: number;
         maxChars?: number;
         strict?: boolean;
         isolated?: boolean;
-      }) => {
-        if (!self.runtime) {
-          self.pendingContextPolicy = policy;
-          return;
-        }
-        Runtime.runSync(self.runtime)(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            yield* context.setDefaultPolicy(policy);
-          })
-        );
-      },
-      setStorage: (storage: unknown) => {
-        self.activeStorageAdapter = storage as ContextStorage;
-        if (!self.runtime) {
-          self.pendingStorageAdapter = storage;
-          return;
-        }
-        Runtime.runSync(self.runtime)(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            yield* context.replaceStorage(storage as any);
-          })
-        );
-      },
-      getHistory: (conversationId: string) =>
-        self.runEffect(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            return yield* context.getHistory(conversationId);
-          }),
-          'Failed to get conversation history'
-        ),
-      addMessages: (conversationId: string, messages: any[]) =>
-        self.runEffect(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            yield* context.addMessages(conversationId, messages);
-          }),
-          'Failed to add messages'
-        ),
-      getContext: (conversationId: string) =>
-        self.runEffect(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            return yield* context.getContext(conversationId);
-          }),
-          'Failed to get context'
-        ),
+      }) => self.setDefaultPolicy(policy),
+      setStorage: (storage: unknown) => self.setStorage(storage),
+      getHistory: (conversationId: string) => self.getHistory(conversationId),
+      addMessages: (conversationId: string, messages: any[]) => self.addMessages(conversationId, messages),
+      getContext: (conversationId: string) => self.getContext(conversationId),
       updateMetadata: (conversationId: string, metadata: Record<string, unknown>) =>
-        self.runEffect(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            yield* context.updateMetadata(conversationId, metadata as any);
-          }),
-          'Failed to update metadata'
-        ),
-      clearContext: (conversationId: string) =>
-        self.runEffect(
-          Effect.gen(function* () {
-            const context = yield* ContextStorageService;
-            yield* context.clearContext(conversationId);
-          }),
-          'Failed to clear context'
-        ),
+        self.updateMetadata(conversationId, metadata),
+      clearContext: (conversationId: string) => self.clearContext(conversationId),
       listSessions: () => self.listSessions(),
       getSession: (conversationId: string) => self.getSession(conversationId),
       exportSession: (conversationId: string, format: 'json' | 'markdown' = 'json') =>
