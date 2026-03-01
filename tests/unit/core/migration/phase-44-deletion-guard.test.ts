@@ -4,7 +4,6 @@ import { join } from 'node:path';
 
 const PROJECT_ROOT = process.cwd();
 const CORE_SRC = join(PROJECT_ROOT, 'packages/core/src');
-const PROCESSOR_PATH = join(CORE_SRC, 'message-processor/processor.ts');
 
 function collectProductionTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -32,6 +31,7 @@ describe('Phase 44 deletion guards', () => {
     'platform/registry.ts',
     'provider/service.ts',
     'routing/router.ts',
+    'message-processor/processor.ts',
   ];
 
   for (const relativePath of deletedFiles) {
@@ -50,17 +50,10 @@ describe('Phase 44 deletion guards', () => {
     }
   });
 
-  test('processor.ts has no imperative Promise-wrapper methods', () => {
-    const processorContent = readFileSync(PROCESSOR_PATH, 'utf-8');
-    const removedWrapperSignatures = [
-      /\basync\s+routeMessage\s*\(/,
-      /\basync\s+processMessage\s*\(/,
-      /\basync\s+processChatMessage\s*\(/,
-    ];
-
-    for (const signature of removedWrapperSignatures) {
-      expect(signature.test(processorContent)).toBe(false);
-    }
+  test('message-processor/index.ts does not re-export deleted processor module', () => {
+    const indexContent = readFileSync(join(CORE_SRC, 'message-processor/index.ts'), 'utf-8');
+    expect(indexContent).not.toContain('./processor');
+    expect(/export\s*{\s*MessageProcessor\s*}/.test(indexContent)).toBe(false);
   });
 
   test('no new XxxManager() or new ToolRegistry() constructors in production code', () => {
