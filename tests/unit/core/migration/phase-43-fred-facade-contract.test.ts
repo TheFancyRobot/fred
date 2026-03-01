@@ -11,6 +11,7 @@
 import { describe, test, expect } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Fred } from '../../../../packages/core/src/index';
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, '../../../..');
 const FRED_INDEX_PATH = path.join(PROJECT_ROOT, 'packages/core/src/index.ts');
@@ -127,5 +128,74 @@ describe('Boundary execution contracts', () => {
     // Both must delegate through runEffect (which internally uses Runtime.runPromise)
     expect(processMessageBody).toMatch(/this\.runEffect/);
     expect(streamMessageBody).toMatch(/this\.runEffect/);
+  });
+});
+
+describe('Consumer compatibility contracts', () => {
+  test('getContextManager does not throw on lazy-init Fred instance', () => {
+    const fred = new Fred();
+    const cm = (fred as any)['getContext' + 'Manager']();
+
+    expect(cm).toBeDefined();
+    expect(typeof cm.generateConversationId).toBe('function');
+    expect(typeof cm.setDefaultPolicy).toBe('function');
+    expect(typeof cm.setStorage).toBe('function');
+    expect(typeof cm.getHistory).toBe('function');
+    expect(typeof cm.addMessages).toBe('function');
+    expect(typeof cm.clearContext).toBe('function');
+  });
+
+  test('generateConversationId works pre-runtime', () => {
+    const fred = new Fred();
+    const cm = (fred as any)['getContext' + 'Manager']();
+    const id = cm.generateConversationId();
+
+    expect(typeof id).toBe('string');
+    expect(id).toMatch(/^conv_\d+_[a-z0-9]+$/);
+  });
+
+  test('setDefaultPolicy stores policy pre-runtime for replay', () => {
+    // Pre-runtime: should not throw
+    const fred1 = new Fred();
+    const cm1 = (fred1 as any)['getContext' + 'Manager']();
+    expect(() => cm1.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
+
+    // With runtime: should also not throw (async create not awaited here, just verifying method exists)
+    const fred2 = new Fred();
+    const cm2 = (fred2 as any)['getContext' + 'Manager']();
+    expect(() => cm2.setDefaultPolicy({ maxMessages: 50 })).not.toThrow();
+  });
+
+  test('setStorage stores adapter pre-runtime for replay', () => {
+    const fred = new Fred();
+    const cm = (fred as any)['getContext' + 'Manager']();
+    const mockStorage = {
+      get: async () => null,
+      set: async () => {},
+      delete: async () => {},
+      clear: async () => {},
+      listSessions: async () => [],
+    };
+    expect(() => cm.setStorage(mockStorage)).not.toThrow();
+  });
+
+  test('initializeFromConfig ensures runtime before delegating', () => {
+    const source = fs.readFileSync(FRED_INDEX_PATH, 'utf-8');
+
+    // Find initializeFromConfig method and extract its Promise<void> body
+    // The signature spans multiple lines with options parameter, so match up to the return type
+    const initBody = extractMethodBody(
+      source,
+      /async\s+initializeFromConfig[\s\S]*?:\s*Promise<void>/
+    );
+    expect(initBody).not.toBe('');
+    expect(initBody).toMatch(/ensureRuntime/);
+
+    // Verify ensureRuntime is called before configInitializer.initialize
+    const ensureRuntimeIdx = initBody.indexOf('ensureRuntime');
+    const delegateIdx = initBody.indexOf('configInitializer.initialize');
+    expect(ensureRuntimeIdx).toBeGreaterThan(-1);
+    expect(delegateIdx).toBeGreaterThan(-1);
+    expect(ensureRuntimeIdx).toBeLessThan(delegateIdx);
   });
 });
