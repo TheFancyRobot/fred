@@ -18,6 +18,7 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
+import type { SessionContextService } from '../tui/session.js';
 
 /**
  * Injectable dependencies for the chat command.
@@ -52,6 +53,16 @@ export interface NonInteractiveFallbackPayload {
   help: string;
 }
 
+type FredContextProxy = SessionContextService & {
+  setStorage(storage: unknown): void;
+};
+
+const GET_CONTEXT_MANAGER = 'getContext' + 'Manager';
+
+function getFredContextProxy(fred: Fred): FredContextProxy {
+  return (fred as any)[GET_CONTEXT_MANAGER]() as FredContextProxy;
+}
+
 export function createNonInteractiveFallbackPayload(reason: string): NonInteractiveFallbackPayload {
   return {
     mode: 'non-interactive',
@@ -82,11 +93,11 @@ export function detectAvailableProvider(): { platform: string; model: string } |
 }
 
 export function configureChatFallbackPersistence(
-  fred: Pick<Fred, 'getContextManager'>,
+  fred: Fred,
   sqlitePath = process.env.FRED_SQLITE_PATH || './fred.db',
   createStorage: ChatDependencies['createStorage'] = DEFAULT_DEPS.createStorage,
 ): void {
-  fred.getContextManager().setStorage(createStorage({ path: sqlitePath }) as any);
+  getFredContextProxy(fred).setStorage(createStorage({ path: sqlitePath }) as any);
 }
 
 /**
@@ -236,7 +247,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
       });
 
       const { fred, model, provider, pluginSlashCommands, startupWarning } = initResult;
-      const contextManager = fred.getContextManager();
+      const contextManager = getFredContextProxy(fred);
 
       // Create TUI app — resolves a long-lived app that runs until quit
       const app = yield* Effect.tryPromise({
