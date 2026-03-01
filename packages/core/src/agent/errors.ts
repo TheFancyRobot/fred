@@ -39,10 +39,19 @@ export class AgentExecutionError extends Data.TaggedError("AgentExecutionError")
 }> {}
 
 /**
+ * Error thrown when parsing or validating an agent markdown file fails.
+ */
+export class AgentFileParseError extends Data.TaggedError("AgentFileParseError")<{
+  readonly filePath: string;
+  readonly message: string;
+}> {}
+
+/**
  * Union type for all agent errors, enabling exhaustive catchTag handling.
  */
 export type AgentError =
   | AgentNotFoundError
   | AgentAlreadyExistsError
   | AgentCreationError
-  | AgentExecutionError;
+  | AgentExecutionError
+  | AgentFileParseError;
