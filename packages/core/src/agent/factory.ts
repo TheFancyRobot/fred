@@ -8,7 +8,6 @@ import type { StreamEvent } from '../stream/events';
 import type { AgentConfig, AgentMessage, AgentResponse, RetryDiagnostics, ToolRetryPolicy } from './agent';
 import { hasRetryDiagnostics } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
-import { ToolRegistry } from '../tool/registry';
 import type { Tool as FredTool } from '../tool/tool';
 import { createHandoffTool } from '../tool/handoff';
 import type { HandoffResult } from '../tool/handoff';
@@ -166,8 +165,16 @@ type AgentRuntimeOptions = {
   policyContext?: ToolGateContext & { conversationId?: string };
 };
 
+/** Minimal tool registry interface for agent factory tool resolution */
+export interface ToolRegistryLike {
+  getMissingToolIds(ids: string[]): string[];
+  getTools(ids: string[]): FredTool[];
+  hasTool(id: string): boolean;
+  registerTool(tool: FredTool): void;
+}
+
 export class AgentFactory {
-  private toolRegistry: ToolRegistry;
+  private toolRegistry: ToolRegistryLike;
   private handoffHandler?: {
     getAgent: (id: string) => any;
     getAvailableAgents: () => string[];
@@ -188,12 +195,12 @@ export class AgentFactory {
   private toolGateService?: ToolGateServiceApi;
   private mcpServerRegistry?: MCPServerRegistry;
 
-  constructor(toolRegistry: ToolRegistry, tracer?: Tracer) {
+  constructor(toolRegistry: ToolRegistryLike, tracer?: Tracer) {
     this.toolRegistry = toolRegistry;
     this.tracer = tracer;
   }
 
-  setToolRegistry(toolRegistry: ToolRegistry): void {
+  setToolRegistry(toolRegistry: ToolRegistryLike): void {
     this.toolRegistry = toolRegistry;
   }
 

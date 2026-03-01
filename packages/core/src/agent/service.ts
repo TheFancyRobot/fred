@@ -10,8 +10,7 @@ import {
   getAgentCreationMessage,
   type AgentError
 } from './errors';
-import { AgentFactory } from './factory';
-import { ToolRegistry } from '../tool/registry';
+import { AgentFactory, type ToolRegistryLike } from './factory';
 import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
@@ -109,7 +108,13 @@ class AgentServiceImpl implements AgentService {
     private toolGateService: typeof ToolGateService.Service,
     private tracer?: Tracer
   ) {
-    this.factory = new AgentFactory(new ToolRegistry(), tracer);
+    const emptyRegistry: ToolRegistryLike = {
+      getMissingToolIds: (ids) => ids,
+      getTools: () => [],
+      hasTool: () => false,
+      registerTool: () => {},
+    };
+    this.factory = new AgentFactory(emptyRegistry, tracer);
     this.factory.setToolGateService(toolGateService);
   }
 
@@ -190,8 +195,23 @@ class AgentServiceImpl implements AgentService {
 
     return Effect.try({
       try: () => {
-        const registry = new ToolRegistry();
-        registry.registerTools(tools);
+        const toolMap = new Map<string, Tool>();
+        for (const tool of tools) {
+          toolMap.set(tool.id, tool);
+        }
+
+        const registry: ToolRegistryLike = {
+          getMissingToolIds: (ids) => ids.filter((id) => !toolMap.has(id)),
+          getTools: (ids) =>
+            ids
+              .map((id) => toolMap.get(id))
+              .filter((tool): tool is Tool => !!tool),
+          hasTool: (id) => toolMap.has(id),
+          registerTool: (tool) => {
+            toolMap.set(tool.id, tool);
+          },
+        };
+
         self.factory.setToolRegistry(registry);
       },
       catch: (cause) =>
