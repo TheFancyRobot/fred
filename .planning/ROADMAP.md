@@ -129,15 +129,22 @@ Plans:
 
 ### Phase 45.1: Combine Assistant Config and Prompt into Single Markdown File with YAML Frontmatter (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
+**Goal:** Introduce a new agent definition format where a single `.md` file per agent contains YAML frontmatter (configuration) and a markdown body (system prompt), with file discovery, validation, coexistence with existing agent sources, and hot reload support
 **Depends on:** Phase 45
-**Plans:** 5/5 plans complete
+**Requirements**: MDAGENT-01, MDAGENT-02, MDAGENT-03, MDAGENT-04, MDAGENT-05, MDAGENT-06
+**Plans**: 3 plans
+**Success Criteria** (what must be TRUE):
+  1. `.md` files with YAML frontmatter (id, platform, model) are parsed into valid AgentConfig objects
+  2. Agent directories are scanned recursively, with `./agents/` as the default convention
+  3. `.md` agents are loaded before config-defined agents during startup, with duplicate ID detection across all sources
+  4. Config-referenced `.md` files with frontmatter are detected as ambiguous and rejected
+  5. File watcher provides hot reload during development with debounced change detection
+  6. All tests pass and build succeeds
 
 Plans:
-- [ ] TBD (run /gsd/plan-phase 45.1 to break down)
-
-**Details:**
-[To be added during planning]
+- [ ] 45.1-01-PLAN.md — Core agent file loader: parsing, validation, discovery, and unit tests
+- [ ] 45.1-02-PLAN.md — Config integration: extend FrameworkConfig, wire into ConfigInitializer, coexistence validation
+- [ ] 45.1-03-PLAN.md — Hot reload file watcher with debounced agent replacement
 
 ### Phase 45.2: Implement ETA for Templating Agent Prompts and Frontmatter (INSERTED)
 
@@ -228,11 +235,17 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | TEST-02 | 45 | Build succeeds, zero new TS errors |
 | TEST-03 | 45 | bun test passes, no regressions |
 | TEST-04 | 45 | Pre-existing LSP errors resolved or documented |
+| MDAGENT-01 | 45.1 | Parse .md files with YAML frontmatter into AgentConfig |
+| MDAGENT-02 | 45.1 | Discover agent .md files from agentDirs recursively |
+| MDAGENT-03 | 45.1 | Integrate agent file loading into ConfigInitializer startup |
+| MDAGENT-04 | 45.1 | Coexistence validation (duplicate IDs, ambiguous .md files) |
+| MDAGENT-05 | 45.1 | Hot reload via file watcher with debounce |
+| MDAGENT-06 | 45.1 | Extend FrameworkConfig with agentDirs field |
 
 **Coverage:**
-- Total requirements: 41
-- Mapped: 41
-- Unmapped: 0 ✓
+- Total requirements: 47
+- Mapped: 47
+- Unmapped: 0
 
 ---
 
@@ -247,7 +260,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
-| 45.1. Config+Prompt Markdown (INSERTED) | 0/0 | Not started | — |
+| 45.1. Config+Prompt Markdown (INSERTED) | 0/3 | Planned | — |
 | 45.2. ETA for Templating Prompts (INSERTED) | 0/0 | Not started | — |
 | 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
 
@@ -285,4 +298,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 45.2 inserted: Implement ETA for Templating Agent Prompts and Frontmatter*
+*Last updated: 2026-03-01 — Phase 45.1 planned: 3 plans for agent .md file loading*
