@@ -185,7 +185,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 |-------|----------------|--------|-----------|
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
-| 43. Fred Class Migration | 5/6 | UAT gap closure | — |
+| 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 0/? | Not started | — |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
@@ -223,4 +223,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 43 UAT gap closure plan 43-06 created*
+*Last updated: 2026-03-01 — Phase 43 gap closure complete (43-06 executed)*

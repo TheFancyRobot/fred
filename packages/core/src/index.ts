@@ -658,10 +658,17 @@ export class Fred {
       if (!exists) {
         throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
       }
+
+      // Update the processor config in the running runtime without invalidation
+      Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const processor = yield* MessageProcessorService;
+          yield* processor.updateConfig({ defaultAgentId: agentId });
+        })
+      );
     }
 
     this.defaultAgentId = agentId;
-    this.invalidateRuntime('default agent updated');
   }
 
   getDefaultAgentId(): string | undefined {
