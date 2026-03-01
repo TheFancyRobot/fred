@@ -6,19 +6,13 @@
 
 import { describe, it, expect, spyOn } from 'bun:test';
 import { WorkflowManager } from '../../../../packages/core/src/workflow/manager';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
-import { AgentManager } from '../../../../packages/core/src/agent/manager';
 import { AgentInstance } from '../../../../packages/core/src/agent/agent';
 
 /**
  * Create a mock Fred-like object with agent manager
  */
 function createMockFred(agents: { id: string }[] = []) {
-  const toolRegistry = new ToolRegistry();
-  const agentManager = new AgentManager(toolRegistry);
-
-  // Manually add agents to the internal map for testing
-  const agentsMap = (agentManager as any).agents as Map<string, AgentInstance>;
+  const agentsMap = new Map<string, AgentInstance>();
   for (const agent of agents) {
     agentsMap.set(agent.id, {
       id: agent.id,
@@ -27,9 +21,9 @@ function createMockFred(agents: { id: string }[] = []) {
     } as AgentInstance);
   }
 
-  // Create mock Fred object with getAgent method
   return {
-    getAgent: (id: string) => agentManager.getAgent(id),
+    getAgent: (id: string) => agentsMap.get(id),
+    listAgents: () => Array.from(agentsMap.values()),
   };
 }
 

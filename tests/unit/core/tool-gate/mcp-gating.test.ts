@@ -1,7 +1,6 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { Effect, Ref } from 'effect';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import { ToolRegistryService } from '../../../../packages/core/src/tool/service';
 import type { MCPServerRegistry } from '../../../../packages/core/src/mcp/registry';
 import type { Tool } from '../../../../packages/core/src/tool/tool';
@@ -14,10 +13,11 @@ import type {
   ToolGateFilterResult,
 } from '../../../../packages/core/src/tool-gate/types';
 import * as Schema from 'effect/Schema';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 
 describe('ToolGateService - MCP Tool Gating', () => {
   let factory: AgentFactory;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockRegistry: MCPServerRegistry;
   let mockProvider: ProviderDefinition;
   let mockToolGate: ToolGateServiceApi;
@@ -68,7 +68,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
   };
 
   beforeEach(() => {
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     toolRegistry.registerTool(nativeTool);
     factory = new AgentFactory(toolRegistry);
 
