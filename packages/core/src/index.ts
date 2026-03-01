@@ -94,7 +94,6 @@ export class Fred {
   private observabilityConfig?: ObservabilityConfig;
   private globalVariables: Map<string, VariableFactory> = new Map();
   private runtimeGeneration = 0;
-  private runtimeInvalidationReason: string | null = null;
   private readonly toolSnapshot = new Map<string, Tool>();
   private readonly intentSnapshot = new Map<string, Intent>();
   private readonly providerSnapshot = new Map<string, ProviderDefinition>();
@@ -158,9 +157,9 @@ export class Fred {
 
   private invalidateRuntime(reason: string): void {
     this.runtimeGeneration += 1;
-    this.runtimeInvalidationReason = reason;
     this.runtime = null;
     this.runtimePromise = null;
+    void reason;
   }
 
   private async applyRuntimeState(runtime: FredRuntime): Promise<void> {
