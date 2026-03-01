@@ -142,9 +142,9 @@ Plans:
   6. All tests pass and build succeeds
 
 Plans:
-- [ ] 45.1-01-PLAN.md — Core agent file loader: parsing, validation, discovery, and unit tests
-- [ ] 45.1-02-PLAN.md — Config integration: extend FrameworkConfig, wire into ConfigInitializer, coexistence validation
-- [ ] 45.1-03-PLAN.md — Hot reload file watcher with debounced agent replacement
+- [x] 45.1-01-PLAN.md — Core agent file loader: parsing, validation, discovery, and unit tests
+- [x] 45.1-02-PLAN.md — Config integration: extend FrameworkConfig, wire into ConfigInitializer, coexistence validation
+- [x] 45.1-03-PLAN.md — Hot reload file watcher with debounced agent replacement
 
 ### Phase 45.2: Implement ETA for Templating Agent Prompts and Frontmatter (INSERTED)
 
@@ -260,7 +260,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
-| 45.1. Config+Prompt Markdown (INSERTED) | 0/3 | Planned | — |
+| 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
 | 45.2. ETA for Templating Prompts (INSERTED) | 0/0 | Not started | — |
 | 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
 
@@ -298,4 +298,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 45.1 planned: 3 plans for agent .md file loading*
+*Last updated: 2026-03-01 — Phase 45.1 complete: markdown agent frontmatter loading, coexistence checks, and hot reload delivered*

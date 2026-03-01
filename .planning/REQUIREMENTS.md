@@ -69,6 +69,15 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 - [x] **TEST-03**: `bun test` passes with no regressions
 - [x] **TEST-04**: Pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer reference) are resolved or documented
 
+### Markdown Agent Definition Format (Phase 45.1)
+
+- [x] **MDAGENT-01**: Parse `.md` files with YAML frontmatter (`id`, `platform`, `model`) into valid `AgentConfig` objects
+- [x] **MDAGENT-02**: Discover agent `.md` files recursively from configured `agentDirs`
+- [x] **MDAGENT-03**: Load markdown-defined agents during `ConfigInitializer` startup before config-defined agents
+- [x] **MDAGENT-04**: Enforce coexistence validation across sources (duplicate IDs and ambiguous frontmatter prompt references)
+- [x] **MDAGENT-05**: Provide hot reload for markdown agent files with debounced change handling
+- [x] **MDAGENT-06**: Extend `FrameworkConfig` with `agentDirs?: string[]`
+
 ## Future Requirements
 
 Deferred beyond v0.3.0. Tracked but not in current roadmap.
@@ -148,12 +157,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-02 | Phase 45 | Complete |
 | TEST-03 | Phase 45 | Complete |
 | TEST-04 | Phase 45 | Complete |
+| MDAGENT-01 | Phase 45.1 | Complete |
+| MDAGENT-02 | Phase 45.1 | Complete |
+| MDAGENT-03 | Phase 45.1 | Complete |
+| MDAGENT-04 | Phase 45.1 | Complete |
+| MDAGENT-05 | Phase 45.1 | Complete |
+| MDAGENT-06 | Phase 45.1 | Complete |
 
 **Coverage:**
-- v0.3.0 requirements: 41 total
-- Mapped to phases: 41
+- v0.3.0 requirements: 47 total
+- Mapped to phases: 47
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-28 after Phase 42 completion and verification*
+*Last updated: 2026-03-01 after Phase 45.1 completion and verification*
