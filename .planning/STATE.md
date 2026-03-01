@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-01T20:07:17Z"
+last_updated: "2026-03-01T20:48:35Z"
 progress:
   total_phases: 48
   completed_phases: 44
-  total_plans: 200
-  completed_plans: 200
+  total_plans: 203
+  completed_plans: 201
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: 13 of 13 in current phase
-Status: Phase complete
-Last activity: 2026-03-01 - Completed 44-13-PLAN.md
+Phase: 45 of 45 (Public API Surface & Verification)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-01 - Completed 45-01-PLAN.md
 
-Progress: ████████████████████ 100% (200/200 plans)
+Progress: ███████████████████░ 99% (201/203 plans)
 
 ## Performance Metrics
 
@@ -124,6 +124,9 @@ Progress: ████████████████████ 100% (200
 | 44-11 | MessageProcessor dead class file is deleted and migration guard now enforces both file absence and no stale `export { MessageProcessor }` barrel re-export | Fully satisfies RMVL-07 by removing the final Promise-wrapper surface and prevents deleted-module export regressions |
 | 44-12 | Fred now exposes direct context/session public methods and CLI chat/session consumers use them without proxy/fallback accessors | Closes CLI consumer migration gap while preserving temporary compatibility shim for final phase cleanup |
 | 44-13 | Dev consumers now use direct Fred context methods and Fred/getContextManager proxy was removed entirely | Closes remaining consumer migration gap before Phase 45 API/release cleanup |
+| 45-01 | Workflow functionality is exported via `WorkflowService` tags while `Workflow` remains a type-only export from manager.ts | Removes final imperative workflow class surface without breaking workflow config contracts |
+| 45-01 | Fred keeps `getWorkflowManager` as a compatibility adapter backed by direct workflow methods and WorkflowService | Supports consumer migration while public workflow APIs now delegate to Effect service runtime |
+| 45-01 | Main entrypoint re-exports include missing service tags and runtime composition helpers from `services.ts` | Completes public API surface requirements for Effect-first consumers in Phase 45 |
 
 ### Quick Tasks Completed
 
@@ -134,12 +137,12 @@ Progress: ████████████████████ 100% (200
 
 ## Session Continuity
 
-Last session: 2026-03-01T20:07:17Z
-Stopped at: Completed 44-13-PLAN.md
+Last session: 2026-03-01T20:48:35Z
+Stopped at: Completed 45-01-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 44-13 dev consumer migration and getContextManager proxy removal plan*
+*Last updated: 2026-03-01 — Completed 45-01 workflow service and public API surface cleanup plan*
