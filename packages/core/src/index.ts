@@ -108,6 +108,7 @@ export class Fred implements FredLike {
   private observabilityConfig?: ObservabilityConfig;
   private globalVariables: Map<string, VariableFactory> = new Map();
   private runtimeGeneration = 0;
+  private runtimeInvalidationReason: string | null = null;
   private readonly toolSnapshot = new Map<string, Tool>();
   private readonly builtInToolIds = new Set<string>();
 
@@ -171,8 +172,9 @@ export class Fred implements FredLike {
     };
   }
 
-  private invalidateRuntime(): void {
+  private invalidateRuntime(reason: string): void {
     this.runtimeGeneration += 1;
+    this.runtimeInvalidationReason = reason;
     this.runtime = null;
     this.runtimePromise = null;
   }
@@ -345,7 +347,7 @@ export class Fred implements FredLike {
     if (this.hookManager) {
       this.hookManager.setTracer(this.tracer);
     }
-    this.invalidateRuntime();
+    this.invalidateRuntime('tracer updated');
   }
 
   // --- Global Variables ---
@@ -531,7 +533,7 @@ export class Fred implements FredLike {
 
     this.defaultAgentId = agentId;
     Effect.runSync(this.intentRouter!.setDefaultAgent(agentId));
-    this.invalidateRuntime();
+    this.invalidateRuntime('default agent updated');
   }
 
   getDefaultAgentId(): string | undefined {
@@ -568,7 +570,7 @@ export class Fred implements FredLike {
       rules: [...config.rules],
       fallbackAgents: config.fallbackAgents ? [...config.fallbackAgents] : undefined,
     };
-    this.invalidateRuntime();
+    this.invalidateRuntime('routing config updated');
   }
 
   async testRoute(message: string, metadata?: Record<string, unknown>): Promise<RoutingDecision | null> {
@@ -753,7 +755,7 @@ export class Fred implements FredLike {
   configureObservability(config: ObservabilityConfig): void {
     this.observabilityConfig = config;
     this.observabilityLayers = buildObservabilityLayers(config);
-    this.invalidateRuntime();
+    this.invalidateRuntime('observability config updated');
   }
 
   async setToolPolicies(policies: ToolPoliciesConfig | undefined): Promise<void> {
@@ -782,7 +784,7 @@ export class Fred implements FredLike {
     // Get memory defaults before initialization
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;
-    this.invalidateRuntime();
+    this.invalidateRuntime('memory defaults updated from config');
 
     // Delegate to config initializer
     await this.configInitializer.initialize(this, configPath, options);
@@ -894,7 +896,7 @@ export class Fred implements FredLike {
 
     // Runtime cleanup happens automatically via Effect.scoped
     // when the runtime was created. Reset state for potential reuse.
-    this.invalidateRuntime();
+    this.invalidateRuntime('shutdown');
   }
 }
 
