@@ -19,10 +19,8 @@ import {
 import type { PipelineConfigV2 } from './pipeline';
 import { PipelineContextManager, createPipelineContext } from './context';
 import type { PipelineContext } from './context';
-import { HookManager } from '../hooks/manager';
 import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hooks/types';
-import { AgentManager } from '../agent/manager';
-import type { AgentResponse } from '../agent/agent';
+import type { AgentInstance, AgentResponse } from '../agent/agent';
 import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { CheckpointManager } from './checkpoint/manager';
@@ -32,6 +30,17 @@ import { annotateSpan } from '../observability/otel';
 import { attachErrorToSpan } from '../observability/errors';
 import { getCurrentCorrelationContext, getCurrentSpanIds, getCorrelationContext } from '../observability/context';
 import { ObservabilityService } from '../observability/service';
+
+/** Minimal agent manager interface for pipeline execution */
+export interface AgentManagerLike {
+  getAgent(id: string): AgentInstance;
+}
+
+/** Minimal hook manager interface for pipeline execution */
+export interface HookManagerLike {
+  executeHooks(hookName: string, event: any): Promise<void>;
+  executeHooksAndMerge(hookName: string, event: any): Promise<any>;
+}
 
 /**
  * Pipeline execution result
@@ -56,8 +65,8 @@ export interface PipelineResult {
  * Executor options
  */
 export interface ExecutorOptions {
-  agentManager: AgentManager;
-  hookManager?: HookManager;
+  agentManager: AgentManagerLike;
+  hookManager?: HookManagerLike;
   tracer?: Tracer;
   pipelineManager?: {
     getPipeline: (id: string) => { execute: (msg: string) => Promise<AgentResponse> } | undefined;

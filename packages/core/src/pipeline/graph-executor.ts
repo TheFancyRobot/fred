@@ -22,12 +22,10 @@ import type {
   JoinNode,
 } from './graph';
 import type { PipelineContext } from './context';
-import type { ExecutorOptions } from './executor';
-import type { HookManager } from '../hooks/manager';
+import type { AgentManagerLike, ExecutorOptions, HookManagerLike } from './executor';
 import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hooks/types';
-import type { AgentManager } from '../agent/manager';
 import { isHandoffSignal, type HandoffSignal } from './handoff-tool';
 import { prepareHandoffContext } from './handoff';
 import type { AgentResponse } from '../agent/agent';
@@ -58,8 +56,8 @@ export interface GraphExecutionResult {
  * Graph executor options (extends ExecutorOptions)
  */
 export interface GraphExecutorOptions extends ExecutorOptions {
-  agentManager: AgentManager;
-  hookManager?: HookManager;
+  agentManager: AgentManagerLike;
+  hookManager?: HookManagerLike;
   tracer?: Tracer;
   pipelineManager?: {
     getPipeline: (id: string) => { execute: (msg: string) => Promise<any> } | undefined;
@@ -679,7 +677,7 @@ async function executeNode(
   context: PipelineContext,
   options: GraphExecutorOptions,
   config: GraphWorkflowConfig,
-  hookManager?: HookManager
+  hookManager?: HookManagerLike
 ): Promise<unknown> {
   const { agentManager, pipelineManager, tracer } = options;
 
@@ -888,7 +886,7 @@ async function handleHandoff(
   context: PipelineContext,
   config: GraphWorkflowConfig,
   options: GraphExecutorOptions,
-  hookManager?: HookManager
+  hookManager?: HookManagerLike
 ): Promise<unknown> {
   const { agentManager, tracer } = options;
   const { targetAgent, reason } = handoffRequest;
