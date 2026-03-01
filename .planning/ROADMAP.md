@@ -140,8 +140,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | PIPE-01 | 42 | executeV2Pipeline stub → working implementation |
 | PIPE-02 | 42 | resume stub → working implementation |
 | PIPE-03 | 42 | resumeWithHumanInput stub → working implementation |
-| FRED-01 | 43 | Fred constructs Effect runtime |
-| FRED-02 | 43 | processMessage → Effect |
+| FRED-01 | 43 | Fred constructs Effect runtime | Complete    | 2026-03-01 | 43 | processMessage → Effect |
 | FRED-03 | 43 | streamMessage → Effect |
 | FRED-04 | 43 | routeMessage → Effect |
 | FRED-05 | 43 | executePipeline → Effect |
