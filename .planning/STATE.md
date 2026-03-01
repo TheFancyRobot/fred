@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T05:12:14.000Z"
+status: in_progress
+last_updated: "2026-03-01T17:17:09Z"
 progress:
   total_phases: 48
   completed_phases: 44
-  total_plans: 187
-  completed_plans: 187
+  total_plans: 193
+  completed_plans: 190
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 45 (Imperative Layer Removal & Consumer Migration)
-Plan: Not started (0 of ? in current phase)
-Status: Phase 43 verified, Phase 44 ready to plan
-Last activity: 2026-03-01 - Phase 43 human verification complete (setDefaultAgent bug fixed)
+Plan: 3 of 6 in current phase
+Status: In progress
+Last activity: 2026-03-01 - Completed 44-04-PLAN.md
 
-Progress: ████████████████████ 100% (187/187 plans)
+Progress: ████████████████████ 98% (190/193 plans)
 
 ## Performance Metrics
 
@@ -111,6 +111,10 @@ None currently.
 | 43-06 | ExternalStorageAdapter wraps Promise-based ContextStorage into Effect interface for replaceStorage | Bridges legacy storage adapters into Effect-backed context service without runtime boundary escapes |
 | 43-06 | initializeFromConfig calls ensureRuntime() after invalidateRuntime to guarantee runtime before ConfigInitializer | Prevents "Context manager is available after runtime initialization" error in dev-chat and CLI |
 | 43-verify | `setDefaultAgent` updates processor config via Ref instead of invalidating runtime | Prevents registered agents from being lost when changing default agent post-runtime |
+| 44-01 | CLI session consumers now use Fred public session APIs with compatibility fallback adapter for injected legacy doubles | Preserves migration direction while keeping existing CLI tests green without immediate test fixture rewrites |
+| 44-02 | Dev chat consumers now use structural context capability interfaces instead of `ContextManager` class types | Keeps consumer code aligned with Effect-backed Fred proxy while preparing imperative class deletion |
+| 44-03 | MessageProcessor and AgentFactory internals now depend on Effect-first structural contracts instead of legacy Promise wrappers and ToolRegistry class coupling | Unblocks manager file deletion by removing internal class-type and wrapper seams while preserving behavior |
+| 44-04 | Pipeline executor/router internals now use structural manager interfaces instead of importing manager class types | Removes compile-time coupling needed for upcoming manager file deletions while preserving runtime behavior |
 
 ### Quick Tasks Completed
 
@@ -121,12 +125,12 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-01T14:55:00Z
-Stopped at: Phase 43 human verification complete; setDefaultAgent runtime invalidation bug fixed; ready for Phase 44 planning
-Resume file: .planning/STATE.md
+Last session: 2026-03-01T17:17:09Z
+Stopped at: Completed 44-04-PLAN.md
+Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 43-06 gap closure plan*
+*Last updated: 2026-03-01 — Completed 44-04 internal manager-type decoupling plan*
