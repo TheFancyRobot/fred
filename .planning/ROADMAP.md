@@ -123,9 +123,9 @@ Plans:
   6. Pre-existing LSP errors (Effect yield errors in index.ts, tracing import errors, config/initializer reference) are resolved or explicitly documented
 
 Plans:
-- [ ] 45-01-PLAN.md — Create WorkflowService, clean imperative exports, add missing service tag re-exports
-- [ ] 45-02-PLAN.md — Add sub-path exports (eval, context, tools), update package.json, migrate consumer imports
-- [ ] 45-03-PLAN.md — Create v0.3.0 changeset, fix type errors, run full verification sweep
+- [x] 45-01-PLAN.md — Create WorkflowService, clean imperative exports, add missing service tag re-exports
+- [x] 45-02-PLAN.md — Add sub-path exports (eval, context, tools), update package.json, migrate consumer imports
+- [x] 45-03-PLAN.md — Create v0.3.0 changeset, fix type errors, run full verification sweep
 
 ---
 
@@ -209,7 +209,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
-| 45. Public API Surface & Verification | 0/3 | Not started | — |
+| 45. Public API Surface & Verification | 3/3 | Gaps found | — |
 
 ---
 
@@ -245,4 +245,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 44 complete (44-07 through 44-10 gap closure plans executed)*
+*Last updated: 2026-03-01 — Phase 45 plans executed; verification reported gaps (4/6 truths verified)*

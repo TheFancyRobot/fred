@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: complete
-last_updated: "2026-03-01T20:59:10Z"
+status: in_progress
+last_updated: "2026-03-01T21:04:08Z"
 progress:
   total_phases: 48
-  completed_phases: 45
+  completed_phases: 44
   total_plans: 203
   completed_plans: 203
 ---
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 Phase: 45 of 45 (Public API Surface & Verification)
 Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-03-01 - Completed 45-03-PLAN.md
+Status: Verification gaps found
+Last activity: 2026-03-01 - Verified Phase 45 and identified 2 gap areas
 
 Progress: ████████████████████ 100% (203/203 plans)
 
@@ -65,7 +65,7 @@ Progress: ████████████████████ 100% (203
 
 ### Blockers/Concerns
 
-- None currently; Phase 44 consumer migration and context proxy removal are complete.
+- Phase 45 verification reported two blockers: `exports.ts` is still a mixed barrel (not Effect-service-only) and there is no single type-safe canonical all-services layer (`FredServices` mismatch in strict typecheck).
 
 ### Decisions (v0.3.0)
 
@@ -130,6 +130,7 @@ Progress: ████████████████████ 100% (203
 | 45-02 | package.json `exports` now defines eval/context/tools sub-path entrypoints plus preserved deep-import compatibility (`mcp/types`, `mcp/registry`, `tool/tool`) | Encodes explicit public import boundaries while avoiding regressions for known existing deep imports |
 | 45-02 | CLI eval/test/chat consumers use split sub-path imports (`@fancyrobot/fred/eval`, `@fancyrobot/fred/context/sqlite`) with main-path compatibility retained | Establishes organized API usage without breaking current main entrypoint consumers |
 | 45-03 | v0.3.0 breaking changes are documented in a dedicated changeset with migration before/after examples and release verification evidence | Gives external consumers a single migration source while closing API-04 and final verification requirements |
+| 45-verify | Phase verification scored 4/6 and flagged API-surface and canonical-layer gaps for follow-up planning | Prevents premature phase closeout and drives `/gsd/plan-phase 45 --gaps` loop |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -139,12 +140,12 @@ Progress: ████████████████████ 100% (203
 
 ## Session Continuity
 
-Last session: 2026-03-01T20:59:10Z
-Stopped at: Completed 45-03-PLAN.md
+Last session: 2026-03-01T21:04:08Z
+Stopped at: Phase 45 verification reported gaps (4/6 truths verified)
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 45-03 v0.3.0 changeset and verification gate plan*
+*Last updated: 2026-03-01 — Phase 45 plans executed; verification reported gaps requiring closure planning*
