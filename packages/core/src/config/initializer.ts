@@ -28,18 +28,48 @@ import type { CheckpointStorage } from '../pipeline/checkpoint';
 /**
  * Interface for Fred instance (to avoid circular dependency)
  */
+interface AgentManagerLike {
+  setDefaultSystemMessage(systemMessage?: string): void;
+  hasAgent(id: string): boolean;
+}
+
+interface ContextManagerLike {
+  setDefaultPolicy(policy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  }): void;
+  setStorage(storage: unknown): void;
+}
+
+interface PipelineManagerLike {
+  setCheckpointManager(manager: import('../pipeline/checkpoint').CheckpointManager): void;
+}
+
+interface ProviderRegistryLike {
+  register(idOrPackage: string, config?: import('../platform/provider').ProviderConfig): Promise<void>;
+  markInitialized(): void;
+}
+
+interface ProviderServiceLike {
+  syncProviderRegistry(): void;
+  registerDefaultProviders(config?: ProviderConfigInput): Promise<void>;
+  loadDefaultProviders(): Promise<void>;
+}
+
 export interface FredLike {
-  getAgentManager(): import('../agent/manager').AgentManager;
-  getContextManager(): import('../context/manager').ContextManager;
-  getPipelineManager(): import('../pipeline/manager').PipelineManager;
-  getProviderRegistry(): import('../platform/registry').ProviderRegistry;
-  getProviderService(): import('../provider/service').ProviderService;
+  getAgentManager(): AgentManagerLike;
+  getContextManager(): ContextManagerLike;
+  getPipelineManager(): PipelineManagerLike;
+  getProviderRegistry(): ProviderRegistryLike;
+  getProviderService(): ProviderServiceLike;
   registerTool(tool: Tool): void;
   registerIntents(intents: import('../intent/intent').Intent[]): void;
   createAgent(config: import('../agent/agent').AgentConfig): Promise<import('../agent/agent').AgentInstance>;
   createPipeline(config: import('../pipeline').PipelineConfig): Promise<import('../pipeline').PipelineInstance>;
   configureRouting(config: import('../routing/types').RoutingConfig): void;
-  configureWorkflows(workflows: import('../workflow/types').Workflow[]): void;
+  configureWorkflows(workflows: import('../workflow/manager').Workflow[]): void;
   configureObservability(config: import('./types').ObservabilityConfig): void;
   setToolPolicies?(policies: ToolPoliciesConfig | undefined): Promise<void> | void;
   configureMCPServers?(configs: Array<import('./types').MCPGlobalServerConfig & { id: string }>): Promise<void>;
@@ -192,8 +222,8 @@ export class ConfigInitializer {
       adapter: 'postgres' | 'sqlite';
       checkpoint?: { enabled?: boolean; ttlMs?: number; cleanupIntervalMs?: number };
     },
-    contextManager: import('../context/manager').ContextManager,
-    pipelineManager: import('../pipeline/manager').PipelineManager
+    contextManager: ContextManagerLike,
+    pipelineManager: PipelineManagerLike
   ): Promise<void> {
     if (persistence.adapter === 'postgres') {
       const connectionString = process.env.FRED_POSTGRES_URL;
