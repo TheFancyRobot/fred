@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T22:40:29Z"
+last_updated: "2026-03-01T22:53:33Z"
 progress:
   total_phases: 53
   completed_phases: 46
   total_plans: 208
-  completed_plans: 206
+  completed_plans: 208
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 45.1 of 46 (Combine Assistant Config and Prompt YAML Frontmatter)
-Plan: 1 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-01 - Completed 45.1-01 core agent file loader
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-03-01 - Completed 45.1-03 hot reload file watcher integration
 
-Progress: ███████████████████░ 99% (206/208 plans)
+Progress: ████████████████████ 100% (208/208 plans)
 
 ## Performance Metrics
 
@@ -142,6 +142,8 @@ Progress: ███████████████████░ 99% (206/
 | 45-04 | FredLayers includes all 14 FredServices tags with default no-op MessageRouterService and Layer.merge for config override | Closes Gap 2 (API-03) by providing a single canonical all-services layer without type assertions |
 | 45-05 | exports.ts uses explicit named exports organized by domain; all service tags consolidated in index.ts services block | Closes Gap 1 (API-02) by replacing wildcard barrel with curated surface and single service re-export location |
 | 45.1-01 | Markdown agent files are parsed only when frontmatter delimiters exist; plain `.md` files without delimiters are skipped | Preserves existing plain prompt-file behavior while enabling explicit standalone agent definitions |
+| 45.1-02 | ConfigInitializer now loads markdown-defined agents before config agents and rejects duplicate IDs across sources before registration | Enforces deterministic startup load order and prevents partial registration state on source collisions |
+| 45.1-03 | Hot reload watches markdown agent dirs with per-file debounce and applies remove-then-create replacement on change events | Enables fast prompt/config iteration during development while avoiding partial-write races and leaked watcher resources |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -151,12 +153,12 @@ Progress: ███████████████████░ 99% (206/
 
 ## Session Continuity
 
-Last session: 2026-03-01T22:40:29Z
-Stopped at: Completed 45.1-01-PLAN.md (core agent file loader)
+Last session: 2026-03-01T22:53:33Z
+Stopped at: Completed 45.1-03-PLAN.md (hot reload file watcher integration)
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — Completed 45.1-01 core agent file loader and tests*
+*Last updated: 2026-03-01 — Completed 45.1-03 hot reload file watcher integration*
