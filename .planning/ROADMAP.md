@@ -86,7 +86,7 @@ Plans:
 **Goal**: All imperative manager classes are deleted from the codebase and all consumers (dev-chat, CLI) are migrated to the Effect-based API
 **Depends on**: Phase 43 (Fred and all services must be Effect-only before deletion is safe)
 **Requirements**: RMVL-01, RMVL-02, RMVL-03, RMVL-04, RMVL-05, RMVL-06, RMVL-07, RMVL-08, CONS-01, CONS-02, CONS-03, CONS-04
-**Plans**: 11 plans
+**Plans**: 13 plans
 **Success Criteria** (what must be TRUE):
   1. Files `tool/registry.ts`, `agent/manager.ts`, `pipeline/manager.ts`, `context/manager.ts`, `hooks/manager.ts`, and `platform/registry.ts` are deleted from the repository
   2. `message-processor/processor.ts` has no remaining Promise-wrapper methods (`processMessage`, `routeMessage`, `streamMessage` imperative variants removed)
@@ -105,7 +105,9 @@ Plans:
 - [x] 44-08-PLAN.md — Migrate 4 agent factory tests from ToolRegistry to ToolRegistryLike mocks
 - [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
 - [x] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
-- [ ] 44-11-PLAN.md — Delete dead MessageProcessor class and clean barrel re-export
+- [x] 44-11-PLAN.md — Delete dead MessageProcessor class and clean barrel re-export
+- [ ] 44-12-PLAN.md — Add Fred public context methods and migrate CLI consumers off getContextManager
+- [ ] 44-13-PLAN.md — Migrate dev consumers off getContextManager and remove proxy from Fred
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
@@ -200,7 +202,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 41. Leaf Service Independence | 5/5 | Complete | 2026-02-28 |
 | 42. Pipeline & MessageProcessor Completion | 4/4 | Complete | 2026-02-28 |
 | 43. Fred Class Migration | 6/6 | Complete | 2026-03-01 |
-| 44. Imperative Layer Removal & Consumer Migration | 10/10 | Complete | 2026-03-01 |
+| 44. Imperative Layer Removal & Consumer Migration | 11/13 | In Progress | 2026-03-01 |
 | 45. Public API Surface & Verification | 0/? | Not started | — |
 
 ---
