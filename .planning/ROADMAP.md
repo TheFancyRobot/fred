@@ -168,10 +168,17 @@ Plans:
 ### Phase 46: Showcase Examples & Framework Differentiation
 **Goal**: Delete existing examples and replace with 12 progressive examples that form a learning path — from quickstart to evaluation harness. Each example demonstrates a distinct Fred capability (intent routing, pipelines, hooks, MCP, config-driven agents, etc.) using the v0.3.0 Effect-based public API. Research competing frameworks to ensure examples highlight differentiators.
 **Depends on**: Phase 45.2 (examples must use the final public API surface)
-**Plans**: 0 plans
+**Plans**: 8 plans
 
 Plans:
-- [ ] TBD (run /gsd/plan-phase 46 to break down)
+- [ ] 46-01-PLAN.md — Delete old examples, configure workspace, create guard test scaffold
+- [ ] 46-02-PLAN.md — API prerequisites: Fred pipeline V2, graph workflow methods, hook queuing, re-exports
+- [ ] 46-03-PLAN.md — Examples 01-03: quickstart, tools, intent routing
+- [ ] 46-04-PLAN.md — Examples 04-05: dynamic handoff, pipeline sequential
+- [ ] 46-05-PLAN.md — Examples 06-07: graph workflow, hooks and middleware
+- [ ] 46-06-PLAN.md — Examples 08-09: observability tracing, evaluation harness
+- [ ] 46-07-PLAN.md — Examples 10-12: config-driven YAML, MCP integration, CLI and TUI
+- [ ] 46-08-PLAN.md — Top-level README, guard test finalization, full verification
 
 ---
 
@@ -269,7 +276,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
-| 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
+| 46. Showcase Examples & Framework Differentiation | 0/8 | Planned | — |
 
 ---
 
