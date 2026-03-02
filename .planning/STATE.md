@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-02T23:42:38Z"
+last_updated: "2026-03-02T23:45:04Z"
 progress:
   total_phases: 53
   completed_phases: 48
-  total_plans: 219
-  completed_plans: 214
+  total_plans: 221
+  completed_plans: 218
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 3 of 8 in current phase
+Plan: 03b of 10 in current phase
 Status: In progress
-Last activity: 2026-03-02 - Completed 46-03-PLAN.md
+Last activity: 2026-03-02 - Completed 46-03b-PLAN.md
 
-Progress: ███████████████████░ 98% (214/219 plans)
+Progress: ████████████████████ 99% (218/221 plans)
 
 ## Performance Metrics
 
@@ -157,6 +157,11 @@ Progress: ███████████████████░ 98% (214/
 | 46-02 | Fred.createPipeline now accepts `AnyPipelineConfig` and routes V2 configs through `PipelineService.createPipelineV2` | Unblocks step-based pipeline examples from using the main Fred facade without internal runtime access |
 | 46-02 | Fred graph workflow execution delegates to imperative `graph-executor` while service path remains stubbed | Enables graph examples immediately without waiting for full Effect-fiber graph migration |
 | 46-03 | Example 01 is a fully self-contained workspace package with README, env template, tsconfig, and minimal Fred flow entrypoint | Establishes the first runnable learning-path artifact and locks the canonical quickstart sequence (`Fred.create` → provider → agent → message → shutdown) |
+| 46-03b | Example 02 uses Fred's built-in calculator plus a custom Effect Schema weather tool instead of importing unexported calculator factory APIs | Keeps example code on stable public exports while still demonstrating dual-tool invocation flows |
+| 46-03b | Example 03 uses `Intent.utterances` for exact/regex matching and adds transcript logs for explicit routing rationale | Highlights Fred's intent-routing differentiator with clear WHY output for each message |
+| 46-06 | Example 09 evaluation harness uses the actual eval API contract (`traceFile` + `runTestCases(cases, tracesDirectory)`) rather than sketch signatures | Keeps showcase examples aligned with the shipped assertion runner contract and avoids API drift in user-facing docs |
+| 46-06 | Example 08 presents hook-based tracing as the default observability path with OTEL kept optional | Prioritizes immediate approachability while still showing production telemetry extension points |
+| 46-07 | Example 10 pairs a complete `config.yaml` with a programmatic equivalent and uses schema-accurate routing/provider fields | Ensures config-driven documentation is runnable and directly mappable to Fred API calls without validation drift |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -166,12 +171,12 @@ Progress: ███████████████████░ 98% (214/
 
 ## Session Continuity
 
-Last session: 2026-03-02 23:42 UTC
-Stopped at: Completed 46-03-PLAN.md
+Last session: 2026-03-02 23:45 UTC
+Stopped at: Completed 46-03b-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-02 — Completed 46-02 (API prerequisites for examples: pipeline V2 facade support, graph workflow APIs, hook snapshot replay, and entrypoint re-exports); Phase 46 in progress*
+*Last updated: 2026-03-02 — Completed 46-03b (Examples 02-03: tools basics and intent routing basics); Phase 46 in progress*
