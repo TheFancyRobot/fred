@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: ready_for_planning
-last_updated: "2026-03-02T20:47:03Z"
+status: in_progress
+last_updated: "2026-03-02T23:37:57Z"
 progress:
   total_phases: 53
   completed_phases: 48
-  total_plans: 211
-  completed_plans: 211
+  total_plans: 219
+  completed_plans: 213
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 0 of 0 in current phase (NOT PLANNED)
-Status: Ready for planning
-Last activity: 2026-03-02 - Phase 45.2 verified complete (9/9 must-haves)
+Plan: 2 of 8 in current phase
+Status: In progress
+Last activity: 2026-03-02 - Completed 46-02-PLAN.md
 
-Progress: ████████████████████ 100% (211/211 plans)
+Progress: ███████████████████░ 97% (213/219 plans)
 
 ## Performance Metrics
 
@@ -72,6 +72,8 @@ Progress: ████████████████████ 100% (211
 ### Roadmap Evolution
 
 - Phase 46 added: Showcase Examples & Framework Differentiation — replace existing examples with new ones demonstrating Fred's unique capabilities; research competing frameworks for differentiators
+- Phase 46 execution started: 46-01 completed (legacy examples removed, examples workspace enabled, guard scaffold added)
+- Phase 46 API prerequisites delivered in 46-02 (Fred V2 pipeline acceptance, graph workflow facade methods, hook pre-runtime queue replay, and required re-exports)
 - Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
 - Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
 
@@ -150,6 +152,10 @@ Progress: ████████████████████ 100% (211
 | 45.2-02 | Fred runtime composes `TemplateEngineLive` and propagates engine, env allowlist, fred config subset, and custom namespace snapshots into AgentService | Ensures programmatic and config-loaded agents resolve ETA templates with the same runtime context model |
 | 45.2-03 | Partial hot-reload invalidates full ETA cache on partial file changes | Guarantees next render recompiles all affected templates without dependency graph drift |
 | 45.2-03 | Template validation helpers remain Effect-native and run at CLI/test boundaries | Keeps core modules compliant with runtime-boundary guardrails |
+| 46-01 | Examples guard runs in scaffold mode until all 12 planned examples exist, then strict structure/import checks enforce compliance | Keeps CI green during phased example rollout while locking future example quality gates |
+| 46-01 | Root workspace includes `examples/*` before example authoring begins | Ensures per-example `workspace:*` dependencies resolve correctly throughout Phase 46 |
+| 46-02 | Fred.createPipeline now accepts `AnyPipelineConfig` and routes V2 configs through `PipelineService.createPipelineV2` | Unblocks step-based pipeline examples from using the main Fred facade without internal runtime access |
+| 46-02 | Fred graph workflow execution delegates to imperative `graph-executor` while service path remains stubbed | Enables graph examples immediately without waiting for full Effect-fiber graph migration |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -159,12 +165,12 @@ Progress: ████████████████████ 100% (211
 
 ## Session Continuity
 
-Last session: 2026-03-02 20:47 UTC
-Stopped at: Phase 45.2 complete and verified; ready for Phase 46 planning
+Last session: 2026-03-02 23:37 UTC
+Stopped at: Completed 46-02-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-02 — Phase 45.2 verified complete (ETA templating + validation tooling); Phase 46 ready for planning*
+*Last updated: 2026-03-02 — Completed 46-02 (API prerequisites for examples: pipeline V2 facade support, graph workflow APIs, hook snapshot replay, and entrypoint re-exports); Phase 46 in progress*
