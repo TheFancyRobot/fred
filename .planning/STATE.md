@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T22:57:09Z"
+status: ready_for_planning
+last_updated: "2026-03-02T20:47:03Z"
 progress:
   total_phases: 53
-  completed_phases: 47
-  total_plans: 208
-  completed_plans: 208
+  completed_phases: 48
+  total_plans: 211
+  completed_plans: 211
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 45.2 of 46 (Implement ETA for Templating Agent Prompts and Frontmatter)
+Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
 Plan: 0 of 0 in current phase (NOT PLANNED)
 Status: Ready for planning
-Last activity: 2026-03-01 - Phase 45.1 verified passed (23/23 must-haves)
+Last activity: 2026-03-02 - Phase 45.2 verified complete (9/9 must-haves)
 
-Progress: ████████████████████ 100% (208/208 plans)
+Progress: ████████████████████ 100% (211/211 plans)
 
 ## Performance Metrics
 
@@ -144,6 +144,12 @@ Progress: ████████████████████ 100% (208
 | 45.1-01 | Markdown agent files are parsed only when frontmatter delimiters exist; plain `.md` files without delimiters are skipped | Preserves existing plain prompt-file behavior while enabling explicit standalone agent definitions |
 | 45.1-02 | ConfigInitializer now loads markdown-defined agents before config agents and rejects duplicate IDs across sources before registration | Enforces deterministic startup load order and prevents partial registration state on source collisions |
 | 45.1-03 | Hot reload watches markdown agent dirs with per-file debounce and applies remove-then-create replacement on change events | Enables fast prompt/config iteration during development while avoiding partial-write races and leaked watcher resources |
+| 45.2-01 | TemplateEngineLive is a config-driven layer factory with per-instance Eta runtime ownership | Keeps template compilation cache/runtime isolated per Fred instance and test run |
+| 45.2-01 | Strict undefined handling uses proxy-wrapped context namespaces in template rendering | Produces deterministic TemplateResolutionError failures instead of silent missing-variable output |
+| 45.2-02 | Frontmatter ETA rendering is centralized in `loadAgentFiles(templateOptions)` and reused by config initialization | Keeps load-time template behavior consistent across file loading paths and preserves backward compatibility |
+| 45.2-02 | Fred runtime composes `TemplateEngineLive` and propagates engine, env allowlist, fred config subset, and custom namespace snapshots into AgentService | Ensures programmatic and config-loaded agents resolve ETA templates with the same runtime context model |
+| 45.2-03 | Partial hot-reload invalidates full ETA cache on partial file changes | Guarantees next render recompiles all affected templates without dependency graph drift |
+| 45.2-03 | Template validation helpers remain Effect-native and run at CLI/test boundaries | Keeps core modules compliant with runtime-boundary guardrails |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -153,12 +159,12 @@ Progress: ████████████████████ 100% (208
 
 ## Session Continuity
 
-Last session: 2026-03-01T23:30:00Z
-Stopped at: Phase 45.1 UAT test 6/10 blocked on @effect/ai-openai Responses API incompatibility with OpenRouter
-Resume file: .planning/phases/45.1-combine-assistant-config-prompt-yaml-frontmatter/.continue-here.md
+Last session: 2026-03-02 20:47 UTC
+Stopped at: Phase 45.2 complete and verified; ready for Phase 46 planning
+Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-01 — UAT paused, root cause identified: @effect/ai-openai v0.37.2 Responses API format rejected by OpenRouter (missing type:"message" on assistant items)*
+*Last updated: 2026-03-02 — Phase 45.2 verified complete (ETA templating + validation tooling); Phase 46 ready for planning*

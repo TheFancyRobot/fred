@@ -161,9 +161,9 @@ Plans:
   7. All tests pass with no regressions
 
 Plans:
-- [ ] 45.2-01-PLAN.md — Core template engine module: ETA wrapper, typed errors, security, context builders, unit tests
-- [ ] 45.2-02-PLAN.md — Integration: wire into file-loader and factory, remove old template system, extend config, Fred class API
-- [ ] 45.2-03-PLAN.md — Hot reload partial watching, CLI validate command, exported test utilities, full verification
+- [x] 45.2-01-PLAN.md — Core template engine module: ETA wrapper, typed errors, security, context builders, unit tests
+- [x] 45.2-02-PLAN.md — Integration: wire into file-loader and factory, remove old template system, extend config, Fred class API
+- [x] 45.2-03-PLAN.md — Hot reload partial watching, CLI validate command, exported test utilities, full verification
 
 ### Phase 46: Showcase Examples & Framework Differentiation
 **Goal**: Delete existing examples and replace with 12 progressive examples that form a learning path — from quickstart to evaluation harness. Each example demonstrates a distinct Fred capability (intent routing, pipelines, hooks, MCP, config-driven agents, etc.) using the v0.3.0 Effect-based public API. Research competing frameworks to ensure examples highlight differentiators.
@@ -268,7 +268,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
-| 45.2. ETA for Templating Prompts (INSERTED) | 0/3 | Planned | — |
+| 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
 
 ---
@@ -305,4 +305,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-01 — Phase 45.1 complete: markdown agent frontmatter loading, coexistence checks, and hot reload delivered*
+*Last updated: 2026-03-02 — Phase 45.2 complete: ETA templating, two-phase resolution, partial hot reload, and CLI validation delivered*
