@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-02T23:46:13Z"
+last_updated: "2026-03-02T23:48:09Z"
 progress:
   total_phases: 53
   completed_phases: 48
@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 7 of 10 in current phase
+Plan: 8 of 10 in current phase
 Status: In progress
-Last activity: 2026-03-02 - Completed 46-05-PLAN.md (backfill)
+Last activity: 2026-03-02 - Completed 46-04-PLAN.md (backfill)
 
 Progress: ████████████████████ 99% (219/221 plans)
 
@@ -160,6 +160,8 @@ Progress: ████████████████████ 99% (219/
 | 46-03 | Example 01 is a fully self-contained workspace package with README, env template, tsconfig, and minimal Fred flow entrypoint | Establishes the first runnable learning-path artifact and locks the canonical quickstart sequence (`Fred.create` → provider → agent → message → shutdown) |
 | 46-03b | Example 02 uses Fred's built-in calculator plus a custom Effect Schema weather tool instead of importing unexported calculator factory APIs | Keeps example code on stable public exports while still demonstrating dual-tool invocation flows |
 | 46-03b | Example 03 uses `Intent.utterances` for exact/regex matching and adds transcript logs for explicit routing rationale | Highlights Fred's intent-routing differentiator with clear WHY output for each message |
+| 46-04 | Example 04 uses the exported `createHandoffTool(getAgent, getAvailableAgents)` API with a shared handoff tool and bidirectional intake/specialist routing | Aligns showcase code with the shipped handoff API while preserving the intended intake -> specialist -> intake collaboration pattern |
+| 46-04 | Example 05 runs V2 step pipelines through `PipelineService.executePipelineV2` and demonstrates pause/resume via `fred.resume(...)` | Delivers checkpoint/resume behavior in a runnable example while documenting true crash/restart needs for persistent checkpoint storage |
 | 46-06 | Example 09 evaluation harness uses the actual eval API contract (`traceFile` + `runTestCases(cases, tracesDirectory)`) rather than sketch signatures | Keeps showcase examples aligned with the shipped assertion runner contract and avoids API drift in user-facing docs |
 | 46-06 | Example 08 presents hook-based tracing as the default observability path with OTEL kept optional | Prioritizes immediate approachability while still showing production telemetry extension points |
 | 46-05 | Example 06 uses `GraphWorkflowBuilder` with conditional/default branching and a merge synthesizer node | Demonstrates declarative graph orchestration for factual vs creative routing |
@@ -176,12 +178,12 @@ Progress: ████████████████████ 99% (219/
 
 ## Session Continuity
 
-Last session: 2026-03-02 23:46 UTC
-Stopped at: Completed 46-05-PLAN.md
+Last session: 2026-03-02 23:48 UTC
+Stopped at: Completed 46-04-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-02 — Completed 46-05 backfill (Examples 06-07: graph workflow branching and hooks middleware lifecycle demos); Phase 46 in progress*
+*Last updated: 2026-03-02 — Completed 46-04 backfill (Examples 04-05: dynamic handoff and sequential pipeline checkpoint/resume); Phase 46 in progress*
