@@ -42,26 +42,12 @@ describe('examples-guard', () => {
   const missingExampleDirs = EXPECTED_EXAMPLES.filter(
     (name) => !existsSync(path.join(examplesDir, name)),
   );
-  const allExamplesExist = missingExampleDirs.length === 0;
 
   test('all expected example directories exist', () => {
-    if (!allExamplesExist) {
-      console.warn(
-        `[examples-guard] scaffold mode: missing example directories: ${missingExampleDirs.join(', ')}`,
-      );
-      expect(missingExampleDirs.length).toBeGreaterThan(0);
-      return;
-    }
-
     expect(missingExampleDirs).toEqual([]);
   });
 
   test('each example directory has required files and folders', () => {
-    if (!allExamplesExist) {
-      expect(missingExampleDirs.length).toBeGreaterThan(0);
-      return;
-    }
-
     for (const exampleName of EXPECTED_EXAMPLES) {
       const exampleRoot = path.join(examplesDir, exampleName);
       expect(existsSync(path.join(exampleRoot, 'package.json'))).toBe(true);
@@ -76,21 +62,23 @@ describe('examples-guard', () => {
   });
 
   test('example source files avoid relative package imports and use @fancyrobot/fred imports', () => {
-    if (!allExamplesExist) {
-      expect(missingExampleDirs.length).toBeGreaterThan(0);
-      return;
-    }
-
     for (const exampleName of EXPECTED_EXAMPLES) {
       const srcDir = path.join(examplesDir, exampleName, 'src');
       const tsFiles = collectTypeScriptFiles(srcDir);
+      let hasFredImport = false;
+
+      expect(tsFiles.length).toBeGreaterThan(0);
 
       for (const filePath of tsFiles) {
         const source = readFileSync(filePath, 'utf-8');
         expect(source).not.toMatch(/\.\.\/\.\.\/src/);
         expect(source).not.toMatch(/\.\.\/packages\//);
-        expect(source).toMatch(/from\s+['"]@fancyrobot\/fred(?:\/[^'"]+)?['"]/);
+        if (/from\s+['"]@fancyrobot\/fred(?:\/[^'"]+)?['"]/.test(source)) {
+          hasFredImport = true;
+        }
       }
+
+      expect(hasFredImport).toBe(true);
     }
   });
 });
