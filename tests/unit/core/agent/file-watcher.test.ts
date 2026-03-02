@@ -34,21 +34,34 @@ const withWatcher = async (
     root: string;
     watcher: AgentFileWatcher;
     events: AgentFileChangeEvent[];
+    partialEvents: Array<{ partialName: string; filePath: string }>;
     warnings: string[];
-  }) => Promise<void> | void
+  }) => Promise<void> | void,
+  options?: {
+    partialDirs?: string[];
+  }
 ): Promise<void> => {
   const root = makeTempDir();
   const warnings: string[] = [];
   const events: AgentFileChangeEvent[] = [];
+  const partialEvents: Array<{ partialName: string; filePath: string }> = [];
   const originalWarn = console.warn;
   console.warn = mock((...args: unknown[]) => {
     warnings.push(args.map((value) => String(value)).join(' '));
   });
 
-  const watcher = new AgentFileWatcher(['./agents'], root, (event) => events.push(event), { debounceMs: 10 });
+  const watcher = new AgentFileWatcher(['./agents'], root, (event) => {
+    events.push(event);
+  }, {
+    debounceMs: 10,
+    partialDirs: options?.partialDirs,
+    onPartialChanged: (partialName, filePath) => {
+      partialEvents.push({ partialName, filePath });
+    },
+  } as any);
 
   try {
-    await setup({ root, watcher, events, warnings });
+    await setup({ root, watcher, events, partialEvents, warnings });
   } finally {
     watcher.close();
     console.warn = originalWarn;
@@ -121,7 +134,7 @@ describe('AgentFileWatcher', () => {
     });
   });
 
-  it('logs warnings and does not throw when parsing invalid frontmatter', async () => {
+  it('logs warnings and emits error event when parsing invalid frontmatter', async () => {
     await withWatcher(async ({ root, watcher, events, warnings }) => {
       const agentDir = join(root, 'agents');
       mkdirSync(agentDir, { recursive: true });
@@ -129,7 +142,9 @@ describe('AgentFileWatcher', () => {
       writeFileSync(filePath, '---\nid: broken\nplatform: openai\n---\n');
 
       expect(() => (watcher as any).handleFileChange(filePath)).not.toThrow();
-      expect(events).toHaveLength(0);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.config).toBeNull();
+      expect(events[0]?.error).toBeString();
       expect(warnings.some((line) => line.includes('Error reloading'))).toBe(true);
     });
   });
@@ -162,5 +177,55 @@ describe('AgentFileWatcher', () => {
       expect(events).toHaveLength(0);
       expect(((watcher as any).debounceTimers as Map<string, ReturnType<typeof setTimeout>>).size).toBe(0);
     });
+  });
+
+  it('starts watcher for configured partial directories', async () => {
+    await withWatcher(async ({ root, watcher }) => {
+      const agentDir = join(root, 'agents');
+      const partialDir = join(root, 'partials');
+      mkdirSync(agentDir, { recursive: true });
+      mkdirSync(partialDir, { recursive: true });
+
+      watcher.start();
+
+      expect(((watcher as any).watchers as unknown[]).length).toBe(2);
+    }, { partialDirs: ['./partials'] });
+  });
+
+  it('emits partial changed callback with normalized partial name for markdown files', async () => {
+    await withWatcher(async ({ root, watcher, partialEvents }) => {
+      const agentDir = join(root, 'agents');
+      const partialDir = join(root, 'partials', 'shared');
+      mkdirSync(agentDir, { recursive: true });
+      mkdirSync(partialDir, { recursive: true });
+
+      watcher.start();
+      const partialPath = join(partialDir, 'safety.md');
+      writeFileSync(partialPath, 'always be safe');
+
+      await sleep(60);
+
+      expect(partialEvents).toHaveLength(1);
+      expect(partialEvents[0]).toEqual({
+        partialName: 'shared/safety',
+        filePath: partialPath,
+      });
+    }, { partialDirs: ['./partials'] });
+  });
+
+  it('ignores non-markdown changes in partial directories', async () => {
+    await withWatcher(async ({ root, watcher, partialEvents }) => {
+      const agentDir = join(root, 'agents');
+      const partialDir = join(root, 'partials');
+      mkdirSync(agentDir, { recursive: true });
+      mkdirSync(partialDir, { recursive: true });
+
+      watcher.start();
+      writeFileSync(join(partialDir, 'ignore.txt'), 'not markdown');
+
+      await sleep(60);
+
+      expect(partialEvents).toHaveLength(0);
+    }, { partialDirs: ['./partials'] });
   });
 });
