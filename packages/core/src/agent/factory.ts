@@ -20,7 +20,9 @@ import { annotateSpan } from '../observability/otel';
 import { attachErrorToSpan, classifyError, ErrorClass } from '../observability/errors';
 import { normalizeMessages, filterHistoryForAgent } from '../messages';
 import { streamMultiStep } from './streaming';
-import { resolveTemplate } from '../variables/template';
+import { containsEtaSyntax } from '../template/engine';
+import { buildBodyContext } from '../template/context';
+import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import type { ToolGateServiceApi, ToolGateContext } from '../tool-gate/types';
 
 type ObservabilityServiceApi = {
@@ -173,6 +175,32 @@ export interface ToolRegistryLike {
   registerTool(tool: FredTool): void;
 }
 
+type TemplateEngineLike = {
+  resolveBody: (template: string, context: any, filePath: string) => Effect.Effect<string, any>;
+};
+
+const isTemplateVariableValue = (value: unknown): value is string | number | boolean =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+const getAgentTemplateVars = (
+  config: AgentConfig,
+  globalVars: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> => {
+  const candidate = (config as AgentConfig & { vars?: unknown }).vars;
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+    return globalVars;
+  }
+
+  const merged: Record<string, string | number | boolean> = { ...globalVars };
+  for (const [key, value] of Object.entries(candidate)) {
+    if (isTemplateVariableValue(value)) {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
+};
+
 export class AgentFactory {
   private toolRegistry: ToolRegistryLike;
   private handoffHandler?: {
@@ -194,6 +222,9 @@ export class AgentFactory {
   private globalVariablesResolver?: () => Record<string, string | number | boolean>;
   private toolGateService?: ToolGateServiceApi;
   private mcpServerRegistry?: MCPServerRegistry;
+  private templateEngine?: TemplateEngineLike;
+  private templateCustomNamespaces: Record<string, unknown> = {};
+  private envAllowlist: string[] = [...DEFAULT_ENV_ALLOWLIST];
 
   constructor(toolRegistry: ToolRegistryLike, tracer?: Tracer) {
     this.toolRegistry = toolRegistry;
@@ -206,6 +237,18 @@ export class AgentFactory {
 
   setGlobalVariablesResolver(resolver: () => Record<string, string | number | boolean>): void {
     this.globalVariablesResolver = resolver;
+  }
+
+  setTemplateEngine(engine?: TemplateEngineLike): void {
+    this.templateEngine = engine;
+  }
+
+  setTemplateCustomNamespaces(namespaces: Record<string, unknown>): void {
+    this.templateCustomNamespaces = { ...namespaces };
+  }
+
+  setEnvAllowlist(envAllowlist: string[]): void {
+    this.envAllowlist = [...envAllowlist];
   }
 
   setDefaultSystemMessage(systemMessage?: string): void {
@@ -819,24 +862,38 @@ export class AgentFactory {
     // Create set of available tool names for history filtering
     const availableToolNames = new Set(effectTools.map((tool) => tool.name));
 
-    // Load the system message template (may contain {{ var_name }} placeholders)
+    // Load the system message template
     const systemMessageTemplate = loadPromptFile(resolvedSystemMessage, undefined, false);
 
     // Helper function to resolve system message with current variable values
     const resolveSystemMessage = (): string => {
-      let resolved = systemMessageTemplate;
-
-      // Resolve {{ var_name }} template variables if resolver is available
-      if (this.globalVariablesResolver) {
-        const globalVars = this.globalVariablesResolver();
-        const resolveEffect = resolveTemplate(resolved, globalVars, {
-          strict: false,
-          removeUnresolved: false,
-        });
-        resolved = Effect.runSync(resolveEffect);
+      if (!containsEtaSyntax(systemMessageTemplate)) {
+        return systemMessageTemplate;
       }
 
-      return resolved;
+      if (!this.templateEngine) {
+        return systemMessageTemplate;
+      }
+
+      const globalVars = this.globalVariablesResolver ? this.globalVariablesResolver() : {};
+      const templateVars = getAgentTemplateVars(config, globalVars);
+      const filteredEnv = filterEnvVars(process.env as Record<string, string | undefined>, this.envAllowlist);
+      const bodyContext = buildBodyContext(
+        templateVars,
+        filteredEnv,
+        config,
+        {},
+        this.templateCustomNamespaces
+      );
+
+      try {
+        return Effect.runSync(
+          this.templateEngine.resolveBody(systemMessageTemplate, bodyContext, `agent:${config.id}`)
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to resolve system message template for agent "${config.id}" (agent:${config.id}): ${message}`);
+      }
     };
 
     const processMessage = async (
