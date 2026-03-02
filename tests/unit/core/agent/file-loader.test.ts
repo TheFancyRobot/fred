@@ -254,5 +254,120 @@ You are an assistant.
         systemMessage: 'You are an assistant.',
       });
     });
+
+    it('resolves ETA syntax in frontmatter when template options are provided', () => {
+      const root = makeTempDir();
+      const base = join(root, 'agents');
+      mkdirSync(base, { recursive: true });
+
+      writeFileSync(
+        join(base, 'assistant.md'),
+        `---
+id: assistant
+platform: openai
+model: <%= env.MODEL %>
+---
+
+You are an assistant.
+`
+      );
+
+      const configs = loadAgentFiles(['./agents'], root, {
+        globalVars: {},
+        filteredEnv: { MODEL: 'gpt-4.1-mini' },
+        fredConfig: {},
+      });
+
+      expect(configs).toHaveLength(1);
+      expect(configs[0]?.model).toBe('gpt-4.1-mini');
+    });
+
+    it('keeps non-ETA frontmatter unchanged when template options are provided', () => {
+      const root = makeTempDir();
+      const base = join(root, 'agents');
+      mkdirSync(base, { recursive: true });
+
+      writeFileSync(
+        join(base, 'assistant.md'),
+        `---
+id: assistant
+platform: openai
+model: gpt-4o-mini
+---
+
+You are an assistant.
+`
+      );
+
+      const configs = loadAgentFiles(['./agents'], root, {
+        globalVars: {},
+        filteredEnv: { MODEL: 'ignored' },
+        fredConfig: {},
+      });
+
+      expect(configs).toHaveLength(1);
+      expect(configs[0]?.model).toBe('gpt-4o-mini');
+    });
+
+    it('throws AgentFileParseError on invalid ETA frontmatter expression', () => {
+      const root = makeTempDir();
+      const base = join(root, 'agents');
+      mkdirSync(base, { recursive: true });
+
+      writeFileSync(
+        join(base, 'assistant.md'),
+        `---
+id: assistant
+platform: openai
+model: <%= env.MODEL
+---
+
+You are an assistant.
+`
+      );
+
+      expect(() =>
+        loadAgentFiles(['./agents'], root, {
+          globalVars: {},
+          filteredEnv: { MODEL: 'gpt-4.1-mini' },
+          fredConfig: {},
+        })
+      ).toThrow(AgentFileParseError);
+    });
+
+    it('preserves frontmatter vars for body template resolution', () => {
+      const root = makeTempDir();
+      const base = join(root, 'agents');
+      mkdirSync(base, { recursive: true });
+
+      writeFileSync(
+        join(base, 'assistant.md'),
+        `---
+id: assistant
+platform: openai
+model: gpt-4o-mini
+vars:
+  role: guide
+  retries: 2
+---
+
+You are <%= vars.role %>.
+`
+      );
+
+      const configs = loadAgentFiles(['./agents'], root, {
+        globalVars: { global: 'value' },
+        filteredEnv: {},
+        fredConfig: {},
+      });
+
+      expect(configs).toHaveLength(1);
+      const vars = (configs[0] as { vars?: Record<string, string | number | boolean> }).vars;
+      expect(vars).toEqual({
+        global: 'value',
+        role: 'guide',
+        retries: 2,
+      });
+    });
   });
 });
