@@ -148,15 +148,22 @@ Plans:
 
 ### Phase 45.2: Implement ETA for Templating Agent Prompts and Frontmatter (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
+**Goal:** Replace the simple `{{ var }}` template substitution system with ETA (a lightweight JavaScript templating engine) for processing agent prompts and frontmatter values, with two-phase resolution (frontmatter at load-time, body per-message), security restrictions, partials support, hot-reload integration, a CLI validate command, and exported test utilities
 **Depends on:** Phase 45.1
-**Plans:** 0 plans
+**Plans:** 3 plans
+**Success Criteria** (what must be TRUE):
+  1. ETA templates with conditionals, loops, expressions, and partials work in agent `.md` files, config agents, and programmatic agents
+  2. Frontmatter ETA expressions resolve at load time; body ETA expressions resolve per-message with current variable values
+  3. Security restrictions prevent template access to dangerous globals; env vars filtered through configurable allowlist
+  4. Hot reload of partial files invalidates template cache for all agents
+  5. `fred validate` CLI command compiles all agent templates without starting Fred
+  6. Old `{{ var }}` template system (`resolveTemplate`) is completely removed
+  7. All tests pass with no regressions
 
 Plans:
-- [ ] TBD (run /gsd/plan-phase 45.2 to break down)
-
-**Details:**
-[To be added during planning]
+- [ ] 45.2-01-PLAN.md — Core template engine module: ETA wrapper, typed errors, security, context builders, unit tests
+- [ ] 45.2-02-PLAN.md — Integration: wire into file-loader and factory, remove old template system, extend config, Fred class API
+- [ ] 45.2-03-PLAN.md — Hot reload partial watching, CLI validate command, exported test utilities, full verification
 
 ### Phase 46: Showcase Examples & Framework Differentiation
 **Goal**: Delete existing examples and replace with 12 progressive examples that form a learning path — from quickstart to evaluation harness. Each example demonstrates a distinct Fred capability (intent routing, pipelines, hooks, MCP, config-driven agents, etc.) using the v0.3.0 Effect-based public API. Research competing frameworks to ensure examples highlight differentiators.
@@ -261,7 +268,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 44. Imperative Layer Removal & Consumer Migration | 13/13 | Complete | 2026-03-01 |
 | 45. Public API Surface & Verification | 3/3 | Gaps found | — |
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
-| 45.2. ETA for Templating Prompts (INSERTED) | 0/0 | Not started | — |
+| 45.2. ETA for Templating Prompts (INSERTED) | 0/3 | Planned | — |
 | 46. Showcase Examples & Framework Differentiation | 0/0 | Not started | — |
 
 ---
