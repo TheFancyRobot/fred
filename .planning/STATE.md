@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-02T23:37:57Z"
+last_updated: "2026-03-02T23:42:38Z"
 progress:
   total_phases: 53
   completed_phases: 48
   total_plans: 219
-  completed_plans: 213
+  completed_plans: 214
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 2 of 8 in current phase
+Plan: 3 of 8 in current phase
 Status: In progress
-Last activity: 2026-03-02 - Completed 46-02-PLAN.md
+Last activity: 2026-03-02 - Completed 46-03-PLAN.md
 
-Progress: ███████████████████░ 97% (213/219 plans)
+Progress: ███████████████████░ 98% (214/219 plans)
 
 ## Performance Metrics
 
@@ -156,6 +156,7 @@ Progress: ███████████████████░ 97% (213/
 | 46-01 | Root workspace includes `examples/*` before example authoring begins | Ensures per-example `workspace:*` dependencies resolve correctly throughout Phase 46 |
 | 46-02 | Fred.createPipeline now accepts `AnyPipelineConfig` and routes V2 configs through `PipelineService.createPipelineV2` | Unblocks step-based pipeline examples from using the main Fred facade without internal runtime access |
 | 46-02 | Fred graph workflow execution delegates to imperative `graph-executor` while service path remains stubbed | Enables graph examples immediately without waiting for full Effect-fiber graph migration |
+| 46-03 | Example 01 is a fully self-contained workspace package with README, env template, tsconfig, and minimal Fred flow entrypoint | Establishes the first runnable learning-path artifact and locks the canonical quickstart sequence (`Fred.create` → provider → agent → message → shutdown) |
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -165,8 +166,8 @@ Progress: ███████████████████░ 97% (213/
 
 ## Session Continuity
 
-Last session: 2026-03-02 23:37 UTC
-Stopped at: Completed 46-02-PLAN.md
+Last session: 2026-03-02 23:42 UTC
+Stopped at: Completed 46-03-PLAN.md
 Resume file: None
 
 ---
