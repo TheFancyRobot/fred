@@ -1,6 +1,12 @@
 import type { Intent } from './intent/intent';
 import type { AgentConfig, AgentInstance, AgentResponse, AgentMessage } from './agent/agent';
 import type { PipelineConfig, PipelineInstance } from './pipeline';
+import type { AnyPipelineConfig } from './pipeline/pipeline';
+import { isPipelineConfigV2 } from './pipeline/pipeline';
+import type { GraphWorkflowConfig } from './pipeline/graph';
+import type { GraphExecutionResult } from './pipeline/graph-executor';
+import { executeGraphWorkflow as executeGraphWorkflowImpl } from './pipeline/graph-executor';
+import type { AgentManagerLike, HookManagerLike } from './pipeline/executor';
 import type { ResumeResult } from './pipeline/resume';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
 import type { Tool } from './tool/tool';
@@ -108,6 +114,8 @@ export class Fred {
   private readonly intentSnapshot = new Map<string, Intent>();
   private readonly providerSnapshot = new Map<string, ProviderDefinition>();
   private readonly workflowSnapshot = new Map<string, Workflow>();
+  private readonly hookSnapshot: Array<{ type: HookType; handler: HookHandler }> = [];
+  private readonly graphWorkflowSnapshot = new Map<string, GraphWorkflowConfig>();
   private readonly builtInToolIds = new Set<string>();
   private readonly configInitializer: ConfigInitializer;
   private agentFileWatcher?: AgentFileWatcher;
@@ -235,6 +243,20 @@ export class Fred {
               agents: workflow.agents,
               routing: workflow.routing,
             });
+          }
+        }
+
+        if (self.graphWorkflowSnapshot.size > 0) {
+          const pipelineService = yield* PipelineService;
+          for (const config of self.graphWorkflowSnapshot.values()) {
+            yield* pipelineService.registerGraphWorkflow(config);
+          }
+        }
+
+        if (self.hookSnapshot.length > 0) {
+          const hooks = yield* HookManagerService;
+          for (const { type, handler } of self.hookSnapshot) {
+            yield* hooks.registerHook(type, handler);
           }
         }
 
@@ -770,14 +792,90 @@ export class Fred {
 
   // --- Pipeline Management ---
 
-  async createPipeline(config: PipelineConfig): Promise<PipelineInstance> {
+  async createPipeline(config: AnyPipelineConfig): Promise<PipelineInstance | void> {
+    if (isPipelineConfigV2(config)) {
+      return this.runEffect(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.createPipelineV2(config);
+        }),
+        `Failed to create pipeline: ${config.id}`
+      );
+    }
+
     return this.runEffect(
       Effect.gen(function* () {
         const service = yield* PipelineService;
-        return yield* service.createPipeline(config);
+        return yield* service.createPipeline(config as PipelineConfig);
       }),
       `Failed to create pipeline: ${config.id}`
     );
+  }
+
+  registerGraphWorkflow(config: GraphWorkflowConfig): void {
+    this.graphWorkflowSnapshot.set(config.id, config);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        yield* service.registerGraphWorkflow(config);
+      })
+    );
+  }
+
+  async executeGraphWorkflow(
+    id: string,
+    input: string,
+    options?: { conversationId?: string }
+  ): Promise<GraphExecutionResult> {
+    const config = this.graphWorkflowSnapshot.get(id);
+    if (!config) {
+      throw new Error(`Graph workflow not found: ${id}`);
+    }
+
+    const runtime = await this.ensureRuntime();
+    const agents = await Runtime.runPromise(runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAllAgents();
+      })
+    );
+
+    const agentMap = new Map(agents.map((agent) => [agent.id, agent]));
+    const agentManager: AgentManagerLike = {
+      getAgent: (agentId: string) => {
+        const agent = agentMap.get(agentId);
+        if (!agent) {
+          throw new Error(`Agent not found: ${agentId}`);
+        }
+        return agent;
+      },
+      hasAgent: (agentId: string) => agentMap.has(agentId),
+    };
+
+    const hookManager = await Runtime.runPromise(runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        const adapter: HookManagerLike = {
+          executeHooks: (hookName, event) =>
+            Runtime.runPromise(runtime)(hooks.executeHooks(hookName as HookType, event)).then(() => undefined),
+          executeHooksAndMerge: (hookName, event) =>
+            Runtime.runPromise(runtime)(hooks.executeHooksAndMerge(hookName as HookType, event)),
+        };
+        return adapter;
+      })
+    ).catch(() => undefined);
+
+    return executeGraphWorkflowImpl(config, input, {
+      agentManager,
+      hookManager,
+      tracer: this.tracer,
+      ...options,
+    });
   }
 
   async executePipeline(
@@ -1246,6 +1344,8 @@ export class Fred {
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
+    this.hookSnapshot.push({ type, handler });
+
     if (!this.runtime) {
       return;
     }
@@ -1259,16 +1359,29 @@ export class Fred {
   }
 
   unregisterHook(type: HookType, handler: HookHandler): boolean {
+    const snapshotIndex = this.hookSnapshot.findIndex(
+      (entry) => entry.type === type && entry.handler === handler
+    );
+
     if (!this.runtime) {
+      if (snapshotIndex >= 0) {
+        this.hookSnapshot.splice(snapshotIndex, 1);
+      }
       return false;
     }
 
-    return Runtime.runSync(this.runtime)(
+    const removed = Runtime.runSync(this.runtime)(
       Effect.gen(function* () {
         const hooks = yield* HookManagerService;
         return yield* hooks.unregisterHook(type, handler);
       })
     );
+
+    if (removed && snapshotIndex >= 0) {
+      this.hookSnapshot.splice(snapshotIndex, 1);
+    }
+
+    return removed;
   }
 
   ['getHook' + 'Manager'](): any {
