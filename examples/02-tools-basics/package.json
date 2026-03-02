@@ -8,6 +8,6 @@
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-openai": "workspace:*",
-    "effect": "workspace:*"
+    "effect": "^3.19.19"
   }
 }
