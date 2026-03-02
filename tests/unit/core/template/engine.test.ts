@@ -247,35 +247,27 @@ describe('template engine service', () => {
   });
 
   it('maps ETA syntax errors to TemplateCompileError', async () => {
-    const result = await Effect.runPromiseExit(
+    const error = await Effect.runPromise(
       Effect.gen(function* () {
         const engine = yield* TemplateEngine;
         return yield* engine.compileFrontmatter('<% if ( %>', frontmatterContext, 'agents/support.md');
-      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })))
+      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })), Effect.flip)
     );
 
-    expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') {
-      const cause = result.cause as any;
-      expect(String(cause)).toContain('TemplateCompileError');
-      expect(String(cause)).toContain('agents/support.md');
-    }
+    expect(error._tag).toBe('TemplateCompileError');
+    expect(error.filePath).toBe('agents/support.md');
   });
 
   it('maps runtime failures to TemplateResolutionError in strict mode', async () => {
-    const result = await Effect.runPromiseExit(
+    const error = await Effect.runPromise(
       Effect.gen(function* () {
         const engine = yield* TemplateEngine;
         return yield* engine.resolveBody('<%= vars.missing %>', bodyContext, 'agents/support.md');
-      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })))
+      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })), Effect.flip)
     );
 
-    expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') {
-      const cause = result.cause as any;
-      expect(String(cause)).toContain('TemplateResolutionError');
-      expect(String(cause)).toContain('agents/support.md');
-    }
+    expect(error._tag).toBe('TemplateResolutionError');
+    expect(error.filePath).toBe('agents/support.md');
   });
 
   it('passes through non-template strings unchanged', async () => {
