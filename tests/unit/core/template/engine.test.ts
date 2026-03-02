@@ -16,6 +16,11 @@ import {
   buildBodyContext,
   buildFrontmatterContext,
 } from '../../../../packages/core/src/template/context';
+import {
+  TemplateEngine,
+  TemplateEngineLive,
+  containsEtaSyntax,
+} from '../../../../packages/core/src/template/engine';
 
 describe('template errors', () => {
   it('creates TemplateCompileError with required fields', () => {
@@ -171,5 +176,162 @@ describe('template context builders', () => {
 
     expect((context as Record<string, any>).extra.value).toBe(42);
     expect((context as Record<string, any>).tenant).toBe('acme');
+  });
+});
+
+describe('template engine service', () => {
+  const vars = { name: 'Fred', retries: 3, enabled: true };
+  const env = { NODE_ENV: 'test', FRED_REGION: 'us-east-1' };
+  const config: FrameworkConfig = {
+    defaultSystemMessage: 'Default system message',
+    agentDirs: ['./agents'],
+  };
+  const agent: AgentConfig = {
+    id: 'support',
+    platform: 'openai',
+    model: 'gpt-4o-mini',
+    temperature: 0.2,
+    maxTokens: 1024,
+  };
+
+  const frontmatterContext = buildFrontmatterContext(vars, env, config);
+  const bodyContext = buildBodyContext(vars, env, agent, config);
+
+  const runWithEngine = <A, E>(effect: Effect.Effect<A, E, TemplateEngine>, strict = true, maxOutputSize = 1024 * 1024) =>
+    Effect.runPromise(effect.pipe(Effect.provide(TemplateEngineLive({ strict, maxOutputSize }))));
+
+  it('resolves ETA expressions in frontmatter', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.compileFrontmatter('model: <%= env.NODE_ENV %>-model', frontmatterContext, 'agents/support.md');
+      })
+    );
+
+    expect(output).toBe('model: test-model');
+  });
+
+  it('resolves ETA expressions in body templates', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody('Hello <%= vars.name %> from <%= agent.id %>', bodyContext, 'agents/support.md');
+      })
+    );
+
+    expect(output).toBe('Hello Fred from support');
+  });
+
+  it('validates compilable templates without rendering', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        yield* engine.validate('<% if (vars.enabled) { %>ok<% } %>', 'agents/support.md');
+        return 'ok';
+      })
+    );
+
+    expect(output).toBe('ok');
+  });
+
+  it('registers and renders named partials', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        yield* engine.registerPartial('shared/greeting', 'Hi <%= vars.name %>');
+        return yield* engine.resolveBody('<%~ include("@shared/greeting") %>', bodyContext, 'agents/support.md');
+      })
+    );
+
+    expect(output).toBe('Hi Fred');
+  });
+
+  it('maps ETA syntax errors to TemplateCompileError', async () => {
+    const result = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.compileFrontmatter('<% if ( %>', frontmatterContext, 'agents/support.md');
+      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })))
+    );
+
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      const cause = result.cause as any;
+      expect(String(cause)).toContain('TemplateCompileError');
+      expect(String(cause)).toContain('agents/support.md');
+    }
+  });
+
+  it('maps runtime failures to TemplateResolutionError in strict mode', async () => {
+    const result = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody('<%= vars.missing %>', bodyContext, 'agents/support.md');
+      }).pipe(Effect.provide(TemplateEngineLive({ strict: true })))
+    );
+
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      const cause = result.cause as any;
+      expect(String(cause)).toContain('TemplateResolutionError');
+      expect(String(cause)).toContain('agents/support.md');
+    }
+  });
+
+  it('passes through non-template strings unchanged', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody('plain text', bodyContext, 'agents/support.md');
+      })
+    );
+
+    expect(output).toBe('plain text');
+  });
+
+  it('applies security header to shadow dangerous globals', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody(
+          '<%= typeof require %>|<%= typeof process %>|<%= typeof Function %>',
+          bodyContext,
+          'agents/support.md'
+        );
+      })
+    );
+
+    expect(output).toBe('undefined|undefined|undefined');
+  });
+
+  it('enforces max output size after rendering', async () => {
+    const result = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody('<%= vars.name %>'.repeat(30), bodyContext, 'agents/support.md');
+      }).pipe(Effect.provide(TemplateEngineLive({ strict: true, maxOutputSize: 100 })))
+    );
+
+    expect(result._tag).toBe('Failure');
+    if (result._tag === 'Failure') {
+      expect(String(result.cause)).toContain('TemplateResolutionError');
+    }
+  });
+
+  it('supports configurable strict mode', async () => {
+    const output = await runWithEngine(
+      Effect.gen(function* () {
+        const engine = yield* TemplateEngine;
+        return yield* engine.resolveBody('<%= vars.missing %>', bodyContext, 'agents/support.md');
+      }),
+      false
+    );
+
+    expect(output).toBe('');
+  });
+
+  it('detects eta syntax delimiters', () => {
+    expect(containsEtaSyntax('hello')).toBe(false);
+    expect(containsEtaSyntax('<%= vars.name %>')).toBe(true);
   });
 });
