@@ -168,6 +168,10 @@ export class Fred {
     this.runtimeGeneration += 1;
     this.runtime = null;
     this.runtimePromise = null;
+    // Preserve storage adapter so it gets replayed into the next runtime
+    if (this.activeStorageAdapter && !this.pendingStorageAdapter) {
+      this.pendingStorageAdapter = this.activeStorageAdapter;
+    }
     void reason;
   }
 

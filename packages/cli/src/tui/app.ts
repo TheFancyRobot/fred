@@ -667,6 +667,7 @@ export class FredTuiApp {
       }
       this.events.onStateChange?.(this.state);
       this.syncStateToUI();
+      void this.loadSelectedSessionTranscript(previousSelectedId);
       return;
     }
 
@@ -724,6 +725,8 @@ export class FredTuiApp {
     const message = error instanceof Error ? error.message : String(error);
     this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, message, nowMs);
+    // Show error in transcript so the user can see what went wrong
+    this.state = appendAssistant(this.state, `[Error: ${message}]`, 0, nowMs);
     this.stopSpinnerInterval();
     this.refreshSessionCost(false);
     this.events.onError?.(error instanceof Error ? error : new Error(message));
