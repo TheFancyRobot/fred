@@ -17,6 +17,7 @@ import { handleRunCommand } from './commands/run';
 import { handleIntentCommand } from './commands/intent';
 import { handleRouteCommand } from './commands/route';
 import { handleMcpCommand } from './commands/mcp';
+import { handleValidateCommand } from './commands/validate';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import {
   AggregatedPluginValidationError,
@@ -75,6 +76,7 @@ const BUILTIN_COMMANDS = new Set([
   'intent',
   'route',
   'mcp',
+  'validate',
 ]);
 
 const PLUGIN_VALIDATION_EXIT_CODE = 12;
@@ -160,6 +162,8 @@ Commands:
   mcp start <id>          Start an MCP server (use --all for all)
   mcp stop <id>           Stop an MCP server (use --all for all)
   mcp status <id>         Show MCP server connection health
+  validate                Compile-check markdown agent templates
+                          --preview        Show resolved output previews
   session                 Manage saved chat sessions
   session list             List sessions (table or --json)
   session show <id>        Show a session transcript
@@ -195,6 +199,8 @@ Examples:
   fred mcp list
   fred mcp start filesystem-server
   fred mcp status filesystem-server
+  fred validate
+  fred validate --preview
   fred session list
   fred session list --json
   fred session show conv_123
@@ -313,6 +319,10 @@ async function main(): Promise<void> {
 
       case 'mcp':
         exitCode = await handleMcpCommand(commandArgs, options);
+        break;
+
+      case 'validate':
+        exitCode = await handleValidateCommand(commandArgs, options);
         break;
 
 

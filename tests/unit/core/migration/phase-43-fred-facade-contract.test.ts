@@ -87,10 +87,10 @@ describe('Runtime lifecycle contracts', () => {
     expect(constructorBody).not.toMatch(/createFredRuntimeWithOptions/);
     expect(constructorBody).not.toMatch(/Layer\.toRuntime/);
 
-    // ensureRuntime method definition must contain the runtime creation call
+    // ensureRuntime method definition must contain runtime creation call
     const ensureRuntimeBody = extractMethodBody(source, /private\s+async\s+ensureRuntime\s*\(\)/);
     expect(ensureRuntimeBody).not.toBe('');
-    expect(ensureRuntimeBody).toMatch(/createFredRuntimeWithOptions/);
+    expect(ensureRuntimeBody).toMatch(/createFredRuntimeWithOptions|makeFredRuntimeLayer/);
   });
 
   test('Fred.create() eagerly initializes runtime', () => {

@@ -63,12 +63,18 @@ export {
   DEFAULT_ENV_ALLOWLIST,
   buildFrontmatterContext,
   buildBodyContext,
+  validateAllTemplates,
+  previewTemplate,
+  securityLintTemplate,
+  compileTemplate,
+  resolveAgentTemplate,
 } from './template';
 export type {
   TemplateEngineConfig,
   FrontmatterContext,
   BodyContext,
   TemplateError,
+  ValidationResult,
 } from './template';
 
 // ─── Context Types ──────────────────────────────────────────────────────────

@@ -9,7 +9,6 @@ import {
   compileTemplate,
   resolveAgentTemplate,
 } from '../../../../packages/core/src/template/validate';
-import { TemplateCompileError } from '../../../../packages/core/src/template/errors';
 
 const tempDirs: string[] = [];
 
@@ -43,7 +42,7 @@ Hello <%= vars.name %>
 `
     );
 
-    const results = await validateAllTemplates(['./agents'], root);
+    const results = await Effect.runPromise(validateAllTemplates(['./agents'], root));
 
     expect(results).toHaveLength(1);
     expect(results[0]?.valid).toBe(true);
@@ -67,7 +66,7 @@ missing end tag
 `
     );
 
-    const results = await validateAllTemplates(['./agents'], root);
+    const results = await Effect.runPromise(validateAllTemplates(['./agents'], root));
 
     expect(results).toHaveLength(1);
     expect(results[0]?.valid).toBe(false);
