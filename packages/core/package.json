@@ -62,6 +62,7 @@
     "@effect/platform": "^0.94.0"
   },
   "dependencies": {
+    "eta": "^4.5.1",
     "graphology": "^0.26.0",
     "graphology-dag": "^0.4.1",
     "js-yaml": "^4.1.0"
