@@ -15,6 +15,8 @@ export {
   type ToolCapabilityMetadata, type ToolSchemaMetadata,
   type ToolSchemaDefinition, type Tool, type ToolResult,
 } from './tool/tool';
+export { createHandoffTool } from './tool/handoff';
+export type { HandoffToolConfig } from './pipeline/handoff-tool';
 
 // ─── Tool Gate ──────────────────────────────────────────────────────────────
 // Note: ToolGateService and ToolGateServiceLive are re-exported from index.ts services block
@@ -106,6 +108,18 @@ export type {
   PauseSignal, PauseRequest, PendingPause,
   PauseMetadata, HumanInputResumeOptions,
 } from './pipeline/pause/types';
+
+// ─── Pipeline Builders ──────────────────────────────────────────────────────
+export { PipelineBuilder } from './pipeline/builder';
+export { GraphWorkflowBuilder } from './pipeline/graph-builder';
+export type {
+  PipelineConfigV2, AnyPipelineConfig,
+} from './pipeline/pipeline';
+export { isPipelineConfigV2 } from './pipeline/pipeline';
+export type {
+  GraphWorkflowConfig, GraphNode, BranchCondition,
+} from './pipeline/graph';
+export type { GraphExecutionResult } from './pipeline/graph-executor';
 
 // ─── Hooks Types ────────────────────────────────────────────────────────────
 export type {
