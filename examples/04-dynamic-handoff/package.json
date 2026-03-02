@@ -1,0 +1,12 @@
+{
+  "name": "@fancyrobot/fred-example-04-dynamic-handoff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-openai": "workspace:*"
+  }
+}
