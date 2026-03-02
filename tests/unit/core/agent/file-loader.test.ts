@@ -319,7 +319,7 @@ You are an assistant.
         `---
 id: assistant
 platform: openai
-model: <%= env.MODEL
+model: <%= env. %>
 ---
 
 You are an assistant.

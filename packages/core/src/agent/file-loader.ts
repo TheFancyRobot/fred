@@ -1,13 +1,31 @@
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { extname, resolve } from 'path';
 import yaml from 'js-yaml';
+import { Eta, EtaParseError } from 'eta';
 import type { AgentConfig, ToolRetryPolicy } from './agent';
 import { AgentFileParseError } from './errors';
+import type { FrameworkConfig } from '../config/types';
+import { buildFrontmatterContext } from '../template/context';
+import { containsEtaSyntax } from '../template/engine';
+import { SECURITY_HEADER } from '../template/security';
+
+type VariableValue = string | number | boolean;
+
+type AgentConfigWithVars = AgentConfig & {
+  vars?: Record<string, VariableValue>;
+};
 
 export interface ParsedAgentFile {
   readonly frontmatter: Record<string, unknown>;
   readonly body: string;
   readonly filePath: string;
+  readonly vars?: Record<string, VariableValue>;
+}
+
+export interface AgentFileTemplateOptions {
+  globalVars: Record<string, VariableValue>;
+  filteredEnv: Record<string, string>;
+  fredConfig: Partial<FrameworkConfig>;
 }
 
 const REQUIRED_FRONTMATTER_FIELDS = ['id', 'platform', 'model'] as const;
@@ -21,6 +39,35 @@ const isStringArray = (value: unknown): value is string[] =>
 
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isVariableValue = (value: unknown): value is VariableValue =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+const extractFrontmatterVars = (frontmatter: Record<string, unknown>, filePath: string): Record<string, VariableValue> | undefined => {
+  if (!('vars' in frontmatter) || frontmatter.vars === undefined) {
+    return undefined;
+  }
+
+  const varsBlock = frontmatter.vars;
+
+  if (!isPlainRecord(varsBlock)) {
+    throwParseError(filePath, 'frontmatter vars must be an object with string, number, or boolean values');
+  }
+
+  const varsRecord = varsBlock as Record<string, unknown>;
+  const normalized: Record<string, VariableValue> = {};
+  for (const [key, value] of Object.entries(varsRecord)) {
+    if (!isVariableValue(value)) {
+      throwParseError(filePath, `frontmatter vars.${key} must be a string, number, or boolean`);
+    }
+    normalized[key] = value as VariableValue;
+  }
+
+  return normalized;
+};
 
 const isToolChoice = (value: unknown): value is AgentConfig['toolChoice'] => {
   if (value === 'auto' || value === 'required' || value === 'none') {
@@ -84,7 +131,29 @@ const getClosingDelimiter = (content: string, searchFrom: number): { yamlEnd: nu
   return null;
 };
 
-export const parseAgentFile = (content: string, filePath: string): ParsedAgentFile | null => {
+const parseYamlFrontmatter = (yamlContent: string, filePath: string): Record<string, unknown> => {
+  let loaded: unknown;
+  try {
+    loaded = yaml.load(yamlContent);
+  } catch (error) {
+    return throwParseError(filePath, `Invalid YAML frontmatter: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!isPlainRecord(loaded)) {
+    return throwParseError(filePath, 'YAML frontmatter must be an object');
+  }
+
+  return loaded;
+};
+
+const parseFrontmatterAndBody = (
+  content: string,
+  filePath: string
+): {
+  frontmatterYaml: string;
+  frontmatter: Record<string, unknown>;
+  body: string;
+} | null => {
   let yamlStart = 0;
   if (content.startsWith('---\n')) {
     yamlStart = 4;
@@ -99,18 +168,8 @@ export const parseAgentFile = (content: string, filePath: string): ParsedAgentFi
     return throwParseError(filePath, 'Unterminated YAML frontmatter');
   }
 
-  const yamlContent = content.slice(yamlStart, delimiter.yamlEnd);
-
-  let loaded: unknown;
-  try {
-    loaded = yaml.load(yamlContent);
-  } catch (error) {
-    return throwParseError(filePath, `Invalid YAML frontmatter: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  if (typeof loaded !== 'object' || loaded === null || Array.isArray(loaded)) {
-    return throwParseError(filePath, 'YAML frontmatter must be an object');
-  }
+  const frontmatterYaml = content.slice(yamlStart, delimiter.yamlEnd);
+  const frontmatter = parseYamlFrontmatter(frontmatterYaml, filePath);
 
   const body = content.slice(delimiter.bodyStart).trim();
   if (body.length === 0) {
@@ -118,8 +177,21 @@ export const parseAgentFile = (content: string, filePath: string): ParsedAgentFi
   }
 
   return {
-    frontmatter: loaded as Record<string, unknown>,
+    frontmatterYaml,
+    frontmatter,
     body,
+  };
+};
+
+export const parseAgentFile = (content: string, filePath: string): ParsedAgentFile | null => {
+  const parsed = parseFrontmatterAndBody(content, filePath);
+  if (parsed === null) {
+    return null;
+  }
+
+  return {
+    frontmatter: parsed.frontmatter,
+    body: parsed.body,
     filePath,
   };
 };
@@ -204,6 +276,9 @@ export const toAgentConfig = (parsed: ParsedAgentFile): AgentConfig => {
   if (frontmatter.toolTimeout !== undefined) config.toolTimeout = frontmatter.toolTimeout as number;
   if (frontmatter.persistHistory !== undefined) config.persistHistory = frontmatter.persistHistory as boolean;
   if (frontmatter.toolRetry !== undefined) config.toolRetry = frontmatter.toolRetry as ToolRetryPolicy;
+  if (parsed.vars !== undefined) {
+    (config as AgentConfigWithVars).vars = { ...parsed.vars };
+  }
 
   return config;
 };
@@ -236,9 +311,20 @@ export const discoverAgentFiles = (dirs: string[], basePath: string): string[] =
   return files;
 };
 
-export const loadAgentFiles = (dirs: string[], basePath: string): AgentConfig[] => {
+export const loadAgentFiles = (dirs: string[], basePath: string, templateOptions?: AgentFileTemplateOptions): AgentConfig[] => {
   const discoveredFiles = discoverAgentFiles(dirs, basePath);
   const agents: AgentConfig[] = [];
+  const eta = templateOptions
+    ? new Eta({
+        autoEscape: false,
+        useWith: true,
+        cache: true,
+        debug: true,
+        tags: ['<%', '%>'],
+        autoTrim: [false, false],
+        functionHeader: SECURITY_HEADER,
+      })
+    : undefined;
 
   for (const filePath of discoveredFiles) {
     const content = readFileSync(filePath, 'utf-8');
@@ -247,8 +333,47 @@ export const loadAgentFiles = (dirs: string[], basePath: string): AgentConfig[] 
       continue;
     }
 
-    validateAgentFrontmatter(parsed.frontmatter, filePath);
-    agents.push(toAgentConfig(parsed));
+    let frontmatter = parsed.frontmatter;
+    if (templateOptions) {
+      const raw = parseFrontmatterAndBody(content, filePath);
+      if (raw !== null && containsEtaSyntax(raw.frontmatterYaml) && eta) {
+        const frontmatterContext = buildFrontmatterContext(
+          templateOptions.globalVars,
+          templateOptions.filteredEnv,
+          templateOptions.fredConfig
+        );
+
+        const resolvedFrontmatterYaml = (() => {
+          try {
+            return eta.renderString(raw.frontmatterYaml, frontmatterContext as Record<string, unknown>);
+          } catch (error) {
+            const message = error instanceof EtaParseError
+              ? `Frontmatter ETA template compile error: ${error.message}`
+              : `Frontmatter ETA template resolution error: ${error instanceof Error ? error.message : String(error)}`;
+            return throwParseError(filePath, message);
+          }
+        })();
+
+        frontmatter = parseYamlFrontmatter(resolvedFrontmatterYaml, filePath);
+      }
+    }
+
+    const frontmatterVars = extractFrontmatterVars(frontmatter, filePath);
+    const mergedVars = templateOptions
+      ? {
+          ...templateOptions.globalVars,
+          ...(frontmatterVars ?? {}),
+        }
+      : undefined;
+
+    validateAgentFrontmatter(frontmatter, filePath);
+    agents.push(
+      toAgentConfig({
+        ...parsed,
+        frontmatter,
+        vars: mergedVars,
+      })
+    );
   }
 
   return agents;

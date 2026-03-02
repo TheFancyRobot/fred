@@ -336,6 +336,13 @@ export interface ToolPoliciesConfig {
 // Framework Config
 // =============================================================================
 
+export interface TemplateConfig {
+  partialDirs?: string[];
+  envAllowlist?: string[];
+  strict?: boolean;
+  maxOutputSize?: number;
+}
+
 /**
  * Fred framework configuration structure for config files
  */
@@ -372,6 +379,7 @@ export interface FrameworkConfig {
   toolPolicies?: ToolPoliciesConfig;
   /** MCP server declarations (global registry, agents reference by ID) */
   mcpServers?: Record<string, MCPGlobalServerConfig>;
+  template?: TemplateConfig;
 }
 
 export interface MemoryConfig {
