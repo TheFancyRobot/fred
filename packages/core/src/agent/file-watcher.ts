@@ -7,23 +7,36 @@ export interface AgentFileChangeEvent {
   readonly filePath: string;
   readonly config: AgentConfig | null;
   readonly previousId?: string;
+  readonly error?: string;
 }
 
 export type AgentFileChangeHandler = (event: AgentFileChangeEvent) => void | Promise<void>;
+
+type PartialFileChangeHandler = (partialName: string, filePath: string) => void | Promise<void>;
+
+interface AgentFileWatcherOptions {
+  debounceMs?: number;
+  partialDirs?: string[];
+  onPartialChanged?: PartialFileChangeHandler;
+}
 
 export class AgentFileWatcher {
   private watchers: FSWatcher[] = [];
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private knownAgentIds = new Map<string, string>();
   private readonly debounceMs: number;
+  private readonly partialDirs: string[];
+  private readonly onPartialChanged?: PartialFileChangeHandler;
 
   constructor(
     private readonly dirs: string[],
     private readonly basePath: string,
     private readonly onFileChanged: AgentFileChangeHandler,
-    options?: { debounceMs?: number }
+    options?: AgentFileWatcherOptions
   ) {
     this.debounceMs = options?.debounceMs ?? 100;
+    this.partialDirs = options?.partialDirs ?? [];
+    this.onPartialChanged = options?.onPartialChanged;
   }
 
   start(): void {
@@ -45,6 +58,30 @@ export class AgentFileWatcher {
       } catch (error) {
         console.warn(
           `[AgentFileWatcher] Failed to watch directory "${resolvedDir}": ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+
+    for (const partialDir of this.partialDirs) {
+      const resolvedDir = resolve(this.basePath, partialDir);
+      if (!existsSync(resolvedDir)) {
+        continue;
+      }
+
+      try {
+        const watcher = watch(resolvedDir, { recursive: true }, (_eventType, filename) => {
+          if (typeof filename !== 'string' || !filename.endsWith('.md')) {
+            return;
+          }
+
+          const filePath = join(resolvedDir, filename);
+          const partialName = filename.replace(/\.md$/, '').replace(/\\/g, '/');
+          this.schedulePartialReload(partialName, filePath);
+        });
+        this.watchers.push(watcher);
+      } catch (error) {
+        console.warn(
+          `[AgentFileWatcher] Failed to watch partial directory "${resolvedDir}": ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
@@ -79,6 +116,20 @@ export class AgentFileWatcher {
     this.debounceTimers.set(filePath, timer);
   }
 
+  private schedulePartialReload(partialName: string, filePath: string): void {
+    const timerKey = `partial:${filePath}`;
+    const existing = this.debounceTimers.get(timerKey);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(timerKey);
+      this.handlePartialChange(partialName, filePath);
+    }, this.debounceMs);
+    this.debounceTimers.set(timerKey, timer);
+  }
+
   private handleFileChange(filePath: string): void {
     const previousId = this.knownAgentIds.get(filePath);
 
@@ -103,14 +154,28 @@ export class AgentFileWatcher {
       this.knownAgentIds.set(filePath, config.id);
       void this.onFileChanged({ filePath, config, previousId });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[AgentFileWatcher] Error reloading "${filePath}": ${error instanceof Error ? error.message : String(error)}`
+        `[AgentFileWatcher] Error reloading "${filePath}": ${message}`
       );
 
       if (previousId) {
         this.knownAgentIds.delete(filePath);
-        void this.onFileChanged({ filePath, config: null, previousId });
       }
+      void this.onFileChanged({ filePath, config: null, previousId, error: message });
+    }
+  }
+
+  private handlePartialChange(partialName: string, filePath: string): void {
+    try {
+      if (existsSync(filePath)) {
+        readFileSync(filePath, 'utf-8');
+      }
+
+      void this.onPartialChanged?.(partialName, filePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[AgentFileWatcher] Error processing partial "${filePath}": ${message}`);
     }
   }
 }

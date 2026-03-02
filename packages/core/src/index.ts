@@ -700,6 +700,16 @@ export class Fred {
     this.onWarning?.(message);
   }
 
+  async onPartialFileChanged(partialName: string, filePath: string): Promise<void> {
+    await this.runEffect(
+      Effect.gen(function* () {
+        const templateEngine = yield* TemplateEngine;
+        yield* templateEngine.invalidateCache();
+      }) as unknown as Effect.Effect<void, never, FredServices>,
+      `Failed to invalidate template cache for partial "${partialName}" from ${filePath}`
+    );
+  }
+
   async registerAgent(config: AgentConfig): Promise<AgentInstance> {
     return this.createAgent(config);
   }

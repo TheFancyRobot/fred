@@ -89,6 +89,7 @@ export interface FredLike {
   setAgentFileWatcher?(watcher: AgentFileWatcher): void;
   emitWarning?(message: string | null): void;
   getGlobalVariables?(): Promise<Record<string, string | number | boolean>>;
+  onPartialFileChanged?(partialName: string, filePath: string): Promise<void> | void;
 }
 
 interface LoadedAgentFile {
@@ -296,7 +297,20 @@ export class ConfigInitializer {
         }
       };
 
-      const watcher = new AgentFileWatcher(discoveredAgentDirs, dirname(configPath), onFileChanged);
+      const partialDirs = config.template?.partialDirs ?? ['./partials'];
+      const watcher = new AgentFileWatcher(discoveredAgentDirs, dirname(configPath), onFileChanged, {
+        partialDirs,
+        onPartialChanged: async (partialName, filePath) => {
+          try {
+            await fred.onPartialFileChanged?.(partialName, filePath);
+            console.log(`[TemplateEngine] Partial "${partialName}" changed, invalidated template cache`);
+          } catch (error) {
+            console.warn(
+              `[TemplateEngine] Failed to process partial change "${partialName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+      });
       for (const entry of fileAgentEntries) {
         watcher.registerKnownAgent(entry.filePath, entry.config.id);
       }

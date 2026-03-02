@@ -195,7 +195,7 @@ describe('AgentFileWatcher', () => {
   it('emits partial changed callback with normalized partial name for markdown files', async () => {
     await withWatcher(async ({ root, watcher, partialEvents }) => {
       const agentDir = join(root, 'agents');
-      const partialDir = join(root, 'partials', 'shared');
+      const partialDir = join(root, 'partials');
       mkdirSync(agentDir, { recursive: true });
       mkdirSync(partialDir, { recursive: true });
 
@@ -207,7 +207,7 @@ describe('AgentFileWatcher', () => {
 
       expect(partialEvents).toHaveLength(1);
       expect(partialEvents[0]).toEqual({
-        partialName: 'shared/safety',
+        partialName: 'safety',
         filePath: partialPath,
       });
     }, { partialDirs: ['./partials'] });
