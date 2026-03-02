@@ -42,6 +42,7 @@ export {
 // ─── Config Types ───────────────────────────────────────────────────────────
 export type {
   FrameworkConfig, ConfigFormat, PersistenceConfig, PersistenceAdapter,
+  TemplateConfig,
   ObservabilityConfig, ToolPoliciesConfig, ToolPolicyRule, ToolPolicyOverride,
   ToolPolicyCondition, ToolPolicyMetadataPredicate,
   ProviderPackConfig, PluginDeclaration, PluginObjectDeclaration,
@@ -50,6 +51,25 @@ export type {
   ConfigStep, ConfigStepBase, ConfigAgentStep, ConfigFunctionRefStep,
   ConfigConditionalStep, ConfigPipelineRefStep, ExtendedPipelineConfig,
 } from './config/types';
+
+// ─── Template Types ──────────────────────────────────────────────────────────
+export {
+  TemplateEngine,
+  TemplateEngineLive,
+  containsEtaSyntax,
+  TemplateCompileError,
+  TemplateResolutionError,
+  filterEnvVars,
+  DEFAULT_ENV_ALLOWLIST,
+  buildFrontmatterContext,
+  buildBodyContext,
+} from './template';
+export type {
+  TemplateEngineConfig,
+  FrontmatterContext,
+  BodyContext,
+  TemplateError,
+} from './template';
 
 // ─── Context Types ──────────────────────────────────────────────────────────
 export type {

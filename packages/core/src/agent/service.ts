@@ -16,6 +16,8 @@ import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
 import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
+import type { TemplateEngine } from '../template/engine';
+import type { FrameworkConfig } from '../config/types';
 
 /**
  * AgentService interface for Effect-based agent lifecycle management
@@ -70,6 +72,14 @@ export interface AgentService {
    * Set global variables resolver
    */
   setGlobalVariablesResolver(resolver: () => Record<string, string | number | boolean>): Effect.Effect<void>;
+
+  setTemplateEngine(engine: TemplateEngine): Effect.Effect<void>;
+
+  setTemplateCustomNamespaces(namespaces: Record<string, unknown>): Effect.Effect<void>;
+
+  setTemplateEnvAllowlist(envAllowlist: string[]): Effect.Effect<void>;
+
+  setTemplateFredConfig(config: Partial<FrameworkConfig>): Effect.Effect<void>;
 
   /**
    * Match agent by utterance
@@ -345,6 +355,34 @@ class AgentServiceImpl implements AgentService {
     const self = this;
     return Effect.sync(() => {
       self.factory.setGlobalVariablesResolver(resolver);
+    });
+  }
+
+  setTemplateEngine(engine: TemplateEngine): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateEngine(engine);
+    });
+  }
+
+  setTemplateCustomNamespaces(namespaces: Record<string, unknown>): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateCustomNamespaces(namespaces);
+    });
+  }
+
+  setTemplateEnvAllowlist(envAllowlist: string[]): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setEnvAllowlist(envAllowlist);
+    });
+  }
+
+  setTemplateFredConfig(config: Partial<FrameworkConfig>): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateFredConfig(config);
     });
   }
 

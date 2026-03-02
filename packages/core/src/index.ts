@@ -14,15 +14,14 @@ import type { EffectProviderFactory } from './platform/base';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
-import { Effect, Runtime, Stream } from 'effect';
+import { Effect, Layer, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { createStreamResultFromIterable } from './stream/result';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
 import type { Workflow } from './workflow/manager';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
-import type { ObservabilityConfig } from './config/types';
-import type { ToolPoliciesConfig } from './config/types';
+import type { FrameworkConfig, ObservabilityConfig, TemplateConfig, ToolPoliciesConfig } from './config/types';
 import {
   type VariableFactory,
 } from './variables';
@@ -38,7 +37,7 @@ import type {
 } from './context/context';
 import {
   FredLayers,
-  createFredRuntimeWithOptions,
+  makeFredRuntimeLayer,
   type FredLayerOptions,
   type FredRuntime,
   type FredServices,
@@ -66,6 +65,13 @@ import { MCPServerRegistry, MCPResourceService } from './mcp';
 import type { MCPGlobalServerConfig } from './config/types';
 import { BUILTIN_PACKS } from './platform/packs';
 import { AgentFileWatcher } from './agent/file-watcher';
+import { loadConfig } from './config/loader';
+import {
+  TemplateEngine,
+  TemplateEngineLive,
+  filterEnvVars,
+  DEFAULT_ENV_ALLOWLIST,
+} from './template';
 
 /**
  * Fred - Main class for building AI agents
@@ -93,7 +99,10 @@ export class Fred {
   private routingConfig?: RoutingConfig;
   private observabilityLayers?: ObservabilityLayers;
   private observabilityConfig?: ObservabilityConfig;
+  private templateConfig: TemplateConfig = {};
+  private templateContextConfig: Partial<FrameworkConfig> = {};
   private globalVariables: Map<string, VariableFactory> = new Map();
+  private templateCustomNamespaces = new Map<string, () => unknown>();
   private runtimeGeneration = 0;
   private readonly toolSnapshot = new Map<string, Tool>();
   private readonly intentSnapshot = new Map<string, Intent>();
@@ -102,6 +111,9 @@ export class Fred {
   private readonly builtInToolIds = new Set<string>();
   private readonly configInitializer: ConfigInitializer;
   private agentFileWatcher?: AgentFileWatcher;
+
+  /** Optional callback invoked when runtime warnings occur (e.g. hot reload errors). Pass null to clear. */
+  onWarning?: (message: string | null) => void;
 
   // MCP integration
   private readonly mcpServerRegistry: MCPServerRegistry;
@@ -188,14 +200,17 @@ export class Fred {
       tracer: this.tracer,
     };
     const globalVariables = this.snapshotGlobalVariablesSync();
+    const templateNamespaces = this.snapshotTemplateNamespacesSync();
+    const envAllowlist = this.templateConfig.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST];
 
-    await Runtime.runPromise(runtime)(
+    await Runtime.runPromise(runtime as any)(
       Effect.gen(function* () {
         const toolRegistryService = yield* ToolRegistryService;
         const providerRegistryService = yield* ProviderRegistryService;
         const agentService = yield* AgentService;
         const processor = yield* MessageProcessorService;
         const workflowService = yield* WorkflowService;
+        const templateEngine = yield* TemplateEngine;
         const matcherOption = yield* Effect.serviceOption(IntentMatcherService);
         const routerOption = yield* Effect.serviceOption(IntentRouterService);
 
@@ -230,6 +245,10 @@ export class Fred {
         yield* agentService.setTracer(self.tracer);
         yield* agentService.setDefaultSystemMessage(undefined);
         yield* agentService.setGlobalVariablesResolver(() => globalVariables);
+        yield* agentService.setTemplateEngine(templateEngine);
+        yield* agentService.setTemplateCustomNamespaces(templateNamespaces);
+        yield* agentService.setTemplateEnvAllowlist(envAllowlist);
+        yield* agentService.setTemplateFredConfig(self.templateContextConfig);
 
         yield* processor.updateConfig(config);
 
@@ -243,7 +262,7 @@ export class Fred {
           yield* contextService.replaceStorage(self.pendingStorageAdapter as any);
           self.pendingStorageAdapter = null;
         }
-      })
+      }) as Effect.Effect<void, never, FredServices | TemplateEngine>
     );
   }
 
@@ -263,8 +282,18 @@ export class Fred {
       this.runtimePromise = (async () => {
         try {
           const runtime = await Effect.runPromise(
-            Effect.scoped(createFredRuntimeWithOptions(layerOptions))
-          );
+            Effect.scoped(
+              Layer.toRuntime(
+                Layer.mergeAll(
+                  makeFredRuntimeLayer(layerOptions),
+                  TemplateEngineLive({
+                    ...this.templateConfig,
+                    basePath: process.cwd(),
+                  })
+                )
+              )
+            )
+          ) as FredRuntime;
 
           await this.applyRuntimeState(runtime);
 
@@ -382,12 +411,27 @@ export class Fred {
     }
 
     const snapshot = this.snapshotGlobalVariablesSync();
+    const templateNamespaces = this.snapshotTemplateNamespacesSync();
     Runtime.runSync(this.runtime)(
       Effect.gen(function* () {
         const agentService = yield* AgentService;
         yield* agentService.setGlobalVariablesResolver(() => snapshot);
+        yield* agentService.setTemplateCustomNamespaces(templateNamespaces);
       })
     );
+  }
+
+  private snapshotTemplateNamespacesSync(): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {};
+    for (const [namespace, resolver] of this.templateCustomNamespaces.entries()) {
+      snapshot[namespace] = resolver();
+    }
+    return snapshot;
+  }
+
+  addTemplateContext(namespace: string, resolver: () => unknown): void {
+    this.templateCustomNamespaces.set(namespace, resolver);
+    this.updateGlobalVariablesResolver();
   }
 
   private snapshotGlobalVariablesSync(): Record<string, string | number | boolean> {
@@ -650,6 +694,10 @@ export class Fred {
   setAgentFileWatcher(watcher: AgentFileWatcher): void {
     this.agentFileWatcher?.close();
     this.agentFileWatcher = watcher;
+  }
+
+  emitWarning(message: string | null): void {
+    this.onWarning?.(message);
   }
 
   async registerAgent(config: AgentConfig): Promise<AgentInstance> {
@@ -1284,6 +1332,14 @@ export class Fred {
       providers?: ProviderConfigInput;
     }
   ): Promise<void> {
+    const config = loadConfig(configPath);
+    this.templateConfig = config.template ?? {};
+    this.templateContextConfig = {
+      defaultSystemMessage: config.defaultSystemMessage,
+      agentDirs: config.agentDirs,
+      template: config.template,
+    };
+
     // Get memory defaults before initialization
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;

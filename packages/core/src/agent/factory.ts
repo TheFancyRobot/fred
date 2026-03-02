@@ -24,6 +24,7 @@ import { containsEtaSyntax } from '../template/engine';
 import { buildBodyContext } from '../template/context';
 import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import type { ToolGateServiceApi, ToolGateContext } from '../tool-gate/types';
+import type { FrameworkConfig } from '../config/types';
 
 type ObservabilityServiceApi = {
   logStructured: (options: {
@@ -225,6 +226,7 @@ export class AgentFactory {
   private templateEngine?: TemplateEngineLike;
   private templateCustomNamespaces: Record<string, unknown> = {};
   private envAllowlist: string[] = [...DEFAULT_ENV_ALLOWLIST];
+  private templateFredConfig: Partial<FrameworkConfig> = {};
 
   constructor(toolRegistry: ToolRegistryLike, tracer?: Tracer) {
     this.toolRegistry = toolRegistry;
@@ -249,6 +251,10 @@ export class AgentFactory {
 
   setEnvAllowlist(envAllowlist: string[]): void {
     this.envAllowlist = [...envAllowlist];
+  }
+
+  setTemplateFredConfig(config: Partial<FrameworkConfig>): void {
+    this.templateFredConfig = { ...config };
   }
 
   setDefaultSystemMessage(systemMessage?: string): void {
@@ -882,7 +888,7 @@ export class AgentFactory {
         templateVars,
         filteredEnv,
         config,
-        {},
+        this.templateFredConfig,
         this.templateCustomNamespaces
       );
 

@@ -19,9 +19,9 @@ import {
 import { loadPromptFile } from '../utils/prompt-loader';
 import {
   discoverAgentFiles,
+  loadAgentFiles,
   parseAgentFile,
-  toAgentConfig,
-  validateAgentFrontmatter,
+  type AgentFileTemplateOptions,
 } from '../agent/file-loader';
 import {
   AgentFileWatcher,
@@ -29,6 +29,8 @@ import {
 } from '../agent/file-watcher';
 import type { AgentConfig } from '../agent/agent';
 import type { ToolPoliciesConfig } from './types';
+import type { FrameworkConfig } from './types';
+import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import { PostgresContextStorage } from '../context/storage/postgres';
 import { SqliteContextStorage } from '../context/storage/sqlite';
 import {
@@ -85,6 +87,8 @@ export interface FredLike {
   setToolPolicies?(policies: ToolPoliciesConfig | undefined): Promise<void> | void;
   configureMCPServers?(configs: Array<import('./types').MCPGlobalServerConfig & { id: string }>): Promise<void>;
   setAgentFileWatcher?(watcher: AgentFileWatcher): void;
+  emitWarning?(message: string | null): void;
+  getGlobalVariables?(): Promise<Record<string, string | number | boolean>>;
 }
 
 interface LoadedAgentFile {
@@ -194,6 +198,19 @@ export class ConfigInitializer {
       }
     }
 
+    // Configure routing before agent creation so runtime invalidation
+    // happens before agents are registered (routing config is baked into
+    // the Effect runtime layer, so configureRouting triggers a rebuild).
+    if (config.routing) {
+      fred.configureRouting(config.routing);
+    }
+
+    // Configure workflows before agent creation for the same reason.
+    const workflows = extractWorkflows(config);
+    if (workflows.length > 0) {
+      fred.configureWorkflows(workflows);
+    }
+
     // Register intents
     const intents = extractIntents(config);
     if (intents.length > 0) {
@@ -206,23 +223,33 @@ export class ConfigInitializer {
       return existsSync(defaultAgentsDir) ? ['./agents'] : [];
     })();
 
-    const fileAgentEntries = discoveredAgentDirs.length > 0
-      ? discoverAgentFiles(discoveredAgentDirs, dirname(configPath)).flatMap((filePath) => {
-        const content = readFileSync(filePath, 'utf-8');
-        const parsed = parseAgentFile(content, filePath);
-        if (parsed === null) {
-          return [];
-        }
-
-        validateAgentFrontmatter(parsed.frontmatter, filePath);
-        return [{
-          filePath,
-          config: toAgentConfig(parsed),
-        } satisfies LoadedAgentFile];
-      })
+    const fileTemplateOptions = await this.buildAgentFileTemplateOptions(fred, config);
+    const discoveredFilePaths = discoveredAgentDirs.length > 0
+      ? discoverAgentFiles(discoveredAgentDirs, dirname(configPath))
+      : [];
+    const fileAgents = discoveredAgentDirs.length > 0
+      ? loadAgentFiles(discoveredAgentDirs, dirname(configPath), fileTemplateOptions)
       : [];
 
-    const fileAgents = fileAgentEntries.map((entry) => entry.config);
+    let configCursor = 0;
+    const fileAgentEntries = discoveredFilePaths.flatMap((filePath) => {
+      const content = readFileSync(filePath, 'utf-8');
+      const parsed = parseAgentFile(content, filePath);
+      if (parsed === null) {
+        return [];
+      }
+
+      const config = fileAgents[configCursor];
+      configCursor += 1;
+      if (!config) {
+        return [];
+      }
+
+      return [{
+        filePath,
+        config,
+      } satisfies LoadedAgentFile];
+    });
 
     validateNoAmbiguousPromptFiles(config.agents ?? [], configPath);
     const configAgents = extractAgents(config, configPath);
@@ -254,7 +281,11 @@ export class ConfigInitializer {
 
           if (event.config) {
             await fred.createAgent(event.config);
+            fred.emitWarning?.(null);
             console.log(`[AgentFileWatcher] Reloaded agent "${event.config.id}" from ${event.filePath}`);
+          } else if (event.error) {
+            const shortPath = event.filePath.split('/').slice(-2).join('/');
+            fred.emitWarning?.(`Agent reload failed (${shortPath}): ${event.error}`);
           } else if (event.previousId) {
             console.log(`[AgentFileWatcher] Removed agent "${event.previousId}" (file deleted or invalid)`);
           }
@@ -279,22 +310,31 @@ export class ConfigInitializer {
       await fred.createPipeline(pipelineConfig);
     }
 
-    // Configure routing if specified in config
-    if (config.routing) {
-      // Warn if defaultAgent references unknown agent
-      if (config.routing.defaultAgent && !agentManager.hasAgent(config.routing.defaultAgent)) {
-        console.warn(
-          `[Config] Routing defaultAgent "${config.routing.defaultAgent}" not found among registered agents`
-        );
-      }
-      fred.configureRouting(config.routing);
+    // Validate routing defaultAgent now that agents are registered
+    if (config.routing?.defaultAgent && !agentManager.hasAgent(config.routing.defaultAgent)) {
+      console.warn(
+        `[Config] Routing defaultAgent "${config.routing.defaultAgent}" not found among registered agents`
+      );
     }
+  }
 
-    // Configure workflows if specified in config
-    const workflows = extractWorkflows(config);
-    if (workflows.length > 0) {
-      fred.configureWorkflows(workflows);
-    }
+  private async buildAgentFileTemplateOptions(
+    fred: FredLike,
+    config: FrameworkConfig
+  ): Promise<AgentFileTemplateOptions> {
+    const globalVars = fred.getGlobalVariables ? await fred.getGlobalVariables() : {};
+    const envAllowlist = config.template?.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST];
+    const filteredEnv = filterEnvVars(process.env as Record<string, string | undefined>, envAllowlist);
+
+    return {
+      globalVars,
+      filteredEnv,
+      fredConfig: {
+        defaultSystemMessage: config.defaultSystemMessage,
+        agentDirs: config.agentDirs,
+        template: config.template,
+      },
+    };
   }
 
   /**
