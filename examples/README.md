@@ -19,15 +19,27 @@ A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to 
 
 3. Add your API key(s) to `.env` and run the example:
 
-   ```bash
-   bun run start
-   ```
+    ```bash
+    bun run start
+    ```
+
+## Agent File Pattern (.md + YAML Frontmatter)
+
+All examples now define agents in `agents/*.md` files with YAML frontmatter and a markdown prompt body.
+
+- Agent config lives in frontmatter (`id`, `platform`, `model`, `tools`, `utterances`, etc.)
+- Agent behavior/prompt content lives in the markdown body
+- Runtime logic stays in TypeScript (`src/*.ts`) for tools, hooks, pipelines, and orchestration
+- Declarative wiring lives in `config.yaml` and is loaded with `initializeFromConfig()`
+- Every example uses OpenRouter with the free default model `openrouter/free` (`OPENROUTER_API_KEY`)
+
+This keeps examples consistent with Fred's declarative-by-default pattern: agents as content, config as declaration, tools/runtime behavior as code.
 
 ## Learning Path
 
 | # | Example | What You'll Learn |
 | --- | --- | --- |
-| 01 | [Quickstart: Single Agent](./01-quickstart-single-agent/) | Initialize `Fred`, register a provider, create one agent, and process your first message |
+| 01 | [Quickstart: Single Agent](./01-quickstart-single-agent/) | Initialize `Fred`, load one markdown-defined agent from config, and process your first message |
 | 02 | [Tools: Registration & Invocation](./02-tools-basics/) | Register built-in and custom tools (Effect Schema format) and let agents invoke them |
 | 03 | [Intent Routing](./03-intent-routing-basics/) | Route messages to specialist agents with explicit intent matching and transcript-style routing output |
 | 04 | [Dynamic Handoff](./04-dynamic-handoff/) | Perform tool-based intake -> specialist handoff with bidirectional transfer and shared conversation context |
@@ -47,7 +59,17 @@ A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to 
 - **22-hook middleware lifecycle (Example 07):** Fine-grained interception points across routing, tool calls, context, and pipelines.
 - **Golden-trace evaluation (Example 09):** First-class local assertions against recorded traces without requiring external SaaS.
 
+## ETA Template Coverage
+
+ETA templating is demonstrated across the learning path where it fits naturally:
+
+- **Loops + expressions:** Example 04 (`<% for %>`, `<%= %>`)
+- **Conditionals + partials + per-message vars:** Example 07 (`<% if %>`, `<%~ include %>`, `vars.*`)
+- **Expressions + env access:** Example 08 (`<%= %>`, `env.*`)
+
+Together these examples cover all six ETA features used by Fred agent templates: expressions, conditionals, loops, partials, environment variables, and per-message variables.
+
 ## Prerequisites
 
 - [Bun](https://bun.sh)
-- At least one model provider API key (examples commonly use `OPENAI_API_KEY`)
+- OpenRouter API key (`OPENROUTER_API_KEY`)
