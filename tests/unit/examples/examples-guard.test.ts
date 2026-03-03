@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
@@ -18,6 +19,7 @@ const EXPECTED_EXAMPLES = [
 ] as const;
 
 const examplesDir = path.resolve(__dirname, '../../../examples');
+const projectRoot = path.resolve(__dirname, '../../..');
 
 function collectTypeScriptFiles(dir: string): string[] {
   const files: string[] = [];
@@ -36,6 +38,36 @@ function collectTypeScriptFiles(dir: string): string[] {
   }
 
   return files;
+}
+
+/**
+ * Run `bunx tsc --noEmit -p <tsconfig>` and return only errors
+ * originating from the example's own source directory.
+ * Pre-existing errors in packages/core etc. are filtered out.
+ */
+function getExampleCompileErrors(exampleName: string): string[] {
+  const tsconfigPath = path.join(examplesDir, exampleName, 'tsconfig.json');
+  const examplePrefix = `examples/${exampleName}/`;
+
+  try {
+    execSync(`bunx tsc --noEmit -p ${tsconfigPath}`, {
+      cwd: projectRoot,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return [];
+  } catch (err: unknown) {
+    const output =
+      (err as { stdout?: string }).stdout ||
+      (err as { stderr?: string }).stderr ||
+      '';
+    // Filter to only errors from this example's own files
+    return output
+      .split('\n')
+      .filter(
+        (line) => line.startsWith(examplePrefix) && line.includes('error TS'),
+      );
+  }
 }
 
 describe('examples-guard', () => {
@@ -81,4 +113,43 @@ describe('examples-guard', () => {
       expect(hasFredImport).toBe(true);
     }
   });
+
+  test(
+    'each example TypeScript source compiles without errors',
+    () => {
+    const failures: Array<{ example: string; errors: string[] }> = [];
+
+    for (const exampleName of EXPECTED_EXAMPLES) {
+      const tsconfigPath = path.join(
+        examplesDir,
+        exampleName,
+        'tsconfig.json',
+      );
+      if (!existsSync(tsconfigPath)) {
+        failures.push({
+          example: exampleName,
+          errors: [`Missing tsconfig.json at ${tsconfigPath}`],
+        });
+        continue;
+      }
+
+      const errors = getExampleCompileErrors(exampleName);
+      if (errors.length > 0) {
+        failures.push({ example: exampleName, errors });
+      }
+    }
+
+    if (failures.length > 0) {
+      const report = failures
+        .map(
+          ({ example, errors }) =>
+            `\n  ✗ ${example}:\n${errors.map((e) => `      ${e}`).join('\n')}`,
+        )
+        .join('');
+      throw new Error(`TypeScript compile failures:${report}`);
+    }
+  },
+    // Each tsc invocation takes ~2s; 12 examples ≈ 24s
+    60_000,
+  );
 });
