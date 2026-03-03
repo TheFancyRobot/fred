@@ -1,18 +1,18 @@
 # 01 - Quickstart: Single Agent
 
-This example shows the fastest path to getting your first response with Fred.
+This example shows the fastest path to getting your first response with Fred using declarative agent files.
 
 ## What you'll learn
 
 - `Fred.create()` to initialize the runtime
-- Provider registration with `registerProviderPack('openai')`
-- Agent creation with `createAgent(...)`
+- Config-driven startup with `initializeFromConfig('./config.yaml')`
+- Agent definition in `agents/assistant.md` with YAML frontmatter
 - Message processing with `processMessage(...)`
 
 ## Prerequisites
 
 - Bun installed
-- OpenAI API key
+- OpenRouter API key
 
 ## Setup
 
@@ -20,7 +20,15 @@ This example shows the fastest path to getting your first response with Fred.
 cp .env.example .env
 ```
 
-Then edit `.env` and set `OPENAI_API_KEY`.
+Then edit `.env` and set `OPENROUTER_API_KEY`.
+
+## File layout
+
+- `agents/assistant.md` defines the agent (content + frontmatter)
+- `config.yaml` defines provider defaults and routing
+- `src/index.ts` keeps runtime glue minimal
+
+This is the recommended pattern: agents as markdown, config as YAML, tools/runtime behavior in TypeScript.
 
 ## Run
 

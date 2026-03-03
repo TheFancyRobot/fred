@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
-    "@fancyrobot/fred-openai": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*",
     "effect": "^3.19.19"
   }
 }

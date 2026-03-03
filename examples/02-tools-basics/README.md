@@ -7,7 +7,7 @@ This example shows how to define and register tools in Fred, then let an agent i
 - Define a custom tool with the Effect Schema format (`schema.input`, `schema.success`, `schema.metadata`)
 - Register tools with `fred.registerTool(...)`
 - Use the built-in `calculator` tool plus a custom `get-weather` tool
-- Prompt an agent so tool usage happens automatically
+- Keep agents declarative in `agents/tool-user.md` and load with `initializeFromConfig()`
 
 ## Why Effect Schema format
 
@@ -20,8 +20,14 @@ This example uses the recommended Effect Schema style.
 
 ## Prerequisites
 
-- `OPENAI_API_KEY` set (see `.env.example`)
+- `OPENROUTER_API_KEY` set (see `.env.example`)
 - Dependencies installed from repo root (`bun install`)
+
+## Pattern used
+
+- Tools stay in `src/index.ts` because schema + handlers are executable code
+- Agent behavior/config lives in `agents/tool-user.md` frontmatter (`tools: [calculator, get-weather]`)
+- `config.yaml` provides OpenRouter defaults and default routing
 
 ## Run
 

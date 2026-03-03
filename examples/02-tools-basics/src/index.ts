@@ -1,4 +1,5 @@
 import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 import type { Tool } from '@fancyrobot/fred';
 import { Schema } from 'effect';
 
@@ -27,23 +28,13 @@ const weatherTool: Tool<{ readonly city: string }, string> = {
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
 
   // Calculator is a built-in Fred tool, registered by default.
   console.log('Calculator tool available:', Boolean(fred.getTool('calculator')));
 
   // Register custom tool defined with Effect Schema.
   fred.registerTool(weatherTool as Tool);
-
-  await fred.createAgent({
-    id: 'tool-user',
-    systemMessage:
-      'You are a helpful assistant with tool access. Use the weather tool for weather questions and the calculator tool for arithmetic.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  fred.setDefaultAgent('tool-user');
+  await fred.initializeFromConfig('./config.yaml');
 
   console.log('--- Weather Query ---');
   const weatherResponse = await fred.processMessage('What is the weather in Tokyo right now?');

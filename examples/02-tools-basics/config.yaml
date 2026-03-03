@@ -1,0 +1,9 @@
+providers:
+  - id: openrouter
+    modelDefaults:
+      model: openrouter/free
+      temperature: 0.7
+
+routing:
+  defaultAgent: tool-user
+  rules: []
