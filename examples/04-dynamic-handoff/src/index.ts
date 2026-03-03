@@ -1,40 +1,10 @@
 import { Fred, createHandoffTool, type Tool } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
 
   const allAgentIds = ['intake', 'billing-specialist', 'tech-specialist'];
-
-  await fred.createAgent({
-    id: 'intake',
-    systemMessage: `You are an intake agent.
-Route customers to the correct specialist with handoff_to_agent:
-- Billing/payment/refund issues -> billing-specialist
-- Technical bugs/setup issues -> tech-specialist
-If a specialist asks for clarification, take over and ask follow-up questions.`,
-    tools: ['handoff_to_agent'],
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'billing-specialist',
-    systemMessage: `You handle invoices, billing, payments, and refunds.
-If you need more customer details before answering, hand back to intake with handoff_to_agent.`,
-    tools: ['handoff_to_agent'],
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'tech-specialist',
-    systemMessage: `You handle technical support issues.
-If the request is actually billing-related, hand back to intake with handoff_to_agent.`,
-    tools: ['handoff_to_agent'],
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
 
   const handoffTool = createHandoffTool(
     (agentId) => fred.getAgent(agentId),
@@ -42,7 +12,7 @@ If the request is actually billing-related, hand back to intake with handoff_to_
   );
 
   fred.registerTool(handoffTool as unknown as Tool);
-  fred.setDefaultAgent('intake');
+  await fred.initializeFromConfig('./config.yaml');
 
   const conversationId = fred.generateConversationId();
 

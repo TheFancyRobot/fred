@@ -9,7 +9,7 @@ Fred can route requests before generation starts, so your app can stay determini
 ## What you'll learn
 
 - Create specialist agents (`billing`, `tech-support`, `general`)
-- Register intents with exact and regex-style matching via `utterances`
+- Define routing utterances in agent frontmatter (`agents/*.md`)
 - Route messages with `fred.routeMessage(...)`
 - Print a router transcript that explains *why* each message was routed
 - Fall back to a default agent when no intent matches
@@ -23,8 +23,14 @@ Fred also supports semantic matching (when embedding support is configured), but
 
 ## Prerequisites
 
-- `OPENAI_API_KEY` set (see `.env.example`)
+- `OPENROUTER_API_KEY` set (see `.env.example`)
 - Dependencies installed from repo root (`bun install`)
+
+## Declarative routing pattern
+
+- `agents/billing.md` and `agents/tech-support.md` define `utterances:` in YAML frontmatter
+- `config.yaml` defines OpenRouter provider + default agent (`general`)
+- `src/index.ts` loads config via `initializeFromConfig()` and keeps transcript logic as an educational mirror of the frontmatter utterances
 
 ## Run
 

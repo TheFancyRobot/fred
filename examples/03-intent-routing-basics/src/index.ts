@@ -1,4 +1,5 @@
 import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 import type { Intent } from '@fancyrobot/fred';
 
 type TranscriptMatch =
@@ -46,29 +47,9 @@ function buildIntentTranscript(message: string, intents: Intent[]): TranscriptMa
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
+  await fred.initializeFromConfig('./config.yaml');
 
-  await fred.createAgent({
-    id: 'billing',
-    systemMessage: 'You are a billing specialist. Help with invoices, payments, refunds, and subscriptions.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'tech-support',
-    systemMessage: 'You are a technical support specialist. Help with bugs, crashes, and troubleshooting.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'general',
-    systemMessage: 'You are a general customer service specialist. Help with broad business questions.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
+  // Demo transcript data mirrors utterances defined in agents/*.md frontmatter.
   const intents: Intent[] = [
     {
       id: 'billing-intent',
@@ -83,9 +64,6 @@ async function main() {
       action: { type: 'agent', target: 'tech-support' },
     },
   ];
-
-  fred.registerIntents(intents);
-  fred.setDefaultAgent('general');
 
   const testMessages = [
     'I need a refund for my last invoice',

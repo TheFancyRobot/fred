@@ -7,6 +7,7 @@ This example shows tool-based handoff between specialists: intake triages reques
 - `createHandoffTool(...)` for agent-to-agent transfer
 - Bidirectional handoff (intake -> specialist -> intake)
 - Conversation continuity with a shared `conversationId`
+- ETA loop syntax inside an agent markdown prompt
 
 ## Handoff patterns in Fred
 
@@ -34,7 +35,7 @@ User -> intake
 ## Prerequisites
 
 - Bun installed
-- OpenAI API key
+- OpenRouter API key
 
 ## Setup
 
@@ -42,7 +43,13 @@ User -> intake
 cp .env.example .env
 ```
 
-Then edit `.env` and set `OPENAI_API_KEY`.
+Then edit `.env` and set `OPENROUTER_API_KEY`.
+
+## Declarative agent setup
+
+- `agents/*.md` defines intake and specialist behavior with YAML frontmatter
+- `agents/intake.md` includes an ETA loop (`<% for (...) { %>`) to render the specialist list
+- `src/index.ts` keeps only runtime logic: build/register handoff tool, load `config.yaml`, run demo conversation
 
 ## Run
 
