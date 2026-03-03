@@ -1,4 +1,5 @@
 import { Fred, GraphWorkflowBuilder } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 function extractText(value: unknown): string {
   if (typeof value === 'string') {
@@ -32,39 +33,7 @@ function extractText(value: unknown): string {
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
-
-  await fred.createAgent({
-    id: 'classifier',
-    systemMessage:
-      'Classify the user input as exactly one word: factual or creative. Output one word only.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'researcher',
-    systemMessage:
-      'Provide a concise factual explanation with concrete details and no invented claims.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'ideator',
-    systemMessage:
-      'Generate imaginative, original ideas while staying coherent and easy to follow.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'synthesizer',
-    systemMessage:
-      'Synthesize prior node outputs into a polished final answer with one short paragraph.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
+  await fred.initializeFromConfig('./config.yaml');
 
   const workflow = new GraphWorkflowBuilder('research-flow')
     .addNode('classifier', { type: 'agent', agentId: 'classifier', expose: ['content'] })

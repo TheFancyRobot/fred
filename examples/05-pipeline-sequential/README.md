@@ -1,10 +1,11 @@
 # 05 - Pipeline: Sequential Orchestration with Checkpointing
 
-This example builds a step-based pipeline with `PipelineBuilder`, mixes agent and function steps, pauses for human input, and resumes from a checkpoint.
+This example builds a step-based pipeline with `PipelineBuilder`, mixes agent and function steps, pauses for human input, and resumes from a checkpoint. Agent definitions live in `agents/*.md`, while pipeline runtime logic stays in TypeScript.
 
 ## What you'll learn
 
 - Build a V2 step pipeline with `PipelineBuilder`
+- Load agent definitions from markdown files via `initializeFromConfig('./config.yaml')`
 - Combine agent steps and function steps in one workflow
 - Trigger a pause for human input and resume execution
 - Enable checkpointing on the pipeline config
@@ -34,7 +35,7 @@ To test true crash/restart recovery, wire persistent checkpoint storage (for exa
 ## Prerequisites
 
 - Bun installed
-- OpenAI API key
+- OpenRouter API key
 
 ## Setup
 
@@ -42,13 +43,15 @@ To test true crash/restart recovery, wire persistent checkpoint storage (for exa
 cp .env.example .env
 ```
 
-Then edit `.env` and set `OPENAI_API_KEY`.
+Then edit `.env` and set `OPENROUTER_API_KEY`.
 
 ## Run
 
 ```bash
 bun run start
 ```
+
+The pipeline is created after config initialization so the `classifier`, `planner`, and `summarizer` agents from `agents/` are already registered.
 
 ## Expected output
 

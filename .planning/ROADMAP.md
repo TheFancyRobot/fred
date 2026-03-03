@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46 (incl. 45.1, 45.2)
+- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46 (incl. 45.1, 45.2, 46.1)
 
 ---
 
@@ -183,6 +183,25 @@ Plans:
 - [x] 46-08-PLAN.md — Top-level README, guard test finalization, full verification
 - [x] 46-09-PLAN.md — Gap closure: enforce per-example TypeScript compile checks in examples guard
 
+### Phase 46.1: Refactor Examples to Use .md Agent Definitions & ETA Templates (INSERTED)
+
+**Goal:** Refactor all 12 examples to use the new `.md` file agent definitions (from Phase 45.1) and ETA templating (from Phase 45.2). Every example should define agents via `.md` files with YAML frontmatter instead of inline programmatic definitions. All relevant ETA features (conditionals, loops, expressions, partials, env vars, per-message variables) should be demonstrated at least once across the full example set.
+**Depends on:** Phase 46 (examples must exist before refactoring them)
+**Plans**: 4 plans
+**Success Criteria** (what must be TRUE):
+  1. All 12 examples define their agents using `.md` files with YAML frontmatter and markdown body system prompts
+  2. No example uses inline string system prompts for agent definitions — all agent prompts live in `.md` files
+  3. ETA template features are demonstrated across the examples: conditionals (`<% if %>`), loops (`<% for %>`), expressions (`<%= %>`), partials, env var access, and per-message variable resolution
+  4. Each ETA feature is exercised by at least one example, with the full feature set covered across all 12
+  5. Examples still pass the guard test (`examples-guard.test.ts`) including structure, import-policy, and compile checks
+  6. `bun test` and `bun run build` pass with no regressions
+
+Plans:
+- [ ] 46.1-01-PLAN.md — Migrate Examples 01-04: quickstart, tools, intent routing, dynamic handoff
+- [ ] 46.1-02-PLAN.md — Migrate Examples 05-08: pipeline, graph workflow, hooks (ETA conditionals+partials), observability (ETA expressions+env vars)
+- [ ] 46.1-03-PLAN.md — Migrate Examples 09-12: eval harness, config-driven, MCP, CLI/TUI
+- [ ] 46.1-04-PLAN.md — Final verification: guard test, full test suite, build, ETA coverage check, README update
+
 ---
 
 ## Phase Dependencies
@@ -203,6 +222,8 @@ Phase 45.1 (Config+Prompt Markdown) ← INSERTED
 Phase 45.2 (ETA for Templating Prompts) ← INSERTED
     ↓
 Phase 46 (Showcase Examples)
+    ↓
+Phase 46.1 (Refactor Examples: .md Agents + ETA) ← INSERTED
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -268,7 +289,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -280,6 +301,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
+| 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 0/4 | Planned | — |
 
 ---
 
@@ -315,4 +337,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-03 — Phase 46 complete: 12 progressive examples with structure/import/compile guardrails, gap closure plan 46-09 verified*
+*Last updated: 2026-03-03 — Phase 46.1 planned: 4 plans in 2 waves*

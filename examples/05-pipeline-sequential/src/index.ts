@@ -1,5 +1,6 @@
 import { Effect, Runtime } from 'effect';
 import { Fred, PipelineBuilder, PipelineService } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 async function executePipelineV2(fred: Fred, pipelineId: string, input: string) {
   const runtime = await fred.getRuntime();
@@ -13,29 +14,7 @@ async function executePipelineV2(fred: Fred, pipelineId: string, input: string) 
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
-
-  await fred.createAgent({
-    id: 'classifier',
-    systemMessage:
-      'Classify user input as one of: question, task, creative. Reply with only the category.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'planner',
-    systemMessage: 'Given the classification, produce a short 2-3 step plan.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  await fred.createAgent({
-    id: 'summarizer',
-    systemMessage: 'Summarize prior pipeline outputs into a concise user-facing response.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
+  await fred.initializeFromConfig('./config.yaml');
 
   const built = new PipelineBuilder('classify-plan-summarize')
     .addAgentStep('classifier')
