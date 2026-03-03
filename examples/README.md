@@ -64,7 +64,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 ETA templating is demonstrated across the learning path where it fits naturally:
 
 - **Loops + expressions:** Example 04 (`<% for %>`, `<%= %>`)
-- **Conditionals + partials + per-message vars:** Example 07 (`<% if %>`, `<%~ include %>`, `vars.*`)
+- **Conditionals + partials + per-message vars:** Example 07 (`<% if %>`, `<%~ include %>`, `session.*` via `addTemplateContext`)
 - **Expressions + env access:** Example 08 (`<%= %>`, `env.*`)
 
 Together these examples cover all six ETA features used by Fred agent templates: expressions, conditionals, loops, partials, environment variables, and per-message variables.

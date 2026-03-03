@@ -8,6 +8,7 @@ This example demonstrates Fred's middleware model using practical hook registrat
 - How hook handlers can modify `event.data` by returning `{ data: ... }`
 - How to add metadata/context during execution
 - How to capture structured lifecycle logs for observability
+- How to inject per-message runtime variables with `fred.addTemplateContext()`
 - How ETA conditionals (`<% if %>`) and partials (`<%~ include %>`) shape agent behavior
 
 ## Why This Is a Differentiator
@@ -80,4 +81,5 @@ You should see:
 
 - `vars.verbose` in frontmatter toggles verbose guidance through an ETA conditional block
 - `partials/safety-rules.md` is included via `<%~ include("@safety-rules") %>` to keep policy text reusable
+- `session.userId` and `session.requestCount` are injected at runtime via `fred.addTemplateContext('session', ...)` - values change between messages, demonstrating per-message template resolution
 - Hooks remain in `src/index.ts` because runtime middleware behavior belongs in code
