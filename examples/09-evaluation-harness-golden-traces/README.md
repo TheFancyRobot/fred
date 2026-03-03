@@ -1,73 +1,53 @@
-# 09 - Evaluation Harness: Golden Traces & Assertions
+# 09 - Evaluation Harness: App + Golden Trace Assertions
 
-This example showcases one of Fred's strongest differentiators: a built-in golden-trace evaluation system with assertion DSL and formatted test reporting.
+This example now has two complementary entry points:
 
-No other mainstream agent framework ships this as a first-class local workflow:
+- `src/index.ts`: a standalone app that runs a billing agent loaded from `agents/billing.md`
+- `test/eval.test.ts`: an eval harness test that validates golden trace assertions
 
-- LangChain typically relies on LangSmith (separate SaaS)
-- CrewAI offers basic `crewai test` coverage
-- AutoGen does not provide a built-in golden-trace assertion harness
+## Architecture
 
-## What You'll Learn
+### App runtime (`src/index.ts`)
 
-- How to load and validate golden trace artifacts
-- How to define assertion-driven `TestCase` suites
-- How to run test cases and print human-readable pass/fail output
-- How to run eval checks in CI with `bun test`
-- How YAML suite manifests scale this pattern for larger regression suites
+- Uses `Fred.create()` + `initializeFromConfig('./config.yaml')`
+- Loads the billing agent from `agents/billing.md`
+- Sends a sample billing/refund message and prints the response
 
-## Assertion Types Available
+### Eval runtime (`test/eval.test.ts`)
 
-Fred's eval assertions include:
+- Runs assertion checks against `test/golden-traces/sample.golden.json`
+- Uses `@fancyrobot/fred/eval`
+- Does not depend on live inference for test execution
 
-- `routing`
-- `response`
-- `tool.calls`
-- `checkpoint`
-- `schema`
+## Why this structure matters
+
+You can iterate on agent behavior and app wiring in `src/index.ts`, while keeping deterministic regression checks in `test/eval.test.ts`.
 
 ## Prerequisites
 
 - Bun installed
-- `OPENAI_API_KEY` (needed when recording traces from live model runs)
+- `OPENROUTER_API_KEY` in `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-## Run the demo
+## Run the app demo
 
 ```bash
 bun run src/index.ts
 ```
 
-You should see formatted output showing each test case and whether assertions passed.
-
-## Run CI-style test
+## Run eval assertions
 
 ```bash
 bun test
 ```
 
-`test/eval.test.ts` demonstrates a minimal automated check that can run in local CI pipelines.
+## Files
 
-## Golden file used in this example
-
-- `test/golden-traces/sample.golden.json`
-
-The sample trace includes routing metadata, response output, tool call records, and spans so assertions can lock down key behavior over time.
-
-## How to update goldens intentionally
-
-When behavior changes on purpose, re-record or regenerate traces deliberately and review diffs before committing:
-
-1. Re-run the workflow that produces the trace
-2. Replace the existing golden file
-3. Re-run eval tests
-4. Confirm assertion updates reflect intentional changes only
-
-Treat golden updates like API changes: explicit, reviewed, and documented.
-
-## Scaling with YAML suite manifests
-
-For larger eval suites, use `runSuite()` with YAML manifests (`parseSuiteManifest`) from `@fancyrobot/fred/eval` to define many cases declaratively while keeping the same assertion model.
+- `agents/billing.md` - Billing agent definition with YAML frontmatter
+- `config.yaml` - OpenRouter provider and routing config
+- `src/index.ts` - Standalone app entry point
+- `test/eval.test.ts` - Golden trace assertion runner
+- `test/golden-traces/sample.golden.json` - Trace fixture used by eval tests

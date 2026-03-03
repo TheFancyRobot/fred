@@ -4,5 +4,5 @@ providers:
       model: openrouter/free
 
 routing:
-  defaultAgent: assistant
+  defaultAgent: billing
   rules: []

@@ -2,14 +2,14 @@
 
 This example shows two ways to configure the same Fred app:
 
-- Declarative config via `config.yaml`
-- Imperative setup via `src/programmatic-equivalent.ts`
+- Declarative runtime via `config.yaml` + `agents/*.md`
+- A Rosetta Stone explanation in `src/programmatic-equivalent.ts`
 
 ## What you'll learn
 
-- How to define providers, agents, intents, and routing in YAML
-- How to load that config with `fred.initializeFromConfig('./config.yaml')`
-- How YAML declarations map to equivalent Fred API calls
+- How to define providers and routing in YAML while defining agents in markdown files
+- How `initializeFromConfig('./config.yaml')` auto-discovers `./agents`
+- How config + markdown maps to equivalent Fred API concepts
 - When to choose static config vs dynamic code
 
 ## Run the example
@@ -20,7 +20,7 @@ This example shows two ways to configure the same Fred app:
 cp .env.example .env
 ```
 
-2. Set your OpenAI key in `.env`.
+2. Set your OpenRouter key in `.env`.
 
 3. Run either variant:
 
@@ -38,16 +38,16 @@ bun run start:programmatic
 
 | YAML (`config.yaml`) | Programmatic (`src/programmatic-equivalent.ts`) |
 | --- | --- |
-| `providers[].id: openai` | `await fred.registerProviderPack('openai')` |
-| `agents[]` | `await fred.createAgent(...)` |
-| `intents[]` | `fred.registerIntent(...)` |
+| `providers[].id: openrouter` | provider pack registration via side-effect import |
+| `agents/*.md` | parsed files passed to `createAgent(...)` conceptually |
+| `utterances` in frontmatter | `registerIntent(...)` conceptually |
 | `routing.defaultAgent` + `routing.rules` | `fred.configureRouting({ defaultAgent, rules })` |
 | Entire file load | `await fred.initializeFromConfig('./config.yaml')` |
 
 ## Config vs code
 
 - Use config when setup is mostly static and you want easy environment-driven changes.
-- Use code when setup is dynamic (runtime conditions, loops, generated agents, or custom branching).
+- Use code when setup is dynamic (runtime conditions, generated behavior, or custom branching).
 
 ## Pipeline function note
 

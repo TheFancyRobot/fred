@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
-    "@fancyrobot/fred-openai": "workspace:*"
+    "@fancyrobot/fred-openrouter": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
