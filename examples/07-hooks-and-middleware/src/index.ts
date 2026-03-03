@@ -108,11 +108,35 @@ async function main() {
 
   await fred.initializeFromConfig('./config.yaml');
 
+  // --- Per-Message Variable Injection ---
+  // addTemplateContext registers a custom namespace whose resolver is called
+  // each time the system prompt is resolved (i.e., per message).
+  let sessionState = { userId: 'anonymous', requestCount: 0 };
+  fred.addTemplateContext('session', () => ({ ...sessionState }));
+
+  // Update session state before each message - the template resolver
+  // captures the latest snapshot, so the agent prompt reflects current values.
+  sessionState = { userId: 'user-42', requestCount: 1 };
+  fred.addTemplateContext('session', () => ({ ...sessionState }));
+
   const response = await fred.processMessage(
     'Send this report to jane@company.com. Use API key sk-abc123def456ghi789jkl012 and SSN 123-45-6789.'
   );
 
   console.log('\nResponse:', response?.content ?? '<no response>');
+
+  // Second message with updated session state - demonstrates that
+  // the template re-resolves with fresh values on every processMessage.
+  sessionState = { userId: 'user-42', requestCount: 2 };
+  fred.addTemplateContext('session', () => ({ ...sessionState }));
+
+  const followUp = await fred.processMessage('Summarize what you know about my session.');
+  console.log('\nFollow-up:', followUp?.content ?? '<no response>');
+
+  console.log('\n--- Per-Message Variable Demo ---');
+  console.log('Session state was injected dynamically via addTemplateContext.');
+  console.log('The agent prompt resolved session.userId and session.requestCount per message.');
+
   console.log('\nStructured log records captured:', structuredLogs.length);
 
   await fred.shutdown();

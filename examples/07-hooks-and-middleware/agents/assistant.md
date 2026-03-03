@@ -14,4 +14,6 @@ When answering questions, provide detailed explanations with examples.
 Keep responses brief and to the point.
 <% } %>
 
+Current session: user <%= session.userId %>, request #<%= session.requestCount %>.
+
 <%~ include("@safety-rules") %>
