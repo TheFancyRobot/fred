@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: planning
-stopped_at: Completed 46.1-04-PLAN.md
-last_updated: "2026-03-03T20:42:19Z"
-last_activity: 2026-03-03 - Completed 46.1-04
+stopped_at: Completed 46.1-05-PLAN.md
+last_updated: "2026-03-03T21:12:33Z"
+last_activity: 2026-03-03 - Completed 46.1-05
 progress:
   total_phases: 10
   completed_phases: 9
-  total_plans: 226
-  completed_plans: 226
+  total_plans: 227
+  completed_plans: 227
   percent: 100
 ---
 
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
-Plan: 4 of 4 in current phase
+Plan: 5 of 5 in current phase
 Status: Phase complete
-Last activity: 2026-03-03 - Completed 46.1-04-PLAN.md
+Last activity: 2026-03-03 - Completed 46.1-05-PLAN.md
 
-Progress: ████████████████████ 100% (226/226 plans)
+Progress: ████████████████████ 100% (227/227 plans)
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Progress: ████████████████████ 100% (226
 - Phase 46.1 execution progressed: 46.1-01 completed (examples 01-04 migrated to markdown agents/config with OpenRouter and ETA loop in example 04)
 - Phase 46.1 execution started: 46.1-02 completed (examples 05-08 migrated to markdown agents with ETA features in examples 07/08)
 - Phase 46.1 execution progressed: 46.1-03 completed (examples 09-12 migrated to markdown agents with eval/app split, Rosetta config mapping, MCP config wiring, and CLI/TUI agent extraction)
+- Phase 46.1 gap closure completed: 46.1-05 adds per-message ETA variable injection demo (`addTemplateContext('session', ...)`) to Example 07 with docs and full verification green
 
 ### Decisions (v0.3.0)
 
@@ -187,6 +188,7 @@ Progress: ████████████████████ 100% (226
 | 46.1-03 | Example 10 Rosetta entrypoint keeps runtime config-driven loading and explains API equivalence without inline prompts | Preserves single source of truth in `config.yaml` + `agents/*.md` while still teaching programmatic mapping |
 | 46.1-03 | Example 11 MCP server transport is declared in `config.yaml` `mcpServers` and consumed by initializeFromConfig | Aligns MCP setup with declarative config patterns enabled by FrameworkConfig support |
 | 46.1-04 | Top-level examples index now documents markdown agent/frontmatter conventions and ETA feature mapping | Keeps onboarding docs aligned with final migration architecture and verification outcomes |
+| 46.1-05 | Example 07 now injects `session.*` runtime values via `fred.addTemplateContext` before each message | Closes remaining ETA per-message variable verification gap while preserving existing hook and template behavior |
 
 ### Quick Tasks Completed
 
@@ -197,12 +199,12 @@ Progress: ████████████████████ 100% (226
 
 ## Session Continuity
 
-Last session: 2026-03-03T20:42:19Z
-Stopped at: Completed 46.1-04-PLAN.md
+Last session: 2026-03-03T21:12:33Z
+Stopped at: Completed 46.1-05-PLAN.md
 Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Completed 46.1-04 (final verification green and examples index updated for markdown agents + ETA coverage).*
+*Last updated: 2026-03-03 — Completed 46.1-05 (per-message ETA variable injection added to Example 07 with full verification green).*
