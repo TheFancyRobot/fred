@@ -187,7 +187,7 @@ Plans:
 
 **Goal:** Refactor all 12 examples to use the new `.md` file agent definitions (from Phase 45.1) and ETA templating (from Phase 45.2). Every example should define agents via `.md` files with YAML frontmatter instead of inline programmatic definitions. All relevant ETA features (conditionals, loops, expressions, partials, env vars, per-message variables) should be demonstrated at least once across the full example set.
 **Depends on:** Phase 46 (examples must exist before refactoring them)
-**Plans**: 4 plans
+**Plans**: 5 plans
 **Success Criteria** (what must be TRUE):
   1. All 12 examples define their agents using `.md` files with YAML frontmatter and markdown body system prompts
   2. No example uses inline string system prompts for agent definitions — all agent prompts live in `.md` files
@@ -197,10 +197,11 @@ Plans:
   6. `bun test` and `bun run build` pass with no regressions
 
 Plans:
-- [ ] 46.1-01-PLAN.md — Migrate Examples 01-04: quickstart, tools, intent routing, dynamic handoff
-- [ ] 46.1-02-PLAN.md — Migrate Examples 05-08: pipeline, graph workflow, hooks (ETA conditionals+partials), observability (ETA expressions+env vars)
-- [ ] 46.1-03-PLAN.md — Migrate Examples 09-12: eval harness, config-driven, MCP, CLI/TUI
-- [ ] 46.1-04-PLAN.md — Final verification: guard test, full test suite, build, ETA coverage check, README update
+- [x] 46.1-01-PLAN.md — Migrate Examples 01-04: quickstart, tools, intent routing, dynamic handoff
+- [x] 46.1-02-PLAN.md — Migrate Examples 05-08: pipeline, graph workflow, hooks (ETA conditionals+partials), observability (ETA expressions+env vars)
+- [x] 46.1-03-PLAN.md — Migrate Examples 09-12: eval harness, config-driven, MCP, CLI/TUI
+- [x] 46.1-04-PLAN.md — Final verification: guard test, full test suite, build, ETA coverage check, README update
+- [ ] 46.1-05-PLAN.md — Gap closure: add per-message variable injection demo to Example 07
 
 ---
 
@@ -301,7 +302,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
-| 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 0/4 | Planned | — |
+| 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 4/5 | Gap closure | — |
 
 ---
 
@@ -337,4 +338,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-03 — Phase 46.1 planned: 4 plans in 2 waves*
+*Last updated: 2026-03-03 — Phase 46.1 gap closure: 5 plans (1 gap closure plan added)*
