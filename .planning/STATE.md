@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: complete
-last_updated: "2026-03-03T04:32:14Z"
+status: in_progress
+last_updated: "2026-03-03T05:00:00Z"
 progress:
-  total_phases: 53
+  total_phases: 54
   completed_phases: 53
   total_plans: 221
   completed_plans: 221
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 11 of 11 in current phase
-Status: Phase complete — ALL PLANS COMPLETE (221/221)
-Last activity: 2026-03-03 - Completed 46-09-PLAN.md
+Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
+Plan: 0 of 0 in current phase (not yet planned)
+Status: Phase inserted — awaiting planning
+Last activity: 2026-03-03 - Inserted Phase 46.1
 
-Progress: █████████████████████ 100% (221/221 plans)
+Progress: █████████████████████ 100% (221/221 plans — Phase 46.1 not yet planned)
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: █████████████████████ 100% (
 - Phase 46 gap closure: 46-09 completed (per-example TypeScript compile guard added to examples-guard.test.ts) — Phase 46 fully complete
 - Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
 - Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
+- Phase 46.1 inserted after Phase 46: Refactor all 12 examples to use .md agent file definitions and ETA templating
 
 ### Decisions (v0.3.0)
 
@@ -184,12 +185,12 @@ Progress: █████████████████████ 100% (
 
 ## Session Continuity
 
-Last session: 2026-03-03 04:32 UTC
-Stopped at: Completed 46-09-PLAN.md — ALL PLANS COMPLETE (221/221)
-Resume file: None
+Last session: 2026-03-03 06:00 UTC
+Stopped at: Phase 46.1 context gathered
+Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Completed 46-09 (per-example TypeScript compile guard); Phase 46 fully complete; Project 100% (221/221 plans)*
+*Last updated: 2026-03-03 — Inserted Phase 46.1 (Refactor Examples: .md Agents + ETA Templates); milestone status reset to in_progress*
