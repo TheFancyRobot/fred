@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: planning
-stopped_at: Completed 46.1-02-PLAN.md
-last_updated: "2026-03-03T20:33:31Z"
-last_activity: 2026-03-03 - Completed 46.1-02
+stopped_at: Completed 46.1-01-PLAN.md
+last_updated: "2026-03-03T20:34:13Z"
+last_activity: 2026-03-03 - Completed 46.1-01
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 226
-  completed_plans: 223
+  completed_plans: 224
   percent: 99
 ---
 
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
 Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-03-03 - Completed 46.1-02-PLAN.md
+Last activity: 2026-03-03 - Completed 46.1-01-PLAN.md
 
-Progress: ███████████████████░ 99% (223/226 plans)
+Progress: ███████████████████░ 99% (224/226 plans)
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Progress: ███████████████████░ 99% (223/
 - Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
 - Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
 - Phase 46.1 inserted after Phase 46: Refactor all 12 examples to use .md agent file definitions and ETA templating
+- Phase 46.1 execution progressed: 46.1-01 completed (examples 01-04 migrated to markdown agents/config with OpenRouter and ETA loop in example 04)
 - Phase 46.1 execution started: 46.1-02 completed (examples 05-08 migrated to markdown agents with ETA features in examples 07/08)
 
 ### Decisions (v0.3.0)
@@ -179,6 +180,8 @@ Progress: ███████████████████░ 99% (223/
 | 46-08 | Examples guard test now runs in strict mode (no scaffold bypass), with per-example structure and import-policy enforcement | Keeps the 12-example learning path continuously protected against API and workspace regressions |
 | 46-08 | Top-level `examples/README.md` is the canonical numbered learning-path index linked to each example README | Gives users one entry point for progressive onboarding and preserves ordering context over time |
 | 46-09 | Filter tsc output by example path prefix to isolate example compile failures from core package noise | Pre-existing core TS warnings cause exit code 1; filtering makes guard sensitive only to example-specific issues |
+| 46.1-01 | Example 03 transcript keeps a local intent mirror while routing intent matching now comes from markdown `utterances` frontmatter | Preserves explainability output in demo logs while migrating runtime routing behavior to declarative agent files |
+| 46.1-01 | Example 04 uses a hardcoded ETA loop in `intake.md` to list specialists | Demonstrates ETA loop syntax with minimal runtime complexity and no extra variable plumbing |
 | 46.1-02 | Examples 05-08 load agents from markdown via initializeFromConfig; runtime workflow/hook/tracing logic remains in TypeScript | Preserves declarative agent definition while keeping executable orchestration behavior explicit and testable |
 
 ### Quick Tasks Completed
@@ -190,12 +193,12 @@ Progress: ███████████████████░ 99% (223/
 
 ## Session Continuity
 
-Last session: 2026-03-03T20:33:31Z
-Stopped at: Completed 46.1-02-PLAN.md
+Last session: 2026-03-03T20:34:13Z
+Stopped at: Completed 46.1-01-PLAN.md
 Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Inserted Phase 46.1 (Refactor Examples: .md Agents + ETA Templates); milestone status reset to in_progress*
+*Last updated: 2026-03-03 — Completed 46.1-01 (examples 01-04 migrated to markdown agents + OpenRouter config pattern).*
