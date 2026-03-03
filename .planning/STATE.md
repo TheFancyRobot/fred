@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-03-03T05:00:00Z"
+status: planning
+stopped_at: Completed 46.1-02-PLAN.md
+last_updated: "2026-03-03T20:33:31Z"
+last_activity: 2026-03-03 - Completed 46.1-02
 progress:
-  total_phases: 54
-  completed_phases: 53
-  total_plans: 221
-  completed_plans: 221
+  total_phases: 10
+  completed_phases: 8
+  total_plans: 226
+  completed_plans: 223
+  percent: 99
 ---
 
 # Project State
@@ -24,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
-Plan: 0 of 0 in current phase (not yet planned)
-Status: Phase inserted — awaiting planning
-Last activity: 2026-03-03 - Inserted Phase 46.1
+Plan: 2 of 4 in current phase
+Status: In progress
+Last activity: 2026-03-03 - Completed 46.1-02-PLAN.md
 
-Progress: █████████████████████ 100% (221/221 plans — Phase 46.1 not yet planned)
+Progress: ███████████████████░ 99% (223/226 plans)
 
 ## Performance Metrics
 
@@ -80,6 +83,7 @@ Progress: █████████████████████ 100% (
 - Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
 - Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
 - Phase 46.1 inserted after Phase 46: Refactor all 12 examples to use .md agent file definitions and ETA templating
+- Phase 46.1 execution started: 46.1-02 completed (examples 05-08 migrated to markdown agents with ETA features in examples 07/08)
 
 ### Decisions (v0.3.0)
 
@@ -175,6 +179,7 @@ Progress: █████████████████████ 100% (
 | 46-08 | Examples guard test now runs in strict mode (no scaffold bypass), with per-example structure and import-policy enforcement | Keeps the 12-example learning path continuously protected against API and workspace regressions |
 | 46-08 | Top-level `examples/README.md` is the canonical numbered learning-path index linked to each example README | Gives users one entry point for progressive onboarding and preserves ordering context over time |
 | 46-09 | Filter tsc output by example path prefix to isolate example compile failures from core package noise | Pre-existing core TS warnings cause exit code 1; filtering makes guard sensitive only to example-specific issues |
+| 46.1-02 | Examples 05-08 load agents from markdown via initializeFromConfig; runtime workflow/hook/tracing logic remains in TypeScript | Preserves declarative agent definition while keeping executable orchestration behavior explicit and testable |
 
 ### Quick Tasks Completed
 
@@ -185,8 +190,8 @@ Progress: █████████████████████ 100% (
 
 ## Session Continuity
 
-Last session: 2026-03-03 06:00 UTC
-Stopped at: Phase 46.1 context gathered
+Last session: 2026-03-03T20:33:31Z
+Stopped at: Completed 46.1-02-PLAN.md
 Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
