@@ -1,5 +1,6 @@
 import { Fred } from '@fancyrobot/fred';
 import type { HookEvent, HookResult, HookType } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 const HOOK_TYPES: HookType[] = [
   'beforeMessageReceived',
@@ -51,15 +52,6 @@ function summarizeEvent(type: HookType, event: HookEvent): Record<string, unknow
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
-
-  await fred.createAgent({
-    id: 'assistant',
-    systemMessage: 'You are a helpful assistant. Keep answers short and practical.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-  fred.setDefaultAgent('assistant');
 
   const structuredLogs: Array<Record<string, unknown>> = [];
 
@@ -113,6 +105,8 @@ async function main() {
 
   console.log('=== Hooks & Middleware Demo ===\n');
   console.log(`Fred exposes ${HOOK_TYPES.length} hook points across the lifecycle.`);
+
+  await fred.initializeFromConfig('./config.yaml');
 
   const response = await fred.processMessage(
     'Send this report to jane@company.com. Use API key sk-abc123def456ghi789jkl012 and SSN 123-45-6789.'

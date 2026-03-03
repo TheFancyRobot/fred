@@ -1,6 +1,6 @@
 # 07 - Hooks & Middleware: Intercepting the Message Lifecycle
 
-This example demonstrates Fred's middleware model using practical hook registrations for redaction, policy injection, and structured event logging.
+This example demonstrates Fred's middleware model using practical hook registrations for redaction, policy injection, and structured event logging. The assistant prompt is loaded from `agents/assistant.md` and uses ETA conditionals plus a reusable partial.
 
 ## What You'll Learn
 
@@ -8,6 +8,7 @@ This example demonstrates Fred's middleware model using practical hook registrat
 - How hook handlers can modify `event.data` by returning `{ data: ... }`
 - How to add metadata/context during execution
 - How to capture structured lifecycle logs for observability
+- How ETA conditionals (`<% if %>`) and partials (`<%~ include %>`) shape agent behavior
 
 ## Why This Is a Differentiator
 
@@ -62,7 +63,7 @@ onStepError / onPipelineError (error paths)
 
 ## Run
 
-1. Copy `.env.example` to `.env` and set `OPENAI_API_KEY`
+1. Copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`
 2. Run `bun install` from the repo root
 3. Run the example:
 
@@ -74,3 +75,9 @@ You should see:
 - Redaction logs for email/API-key/SSN patterns
 - Policy-injection log before agent selection
 - Structured lifecycle log output from logging hooks
+
+## ETA Prompt Features
+
+- `vars.verbose` in frontmatter toggles verbose guidance through an ETA conditional block
+- `partials/safety-rules.md` is included via `<%~ include("@safety-rules") %>` to keep policy text reusable
+- Hooks remain in `src/index.ts` because runtime middleware behavior belongs in code

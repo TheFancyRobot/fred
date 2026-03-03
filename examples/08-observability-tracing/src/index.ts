@@ -1,4 +1,5 @@
 import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 type TraceEntry = {
   event: string;
@@ -21,16 +22,7 @@ function toMessageLength(payload: unknown): number {
 
 async function main() {
   const fred = await Fred.create();
-  await fred.registerProviderPack('openai');
-
-  await fred.createAgent({
-    id: 'assistant',
-    systemMessage: 'You are a helpful assistant.',
-    platform: 'openai',
-    model: 'gpt-4o-mini',
-  });
-
-  fred.setDefaultAgent('assistant');
+  await fred.initializeFromConfig('./config.yaml');
 
   const traceLog: TraceEntry[] = [];
 

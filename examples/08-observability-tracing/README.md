@@ -1,6 +1,6 @@
 # 08 - Observability: Tracing & Monitoring
 
-Learn how to instrument Fred applications with lightweight hook-based tracing first, then scale up to full OpenTelemetry (OTEL) when you need production telemetry pipelines.
+Learn how to instrument Fred applications with lightweight hook-based tracing first, then scale up to full OpenTelemetry (OTEL) when you need production telemetry pipelines. The assistant prompt is loaded from `agents/assistant.md` and demonstrates ETA expressions with environment-aware behavior.
 
 ## What You'll Learn
 
@@ -8,11 +8,13 @@ Learn how to instrument Fred applications with lightweight hook-based tracing fi
 - Capturing message, routing, tool, and response lifecycle events
 - Organizing trace data for quick debugging
 - Optional OTEL layer wiring for production-grade telemetry
+- ETA expressions like `<%= agent.model %>` for prompt self-awareness
+- Env-allowlisted template access (`env.NODE_ENV`) for environment-specific instructions
 
 ## Prerequisites
 
 - Bun installed
-- `OPENAI_API_KEY` set in `.env`
+- `OPENROUTER_API_KEY` set in `.env`
 
 ```bash
 cp .env.example .env
@@ -39,6 +41,14 @@ This example uses Fred hooks as the first observability layer:
 - `afterResponseGenerated` for output diagnostics
 
 This is the fastest way to add visibility without external infrastructure.
+
+## ETA Prompt Features
+
+`agents/assistant.md` renders metadata and environment context at runtime:
+
+- `<%= agent.id %>` and `<%= agent.model %>` expose resolved agent config
+- `<% if (env.NODE_ENV === 'development') { %>` adds diagnostics guidance only in development
+- `config.yaml` uses `template.envAllowlist` to explicitly permit `NODE_ENV`
 
 ## Full OTEL Integration (Optional)
 
