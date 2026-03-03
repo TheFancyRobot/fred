@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: planning
-stopped_at: Completed 46.1-05-PLAN.md
-last_updated: "2026-03-03T21:12:33Z"
-last_activity: 2026-03-03 - Completed 46.1-05
+status: complete
+stopped_at: Phase 46.1 verified complete
+last_updated: "2026-03-03T21:20:00Z"
+last_activity: 2026-03-03 - Phase 46.1 verified complete
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 227
   completed_plans: 227
   percent: 100
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
 Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-03-03 - Completed 46.1-05-PLAN.md
+Status: Milestone complete (all phases verified)
+Last activity: 2026-03-03 - Phase 46.1 verified complete
 
 Progress: ████████████████████ 100% (227/227 plans)
 
@@ -87,6 +87,7 @@ Progress: ████████████████████ 100% (227
 - Phase 46.1 execution started: 46.1-02 completed (examples 05-08 migrated to markdown agents with ETA features in examples 07/08)
 - Phase 46.1 execution progressed: 46.1-03 completed (examples 09-12 migrated to markdown agents with eval/app split, Rosetta config mapping, MCP config wiring, and CLI/TUI agent extraction)
 - Phase 46.1 gap closure completed: 46.1-05 adds per-message ETA variable injection demo (`addTemplateContext('session', ...)`) to Example 07 with docs and full verification green
+- Phase 46.1 verified passed: 6/6 must-haves met; milestone v0.3.0 phase execution complete
 
 ### Decisions (v0.3.0)
 
@@ -199,12 +200,12 @@ Progress: ████████████████████ 100% (227
 
 ## Session Continuity
 
-Last session: 2026-03-03T21:12:33Z
-Stopped at: Completed 46.1-05-PLAN.md
+Last session: 2026-03-03T21:20:00Z
+Stopped at: Phase 46.1 verified complete
 Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Completed 46.1-05 (per-message ETA variable injection added to Example 07 with full verification green).*
+*Last updated: 2026-03-03 — Phase 46.1 verified complete (6/6 must-haves, milestone v0.3.0 phase execution complete).*

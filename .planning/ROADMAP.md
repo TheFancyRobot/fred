@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46 (incl. 45.1, 45.2, 46.1)
+- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46 (incl. 45.1, 45.2, 46.1)
 
 ---
 
@@ -201,7 +201,7 @@ Plans:
 - [x] 46.1-02-PLAN.md — Migrate Examples 05-08: pipeline, graph workflow, hooks (ETA conditionals+partials), observability (ETA expressions+env vars)
 - [x] 46.1-03-PLAN.md — Migrate Examples 09-12: eval harness, config-driven, MCP, CLI/TUI
 - [x] 46.1-04-PLAN.md — Final verification: guard test, full test suite, build, ETA coverage check, README update
-- [ ] 46.1-05-PLAN.md — Gap closure: add per-message variable injection demo to Example 07
+- [x] 46.1-05-PLAN.md — Gap closure: add per-message variable injection demo to Example 07
 
 ---
 
@@ -302,7 +302,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45.1. Config+Prompt Markdown (INSERTED) | 3/3 | Complete | 2026-03-01 |
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
-| 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 4/5 | Gap closure | — |
+| 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
 
 ---
 
@@ -338,4 +338,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-03 — Phase 46.1 gap closure: 5 plans (1 gap closure plan added)*
+*Last updated: 2026-03-03 — Phase 46.1 complete (gap closure executed and verified: 5/5 plans).*
