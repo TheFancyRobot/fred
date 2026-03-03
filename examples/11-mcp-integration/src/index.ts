@@ -1,19 +1,11 @@
 import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 async function main() {
   const fred = await Fred.create();
 
   try {
-    await fred.registerProviderPack('openai');
-
-    await fred.configureMCPServers([
-      {
-        id: 'filesystem',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/mcp-demo'],
-      },
-    ]);
+    await fred.initializeFromConfig('./config.yaml');
 
     const serverStatus = fred.getMCPServerRegistry().getServerStatus('filesystem');
     if (serverStatus !== 'connected') {
@@ -22,16 +14,6 @@ async function main() {
       );
       return;
     }
-
-    await fred.createAgent({
-      id: 'file-assistant',
-      systemMessage: 'You are a file management assistant. Use MCP tools to read, write, and manage files.',
-      platform: 'openai',
-      model: 'gpt-4o-mini',
-      mcpServers: ['filesystem'],
-    });
-
-    fred.setDefaultAgent('file-assistant');
 
     console.log('=== MCP Integration Demo ===');
     console.log('Connected to filesystem MCP server. MCP tools are auto-discovered from configured server IDs.');

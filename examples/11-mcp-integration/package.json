@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
-    "@fancyrobot/fred-openai": "workspace:*"
+    "@fancyrobot/fred-openrouter": "workspace:*"
   }
 }

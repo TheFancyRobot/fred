@@ -7,7 +7,7 @@ This example focuses on Fred's interactive CLI/TUI workflow using a config-first
 - Use `fred chat` for interactive TUI sessions
 - Use `fred run` for headless one-shot execution
 - Navigate session and agent context in the TUI
-- Run Fred from `config.yaml` without writing orchestration code
+- Run Fred from `config.yaml` + `agents/*.md` without writing orchestration code
 
 ## Why this matters
 
@@ -17,7 +17,7 @@ Fred includes a polished built-in TUI, which is rare among agent frameworks. You
 
 - Bun installed
 - Fred CLI available in your shell
-- `OPENAI_API_KEY` configured
+- `OPENROUTER_API_KEY` configured
 
 ## Step-by-step walkthrough
 
@@ -26,7 +26,7 @@ Fred includes a polished built-in TUI, which is rare among agent frameworks. You
    ```bash
    bun install
    cp .env.example .env
-   # edit .env and set OPENAI_API_KEY
+   # edit .env and set OPENROUTER_API_KEY
    ```
 
 2. Start the TUI:
@@ -41,8 +41,14 @@ Fred includes a polished built-in TUI, which is rare among agent frameworks. You
    - Arrow keys to move through selectable items
 
 4. Inspect agents and tools in the sidebar:
-   - Confirm `assistant` and `coder` are loaded
-   - Send messages like "help with debugging" to observe intent-driven routing
+    - Confirm `assistant` and `coder` are loaded
+    - Send messages like "help with debugging" to observe intent-driven routing
+
+## Agent definition layout
+
+- `agents/assistant.md` and `agents/coder.md` define prompts + frontmatter
+- `coder.md` includes `utterances` for intent routing
+- `config.yaml` now focuses on provider + routing (no inline `agents:` block)
 
 5. Run headlessly:
 

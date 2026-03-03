@@ -1,24 +1,7 @@
 providers:
-  - id: openai
+  - id: openrouter
     modelDefaults:
-      model: gpt-4o-mini
-
-agents:
-  - id: assistant
-    systemMessage: "You are a helpful assistant for the Fred CLI demo."
-    platform: openai
-    model: gpt-4o-mini
-  - id: coder
-    systemMessage: "You are a coding assistant."
-    platform: openai
-    model: gpt-4o-mini
-
-intents:
-  - id: code-intent
-    utterances: ["code", "programming", "debug"]
-    action:
-      type: agent
-      target: coder
+      model: openrouter/free
 
 routing:
   defaultAgent: assistant

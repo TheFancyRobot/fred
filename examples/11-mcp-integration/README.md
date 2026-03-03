@@ -4,8 +4,8 @@ Connect Fred to an MCP server, let an agent auto-discover server tools, and hand
 
 ## What you'll learn
 
-- How to connect a global MCP server with `configureMCPServers`
-- How MCP tools become available to an agent via `mcpServers: ['server-id']`
+- How to declare MCP transport config in `config.yaml`
+- How MCP tools become available to an agent via `mcpServers` in agent frontmatter
 - How to detect and handle server-down or disconnected states
 
 ## Prerequisites
@@ -13,14 +13,14 @@ Connect Fred to an MCP server, let an agent auto-discover server tools, and hand
 - Bun installed
 - `npx` available in your shell
 - Writable `/tmp` directory (this example uses `/tmp/mcp-demo`)
-- `OPENAI_API_KEY` set in `.env`
+- `OPENROUTER_API_KEY` set in `.env`
 
 ## Run the example
 
 ```bash
 bun install
 cp .env.example .env
-# edit .env and set OPENAI_API_KEY
+# edit .env and set OPENROUTER_API_KEY
 bun run start
 ```
 
@@ -44,6 +44,8 @@ Recovery pattern:
 
 ## Files
 
-- `src/index.ts` - End-to-end MCP setup + agent usage
+- `agents/file-assistant.md` - MCP-enabled agent (`mcpServers: ['filesystem']`)
+- `config.yaml` - OpenRouter provider + MCP server transport declaration + routing
+- `src/index.ts` - Runtime flow and server status checks
 - `.env.example` - Required environment variable
 - `tsconfig.json` - Local typecheck config

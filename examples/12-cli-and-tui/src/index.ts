@@ -1,4 +1,5 @@
 import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
 
 async function main() {
   const fred = await Fred.create();
@@ -6,7 +7,7 @@ async function main() {
   try {
     await fred.initializeFromConfig('./config.yaml');
 
-    console.log('Fred configured with 2 agents and intent routing.');
+    console.log('Fred configured with markdown-defined agents from ./agents and intent routing.');
     console.log('');
     console.log('Try the interactive TUI:');
     console.log('  fred chat --config ./config.yaml');
