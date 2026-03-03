@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-03-02T23:51:40Z"
+status: complete
+last_updated: "2026-03-03T04:32:14Z"
 progress:
   total_phases: 53
-  completed_phases: 49
+  completed_phases: 53
   total_plans: 221
-  completed_plans: 220
+  completed_plans: 221
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46 of 46 (Showcase Examples & Framework Differentiation)
-Plan: 10 of 10 in current phase
-Status: Phase complete
-Last activity: 2026-03-02 - Completed 46-08-PLAN.md
+Plan: 11 of 11 in current phase
+Status: Phase complete — ALL PLANS COMPLETE (221/221)
+Last activity: 2026-03-03 - Completed 46-09-PLAN.md
 
-Progress: ████████████████████ 99% (220/221 plans)
+Progress: █████████████████████ 100% (221/221 plans)
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: ████████████████████ 99% (220/
 - Phase 46 API prerequisites delivered in 46-02 (Fred V2 pipeline acceptance, graph workflow facade methods, hook pre-runtime queue replay, and required re-exports)
 - Phase 46 backfill: 46-05 completed (Example 06 graph branching workflow and Example 07 hooks/middleware lifecycle)
 - Phase 46 complete: 46-08 completed (top-level examples learning-path README, strict guard finalization, and full test/build verification)
+- Phase 46 gap closure: 46-09 completed (per-example TypeScript compile guard added to examples-guard.test.ts) — Phase 46 fully complete
 - Phase 45.1 inserted after Phase 45: Combine assistant config and prompt into single markdown file with YAML frontmatter (URGENT)
 - Phase 45.2 inserted after Phase 45: Implement ETA for templating agent prompts and frontmatter (URGENT)
 
@@ -172,6 +173,8 @@ Progress: ████████████████████ 99% (220/
 | 46-07b | Example 12 declares `routing.rules: []` with `defaultAgent` in demo config and anchors the walkthrough around `fred chat`/`fred run` | Keeps the CLI/TUI example immediately runnable while satisfying config validation contracts |
 | 46-08 | Examples guard test now runs in strict mode (no scaffold bypass), with per-example structure and import-policy enforcement | Keeps the 12-example learning path continuously protected against API and workspace regressions |
 | 46-08 | Top-level `examples/README.md` is the canonical numbered learning-path index linked to each example README | Gives users one entry point for progressive onboarding and preserves ordering context over time |
+| 46-09 | Filter tsc output by example path prefix to isolate example compile failures from core package noise | Pre-existing core TS warnings cause exit code 1; filtering makes guard sensitive only to example-specific issues |
+
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -181,12 +184,12 @@ Progress: ████████████████████ 99% (220/
 
 ## Session Continuity
 
-Last session: 2026-03-02 23:51 UTC
-Stopped at: Completed 46-08-PLAN.md
+Last session: 2026-03-03 04:32 UTC
+Stopped at: Completed 46-09-PLAN.md — ALL PLANS COMPLETE (221/221)
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-02 — Completed 46-08 (top-level examples README, strict guard finalization, full verification); Phase 46 complete*
+*Last updated: 2026-03-03 — Completed 46-09 (per-example TypeScript compile guard); Phase 46 fully complete; Project 100% (221/221 plans)*
