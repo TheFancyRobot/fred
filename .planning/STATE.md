@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: planning
-stopped_at: Completed 46.1-03-PLAN.md
-last_updated: "2026-03-03T20:35:22Z"
-last_activity: 2026-03-03 - Completed 46.1-03
+stopped_at: Completed 46.1-04-PLAN.md
+last_updated: "2026-03-03T20:42:19Z"
+last_activity: 2026-03-03 - Completed 46.1-04
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 226
-  completed_plans: 225
-  percent: 99
+  completed_plans: 226
+  percent: 100
 ---
 
 # Project State
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-03-03 - Completed 46.1-03-PLAN.md
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-03-03 - Completed 46.1-04-PLAN.md
 
-Progress: ███████████████████░ 99% (225/226 plans)
+Progress: ████████████████████ 100% (226/226 plans)
 
 ## Performance Metrics
 
@@ -186,6 +186,7 @@ Progress: ███████████████████░ 99% (225/
 | 46.1-02 | Examples 05-08 load agents from markdown via initializeFromConfig; runtime workflow/hook/tracing logic remains in TypeScript | Preserves declarative agent definition while keeping executable orchestration behavior explicit and testable |
 | 46.1-03 | Example 10 Rosetta entrypoint keeps runtime config-driven loading and explains API equivalence without inline prompts | Preserves single source of truth in `config.yaml` + `agents/*.md` while still teaching programmatic mapping |
 | 46.1-03 | Example 11 MCP server transport is declared in `config.yaml` `mcpServers` and consumed by initializeFromConfig | Aligns MCP setup with declarative config patterns enabled by FrameworkConfig support |
+| 46.1-04 | Top-level examples index now documents markdown agent/frontmatter conventions and ETA feature mapping | Keeps onboarding docs aligned with final migration architecture and verification outcomes |
 
 ### Quick Tasks Completed
 
@@ -196,12 +197,12 @@ Progress: ███████████████████░ 99% (225/
 
 ## Session Continuity
 
-Last session: 2026-03-03T20:35:22Z
-Stopped at: Completed 46.1-03-PLAN.md
+Last session: 2026-03-03T20:42:19Z
+Stopped at: Completed 46.1-04-PLAN.md
 Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Completed 46.1-03 (examples 09-12 migrated to markdown agents/config with OpenRouter and MCP config wiring).*
+*Last updated: 2026-03-03 — Completed 46.1-04 (final verification green and examples index updated for markdown agents + ETA coverage).*
