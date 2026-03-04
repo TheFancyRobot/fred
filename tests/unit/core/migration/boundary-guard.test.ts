@@ -29,13 +29,16 @@ describe('Effect runtime boundary guards', () => {
     'Runtime.runFork',
   ];
 
-  const boundaryFiles = new Set(['index.ts', 'services.ts']);
-
-  const knownExceptions = new Set([
+  const boundaryFiles = new Set([
+    'index.ts',
+    'services.ts',
     'pipeline/checkpoint/manager.ts',
     'pipeline/checkpoint/postgres.ts',
     'pipeline/checkpoint/sqlite.ts',
     'pipeline/pause/manager.ts',
+  ]);
+
+  const knownExceptions = new Set([
     'hooks/service.ts',
     'eval/service.ts',
     'eval/replay.ts',
