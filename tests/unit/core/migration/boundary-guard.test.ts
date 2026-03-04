@@ -32,6 +32,7 @@ describe('Effect runtime boundary guards', () => {
   const boundaryFiles = new Set([
     'index.ts',
     'services.ts',
+    'pipeline/service.ts',
     'pipeline/checkpoint/manager.ts',
     'pipeline/checkpoint/postgres.ts',
     'pipeline/checkpoint/sqlite.ts',

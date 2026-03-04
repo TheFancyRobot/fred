@@ -29,7 +29,7 @@ import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hoo
 import { isHandoffSignal, type HandoffSignal } from './handoff-tool';
 import { prepareHandoffContext } from './handoff';
 import type { AgentResponse } from '../agent/agent';
-import { Context, Effect, Layer } from 'effect';
+import { Cause, Context, Effect, Exit, Layer } from 'effect';
 import { annotateSpan } from '../observability/otel';
 import { getCurrentCorrelationContext, getCurrentSpanIds } from '../observability/context';
 
@@ -78,6 +78,7 @@ function runAsync<A>(thunk: () => PromiseLike<A> | A): Effect.Effect<A, Error> {
  * Graph executor options (extends ExecutorOptions)
  */
 export interface GraphExecutorOptions extends ExecutorOptions {
+  conversationId?: string;
   agentManager: AgentManagerLike;
   hookManager?: HookManagerLike;
   tracer?: Tracer;
@@ -639,7 +640,30 @@ export async function executeGraphWorkflow(
   input: string,
   options: GraphExecutorOptions
 ): Promise<GraphExecutionResult> {
-  return Effect.runPromise(executeGraphWorkflowEffect(config, input, options));
+  return new Promise((resolve) => {
+    Effect.runCallback(executeGraphWorkflowEffect(config, input, options), {
+      onExit: (exit) => {
+        if (Exit.isSuccess(exit)) {
+          resolve(exit.value);
+          return;
+        }
+        const error = Cause.squash(exit.cause);
+        resolve({
+          success: false,
+          context: {
+            pipelineId: config.id,
+            input,
+            outputs: {},
+            history: [],
+            metadata: {},
+          },
+          outputs: {},
+          executedNodes: [],
+          error: toError(error),
+        });
+      },
+    });
+  });
 }
 
 /**

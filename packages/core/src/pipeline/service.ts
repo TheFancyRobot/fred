@@ -33,10 +33,15 @@ import { PauseService } from './pause/service';
 import { validateGraphWorkflow } from './graph-validator';
 import { validateId, validatePipelineAgentCount } from '../utils/validation';
 import {
-  executePipelineV2 as executePipelineV2Impl,
   type AgentManagerLike,
+  ExecutorService,
+  type ExecutorService as ExecutorServiceApi,
   type ExtendedExecutionOptions,
 } from './executor';
+import {
+  GraphExecutorService,
+  type GraphExecutorService as GraphExecutorServiceApi,
+} from './graph-executor';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -226,6 +231,8 @@ class PipelineServiceImpl implements PipelineService {
     private pipelinesV2: Ref.Ref<Map<string, PipelineConfigV2>>,
     private graphWorkflows: Ref.Ref<Map<string, GraphWorkflowConfig>>,
     private agentService: AgentService,
+    private executorService: ExecutorServiceApi,
+    private graphExecutorService: GraphExecutorServiceApi,
     private hookService: HookManagerService,
     private checkpointService: CheckpointService,
     private pauseService: PauseService
@@ -581,25 +588,19 @@ class PipelineServiceImpl implements PipelineService {
         }))
       );
 
-      // Create imperative agent adapter from AgentService
-      const agentAdapter = self.createAgentAdapter();
-
-      // Build executor options with adapters
       const executorOptions: ExtendedExecutionOptions = {
-        agentManager: agentAdapter,
+        agentManager: self.createExecutorAgentManager(),
         conversationId: options?.conversationId,
         history: options?.history,
       };
 
-      // Execute via Effect.tryPromise wrapper
-      const result = yield* Effect.tryPromise({
-        try: () => executePipelineV2Impl(config, input, executorOptions),
-        catch: (error) => new PipelineExecutionError({
+      const result = yield* self.executorService.executePipelineV2(config, input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
           pipelineId,
           step: 0,
-          cause: error instanceof Error ? error : new Error(String(error))
-        })
-      });
+          cause: error.cause,
+        }))
+      );
 
       // If executor returned a failed result, fail the Effect
       if (!result.success && result.status === 'failed') {
@@ -614,11 +615,7 @@ class PipelineServiceImpl implements PipelineService {
     });
   }
 
-  /**
-   * Create an imperative AgentManager adapter from AgentService.
-   * This allows the executor to work with the Effect-based service.
-   */
-  private createAgentAdapter(): AgentManagerLike {
+  private createExecutorAgentManager(): AgentManagerLike {
     const self = this;
     return {
       getAgent: (id: string) => {
@@ -767,10 +764,8 @@ class PipelineServiceImpl implements PipelineService {
       }
 
       // Step 5: Execute from computed step with restored context
-      const agentAdapter = self.createAgentAdapter();
-
       const executorOptions: ExtendedExecutionOptions = {
-        agentManager: agentAdapter,
+        agentManager: self.createExecutorAgentManager(),
         conversationId: options?.conversationId ?? checkpoint.context.conversationId,
         history: checkpoint.context.history as Array<{ role: string; content: string }>,
         runId,
@@ -778,14 +773,13 @@ class PipelineServiceImpl implements PipelineService {
         restoredContext: checkpoint.context,
       };
 
-      const result = yield* Effect.tryPromise({
-        try: () => executePipelineV2Impl(config, checkpoint.context.input, executorOptions),
-        catch: (error) => new PipelineExecutionError({
+      const result = yield* self.executorService.executePipelineV2(config, checkpoint.context.input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
           pipelineId: checkpoint.pipelineId,
           step: startStep,
-          cause: error instanceof Error ? error : new Error(String(error)),
-        }),
-      });
+          cause: error.cause,
+        }))
+      );
 
       // If executor returned a failed result, fail the Effect
       if (!result.success && result.status === 'failed') {
@@ -895,10 +889,8 @@ class PipelineServiceImpl implements PipelineService {
       yield* self.checkpointService.updateStatus(runId, checkpoint.step, 'in_progress');
 
       // Step 8: Execute from computed step with enriched context
-      const agentAdapter = self.createAgentAdapter();
-
       const executorOptions: ExtendedExecutionOptions = {
-        agentManager: agentAdapter,
+        agentManager: self.createExecutorAgentManager(),
         conversationId: options.conversationId ?? checkpoint.context.conversationId,
         history: enrichedContext.history as Array<{ role: string; content: string }>,
         runId,
@@ -906,14 +898,13 @@ class PipelineServiceImpl implements PipelineService {
         restoredContext: enrichedContext,
       };
 
-      const result = yield* Effect.tryPromise({
-        try: () => executePipelineV2Impl(config, enrichedContext.input, executorOptions),
-        catch: (error) => new PipelineExecutionError({
+      const result = yield* self.executorService.executePipelineV2(config, enrichedContext.input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
           pipelineId: checkpoint.pipelineId,
           step: startStep,
-          cause: error instanceof Error ? error : new Error(String(error)),
-        }),
-      });
+          cause: error.cause,
+        }))
+      );
 
       // If executor returned a failed result, fail the Effect
       if (!result.success && result.status === 'failed') {
@@ -1003,9 +994,6 @@ class PipelineServiceImpl implements PipelineService {
     input: string,
     options?: { conversationId?: string }
   ): Effect.Effect<GraphExecutionResult, PipelineExecutionError> {
-    // Graph execution with structured concurrency
-    // Fork nodes create parallel fibers that are automatically cancelled
-    // if parent is interrupted (parent-child cancellation cascade)
     const self = this;
     return Effect.gen(function* () {
       const config = yield* self.getGraphWorkflow(id).pipe(
@@ -1016,13 +1004,16 @@ class PipelineServiceImpl implements PipelineService {
         }))
       );
 
-      // For now, delegate to existing executor
-      // Full Effect-native graph execution would use Effect.fork for parallelism
-      return yield* Effect.fail(new PipelineExecutionError({
-        pipelineId: id,
-        step: 0,
-        cause: new Error('Graph execution path requires Effect fiber implementation')
-      }));
+      return yield* self.graphExecutorService.executeGraphWorkflow(config, input, {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options?.conversationId,
+      }).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
+          pipelineId: id,
+          step: 0,
+          cause: error,
+        }))
+      );
     });
   }
 
@@ -1048,6 +1039,8 @@ export const PipelineServiceLive = Layer.effect(
   PipelineService,
   Effect.gen(function* () {
     const agentService = yield* AgentService;
+    const executorService = yield* ExecutorService;
+    const graphExecutorService = yield* GraphExecutorService;
     const hookService = yield* HookManagerService;
     const checkpointService = yield* CheckpointService;
     const pauseService = yield* PauseService;
@@ -1061,6 +1054,8 @@ export const PipelineServiceLive = Layer.effect(
       pipelinesV2,
       graphWorkflows,
       agentService,
+      executorService,
+      graphExecutorService,
       hookService,
       checkpointService,
       pauseService

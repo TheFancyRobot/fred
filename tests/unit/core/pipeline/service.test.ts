@@ -11,6 +11,8 @@ import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/ser
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from '../../../../packages/core/src/pipeline/checkpoint/types';
 import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
 import type { PipelineResult } from '../../../../packages/core/src/pipeline/executor';
+import { ExecutorService, ExecutorServiceLive } from '../../../../packages/core/src/pipeline/executor';
+import { GraphExecutorService, GraphExecutorServiceLive } from '../../../../packages/core/src/pipeline/graph-executor';
 import { PipelineExecutionError, PipelineNotFoundError } from '../../../../packages/core/src/pipeline/errors';
 import { AgentNotFoundError } from '../../../../packages/core/src/agent/errors';
 
@@ -98,6 +100,8 @@ function createMockStorage(): CheckpointStorage {
 // Build complete layer stack
 const TestLayer = PipelineServiceLive.pipe(
   Layer.provide(AgentServiceLive),
+  Layer.provide(ExecutorServiceLive),
+  Layer.provide(GraphExecutorServiceLive),
   Layer.provide(HookManagerServiceLive),
   Layer.provide(PauseServiceLive),
   Layer.provide(CheckpointServiceLive({ storage: createMockStorage() })),
@@ -366,10 +370,16 @@ describe('PipelineService', () => {
         matchAgentByUtterance: () => Effect.succeed(null),
         getMCPMetrics: () => Effect.succeed({}),
         registerShutdownHooks: () => Effect.void,
+        setTemplateEngine: () => Effect.void,
+        setTemplateCustomNamespaces: () => Effect.void,
+        setTemplateEnvAllowlist: () => Effect.void,
+        setTemplateFredConfig: () => Effect.void,
       });
 
       return PipelineServiceLive.pipe(
         Layer.provide(MockAgentService),
+        Layer.provide(ExecutorServiceLive),
+        Layer.provide(GraphExecutorServiceLive),
         Layer.provide(HookManagerServiceLive),
         Layer.provide(PauseServiceLive),
         Layer.provide(CheckpointServiceLive({ storage: createMockStorage() })),
@@ -575,6 +585,8 @@ describe('PipelineService', () => {
 
       return PipelineServiceLive.pipe(
         Layer.provide(AgentServiceLive),
+        Layer.provide(ExecutorServiceLive),
+        Layer.provide(GraphExecutorServiceLive),
         Layer.provide(HookManagerServiceLive),
         Layer.provide(PauseServiceLive),
         Layer.provide(CheckpointServiceLive({ storage: mockStorage })),
@@ -822,6 +834,8 @@ describe('PipelineService', () => {
 
       return PipelineServiceLive.pipe(
         Layer.provide(AgentServiceLive),
+        Layer.provide(ExecutorServiceLive),
+        Layer.provide(GraphExecutorServiceLive),
         Layer.provide(HookManagerServiceLive),
         Layer.provide(PauseServiceLive),
         Layer.provide(CheckpointServiceLive({ storage: mockStorage })),

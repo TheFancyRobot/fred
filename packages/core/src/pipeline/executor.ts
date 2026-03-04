@@ -25,7 +25,7 @@ import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { CheckpointManager } from './checkpoint/manager';
 import { detectPauseSignal, type DetectedPause } from './pause';
-import { Context, Duration, Effect, Layer, Option } from 'effect';
+import { Cause, Context, Duration, Effect, Exit, Layer, Option } from 'effect';
 import { annotateSpan } from '../observability/otel';
 import { attachErrorToSpan } from '../observability/errors';
 import { getCurrentCorrelationContext, getCurrentSpanIds, getCorrelationContext } from '../observability/context';
@@ -812,17 +812,28 @@ export async function executePipelineV2(
     conversationId: options.conversationId,
   }).getFullContext();
 
-  return Effect.runPromise(
-    executePipelineV2Effect(config, input, options).pipe(
-      Effect.catchTag('PipelineExecutionError', (error) =>
-        Effect.succeed({
-          success: false,
-          status: 'failed' as const,
-          context: fallbackContext,
-          error: toError(error.cause),
-          runId: options.runId,
-        })
-      )
-    )
-  );
+  return new Promise((resolve, reject) => {
+    Effect.runCallback(
+      executePipelineV2Effect(config, input, options).pipe(
+        Effect.catchTag('PipelineExecutionError', (error) =>
+          Effect.succeed({
+            success: false,
+            status: 'failed' as const,
+            context: fallbackContext,
+            error: toError(error.cause),
+            runId: options.runId,
+          })
+        )
+      ),
+      {
+        onExit: (exit) => {
+        if (Exit.isSuccess(exit)) {
+          resolve(exit.value as PipelineResult);
+          return;
+        }
+        reject(Cause.squash(exit.cause));
+        },
+      }
+    );
+  });
 }

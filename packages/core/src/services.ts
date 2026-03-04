@@ -20,6 +20,8 @@ import { CheckpointService } from './pipeline/checkpoint/service';
 import { CheckpointNotFoundError } from './pipeline/errors';
 import { PauseService, PauseServiceLive } from './pipeline/pause/service';
 import { PipelineService, PipelineServiceLive } from './pipeline/service';
+import { ExecutorServiceLive } from './pipeline/executor';
+import { GraphExecutorServiceLive } from './pipeline/graph-executor';
 import { MessageProcessorService, MessageProcessorServiceLive } from './message-processor/service';
 import { IntentMatcherService, IntentMatcherServiceLive } from './intent/service';
 import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
@@ -283,6 +285,8 @@ const workflowLayer = WorkflowServiceLive.pipe(
  */
 const pipelineLayer = PipelineServiceLive.pipe(
   Layer.provide(agentLayer),
+  Layer.provide(ExecutorServiceLive),
+  Layer.provide(GraphExecutorServiceLive),
   Layer.provide(HookManagerServiceLive),
   Layer.provide(CheckpointServiceLive),
   Layer.provide(pauseLayer)

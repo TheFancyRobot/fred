@@ -352,9 +352,11 @@ describe('ExecutorService - error propagation and boundary guard', () => {
     const source = await Bun.file('packages/core/src/pipeline/executor.ts').text();
     const runForkMatches = source.match(/Effect\.runFork/g) ?? [];
     const runPromiseMatches = source.match(/Effect\.runPromise/g) ?? [];
+    const runCallbackMatches = source.match(/Effect\.runCallback/g) ?? [];
 
     expect(runForkMatches.length).toBe(0);
-    expect(runPromiseMatches.length).toBe(1);
+    expect(runPromiseMatches.length).toBe(0);
+    expect(runCallbackMatches.length).toBeGreaterThanOrEqual(1);
     expect(source).toContain('@deprecated');
   });
 });
