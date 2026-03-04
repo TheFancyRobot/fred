@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 46.2-01-PLAN.md
-last_updated: "2026-03-04T03:09:57Z"
-last_activity: 2026-03-04 - Completed 46.2-01-PLAN.md
+stopped_at: Completed 46.2-02-PLAN.md
+last_updated: "2026-03-04T03:15:26Z"
+last_activity: 2026-03-04 - Completed 46.2-02-PLAN.md
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 231
-  completed_plans: 228
+  completed_plans: 229
   percent: 99
 ---
 
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 46.2 of 46.2 (Gap Closure: Agents Convention)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-03-04 - Completed 46.2-01-PLAN.md
+Last activity: 2026-03-04 - Completed 46.2-02-PLAN.md
 
-Progress: ███████████████████░ 99% (228/231 plans)
+Progress: ███████████████████░ 99% (229/231 plans)
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Progress: ███████████████████░ 99% (228/
 - Phase 46.1 gap closure completed: 46.1-05 adds per-message ETA variable injection demo (`addTemplateContext('session', ...)`) to Example 07 with docs and full verification green
 - Phase 46.1 verified passed: 6/6 must-haves met; milestone v0.3.0 phase execution complete
 - Phase 46.2 execution started: 46.2-01 completed (Example 04 runtime template context injection, initializer default src/agents priority, examples docs convention update)
+- Phase 46.2 execution progressed: 46.2-02 completed (examples 01-04 markdown agent files migrated from root `agents/` to `src/agents/` with legacy directories removed)
 
 ### Decisions (v0.3.0)
 
@@ -194,6 +195,8 @@ Progress: ███████████████████░ 99% (228/
 | 46.2-01 | Example 04 specialist loop now reads `it.departments.available` populated via runtime `addTemplateContext('departments', ...)` | Removes hardcoded prompt literals while preserving handoff behavior and IDs |
 | 46.2-01 | ConfigInitializer default agent discovery now checks `./src/agents` before `./agents` fallback | Aligns runtime defaults with TypeScript project expectations without breaking legacy layouts |
 | 46.2-01 | Examples docs now standardize on `src/agents/*.md` and document context-driven ETA data for Example 04 | Removes legacy root-level rationale and teaches data-driven template patterns |
+| 46.2-02 | Example markdown agents for 01-04 are migrated via path-only renames into `src/agents/` | Aligns early examples with convention and avoids content drift during migration |
+| 46.2-02 | Staging uses explicit force-add on migrated files because `.gitignore` `agents/` pattern also matches nested `src/agents/` | Unblocks commit operations without changing ignore policy during this slice |
 
 ### Quick Tasks Completed
 
@@ -204,12 +207,12 @@ Progress: ███████████████████░ 99% (228/
 
 ## Session Continuity
 
-Last session: 2026-03-04T03:09:57Z
-Stopped at: Completed 46.2-01-PLAN.md
+Last session: 2026-03-04T03:15:26Z
+Stopped at: Completed 46.2-02-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-04 — Completed 46.2-01 plan; Phase 46.2 in progress (1/4 plans complete).*
+*Last updated: 2026-03-04 — Completed 46.2-02 plan; Phase 46.2 in progress (2/4 plans complete).*
