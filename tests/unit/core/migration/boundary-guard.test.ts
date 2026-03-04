@@ -21,26 +21,28 @@ function collectProductionTsFiles(dir: string): string[] {
   return files;
 }
 
-describe('Phase 44 boundary guards', () => {
-  const boundaryFiles = new Set([
-    'index.ts',
-    'services.ts',
-  ]);
+describe('Effect runtime boundary guards', () => {
+  const VIOLATION_PATTERNS = [
+    'Effect.runPromise',
+    'Runtime.runPromise',
+    'Effect.runFork',
+    'Runtime.runFork',
+  ];
+
+  const boundaryFiles = new Set(['index.ts', 'services.ts']);
 
   const knownExceptions = new Set([
-    'pipeline/executor.ts',
-    'pipeline/graph-executor.ts',
-    'pipeline/service.ts',
+    'pipeline/checkpoint/manager.ts',
+    'pipeline/checkpoint/postgres.ts',
+    'pipeline/checkpoint/sqlite.ts',
+    'pipeline/pause/manager.ts',
     'hooks/service.ts',
     'eval/service.ts',
     'eval/replay.ts',
     'mcp/health.ts',
-    'effect/index.ts',
-    'observability/otel.ts',
-    'observability/context.ts',
   ]);
 
-  test('no NEW Effect.runPromise/Runtime.runPromise calls appear outside boundary and known exception files', () => {
+  test('no NEW Effect.runPromise/Runtime.runPromise/Effect.runFork/Runtime.runFork calls appear outside boundary and known exception files', () => {
     const violations: string[] = [];
 
     for (const filePath of collectProductionTsFiles(CORE_SRC)) {
@@ -51,14 +53,31 @@ describe('Phase 44 boundary guards', () => {
 
       const content = readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
+      let inBlockComment = false;
+
       for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
         const trimmed = line.trim();
-        if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+
+        if (inBlockComment) {
+          if (trimmed.includes('*/')) {
+            inBlockComment = false;
+          }
           continue;
         }
 
-        if (line.includes('Effect.runPromise') || line.includes('Runtime.runPromise')) {
+        if (trimmed.startsWith('//')) {
+          continue;
+        }
+
+        if (trimmed.includes('/*')) {
+          if (!trimmed.includes('*/')) {
+            inBlockComment = true;
+          }
+          continue;
+        }
+
+        if (VIOLATION_PATTERNS.some((pattern) => line.includes(pattern))) {
           violations.push(`${relativePath}:${index + 1}: ${trimmed}`);
         }
       }
@@ -67,13 +86,13 @@ describe('Phase 44 boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
-  test('known exception files exist and still carry the audited runPromise usage', () => {
+  test('known exception files exist and still carry at least one audited boundary violation pattern', () => {
     for (const relativePath of knownExceptions) {
       const absolutePath = join(CORE_SRC, relativePath);
       expect(existsSync(absolutePath)).toBe(true);
 
       const content = readFileSync(absolutePath, 'utf-8');
-      expect(content.includes('Effect.runPromise') || content.includes('Runtime.runPromise')).toBe(true);
+      expect(VIOLATION_PATTERNS.some((pattern) => content.includes(pattern))).toBe(true);
     }
   });
 
