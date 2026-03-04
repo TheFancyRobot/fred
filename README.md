@@ -1,205 +1,87 @@
 # Fred
 
-A TypeScript framework for building AI agents with intent-based routing, pipeline orchestration, and multi-provider support. Built on [Effect](https://effect.website) and [@effect/ai](https://github.com/Effect-TS/effect/tree/main/packages/ai) for the Bun runtime.
+[![npm version](https://img.shields.io/npm/v/@fancyrobot/fred)](https://www.npmjs.com/package/@fancyrobot/fred)
+[![CI](https://github.com/TheFancyRobot/fred/actions/workflows/ci.yml/badge.svg)](https://github.com/TheFancyRobot/fred/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Fred is a TypeScript framework for building AI agents with intent-based routing, pipeline orchestration, and multi-provider support. It is built on [Effect](https://effect.website) for reliability and designed to run on [Bun](https://bun.sh).
 
 ## Features
 
-- **Intent-based routing** -- match messages to agents via exact, regex, or semantic matching
-- **Pipeline orchestration** -- sequential and graph-based agent workflows with checkpointing and pause/resume
-- **Multi-provider AI** -- OpenAI, Anthropic, Google, Groq, and OpenRouter via `@effect/ai`
-- **Tool system** -- registry of reusable tools with Effect Schema or JSON Schema definitions
-- **MCP integration** -- connect agents to Model Context Protocol servers for automatic tool discovery
-- **Dynamic handoff** -- agents can transfer conversations to other agents via tool calls
-- **Pipeline hooks** -- intercept and modify the message pipeline at 21 hook points
-- **Observability** -- lightweight tracing with optional OpenTelemetry integration
-- **Evaluation harness** -- golden trace-based testing for regression detection
-- **YAML/JSON config** -- define agents, intents, pipelines, and tools declaratively
-- **Interactive TUI** -- terminal chat interface with session management, streaming, and markdown rendering
-
-## Installation
-
-```bash
-# Core package (required)
-bun add @fancyrobot/fred effect
-
-# Add providers as needed
-bun add @fancyrobot/fred-openai @effect/ai-openai
-bun add @fancyrobot/fred-anthropic @effect/ai-anthropic
-bun add @fancyrobot/fred-google @effect/ai-google
-bun add @fancyrobot/fred-groq @effect/ai-groq
-bun add @fancyrobot/fred-openrouter @effect/ai-openai
-
-# CLI (optional)
-bun add -g @fancyrobot/fred-cli
-```
-
-Each provider package auto-registers when imported.
-
-### Requirements
-
-- [Bun](https://bun.sh) >= 1.0
-- At least one provider API key (e.g. `OPENAI_API_KEY`)
+- Intent-based routing with exact, regex, and semantic matching
+- Sequential pipelines and graph workflows with checkpoint/resume support
+- Reusable tools with Effect Schema or JSON Schema definitions
+- Agent handoff, hooks, and middleware across the message lifecycle
+- Built-in support for CLI/TUI workflows, local dev server mode, and evaluation
 
 ## Quick Start
 
-```typescript
-import { Fred } from '@fancyrobot/fred';
-import '@fancyrobot/fred-openai'; // auto-registers provider
+Install core + one provider package:
 
-const fred = new Fred();
-fred.registerDefaultProviders(); // reads API keys from environment
-
-// Register a tool
-fred.registerTool({
-  id: 'calculator',
-  name: 'calculator',
-  description: 'Perform basic arithmetic',
-  parameters: {
-    type: 'object',
-    properties: {
-      operation: { type: 'string', enum: ['add', 'subtract'] },
-      a: { type: 'number' },
-      b: { type: 'number' },
-    },
-    required: ['operation', 'a', 'b'],
-  },
-  execute: async (args) => {
-    return args.operation === 'add' ? args.a + args.b : args.a - args.b;
-  },
-});
-
-// Create agents
-await fred.createAgent({
-  id: 'math-agent',
-  systemMessage: './prompts/math-agent.md',
-  platform: 'openai',
-  model: 'gpt-4',
-  tools: ['calculator'],
-  utterances: ['calculate', 'math', 'compute'],
-});
-
-await fred.createAgent({
-  id: 'default-agent',
-  systemMessage: 'You are a helpful assistant.',
-  platform: 'openai',
-  model: 'gpt-4',
-});
-fred.setDefaultAgent('default-agent');
-
-// Process a message
-const response = await fred.processMessage('What is 15 + 27?', {
-  conversationId: 'my-conversation',
-});
-console.log(response.content);
+```bash
+bun add @fancyrobot/fred @fancyrobot/fred-openrouter effect
 ```
 
-### Config File
+Create an agent file at `src/agents/assistant.md`:
 
-Agents, intents, tools, and pipelines can also be defined in YAML or JSON:
+```markdown
+---
+id: assistant
+platform: openrouter
+model: openrouter/auto
+---
+
+You are a concise and helpful assistant.
+```
+
+Create `config.yaml`:
 
 ```yaml
-agents:
-  - id: greeting-agent
-    systemMessage: ./prompts/greeting.md
-    platform: openai
-    model: gpt-4
-    utterances: [hello, hi, hey]
-
-intents:
-  - id: greeting
-    utterances: [hello, hi]
-    action:
-      type: agent
-      target: greeting-agent
+providers:
+  - id: openrouter
+    type: openrouter
+agentDirs:
+  - ./src/agents
+routing:
+  defaultAgent: assistant
+  rules: []
 ```
 
+Use it from TypeScript:
+
 ```typescript
+import { Fred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openrouter';
+
+const fred = await Fred.create();
 await fred.initializeFromConfig('config.yaml');
+const response = await fred.processMessage('Hello!', { conversationId: 'demo' });
+console.log(response.content);
+await fred.shutdown();
 ```
 
-## CLI
+See the [core package documentation](packages/core/README.md) for the full getting-started guide and programmatic API.
 
-The `fred` CLI provides interactive chat, resource inspection, and testing:
+## Packages
 
-```bash
-fred chat                    # Interactive TUI chat
-fred run                     # Headless agent execution
-fred agents                  # List agents
-fred tools                   # List tools
-fred providers               # List providers
-fred session list             # List saved sessions
-fred config validate          # Validate config file
-fred init                    # Scaffold new project
-fred test                    # Run golden trace tests
-fred eval                    # Evaluation workflows
-fred mcp list                # List MCP servers
-```
+| Package | Description |
+|---------|-------------|
+| [@fancyrobot/fred](packages/core/README.md) | Core framework |
+| [@fancyrobot/fred-cli](packages/cli/README.md) | CLI and TUI |
+| [@fancyrobot/fred-dev](packages/dev/README.md) | Development tooling |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | OpenAI provider |
+| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | Anthropic provider |
+| [@fancyrobot/fred-google](packages/provider-google/README.md) | Google (Gemini) provider |
+| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | Groq provider |
+| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | OpenRouter provider |
 
-## Development Chat
+## Examples
 
-```bash
-bun run dev
-```
-
-Starts an interactive terminal chat that auto-detects providers from environment variables. Works with zero configuration -- creates a temporary dev agent if none are configured.
-
-## Server Mode
-
-```bash
-bun run server --config config.yaml --port 3000
-```
-
-Exposes an OpenAI-compatible API:
-
-| Endpoint | Description |
-|---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible chat (works with Chatbox, etc.) |
-| `POST /chat` | Simplified chat endpoint |
-| `POST /message` | Process with intent matching options |
-| `GET /agents` | List agents |
-| `GET /intents` | List intents |
-| `GET /tools` | List tools |
-| `GET /health` | Health check |
-
-## Providers
-
-| Provider | Package | Backend |
-|---|---|---|
-| OpenAI | `@fancyrobot/fred-openai` | `@effect/ai-openai` |
-| Anthropic | `@fancyrobot/fred-anthropic` | `@effect/ai-anthropic` |
-| Google | `@fancyrobot/fred-google` | `@effect/ai-google` |
-| Groq | `@fancyrobot/fred-groq` | `@effect/ai` (Chat Completions) |
-| OpenRouter | `@fancyrobot/fred-openrouter` | `@effect/ai-openai` |
-
-Set API keys via environment variables:
-
-```bash
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GOOGLE_GENERATIVE_AI_API_KEY=...
-GROQ_API_KEY=...
-OPENROUTER_API_KEY=...
-```
-
-Or pass them programmatically:
-
-```typescript
-const openai = await fred.useProvider('openai', { apiKey: 'your_key' });
-```
-
-## Architecture
-
-Fred routes messages in priority order:
-
-1. **Agent utterances** -- direct routing (highest priority)
-2. **Intent matching** -- exact, then regex, then semantic similarity
-3. **Default agent** -- fallback
-
-The message pipeline supports 21 hook points across message lifecycle, intent resolution, agent selection, tool execution, routing, and pipeline orchestration. See the [Hooks documentation](https://sincspecv.github.io/fred/advanced/hooks/) for details.
+Fred includes 12 progressive examples covering quickstart, tools, routing, pipelines, hooks, MCP, and CLI/TUI usage. Start here: [examples/README.md](examples/README.md).
 
 ## Documentation
 
-Full guides, API reference, and examples: **[sincspecv.github.io/fred](https://sincspecv.github.io/fred)**
+Full guides and API reference: [sincspecv.github.io/fred](https://sincspecv.github.io/fred)
 
 ## Contributing
 
@@ -207,13 +89,11 @@ Full guides, API reference, and examples: **[sincspecv.github.io/fred](https://s
 git clone https://github.com/TheFancyRobot/fred.git
 cd fred
 bun install
-
-bun test           # Run all tests
-bun test:unit      # Unit tests only
-bun run build      # Build all packages
+bun test
+bun run build
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow details.
 
 ## License
 
