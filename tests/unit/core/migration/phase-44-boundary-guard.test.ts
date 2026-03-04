@@ -28,7 +28,6 @@ describe('Phase 44 boundary guards', () => {
   ]);
 
   const knownExceptions = new Set([
-    'agent/factory.ts',
     'pipeline/executor.ts',
     'pipeline/graph-executor.ts',
     'pipeline/service.ts',

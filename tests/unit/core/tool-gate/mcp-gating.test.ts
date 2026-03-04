@@ -152,7 +152,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
       mcpServers: ['github'],
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // ToolGateService should have been called with MCP tools
     expect(mockToolGate.filterTools).toHaveBeenCalled();
@@ -194,7 +194,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
       mcpServers: ['github'],
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // All tools should be registered
     expect(toolRegistry.hasTool('github/create_issue')).toBe(true);
@@ -245,7 +245,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
       mcpServers: ['github'], // MCP tools
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // Native tool should be unaffected
     expect(toolRegistry.hasTool('calculator')).toBe(true);
@@ -285,7 +285,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
       mcpServers: ['github'],
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // Verify context includes agent ID
     expect(capturedContext).toBeDefined();
@@ -333,7 +333,7 @@ describe('ToolGateService - MCP Tool Gating', () => {
       mcpServers: ['github'],
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // Should log warning for denied tools
     expect(warnMock).toHaveBeenCalled();

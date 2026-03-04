@@ -1,6 +1,6 @@
 import { Action } from '../intent/intent';
 import type { Prompt } from '@effect/ai';
-import type { Stream } from 'effect';
+import type { Effect, Stream } from 'effect';
 import type { StreamEvent } from '../stream/events';
 
 /**
@@ -110,7 +110,7 @@ export function hasRetryDiagnostics(error: unknown): error is ErrorWithRetryDiag
 export interface AgentInstance {
   id: string;
   config: AgentConfig;
-  processMessage: (message: string, messages?: AgentMessage[]) => Promise<AgentResponse>;
+  processMessage: (message: string, messages?: AgentMessage[]) => Effect.Effect<AgentResponse, Error>;
   // Stream has error and requirements channels - actual types vary by implementation
   streamMessage?: (
     message: string,

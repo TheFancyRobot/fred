@@ -240,17 +240,15 @@ class AgentServiceImpl implements AgentService {
     config: AgentConfig,
     providerDef: ProviderDefinition
   ): Effect.Effect<{ processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] }, AgentCreationError> {
-    const self = this;
-
-    return Effect.tryPromise({
-      try: () => self.factory.createAgent(config, providerDef),
-      catch: (cause) =>
+    return this.factory.createAgent(config, providerDef).pipe(
+      Effect.mapError((cause) =>
         new AgentCreationError({
           id: config.id,
           message: getAgentCreationMessage(config.id),
           cause,
-        }),
-    });
+        })
+      )
+    );
   }
 
   getAgent(id: string): Effect.Effect<AgentInstance, AgentNotFoundError> {

@@ -105,7 +105,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       mcpServers: ['github'],
     };
 
-    const agent = await factory.createAgent(config, mockProvider);
+    const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
     expect(agent).toBeDefined();
     expect(mockRegistry.discoverTools).toHaveBeenCalledWith('github');
 
@@ -127,7 +127,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       mcpServers: ['unknown'],
     };
 
-    const agent = await factory.createAgent(config, mockProvider);
+    const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
     expect(agent).toBeDefined();
     expect(mockRegistry.discoverTools).toHaveBeenCalledWith('unknown');
     expect(warnMock).toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       // No mcpServers
     };
 
-    const agent = await factory.createAgent(config, mockProvider);
+    const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
     expect(agent).toBeDefined();
     expect(mockRegistry.discoverTools).not.toHaveBeenCalled();
   });
@@ -159,7 +159,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       mcpServers: ['github', 'filesystem'],
     };
 
-    const agent = await factory.createAgent(config, mockProvider);
+    const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
     expect(agent).toBeDefined();
     expect(mockRegistry.discoverTools).toHaveBeenCalledWith('github');
     expect(mockRegistry.discoverTools).toHaveBeenCalledWith('filesystem');
@@ -179,7 +179,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       mcpServers: ['github'],
     };
 
-    await factory.createAgent(config, mockProvider);
+    await Effect.runPromise(factory.createAgent(config, mockProvider));
 
     // Verify namespace format
     const tool = toolRegistry.getTools(['github/create_issue'])[0];
@@ -200,7 +200,7 @@ describe('AgentFactory - MCP Registry Integration', () => {
       mcpServers: ['github'],
     };
 
-    const agent = await factoryNoRegistry.createAgent(config, mockProvider);
+    const agent = await Effect.runPromise(factoryNoRegistry.createAgent(config, mockProvider));
     expect(agent).toBeDefined();
     // discoverTools should not be called since registry not set
   });

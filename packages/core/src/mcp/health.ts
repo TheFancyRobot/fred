@@ -148,19 +148,26 @@ export class MCPHealthManager {
         // Reset retry state on success
         this.retryState.delete(serverId);
 
-        console.log(`Server '${serverId}' reconnected successfully`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(`Server '${serverId}' reconnected successfully`);
+        }
         return true;
       } catch (error) {
         const attemptNum = attempt + 1;
-        console.warn(
-          `Reconnect attempt ${attemptNum}/${maxRetries} failed for '${serverId}':`,
-          error instanceof Error ? error.message : String(error)
-        );
+        // Only log in production (not during tests) to avoid misleading output
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(
+            `Reconnect attempt ${attemptNum}/${maxRetries} failed for '${serverId}':`,
+            error instanceof Error ? error.message : String(error)
+          );
+        }
 
         // If not last attempt, wait with exponential backoff
         if (attempt < maxRetries - 1) {
           const backoffMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-          console.log(`Waiting ${backoffMs}ms before retry...`);
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`Waiting ${backoffMs}ms before retry...`);
+          }
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
         }
       }
@@ -171,9 +178,11 @@ export class MCPHealthManager {
     this.stopHealthCheck(serverId);
     this.retryState.delete(serverId);
 
-    console.error(
-      `Server '${serverId}' failed to reconnect after ${maxRetries} attempts`
-    );
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(
+        `Server '${serverId}' failed to reconnect after ${maxRetries} attempts`
+      );
+    }
     return false;
   }
 }

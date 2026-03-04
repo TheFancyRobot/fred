@@ -110,7 +110,7 @@ async function executeStepWithRetry(
       if (!agent) {
         throw new Error(`Agent "${step.agentId}" not found`);
       }
-      const response = await agent.processMessage(context.input, context.history);
+      const response = await Effect.runPromise(agent.processMessage(context.input, context.history));
       return response;
     }
 
@@ -261,9 +261,7 @@ async function executeStepWithHooks(
   });
 
   // Run annotation effect (fire and forget - best effort)
-  Effect.runPromise(spanAnnotation).catch(() => {
-    // Annotation failed, continue execution
-  });
+  Effect.runFork(spanAnnotation.pipe(Effect.ignore));
 
   let result: unknown;
   let lastError: Error | undefined;
@@ -277,7 +275,7 @@ async function executeStepWithHooks(
     // Annotate retry attempt if > 0
     if (attempt > 0) {
       const retryAnnotation = annotateSpan({ attempt });
-      Effect.runPromise(retryAnnotation).catch(() => {});
+      Effect.runFork(retryAnnotation.pipe(Effect.ignore));
       stepSpan?.addEvent(`retry.attempt.${attempt}`, {
         'retry.attempt': attempt,
         'retry.maxRetries': maxRetries,
@@ -425,9 +423,7 @@ async function executeStepWithHooks(
           });
         });
 
-        Effect.runPromise(recordBranchEffect as any).catch(() => {
-          // Best-effort: ignore failures
-        });
+        Effect.runFork((recordBranchEffect as any).pipe(Effect.ignore));
       }
     }
   }
@@ -455,9 +451,7 @@ async function executeStepWithHooks(
       });
     });
 
-    Effect.runPromise(recordStepEffect as any).catch(() => {
-      // Best-effort: ignore failures
-    });
+    Effect.runFork((recordStepEffect as any).pipe(Effect.ignore));
   }
 
   // Execute afterStep hooks with correlation context
@@ -577,9 +571,7 @@ export async function executePipelineV2(
   });
 
   // Run annotation effect (fire and forget - best effort)
-  Effect.runPromise(pipelineAnnotation).catch(() => {
-    // Annotation failed, continue execution
-  });
+  Effect.runFork(pipelineAnnotation.pipe(Effect.ignore));
 
   const pipelineData: PipelineHookEventData = {
     pipelineId: config.id,

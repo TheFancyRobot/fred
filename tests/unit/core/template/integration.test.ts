@@ -36,8 +36,8 @@ describe('template integration', () => {
     });
 
     try {
-      const agent = await factory.createAgent(config, provider as any);
-      await agent.processMessage('hello');
+      const agent = await Effect.runPromise(factory.createAgent(config, provider as any));
+      await Effect.runPromise(agent.processMessage('hello'));
       return capturedSystem;
     } finally {
       generateSpy.mockRestore();
@@ -127,7 +127,7 @@ describe('template integration', () => {
     });
 
     try {
-      const agent = await factory.createAgent(
+      const agent = await Effect.runPromise(factory.createAgent(
         {
           id: 'dynamic-vars',
           platform: 'openai',
@@ -135,11 +135,11 @@ describe('template integration', () => {
           systemMessage: 'Hello <%= vars.name %>',
         },
         provider as any
-      );
+      ));
 
-      const first = await agent.processMessage('hello');
+      const first = await Effect.runPromise(agent.processMessage('hello'));
       currentName = 'Grace';
-      const second = await agent.processMessage('hello');
+      const second = await Effect.runPromise(agent.processMessage('hello'));
 
       expect(first.content).toBe('Hello Ada');
       expect(second.content).toBe('Hello Grace');
@@ -172,8 +172,8 @@ describe('template integration (real ETA engine)', () => {
     });
 
     try {
-      const agent = await factory.createAgent(config, provider as any);
-      await agent.processMessage('hello');
+      const agent = await Effect.runPromise(factory.createAgent(config, provider as any));
+      await Effect.runPromise(agent.processMessage('hello'));
       return capturedSystem;
     } finally {
       generateSpy.mockRestore();
@@ -285,7 +285,7 @@ describe('template integration (real ETA engine)', () => {
     });
 
     try {
-      const agent = await factory.createAgent(
+      const agent = await Effect.runPromise(factory.createAgent(
         {
           id: 'dynamic',
           platform: 'openai',
@@ -293,11 +293,11 @@ describe('template integration (real ETA engine)', () => {
           systemMessage: 'You are a <%= vars.role %>.',
         },
         provider as any
-      );
+      ));
 
-      const first = await agent.processMessage('hello');
+      const first = await Effect.runPromise(agent.processMessage('hello'));
       currentRole = 'expert';
-      const second = await agent.processMessage('hello');
+      const second = await Effect.runPromise(agent.processMessage('hello'));
 
       expect(first.content).toBe('You are a assistant.');
       expect(second.content).toBe('You are a expert.');

@@ -457,14 +457,12 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(quitFired).toBe(true);
   });
 
-  test('Ctrl+Shift+C copies transcript to clipboard without quitting', async () => {
+  test('Ctrl+Shift+C is not intercepted so terminal can copy selected text', async () => {
     await createTestApp();
 
-    const copySpy = (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52;
     let copiedText = '';
-    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = (text: string) => {
+    (app as any).copyToClipboard = (text: string) => {
       copiedText = text;
-      return true;
     };
 
     app.processKey(makeKey({ name: 'h' }));
@@ -476,11 +474,9 @@ describe('TUI App (OpenTUI integration)', () => {
 
     app.processKey(makeKey({ name: 'c', ctrl: true, shift: true }));
 
-    expect(copiedText).toContain('user:');
-    expect(copiedText).toContain('hi');
+    // Nothing should be copied — Ctrl+Shift+C is reserved for the terminal
+    expect(copiedText).toBe('');
     expect(app.isRunning()).toBe(true);
-
-    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = copySpy;
   });
 
   test('mouse wheel scrolling updates transcript viewport offset', async () => {
@@ -640,7 +636,10 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.streaming.isStreaming).toBe(false);
     expect(state.streaming.lastError).toBe('provider disconnected');
     expect(state.streaming.outputTokenCount).toBe(2);
-    expect(state.transcript.messages[state.transcript.messages.length - 1]?.content).toBe('hello world');
+    // Accumulated output preserved with error appended for visibility
+    const lastMsg = state.transcript.messages[state.transcript.messages.length - 1];
+    expect(lastMsg?.content).toContain('hello world');
+    expect(lastMsg?.content).toContain('[Error: provider disconnected]');
     expect(capturedErrorMessage).toBe('provider disconnected');
   });
 
@@ -1092,6 +1091,110 @@ describe('TUI App (OpenTUI integration)', () => {
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain('? Help');
       expect(frame).toContain('Tab complete');
+    });
+  });
+
+  describe('thinking indicator and stream timeout', () => {
+    test('waitingForFirstToken is true after submit, false after first token', async () => {
+      await createTestApp();
+
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().streaming.isStreaming).toBe(true);
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Push first token — should clear waitingForFirstToken
+      app.pushAssistantToken('hello');
+      await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+    });
+
+    test('waitingForFirstToken clears on stream completion', async () => {
+      await createTestApp();
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      app.completeAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('waitingForFirstToken clears on stream error', async () => {
+      await createTestApp({
+        onError: () => {},
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      app.failAssistantStream(new Error('test error'));
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('thinking indicator renders during pre-token wait', async () => {
+      await createTestApp();
+
+      // Submit a user message so the spinner has a message to attach to
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      // Indicator uses braille dot spinner characters (U+2800 block)
+      const hasBrailleSpinner = /[\u2800-\u28FF]/.test(frame);
+      expect(hasBrailleSpinner).toBe(true);
+    });
+
+    test('thinking indicator disappears after first token', async () => {
+      await createTestApp();
+
+      // Submit a user message first
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      app.pushAssistantToken('hello');
+      await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+
+      // State should reflect: no longer waiting, but still streaming
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+
+      // Allow render pipeline to settle after state change
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      // Braille spinner should be gone
+      const hasBrailleSpinner = /[\u2800-\u28FF]/.test(frame);
+      expect(hasBrailleSpinner).toBe(false);
+    });
+
+    test('stream timeout fires error after silence', async () => {
+      let capturedErrorMessage: string | undefined;
+      await createTestApp({
+        onError: (error) => {
+          capturedErrorMessage = error.message;
+        },
+      });
+
+      // Manually start stream and simulate timeout by calling failAssistantStream
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Simulate what the timeout callback does
+      app.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
+
+      expect(app.getState().streaming.isStreaming).toBe(false);
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.lastError).toContain('timed out');
+      expect(capturedErrorMessage).toContain('timed out');
     });
   });
 });

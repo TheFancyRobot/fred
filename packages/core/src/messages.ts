@@ -106,6 +106,18 @@ export const normalizeMessage = (message: PromptMessage | LegacyMessage): Prompt
   }
 
   if (Array.isArray(content) && content.every(isPromptPart)) {
+    // For non-tool roles, flatten text-only part arrays to plain strings.
+    // SQLite history stores content as typed part arrays, but OpenAI-compatible
+    // APIs (including OpenRouter) expect plain strings for user/assistant/system messages.
+    if (role !== 'tool') {
+      const allText = content.every((p: any) => p.type === 'text');
+      if (allText) {
+        return {
+          role,
+          content: content.map((p: any) => p.text ?? '').join(''),
+        } as PromptMessage;
+      }
+    }
     return {
       role,
       content: content as unknown as PromptMessage['content'],

@@ -13,7 +13,7 @@ export type NoConfigReason =
 /**
  * Config file format
  */
-export type ConfigFormat = 'ts' | 'json';
+export type ConfigFormat = 'ts' | 'json' | 'yaml' | 'yml';
 
 /**
  * Candidate config file

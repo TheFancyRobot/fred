@@ -77,9 +77,14 @@ Desktop.ini
 *.tsbuildinfo
 
 # Config files (user-specific)
+fred.config.yaml
+fred.config.json
 config.local.json
 fred.config.local.json
 .env.example.local
+
+# Local agent markdown files (for dev testing)
+agents/
 
 # Flox local state
 .flox/

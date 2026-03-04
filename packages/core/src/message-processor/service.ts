@@ -516,25 +516,24 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           }
 
           try {
-            response = yield* Effect.tryPromise({
-              try: () =>
-                (route.agent!.processMessage as any)(
-                  message,
-                  sequentialVisibility ? previousMessages : [],
-                  {
-                    policyContext: {
-                      intentId: route.intentId,
-                      agentId: route.agentId,
-                      conversationId,
-                      userId: options?.userId,
-                      role: options?.role,
-                      metadata: options?.policyMetadata,
-                    },
-                  }
-                ) as Promise<AgentResponse>,
-              catch: (error) =>
-                new RouteExecutionError({ routeType: 'agent', cause: error instanceof Error ? error : new Error(String(error)) }),
-            });
+            response = yield* ((route.agent!.processMessage as any)(
+              message,
+              sequentialVisibility ? previousMessages : [],
+              {
+                policyContext: {
+                  intentId: route.intentId,
+                  agentId: route.agentId,
+                  conversationId,
+                  userId: options?.userId,
+                  role: options?.role,
+                  metadata: options?.policyMetadata,
+                },
+              }
+            ) as Effect.Effect<AgentResponse, Error>).pipe(
+              Effect.mapError((error: unknown) =>
+                new RouteExecutionError({ routeType: 'agent', cause: error instanceof Error ? error : new Error(String(error)) })
+              )
+            );
             if (agentSpan) {
               agentSpan.setAttribute('response.length', response.content.length);
               agentSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
@@ -603,11 +602,11 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           const messageWithContext = handoffMessage + handoffContext;
 
           // Process message with target agent
-          const handoffResult = yield* Effect.tryPromise({
-            try: () => targetAgent.processMessage(messageWithContext, previousMessages),
-            catch: (error) =>
-              new HandoffError({ fromAgentId: usedAgentId || 'unknown', toAgentId: handoff.agentId, cause: error instanceof Error ? error : new Error(String(error)) }),
-          });
+          const handoffResult = yield* targetAgent.processMessage(messageWithContext, previousMessages).pipe(
+            Effect.mapError((error) =>
+              new HandoffError({ fromAgentId: usedAgentId || 'unknown', toAgentId: handoff.agentId, cause: error instanceof Error ? error : new Error(String(error)) })
+            )
+          );
           currentResponse = handoffResult;
           usedAgentId = handoff.agentId;
 
@@ -908,9 +907,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
             });
           }
 
-          const response = yield* Effect.promise(() =>
-            agent.processMessage(currentMessage, sequentialVisibility ? previousMessages : [])
-          );
+          const response = yield* agent.processMessage(currentMessage, sequentialVisibility ? previousMessages : []);
 
           if (response.content && shouldPersistHistory) {
             yield* self.contextStorage.addMessage(conversationId, {

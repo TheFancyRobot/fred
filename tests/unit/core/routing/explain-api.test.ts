@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { Effect } from 'effect';
 import { Fred } from '../../../../packages/core/src/index';
 import { createMockProvider } from '../../helpers/mock-provider';
 
@@ -23,7 +24,7 @@ async function registerMockAgent(
     systemMessage: 'Mock agent',
   } as any);
 
-  agent.processMessage = async () => ({ content: response });
+  agent.processMessage = () => Effect.succeed({ content: response });
 }
 
 describe('Routing Explain API Integration', () => {

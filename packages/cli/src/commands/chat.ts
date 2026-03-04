@@ -375,6 +375,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
           ),
       });
 
+      // Surface runtime warnings (e.g. hot reload errors) as transient TUI notices
+      fred.onWarning = (msg) => app.setSystemNotice(msg);
+
       // Update telemetry with actual model info
       app.updateTelemetryModel(model, provider);
 

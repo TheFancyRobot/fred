@@ -43,6 +43,95 @@
         "typescript": "^5.9.3",
       },
     },
+    "examples/01-quickstart-single-agent": {
+      "name": "@fancyrobot/fred-example-01-quickstart",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/02-tools-basics": {
+      "name": "@fancyrobot/fred-example-02-tools",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+        "effect": "^3.19.19",
+      },
+    },
+    "examples/03-intent-routing-basics": {
+      "name": "@fancyrobot/fred-example-03-intent-routing",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/04-dynamic-handoff": {
+      "name": "@fancyrobot/fred-example-04-dynamic-handoff",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/05-pipeline-sequential": {
+      "name": "@fancyrobot/fred-example-05-pipeline-sequential",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+        "effect": "^3.19.19",
+      },
+    },
+    "examples/06-pipeline-graph-workflow": {
+      "name": "@fancyrobot/fred-example-06-graph-workflow",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/07-hooks-and-middleware": {
+      "name": "@fancyrobot/fred-example-07-hooks",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/08-observability-tracing": {
+      "name": "@fancyrobot/fred-example-08-observability",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/09-evaluation-harness-golden-traces": {
+      "name": "@fancyrobot/fred-example-09-evaluation",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/10-config-driven-yaml": {
+      "name": "@fancyrobot/fred-example-10-config",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
+    "examples/11-mcp-integration": {
+      "name": "@fancyrobot/fred-example-11-mcp",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
+    "examples/12-cli-and-tui": {
+      "name": "@fancyrobot/fred-example-12-cli-tui",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-openrouter": "workspace:*",
+      },
+    },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
       "version": "0.3.0",
@@ -271,6 +360,30 @@
     "@fancyrobot/fred-cli": ["@fancyrobot/fred-cli@workspace:packages/cli"],
 
     "@fancyrobot/fred-dev": ["@fancyrobot/fred-dev@workspace:packages/dev"],
+
+    "@fancyrobot/fred-example-01-quickstart": ["@fancyrobot/fred-example-01-quickstart@workspace:examples/01-quickstart-single-agent"],
+
+    "@fancyrobot/fred-example-02-tools": ["@fancyrobot/fred-example-02-tools@workspace:examples/02-tools-basics"],
+
+    "@fancyrobot/fred-example-03-intent-routing": ["@fancyrobot/fred-example-03-intent-routing@workspace:examples/03-intent-routing-basics"],
+
+    "@fancyrobot/fred-example-04-dynamic-handoff": ["@fancyrobot/fred-example-04-dynamic-handoff@workspace:examples/04-dynamic-handoff"],
+
+    "@fancyrobot/fred-example-05-pipeline-sequential": ["@fancyrobot/fred-example-05-pipeline-sequential@workspace:examples/05-pipeline-sequential"],
+
+    "@fancyrobot/fred-example-06-graph-workflow": ["@fancyrobot/fred-example-06-graph-workflow@workspace:examples/06-pipeline-graph-workflow"],
+
+    "@fancyrobot/fred-example-07-hooks": ["@fancyrobot/fred-example-07-hooks@workspace:examples/07-hooks-and-middleware"],
+
+    "@fancyrobot/fred-example-08-observability": ["@fancyrobot/fred-example-08-observability@workspace:examples/08-observability-tracing"],
+
+    "@fancyrobot/fred-example-09-evaluation": ["@fancyrobot/fred-example-09-evaluation@workspace:examples/09-evaluation-harness-golden-traces"],
+
+    "@fancyrobot/fred-example-10-config": ["@fancyrobot/fred-example-10-config@workspace:examples/10-config-driven-yaml"],
+
+    "@fancyrobot/fred-example-11-mcp": ["@fancyrobot/fred-example-11-mcp@workspace:examples/11-mcp-integration"],
+
+    "@fancyrobot/fred-example-12-cli-tui": ["@fancyrobot/fred-example-12-cli-tui@workspace:examples/12-cli-and-tui"],
 
     "@fancyrobot/fred-google": ["@fancyrobot/fred-google@workspace:packages/provider-google"],
 

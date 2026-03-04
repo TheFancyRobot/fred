@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Exit, Cause } from 'effect';
 import { LanguageModel } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import { AgentConfig } from '../../../../packages/core/src/agent/agent';
@@ -42,7 +42,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000, // 1 second timeout
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       // The tool should execute successfully
       // We can't directly test tool execution without mocking ToolLoopAgent,
@@ -76,7 +76,7 @@ describe('AgentFactory', () => {
         toolTimeout: 100, // Very short timeout
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       // Agent should still be created even if tool might timeout
       expect(agent).toBeDefined();
@@ -101,7 +101,7 @@ describe('AgentFactory', () => {
         // toolTimeout not specified - should use default 300000
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -128,7 +128,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
       
       // If timeout wasn't cleared, we'd have memory leaks
@@ -156,7 +156,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -259,7 +259,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       expect(agent).toBeDefined();
       expect(agent.processMessage).toBeDefined();
@@ -276,7 +276,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -304,7 +304,7 @@ describe('AgentFactory', () => {
         tools: ['known-tool', 'missing-tool'],
       };
 
-      await factory.createAgent(config, mockProvider);
+      await Effect.runPromise(factory.createAgent(config, mockProvider));
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy.mock.calls[0][0]).toContain('missing-tool');
@@ -337,7 +337,7 @@ describe('AgentFactory', () => {
         tools: ['test-tool'],
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -350,7 +350,7 @@ describe('AgentFactory', () => {
         maxSteps: 10,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -363,7 +363,7 @@ describe('AgentFactory', () => {
         toolChoice: 'required',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -376,7 +376,7 @@ describe('AgentFactory', () => {
         temperature: 0.5,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -397,7 +397,7 @@ describe('AgentFactory', () => {
         ],
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -413,7 +413,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factoryWithoutTracer.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factoryWithoutTracer.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -460,7 +460,7 @@ describe('AgentFactory', () => {
       };
 
       // Agent should still be created even if tool might error
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -475,7 +475,7 @@ describe('AgentFactory', () => {
       };
 
       // Should not throw - tools are optional
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
       expect(warnSpy).toHaveBeenCalledTimes(1);
       warnSpy.mockRestore();
@@ -510,7 +510,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -538,17 +538,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'retry-agent',
         systemMessage: 'Test retry boundary',
         platform: 'groq',
         model: 'llama-3.3-70b-versatile',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false); // Should not reach here
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeDefined();
         expect(err._retryDiagnostics.provider).toBe('groq');
         expect(err._retryDiagnostics.retryable).toBe(true);
@@ -583,17 +583,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'retry-nested-agent',
         systemMessage: 'Test nested retry',
         platform: 'groq',
         model: 'llama-3.3-70b-versatile',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false);
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeDefined();
         expect(err._retryDiagnostics.retryable).toBe(false);
         expect(err._retryDiagnostics.lastStatusCode).toBe(401);
@@ -615,17 +615,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'plain-error-agent',
         systemMessage: 'Test plain error',
         platform: 'openai',
         model: 'gpt-4',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false);
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeUndefined();
       }
 
@@ -680,17 +680,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'gated-agent',
         systemMessage: 'Tool gate test',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['safe_tool', 'admin_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      await agent.processMessage('hello', [], {
+      await Effect.runPromise(agent.processMessage('hello', [], {
         policyContext: { intentId: 'safe-intent', agentId: 'gated-agent' },
-      });
+      }));
 
       expect(toolkitTools).toEqual(['safe_tool']);
       generateSpy.mockRestore();
@@ -740,17 +740,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'deny-agent',
         systemMessage: 'Tool deny test',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['safe_tool', 'admin_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      const response = await agent.processMessage('run admin tool', [], {
+      const response = await Effect.runPromise(agent.processMessage('run admin tool', [], {
         policyContext: { intentId: 'safe-intent', agentId: 'deny-agent' },
-      });
+      }));
 
       expect(response.toolCalls?.[0]?.toolId).toBe('admin_tool');
       expect(response.toolCalls?.[0]?.error?.code).toBe('POLICY_DENIED');
@@ -826,22 +826,22 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'approval-agent',
         systemMessage: 'Test agent with approval',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['approval_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      const response = await agent.processMessage('run approval tool', [], {
+      const response = await Effect.runPromise(agent.processMessage('run approval tool', [], {
         policyContext: {
           intentId: 'test-intent',
           agentId: 'approval-agent',
           userId: 'user-123',
           metadata: { conversationId: 'conv-456' },
         },
-      });
+      }));
 
       // Note: Due to mocking limitations, tools aren't actually executed in this test context.
       // The approval workflow is thoroughly tested in tool-gate/service.test.ts.

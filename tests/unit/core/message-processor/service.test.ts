@@ -343,7 +343,7 @@ describe('MessageProcessorService Routing', () => {
     const routedAgent = {
       id: 'intent-agent',
       config: { id: 'intent-agent', platform: 'openai', model: 'gpt-4', systemMessage: 'test' },
-      processMessage: async () => ({ content: 'ok' }),
+      processMessage: () => Effect.succeed({ content: 'ok' }),
     } as any;
 
     const agentLayer = Layer.succeed(AgentService, {
@@ -400,7 +400,7 @@ describe('MessageProcessorService Routing', () => {
     const routedAgent = {
       id: 'router-agent',
       config: { id: 'router-agent', platform: 'openai', model: 'gpt-4', systemMessage: 'test' },
-      processMessage: async () => ({ content: 'ok' }),
+      processMessage: () => Effect.succeed({ content: 'ok' }),
     } as any;
 
     const agentLayer = Layer.succeed(AgentService, {
@@ -555,7 +555,7 @@ describe('MessageProcessorService stream contracts', () => {
         systemMessage: 'test',
         persistHistory: true,
       },
-      processMessage: async () => ({ content: 'fallback' }),
+      processMessage: () => Effect.succeed({ content: 'fallback' }),
       streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
         const runId = `run_${Date.now()}`;
         const threadId = opts?.threadId;
@@ -659,7 +659,7 @@ describe('MessageProcessorService stream contracts', () => {
         systemMessage: 'test',
         persistHistory: true,
       },
-      processMessage: async () => ({ content: 'fallback' }),
+      processMessage: () => Effect.succeed({ content: 'fallback' }),
       streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
         const runId = `run_${Date.now()}`;
         const threadId = opts?.threadId;
@@ -772,7 +772,7 @@ describe('MessageProcessorService stream contracts', () => {
         systemMessage: 'test',
         persistHistory: true,
       },
-      processMessage: async () => ({ content: 'fallback' }),
+      processMessage: () => Effect.succeed({ content: 'fallback' }),
       streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
         const runId = `run_${Date.now()}`;
         const threadId = opts?.threadId;
@@ -869,7 +869,7 @@ describe('MessageProcessorService stream contracts', () => {
         systemMessage: 'test',
         persistHistory: true,
       },
-      processMessage: async () => ({ content: 'fallback' }),
+      processMessage: () => Effect.succeed({ content: 'fallback' }),
       streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
         const runId = `run_${Date.now()}`;
         const threadId = opts?.threadId;
@@ -979,9 +979,9 @@ describe('MessageProcessorService policy context propagation', () => {
     const mockAgent = {
       id: 'policy-agent',
       config: { id: 'policy-agent', platform: 'openai', model: 'gpt-4', systemMessage: 'test' },
-      processMessage: async (_message: string, _messages: unknown[], runtimeOptions?: { policyContext?: Record<string, unknown> }) => {
+      processMessage: (_message: string, _messages: unknown[], runtimeOptions?: { policyContext?: Record<string, unknown> }) => {
         capturedPolicyContext = runtimeOptions?.policyContext;
-        return { content: 'ok' };
+        return Effect.succeed({ content: 'ok' });
       },
     } as any;
 

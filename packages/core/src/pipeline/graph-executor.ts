@@ -206,9 +206,7 @@ export async function executeGraphWorkflow(
   });
 
   // Run annotation effect (fire and forget - best effort)
-  Effect.runPromise(graphAnnotation).catch(() => {
-    // Annotation failed, continue execution
-  });
+  Effect.runFork(graphAnnotation.pipe(Effect.ignore));
 
   const pipelineData: PipelineHookEventData = {
     pipelineId: config.id,
@@ -327,9 +325,7 @@ export async function executeGraphWorkflow(
             });
           });
 
-          Effect.runPromise(recordForkEffect).catch(() => {
-            // Best-effort: ignore failures
-          });
+          Effect.runFork((recordForkEffect as any).pipe(Effect.ignore));
         }
 
         // Execute all branches in parallel
@@ -428,9 +424,7 @@ export async function executeGraphWorkflow(
             });
           });
 
-          Effect.runPromise(recordJoinEffect).catch(() => {
-            // Best-effort: ignore failures
-          });
+          Effect.runFork((recordJoinEffect as any).pipe(Effect.ignore));
         }
 
         // Merge outputs from source nodes
@@ -488,7 +482,7 @@ export async function executeGraphWorkflow(
         stepName: nodeId,
       });
 
-      Effect.runPromise(nodeAnnotation).catch(() => {});
+      Effect.runFork(nodeAnnotation.pipe(Effect.ignore));
 
       try {
         const result = await executeNode(
@@ -568,9 +562,7 @@ export async function executeGraphWorkflow(
               });
             });
 
-            Effect.runPromise(recordBranchEffect).catch(() => {
-              // Best-effort: ignore failures
-            });
+            Effect.runFork((recordBranchEffect as any).pipe(Effect.ignore));
           }
         }
 
@@ -749,7 +741,7 @@ async function executeNode(
       if (!agent) {
         throw new Error(`Agent "${node.agentId}" not found`);
       }
-      const agentResult = await agent.processMessage(context.input, context.history);
+      const agentResult = await Effect.runPromise(agent.processMessage(context.input, context.history));
 
       // Check if agent returned a handoff request
       if (isHandoffSignal(agentResult)) {
@@ -814,9 +806,7 @@ async function executeNode(
       });
     });
 
-    Effect.runPromise(recordNodeEffect).catch(() => {
-      // Best-effort: ignore failures
-    });
+    Effect.runFork((recordNodeEffect as any).pipe(Effect.ignore));
   }
 
   // Execute afterStep hooks with correlation context
@@ -977,10 +967,10 @@ async function handleHandoff(
       throw new Error(`Target agent "${targetAgent}" not found for handoff`);
     }
 
-    const targetResult = await targetAgentInstance.processMessage(
+    const targetResult = await Effect.runPromise(targetAgentInstance.processMessage(
       context.input,
       context.history
-    );
+    ));
 
     // Check if target agent also requested a handoff (chaining)
     if (isHandoffSignal(targetResult)) {

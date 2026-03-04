@@ -28,7 +28,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 2,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent.streamMessage).toBeDefined();
       expect(typeof agent.streamMessage).toBe('function');
 
@@ -59,7 +59,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 3,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('What is 2 + 2?', []);
 
       expect(stream).toBeDefined();
@@ -79,7 +79,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Hello', []);
 
       expect(stream).toBeDefined();
@@ -107,7 +107,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 2,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Echo "test"', []);
 
       expect(stream).toBeDefined();
@@ -126,7 +126,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', []);
 
       // Collect events to verify sequence ordering
@@ -143,7 +143,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', []);
 
       // First event should be run-start with sequence: 0
@@ -160,7 +160,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', []);
 
       // Second event should be message-start with sequence: 1
@@ -177,7 +177,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', []);
 
       // Last event should be run-end
@@ -196,7 +196,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', [], { threadId: 'thread_123' });
 
       expect(stream).toBeDefined();
@@ -212,7 +212,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 1,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Test', []);
 
       expect(stream).toBeDefined();
@@ -240,7 +240,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 2,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Use slow tool', []);
 
       expect(stream).toBeDefined();
@@ -267,7 +267,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 2,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Use timed tool', []);
 
       expect(stream).toBeDefined();
@@ -294,7 +294,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 2,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Use failing tool', []);
 
       expect(stream).toBeDefined();
@@ -320,7 +320,7 @@ describe('AgentFactory streamMessage integration', () => {
         maxSteps: 3,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       const stream = agent.streamMessage('Use error tool', []);
 
       expect(stream).toBeDefined();

@@ -330,7 +330,7 @@ describe('PipelineService', () => {
       return {
         id,
         config: { id } as any,
-        processMessage: async (input: string) => ({
+        processMessage: (input: string) => Effect.succeed({
           content: `Agent ${id} processed: ${input}`,
           toolCalls: [],
         }),

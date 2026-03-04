@@ -81,6 +81,7 @@ export interface SessionTranscript {
 
 export interface StreamingState {
   isStreaming: boolean;
+  waitingForFirstToken: boolean;
   streamStartMs: number | null;
   firstTokenLatencyMs: number | null;
   outputTokenCount: number;
@@ -215,6 +216,8 @@ export interface TuiState {
   helpModal: {
     isOpen: boolean;
   };
+  /** Transient system notice (e.g. hot reload error). Cleared on resolution. */
+  systemNotice: string | null;
 }
 
 /**
@@ -235,6 +238,7 @@ export function createInitialTuiStateWithPlugins(
     transcript,
     streaming: {
       isStreaming: false,
+      waitingForFirstToken: false,
       streamStartMs: null,
       firstTokenLatencyMs: null,
       outputTokenCount: 0,
@@ -306,6 +310,7 @@ export function createInitialTuiStateWithPlugins(
     helpModal: {
       isOpen: false,
     },
+    systemNotice: null,
   };
 }
 
@@ -1105,6 +1110,7 @@ export function startStreaming(state: TuiState, nowMs = Date.now()): TuiState {
     ...state,
     streaming: {
       isStreaming: true,
+      waitingForFirstToken: true,
       streamStartMs: nowMs,
       firstTokenLatencyMs: null,
       outputTokenCount: 0,
@@ -1150,6 +1156,7 @@ export function appendAssistant(
       streaming: state.streaming.isStreaming
         ? {
             ...state.streaming,
+            waitingForFirstToken: false,
             firstTokenLatencyMs: state.streaming.firstTokenLatencyMs ?? (
               state.streaming.streamStartMs !== null
                 ? Math.max(0, nowMs - state.streaming.streamStartMs)
@@ -1214,6 +1221,7 @@ export function appendAssistant(
         ? {
             ...state.streaming,
             isStreaming: true,
+            waitingForFirstToken: false,
             firstTokenLatencyMs,
             outputTokenCount: nextOutputTokenCount,
             tokensPerSecond: getStreamRate(state.streaming.streamStartMs, nextOutputTokenCount, nowMs),
@@ -1243,6 +1251,7 @@ export function finishStreaming(state: TuiState, nowMs = Date.now()): TuiState {
     streaming: {
       ...state.streaming,
       isStreaming: false,
+      waitingForFirstToken: false,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
     },
@@ -1255,11 +1264,16 @@ export function recordStreamingError(state: TuiState, error: string, nowMs = Dat
     streaming: {
       ...state.streaming,
       isStreaming: false,
+      waitingForFirstToken: false,
       lastError: error,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
     },
   };
+}
+
+export function setSystemNotice(state: TuiState, notice: string | null): TuiState {
+  return { ...state, systemNotice: notice?.trim() || null };
 }
 
 export function appendUserMessage(state: TuiState, content: string, nowMs = Date.now()): TuiState {

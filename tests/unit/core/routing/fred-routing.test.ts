@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { Effect } from 'effect';
 import { Fred } from '../../../../packages/core/src/index';
 import type { RoutingConfig } from '../../../../packages/core/src/routing/types';
 import { createMockProvider } from '../../helpers/mock-provider';
@@ -27,7 +28,7 @@ async function registerMockAgent(
     persistHistory: options?.persistHistory,
   } as any);
 
-  agent.processMessage = async () => ({ content: options?.response ?? 'Mock response' });
+  agent.processMessage = () => Effect.succeed({ content: options?.response ?? 'Mock response' });
 }
 
 describe('Fred Routing Integration', () => {

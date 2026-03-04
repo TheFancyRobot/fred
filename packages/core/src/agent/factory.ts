@@ -269,21 +269,18 @@ export class AgentFactory {
     this.observabilityService = observabilityService;
   }
 
-  private logWarning(message: string, metadata?: Record<string, unknown>): void {
+  private logWarning(message: string, metadata?: Record<string, unknown>): Effect.Effect<void> {
     if (this.observabilityService) {
-      void Effect.runPromise(
-        this.observabilityService.logStructured({
-          level: 'warning',
-          message,
-          metadata,
-        })
-      ).catch(() => {
-        console.warn(message);
-      });
-      return;
+      return this.observabilityService.logStructured({
+        level: 'warning',
+        message,
+        metadata,
+      }).pipe(
+        Effect.catchAll(() => Effect.sync(() => console.warn(message)))
+      );
     }
 
-    console.warn(message);
+    return Effect.sync(() => console.warn(message));
   }
 
   setToolGateService(toolGateService?: ToolGateServiceApi): void {
@@ -394,21 +391,22 @@ export class AgentFactory {
     }
   }
 
-  async createAgent(
+  createAgent(
     config: AgentConfig,
     provider: ProviderDefinition
-  ): Promise<{
-    processMessage: (message: string, messages?: AgentMessage[], runtimeOptions?: AgentRuntimeOptions) => Promise<AgentResponse>;
+  ): Effect.Effect<{
+    processMessage: (message: string, messages?: AgentMessage[], runtimeOptions?: AgentRuntimeOptions) => Effect.Effect<AgentResponse, Error>;
     streamMessage: (
       message: string,
       messages?: AgentMessage[],
       options?: { threadId?: string }
     ) => Stream.Stream<StreamEvent, unknown, any>;
-  }> {
+  }, Error> {
+    return Effect.gen(this, function* () {
     const resolvedSystemMessage = config.systemMessage ?? this.defaultSystemMessage ?? '';
 
     if (!resolvedSystemMessage) {
-      throw new Error(`Agent "${config.id}" must have a systemMessage`);
+      yield* Effect.fail(new Error(`Agent "${config.id}" must have a systemMessage`));
     }
 
     const modelEffect = provider.getModel(config.model, {
@@ -594,13 +592,7 @@ export class AgentFactory {
           const toolAnnotation = annotateSpan({
             toolId,
             agentId: config.id,
-          });
-          Effect.runPromise(toolAnnotation).catch(() => {
-            self.logWarning('Failed to annotate tool execution span', {
-              toolId,
-              agentId: config.id,
-            });
-          });
+          }).pipe(Effect.ignore);
 
           const toolDefinition = toolDefinitions.get(toolId);
           const executor = execute ?? toolDefinition?.execute;
@@ -698,7 +690,7 @@ export class AgentFactory {
             throw lastError ?? new Error(`Tool "${toolId}" failed after ${retryPolicy.maxRetries} retries`);
           };
 
-          return Effect.tryPromise({
+          const toolExecution = Effect.tryPromise({
             try: executeWithRetry,
             catch: (error) => {
               const executionTime = Date.now() - startTime;
@@ -744,6 +736,8 @@ export class AgentFactory {
               })
             )
           );
+
+          return Effect.zipRight(toolAnnotation, toolExecution);
         }
       };
     };
@@ -767,11 +761,9 @@ export class AgentFactory {
     // MCP tool discovery from global registry
     if (this.mcpServerRegistry && config.mcpServers && config.mcpServers.length > 0) {
       for (const serverId of config.mcpServers) {
-        try {
+        yield* Effect.gen(this, function* () {
           // Discover tools from global registry for this server
-          const fredTools = await Effect.runPromise(
-            this.mcpServerRegistry.discoverTools(serverId)
-          );
+          const fredTools = yield* this.mcpServerRegistry!.discoverTools(serverId);
 
           // Apply ToolGateService filtering at discovery time
           let filteredTools = fredTools;
@@ -779,17 +771,15 @@ export class AgentFactory {
             const gateContext: ToolGateContext = {
               agentId: config.id,
             };
-            const filterResult = await Effect.runPromise(
-              this.toolGateService.filterTools(fredTools, gateContext)
-            );
+            const filterResult = yield* this.toolGateService.filterTools(fredTools, gateContext);
             filteredTools = filterResult.allowed;
 
             // Log denied MCP tools
             if (filterResult.denied.length > 0) {
-              this.logWarning('MCP tools denied by policy', {
+              yield* this.logWarning('MCP tools denied by policy', {
                 agentId: config.id,
                 serverId,
-                deniedToolIds: filterResult.denied.map((d) => d.toolId),
+                deniedToolIds: filterResult.denied.map((d: any) => d.toolId),
               });
             }
           }
@@ -814,22 +804,24 @@ export class AgentFactory {
               })
             );
           }
-        } catch (error) {
-          // Graceful degradation: server not found or discovery failed
-          this.logWarning('Failed to discover MCP tools for agent', {
-            agentId: config.id,
-            serverId,
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
-        }
+        }).pipe(
+          Effect.catchAll((error) =>
+            // Graceful degradation: server not found or discovery failed
+            this.logWarning('Failed to discover MCP tools for agent', {
+              agentId: config.id,
+              serverId,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            })
+          )
+        );
       }
     }
 
-    const resolveAllowedToolIds = async (runtimeOptions?: AgentRuntimeOptions): Promise<Set<string>> => {
+    const resolveAllowedToolIds = (runtimeOptions?: AgentRuntimeOptions): Effect.Effect<Set<string>, Error> => {
       const defaultAllowed = new Set(effectTools.map((tool) => tool.name));
 
       if (!this.toolGateService) {
-        return defaultAllowed;
+        return Effect.succeed(defaultAllowed);
       }
 
       const gateContext: ToolGateContext = {
@@ -846,14 +838,18 @@ export class AgentFactory {
       };
 
       const allConfiguredTools = Array.from(toolDefinitions.values()) as FredTool[];
-      const filtered = await Effect.runPromise(this.toolGateService.filterTools(allConfiguredTools, gateContext));
-      const allowed = new Set(filtered.allowed.map((tool) => tool.id));
+      return this.toolGateService.filterTools(allConfiguredTools, gateContext).pipe(
+        Effect.map((filtered) => {
+          const allowed = new Set(filtered.allowed.map((tool) => tool.id));
 
-      if (defaultAllowed.has('handoff_to_agent')) {
-        allowed.add('handoff_to_agent');
-      }
+          if (defaultAllowed.has('handoff_to_agent')) {
+            allowed.add('handoff_to_agent');
+          }
 
-      return allowed;
+          return allowed;
+        }),
+        Effect.mapError((error: unknown) => error instanceof Error ? error : new Error(String(error)))
+      );
     };
 
     const toolkit = effectTools.length > 0 ? Toolkit.make(...effectTools) : undefined;
@@ -872,13 +868,13 @@ export class AgentFactory {
     const systemMessageTemplate = loadPromptFile(resolvedSystemMessage, undefined, false);
 
     // Helper function to resolve system message with current variable values
-    const resolveSystemMessage = (): string => {
+    const resolveSystemMessage = (): Effect.Effect<string, Error> => {
       if (!containsEtaSyntax(systemMessageTemplate)) {
-        return systemMessageTemplate;
+        return Effect.succeed(systemMessageTemplate);
       }
 
       if (!this.templateEngine) {
-        return systemMessageTemplate;
+        return Effect.succeed(systemMessageTemplate);
       }
 
       const globalVars = this.globalVariablesResolver ? this.globalVariablesResolver() : {};
@@ -892,247 +888,239 @@ export class AgentFactory {
         this.templateCustomNamespaces
       );
 
-      try {
-        return Effect.runSync(
-          this.templateEngine.resolveBody(systemMessageTemplate, bodyContext, `agent:${config.id}`)
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to resolve system message template for agent "${config.id}" (agent:${config.id}): ${message}`);
-      }
+      return this.templateEngine.resolveBody(systemMessageTemplate, bodyContext, `agent:${config.id}`).pipe(
+        Effect.mapError((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          return new Error(`Failed to resolve system message template for agent "${config.id}" (agent:${config.id}): ${message}`);
+        })
+      );
     };
 
-    const processMessage = async (
+    const processMessage = (
       message: string,
       previousMessages: AgentMessage[] = [],
       runtimeOptions?: AgentRuntimeOptions
-    ): Promise<AgentResponse> => {
-      const modelSpan = this.tracer?.startSpan('model.call', {
-        kind: SpanKind.CLIENT,
-        attributes: {
-          'agent.id': config.id,
-          'model.name': config.model,
-          'model.platform': config.platform,
-          'model.temperature': config.temperature ?? 0.7,
-          'model.maxTokens': config.maxTokens ?? 0,
-          'message.length': message.length,
-          'history.length': previousMessages.length,
-          'agent.maxSteps': config.maxSteps ?? 20,
-        },
-      });
+    ): Effect.Effect<AgentResponse, Error> => {
+      const self = this;
 
-      const previousActiveSpan = this.tracer?.getActiveSpan();
-      if (modelSpan) {
-        this.tracer?.setActiveSpan(modelSpan);
-      }
-
-      // Annotate model span with Fred identifiers (best effort)
-      const modelAnnotation = annotateSpan({
-        agentId: config.id,
-        provider: config.platform,
-      });
-      Effect.runPromise(modelAnnotation).catch(() => {
-        this.logWarning('Failed to annotate model span', {
-          agentId: config.id,
-          provider: config.platform,
-          model: config.model,
+      return Effect.gen(function* () {
+        const modelSpan = self.tracer?.startSpan('model.call', {
+          kind: SpanKind.CLIENT,
+          attributes: {
+            'agent.id': config.id,
+            'model.name': config.model,
+            'model.platform': config.platform,
+            'model.temperature': config.temperature ?? 0.7,
+            'model.maxTokens': config.maxTokens ?? 0,
+            'message.length': message.length,
+            'history.length': previousMessages.length,
+            'agent.maxSteps': config.maxSteps ?? 20,
+          },
         });
-      });
 
-      try {
-        const allowedToolIds = await resolveAllowedToolIds(runtimeOptions);
-        const allowedEffectTools = effectTools.filter((tool) => allowedToolIds.has(tool.name));
-        const runtimeToolkit = allowedEffectTools.length > 0 ? Toolkit.make(...allowedEffectTools) : undefined;
-        const runtimeToolHandlers = Object.fromEntries(
-          allowedEffectTools.map((tool) => [
-            tool.name,
-            buildToolHandler(tool.name, toolExecutors.get(tool.name), allowedToolIds, runtimeOptions),
-          ])
-        );
-        const runtimeToolLayer = runtimeToolkit ? runtimeToolkit.toLayer(runtimeToolHandlers as any) : Layer.empty;
-        const runtimeAvailableToolNames = new Set(allowedEffectTools.map((tool) => tool.name));
-
-        // Resolve system message with current variable values
-        const resolvedSystemMessage = resolveSystemMessage();
-
-        // Normalize all messages
-        const normalizedMessages = normalizeMessages([
-          { role: 'system', content: resolvedSystemMessage },
-          ...previousMessages,
-          { role: 'user', content: message },
-        ]);
-
-        // Filter history to only include tool calls available to this agent
-        // This prevents confusion when agents see tool calls from other agents
-        const promptMessages = filterHistoryForAgent(normalizedMessages, runtimeAvailableToolNames);
-
-        // Get the model (AiModel) and compose all layers with proper dependency resolution
-        const model = await Effect.runPromise(modelEffect);
-        const providerWithHttp = provider.layer.pipe(Layer.provide(FetchHttpClient.layer));
-        const modelWithClient = Layer.provide(model, providerWithHttp);
-        const fullLayer = Layer.mergeAll(modelWithClient, runtimeToolLayer, BunContext.layer);
-
-        // Use @effect/ai's built-in multi-step execution
-        // This prevents double execution (no manual loop to duplicate toolkit execution)
-        // Use conservative maxSteps to prevent runaway tool calling
-        const maxSteps = Math.min(config.maxSteps ?? 3, 3);
-
-        const prompt = Prompt.make(promptMessages);
-        // Cast options via unknown to satisfy TypeScript - the runtime types are correct
-        const generateOptions = {
-          prompt,
-          toolkit: runtimeToolkit,
-          maxSteps,
-          toolChoice: config.toolChoice,
-          temperature: config.temperature,
-        } as unknown as Parameters<typeof LanguageModel.generateText>[0];
-        const program = LanguageModel.generateText(generateOptions);
-
-        // Provide layer and cast to never requirements for runPromise compatibility
-        const providedProgram = Effect.provide(
-          program as Effect.Effect<any, any, any>,
-          fullLayer as any
-        ) as Effect.Effect<any, any, never>;
-
-        // Retry boundary: providers (e.g. Groq) attach _retryDiagnostics to errors
-        // after exhausting their internal retries. The factory normalizes this metadata
-        // so downstream consumers (CLI --json) can emit structured diagnostics.
-        let result: any;
-        try {
-          result = await Effect.runPromise(providedProgram);
-        } catch (providerError: any) {
-          // Extract original error from FiberFailure using Effect's public Cause API
-          let originalError: unknown = providerError;
-          if (Runtime.isFiberFailure(providerError)) {
-            const cause = providerError[Runtime.FiberFailureCauseId];
-            const failureOpt = Cause.failureOption(cause);
-            if (Option.isSome(failureOpt)) {
-              originalError = failureOpt.value;
-            }
-          }
-
-          // Look for RetryDiagnostics on the original error, its cause chain, or the wrapper
-          const diagnostics: RetryDiagnostics | undefined =
-            hasRetryDiagnostics(originalError) ? originalError._retryDiagnostics
-            : hasRetryDiagnostics((originalError as any)?.cause) ? (originalError as any).cause._retryDiagnostics
-            : hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
-            : undefined;
-
-          if (diagnostics) {
-            // Attach normalized retry metadata for CLI structured error payloads
-            const enrichedError = providerError instanceof Error
-              ? providerError
-              : new Error(String(providerError));
-            (enrichedError as any)._retryDiagnostics = diagnostics;
-            throw enrichedError;
-          }
-          throw providerError;
+        const previousActiveSpan = self.tracer?.getActiveSpan();
+        if (modelSpan) {
+          self.tracer?.setActiveSpan(modelSpan);
         }
 
-        // Extract tool calls from result
-        const allToolCalls = (result.toolCalls ?? []).map((tc: any) => {
-          const toolId = tc.name as string;
-          if (!allowedToolIds.has(toolId)) {
+        // Annotate model span with Fred identifiers (best effort)
+        yield* annotateSpan({
+          agentId: config.id,
+          provider: config.platform,
+        }).pipe(
+          Effect.catchAll(() =>
+            self.logWarning('Failed to annotate model span', {
+              agentId: config.id,
+              provider: config.platform,
+              model: config.model,
+            })
+          )
+        );
+
+        return yield* Effect.gen(function* () {
+          const allowedToolIds = yield* resolveAllowedToolIds(runtimeOptions);
+          const allowedEffectTools = effectTools.filter((tool) => allowedToolIds.has(tool.name));
+          const runtimeToolkit = allowedEffectTools.length > 0 ? Toolkit.make(...allowedEffectTools) : undefined;
+          const runtimeToolHandlers = Object.fromEntries(
+            allowedEffectTools.map((tool) => [
+              tool.name,
+              buildToolHandler(tool.name, toolExecutors.get(tool.name), allowedToolIds, runtimeOptions),
+            ])
+          );
+          const runtimeToolLayer = runtimeToolkit ? runtimeToolkit.toLayer(runtimeToolHandlers as any) : Layer.empty;
+          const runtimeAvailableToolNames = new Set(allowedEffectTools.map((tool) => tool.name));
+
+          // Resolve system message with current variable values
+          const resolvedSystemMsg = yield* resolveSystemMessage();
+
+          // Normalize all messages
+          const normalizedMessages = normalizeMessages([
+            { role: 'system', content: resolvedSystemMsg },
+            ...previousMessages,
+            { role: 'user', content: message },
+          ]);
+
+          // Filter history to only include tool calls available to this agent
+          // This prevents confusion when agents see tool calls from other agents
+          const promptMessages = filterHistoryForAgent(normalizedMessages, runtimeAvailableToolNames);
+
+          // Get the model (AiModel) and compose all layers with proper dependency resolution
+          const model = yield* modelEffect;
+          const providerWithHttp = provider.layer.pipe(Layer.provide(FetchHttpClient.layer));
+          const modelWithClient = Layer.provide(model, providerWithHttp);
+          const fullLayer = Layer.mergeAll(modelWithClient, runtimeToolLayer, BunContext.layer);
+
+          // Use @effect/ai's built-in multi-step execution
+          // This prevents double execution (no manual loop to duplicate toolkit execution)
+          // Use conservative maxSteps to prevent runaway tool calling
+          const maxSteps = Math.min(config.maxSteps ?? 3, 3);
+
+          const prompt = Prompt.make(promptMessages);
+          // Cast options via unknown to satisfy TypeScript - the runtime types are correct
+          const generateOptions = {
+            prompt,
+            toolkit: runtimeToolkit,
+            maxSteps,
+            toolChoice: config.toolChoice,
+            temperature: config.temperature,
+          } as unknown as Parameters<typeof LanguageModel.generateText>[0];
+          const program = LanguageModel.generateText(generateOptions);
+
+          // Provide layer and cast to satisfy requirements
+          const providedProgram = Effect.provide(
+            program as Effect.Effect<any, any, any>,
+            fullLayer as any
+          ) as Effect.Effect<any, any, never>;
+
+          // Retry boundary: providers (e.g. Groq) attach _retryDiagnostics to errors
+          // after exhausting their internal retries. The factory normalizes this metadata
+          // so downstream consumers (CLI --json) can emit structured diagnostics.
+          const result: any = yield* providedProgram.pipe(
+            Effect.catchAll((providerError: any) => {
+              // Look for RetryDiagnostics on the error or its cause chain
+              const diagnostics: RetryDiagnostics | undefined =
+                hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
+                : hasRetryDiagnostics((providerError as any)?.cause) ? (providerError as any).cause._retryDiagnostics
+                : undefined;
+
+              if (diagnostics) {
+                // Attach normalized retry metadata for CLI structured error payloads
+                const enrichedError = providerError instanceof Error
+                  ? providerError
+                  : new Error(String(providerError));
+                (enrichedError as any)._retryDiagnostics = diagnostics;
+                return Effect.fail(enrichedError);
+              }
+              return Effect.fail(providerError);
+            })
+          );
+
+          // Extract tool calls from result
+          const allToolCalls = (result.toolCalls ?? []).map((tc: any) => {
+            const toolId = tc.name as string;
+            if (!allowedToolIds.has(toolId)) {
+              return {
+                toolId,
+                args: tc.params as Record<string, any>,
+                result: `Tool "${toolId}" denied by policy`,
+                error: {
+                  code: 'POLICY_DENIED',
+                  message: `Tool "${toolId}" denied by policy`,
+                },
+              };
+            }
+
             return {
               toolId,
               args: tc.params as Record<string, any>,
-              result: `Tool "${toolId}" denied by policy`,
-              error: {
-                code: 'POLICY_DENIED',
-                message: `Tool "${toolId}" denied by policy`,
-              },
+              result: undefined,
+            };
+          });
+
+          const usage = {
+            inputTokens: result.usage?.inputTokens ?? 0,
+            outputTokens: result.usage?.outputTokens ?? 0,
+            totalTokens: result.usage?.totalTokens ?? 0,
+          };
+
+          // Annotate model span with token counts
+          if (modelSpan && usage.totalTokens > 0) {
+            modelSpan.setAttributes({
+              'token.input': usage.inputTokens,
+              'token.output': usage.outputTokens,
+              'token.total': usage.totalTokens,
+            });
+          }
+
+          // Record token usage and cost metrics if observability is available
+          if (self.observabilityService && usage.totalTokens > 0) {
+            yield* Effect.all([
+              self.observabilityService.recordTokenUsage({
+                provider: config.platform,
+                model: config.model,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+              }),
+              self.observabilityService.recordModelCost({
+                provider: config.platform,
+                model: config.model,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+              }),
+            ]).pipe(
+              Effect.catchAllCause((cause) => {
+                const error = Cause.squash(cause);
+                return self.logWarning('Failed to record token usage metrics', {
+                  agentId: config.id,
+                  provider: config.platform,
+                  model: config.model,
+                  errorMessage: error instanceof Error ? error.message : String(error),
+                });
+              })
+            );
+          }
+
+          // Check for handoff
+          const handoffCall = allToolCalls.find((call: any) => call.toolId === 'handoff_to_agent');
+          if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result) {
+            return {
+              content: result.text,
+              toolCalls: allToolCalls,
+              usage,
+              handoff: handoffCall.result as HandoffResult,
             };
           }
 
           return {
-            toolId,
-            args: tc.params as Record<string, any>,
-            result: undefined,
-          };
-        });
-
-        const usage = {
-          inputTokens: result.usage?.inputTokens ?? 0,
-          outputTokens: result.usage?.outputTokens ?? 0,
-          totalTokens: result.usage?.totalTokens ?? 0,
-        };
-
-        // Annotate model span with token counts
-        if (modelSpan && usage.totalTokens > 0) {
-          modelSpan.setAttributes({
-            'token.input': usage.inputTokens,
-            'token.output': usage.outputTokens,
-            'token.total': usage.totalTokens,
-          });
-        }
-
-        // Record token usage and cost metrics if observability is available
-        if (this.observabilityService && usage.totalTokens > 0) {
-          try {
-            // Record token usage
-            await Effect.runPromise(
-              this.observabilityService.recordTokenUsage({
-                provider: config.platform,
-                model: config.model,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-              })
-            );
-
-            // Record model cost if pricing is configured
-            await Effect.runPromise(
-              this.observabilityService.recordModelCost({
-                provider: config.platform,
-                model: config.model,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-              })
-            );
-          } catch (error) {
-            this.logWarning('Failed to record token usage metrics', {
-              agentId: config.id,
-              provider: config.platform,
-              model: config.model,
-              errorMessage: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        // Check for handoff
-        const handoffCall = allToolCalls.find((call: any) => call.toolId === 'handoff_to_agent');
-        if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result) {
-          return {
             content: result.text,
             toolCalls: allToolCalls,
             usage,
-            handoff: handoffCall.result as HandoffResult,
           };
-        }
-
-        return {
-          content: result.text,
-          toolCalls: allToolCalls,
-          usage,
-        };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        if (modelSpan) {
-          // Use error taxonomy for span status/classification
-          attachErrorToSpan(modelSpan, err, {
-            includeStack: false,
-          });
-        }
-        throw error;
-      } finally {
-        if (modelSpan) {
-          modelSpan.end();
-          if (previousActiveSpan) {
-            this.tracer?.setActiveSpan(previousActiveSpan);
-          } else {
-            this.tracer?.setActiveSpan(undefined);
-          }
-        }
-      }
+        }).pipe(
+          Effect.tapError((error) =>
+            Effect.sync(() => {
+              const err = error instanceof Error ? error : new Error(String(error));
+              if (modelSpan) {
+                attachErrorToSpan(modelSpan, err, {
+                  includeStack: false,
+                });
+              }
+            })
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (modelSpan) {
+                modelSpan.end();
+                if (previousActiveSpan) {
+                  self.tracer?.setActiveSpan(previousActiveSpan);
+                } else {
+                  self.tracer?.setActiveSpan(undefined);
+                }
+              }
+            })
+          )
+        );
+      });
     };
 
     const streamMessage = (
@@ -1146,19 +1134,20 @@ export class AgentFactory {
       const messageId = `msg_${startedAt}_${Math.random().toString(36).slice(2, 6)}`;
       const threadId = options?.threadId;
 
-      // Resolve system message with current variable values
-      const resolvedSystemMessage = resolveSystemMessage();
+      // Resolve system message (now returns Effect), then build the stream
+      const buildStream = Effect.gen(function* () {
+        const resolvedSystemMsg = yield* resolveSystemMessage();
 
-      // Normalize all messages
-      const normalizedMessages = normalizeMessages([
-        { role: 'system', content: resolvedSystemMessage },
-        ...previousMessages,
-        { role: 'user', content: message },
-      ]);
+        // Normalize all messages
+        const normalizedMessages = normalizeMessages([
+          { role: 'system', content: resolvedSystemMsg },
+          ...previousMessages,
+          { role: 'user', content: message },
+        ]);
 
-      // Filter history to only include tool calls available to this agent
-      // This prevents confusion when agents see tool calls from other agents
-      const promptMessages = filterHistoryForAgent(normalizedMessages, availableToolNames);
+        // Filter history to only include tool calls available to this agent
+        // This prevents confusion when agents see tool calls from other agents
+        const promptMessages = filterHistoryForAgent(normalizedMessages, availableToolNames);
 
       // Compose all layers together with proper dependency resolution
       const providerWithHttp = provider.layer.pipe(Layer.provide(FetchHttpClient.layer));
@@ -1319,30 +1308,30 @@ export class AgentFactory {
 
             // Record token usage and cost metrics if observability is available
             if (self.observabilityService) {
-              try {
-                // Record token usage
-                yield* self.observabilityService.recordTokenUsage({
+              yield* Effect.all([
+                self.observabilityService.recordTokenUsage({
                   provider: config.platform,
                   model: config.model,
                   inputTokens: streamState.usage.inputTokens ?? 0,
                   outputTokens: streamState.usage.outputTokens ?? 0,
-                });
-
-                // Record model cost if pricing is configured
-                yield* self.observabilityService.recordModelCost({
+                }),
+                self.observabilityService.recordModelCost({
                   provider: config.platform,
                   model: config.model,
                   inputTokens: streamState.usage.inputTokens ?? 0,
                   outputTokens: streamState.usage.outputTokens ?? 0,
-                });
-              } catch (error) {
-                self.logWarning('Failed to record streaming token usage metrics', {
-                  agentId: config.id,
-                  provider: config.platform,
-                  model: config.model,
-                  errorMessage: error instanceof Error ? error.message : String(error),
-                });
-              }
+                }),
+              ]).pipe(
+                Effect.catchAllCause((cause) => {
+                  const error = Cause.squash(cause);
+                  return self.logWarning('Failed to record streaming token usage metrics', {
+                    agentId: config.id,
+                    provider: config.platform,
+                    model: config.model,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                  });
+                })
+              );
             }
           }
 
@@ -1370,12 +1359,16 @@ export class AgentFactory {
         })
       );
 
-      return Stream.fromIterable(initialEvents).pipe(
-        Stream.concat(multiStepWithTracking),
-        Stream.concat(runEndEvent)
-      );
+        return Stream.fromIterable(initialEvents).pipe(
+          Stream.concat(multiStepWithTracking),
+          Stream.concat(runEndEvent)
+        );
+      });
+
+      return Stream.unwrap(buildStream);
     };
 
     return { processMessage, streamMessage };
+    });
   }
 }

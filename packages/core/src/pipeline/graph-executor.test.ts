@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach } from 'bun:test';
+import { Effect } from 'effect';
 import {
   executeGraphWorkflow,
   evaluateCondition,
@@ -24,21 +25,21 @@ function createMockAgentManager(): AgentManagerLike {
 
   // Add mock agents
   agents.set('agent1', {
-    processMessage: async (input: string) => ({
+    processMessage: (input: string) => Effect.succeed({
       content: `agent1: ${input}`,
       toolCalls: [],
     }),
   });
 
   agents.set('agent2', {
-    processMessage: async (input: string) => ({
+    processMessage: (input: string) => Effect.succeed({
       content: `agent2: ${input}`,
       toolCalls: [],
     }),
   });
 
   agents.set('classifier', {
-    processMessage: async (input: string) => ({
+    processMessage: (input: string) => Effect.succeed({
       content: 'classified',
       toolCalls: [],
       metadata: { category: input.includes('urgent') ? 'urgent' : 'normal' },
@@ -457,7 +458,7 @@ describe('Graph Executor', () => {
         getAgent: (id: string) => {
           if (id === 'sales') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 type: 'handoff_request',
                 targetAgent: 'support',
                 reason: 'Technical question',
@@ -466,7 +467,7 @@ describe('Graph Executor', () => {
           }
           if (id === 'support') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 content: `Support handled: ${input}`,
                 toolCalls: [],
               }),
@@ -512,7 +513,7 @@ describe('Graph Executor', () => {
         getAgent: (id: string) => {
           if (id === 'sales') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 type: 'handoff_request',
                 targetAgent: 'billing', // Not in allowed targets
                 reason: 'Billing question',
@@ -558,7 +559,7 @@ describe('Graph Executor', () => {
         getAgent: (id: string) => {
           if (id === 'triage') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 type: 'handoff_request',
                 targetAgent: 'specialist',
                 reason: 'Needs specialist',
@@ -567,7 +568,7 @@ describe('Graph Executor', () => {
           }
           if (id === 'specialist') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 type: 'handoff_request',
                 targetAgent: 'expert',
                 reason: 'Needs expert',
@@ -576,7 +577,7 @@ describe('Graph Executor', () => {
           }
           if (id === 'expert') {
             return {
-              processMessage: async (input: string) => ({
+              processMessage: (input: string) => Effect.succeed({
                 content: `Expert resolved: ${input}`,
                 toolCalls: [],
               }),
@@ -629,7 +630,7 @@ describe('Graph Executor', () => {
         getAgent: (id: string) => {
           if (id === 'source') {
             return {
-              processMessage: async (input: string, history: any[]) => ({
+              processMessage: (input: string, history: any[]) => Effect.succeed({
                 type: 'handoff_request',
                 targetAgent: 'target',
                 reason: 'Handoff with history',
@@ -638,12 +639,12 @@ describe('Graph Executor', () => {
           }
           if (id === 'target') {
             return {
-              processMessage: async (input: string, history: any[]) => {
+              processMessage: (input: string, history: any[]) => {
                 capturedHistory = history;
-                return {
+                return Effect.succeed({
                   content: `Received history`,
                   toolCalls: [],
-                };
+                });
               },
             };
           }

@@ -421,21 +421,19 @@ class PipelineServiceImpl implements PipelineService {
    * Effect-wrapped agent message processing
    */
   private processAgentMessage(
-    agent: { processMessage: (message: string, history?: AgentMessage[]) => Promise<AgentResponse> },
+    agent: { processMessage: (message: string, history?: AgentMessage[]) => Effect.Effect<AgentResponse, Error> },
     message: string,
     history: AgentMessage[],
     pipelineId: string,
     step: number
   ): Effect.Effect<AgentResponse, PipelineExecutionError> {
-    return Effect.async<AgentResponse, PipelineExecutionError>((resume) => {
-      agent.processMessage(message, history)
-        .then((response) => resume(Effect.succeed(response)))
-        .catch((error) => resume(Effect.fail(new PipelineExecutionError({
-          pipelineId,
-          step,
-          cause: error
-        }))));
-    });
+    return agent.processMessage(message, history).pipe(
+      Effect.mapError((error) => new PipelineExecutionError({
+        pipelineId,
+        step,
+        cause: error,
+      }))
+    );
   }
 
   matchPipelineByUtterance(
@@ -624,18 +622,18 @@ class PipelineServiceImpl implements PipelineService {
     const self = this;
     return {
       getAgent: (id: string) => {
-        // Synchronous lookup - we need to use Effect.runPromiseSync or cache agents
-        // For now, we create a lazy agent wrapper that resolves on demand
+        // Create a lazy agent wrapper that resolves the real agent on demand
+        // processMessage returns Effect, bridged to Promise via Effect.runPromise in executor
         return {
           id,
           config: { id } as any,
-          processMessage: async (message: string, history?: AgentMessage[]) => {
-            const agent = await Effect.runPromise(
-              self.agentService.getAgent(id)
-            );
-            return agent.processMessage(message, history);
+          processMessage: (message: string, history?: AgentMessage[]) => {
+            return Effect.gen(function* () {
+              const agent = yield* self.agentService.getAgent(id);
+              return yield* agent.processMessage(message, history);
+            });
           },
-        };
+        } as any;
       },
       hasAgent: (id: string) => {
         // Synchronous check - run Effect synchronously

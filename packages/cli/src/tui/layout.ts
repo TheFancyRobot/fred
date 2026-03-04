@@ -10,6 +10,7 @@ import {
   TextRenderable,
   CodeRenderable,
   TextAttributes,
+  RGBA,
   type CliRenderer,
   type SyntaxStyle,
 } from '@opentui/core';
@@ -722,8 +723,10 @@ export function buildUserMessageRenderable(
   theme: TuiTheme,
   content: string,
   id: string,
+  options?: { spinner?: boolean; nowMs?: number },
 ): BoxRenderable {
   const safeContent = sanitizeForTerminalDisplay(content);
+
   const container = new BoxRenderable(renderer, {
     id: `msg-user-${id}`,
     flexDirection: 'column',
@@ -744,8 +747,63 @@ export function buildUserMessageRenderable(
     fg: theme.fg.primary,
   });
   text.selectable = true;
-
   container.add(text);
+
+  // Thinking spinner — absolutely positioned at top-right of message container.
+  // Uses a BoxRenderable wrapper because only BoxRenderable supports position: 'absolute'.
+  if (options?.spinner) {
+    const spinnerBox = new BoxRenderable(renderer, {
+      id: `${THINKING_SPINNER_ID_PREFIX}box-${id}`,
+      position: 'absolute',
+      top: 1,
+      right: 1,
+    });
+    const spinnerText = new TextRenderable(renderer, {
+      id: `${THINKING_SPINNER_ID_PREFIX}${id}`,
+      content: getSpinnerFrame(options.nowMs ?? Date.now()),
+      fg: theme.accent.primary,
+      attributes: TextAttributes.BOLD,
+    });
+    spinnerText.selectable = false;
+    spinnerBox.add(spinnerText);
+    container.add(spinnerBox);
+  }
+
+  return container;
+}
+
+/**
+ * Build a renderable for a transient system notice (e.g. hot reload warning).
+ */
+export function buildSystemNoticeRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  content: string,
+  id: string,
+): BoxRenderable {
+  const safeContent = sanitizeForTerminalDisplay(content);
+
+  const container = new BoxRenderable(renderer, {
+    id: `msg-notice-${id}`,
+    flexDirection: 'column',
+    border: ['left'],
+    borderStyle: 'single',
+    borderColor: theme.status.warn,
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 1,
+    paddingBottom: 1,
+    marginBottom: 1,
+  });
+
+  const text = new TextRenderable(renderer, {
+    id: `msg-notice-text-${id}`,
+    content: safeContent,
+    fg: theme.status.warn,
+  });
+  text.selectable = true;
+  container.add(text);
+
   return container;
 }
 
@@ -815,6 +873,38 @@ export function buildThinkingRenderable(
 
   container.add(text);
   return container;
+}
+
+// ---------------------------------------------------------------------------
+// Thinking indicator — braille spinner at top-right of user message
+// ---------------------------------------------------------------------------
+
+/** ID prefix for the thinking spinner TextRenderable */
+export const THINKING_SPINNER_ID_PREFIX = 'thinking-spinner-';
+
+/** Full-cell braille spinner frames — 8 frames using 7/8 dots with one gap rotating */
+const SPINNER_FRAMES = ['\u28FE', '\u28FD', '\u28FB', '\u28BF', '\u287F', '\u28DF', '\u28EF', '\u28F7'];
+// Visually: ⣾ ⣽ ⣻ ⢿ ⡿ ⣟ ⣯ ⣷
+
+/**
+ * Get the current spinner frame character for the given timestamp.
+ * Cycles through 8 full-cell braille frames at 80ms per frame (640ms full cycle).
+ */
+export function getSpinnerFrame(nowMs: number): string {
+  const frameIndex = Math.floor(nowMs / 80) % SPINNER_FRAMES.length;
+  return SPINNER_FRAMES[frameIndex];
+}
+
+/**
+ * Linearly interpolate between two RGBA colors.
+ */
+export function lerpColor(a: RGBA, b: RGBA, t: number): RGBA {
+  return RGBA.fromValues(
+    a.r + (b.r - a.r) * t,
+    a.g + (b.g - a.g) * t,
+    a.b + (b.b - a.b) * t,
+    a.a + (b.a - a.a) * t,
+  );
 }
 
 // ---------------------------------------------------------------------------
