@@ -25,7 +25,7 @@ A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to 
 
 ## Agent File Pattern (.md + YAML Frontmatter)
 
-All examples now define agents in `agents/*.md` files with YAML frontmatter and a markdown prompt body.
+All examples now define agents in `src/agents/*.md` files with YAML frontmatter and a markdown prompt body.
 
 - Agent config lives in frontmatter (`id`, `platform`, `model`, `tools`, `utterances`, etc.)
 - Agent behavior/prompt content lives in the markdown body
@@ -63,7 +63,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 
 ETA templating is demonstrated across the learning path where it fits naturally:
 
-- **Loops + expressions:** Example 04 (`<% for %>`, `<%= %>`)
+- **Loops + expressions:** Example 04 (`<% for %>`, `<%= %>`) with runtime data from `addTemplateContext('departments', ...)` consumed as `it.departments.available`
 - **Conditionals + partials + per-message vars:** Example 07 (`<% if %>`, `<%~ include %>`, `session.*` via `addTemplateContext`)
 - **Expressions + env access:** Example 08 (`<%= %>`, `env.*`)
 
