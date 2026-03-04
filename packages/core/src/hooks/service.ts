@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Layer, Ref } from 'effect';
+import { Context, Data, Effect, Layer, Ref, Runtime } from 'effect';
 import type { HookType, HookEvent, HookResult, HookHandler } from './types';
 import { ObservabilityService } from '../observability/service';
 
@@ -114,6 +114,7 @@ class HookManagerServiceImpl implements HookManagerService {
     const self = this;
     return Effect.gen(function* () {
       const startTime = Date.now();
+      const runtime = yield* Effect.runtime<never>();
 
       const hooks = yield* Ref.get(self.hooks);
       const handlers = hooks.get(type);
@@ -126,7 +127,7 @@ class HookManagerServiceImpl implements HookManagerService {
             return undefined;
           }
 
-          return Effect.runPromise(self.observability!.exportTrace(event.runId!));
+          return Runtime.runPromise(runtime)(self.observability!.exportTrace(event.runId!));
         };
 
         event.correlation = {

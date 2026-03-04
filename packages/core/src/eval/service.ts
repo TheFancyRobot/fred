@@ -36,35 +36,43 @@ export class EvaluationService extends Context.Tag('EvaluationService')<
   EvaluationServiceApi
 >() {}
 
-async function listAllCheckpointsForRun(runId: string, checkpointService: CheckpointService): Promise<Checkpoint[]> {
-  const storage = await Effect.runPromise(checkpointService.getStorage());
-  const statuses: CheckpointStatus[] = [
-    'pending',
-    'in_progress',
-    'completed',
-    'failed',
-    'paused',
-    'expired',
-  ];
+function listAllCheckpointsForRun(
+  runId: string,
+  checkpointService: Context.Tag.Service<typeof CheckpointService>
+): Effect.Effect<Checkpoint[], Error> {
+  return Effect.gen(function* () {
+    const storage = yield* checkpointService.getStorage();
+    const statuses: CheckpointStatus[] = [
+      'pending',
+      'in_progress',
+      'completed',
+      'failed',
+      'paused',
+      'expired',
+    ];
 
-  const checkpoints = (
-    await Promise.all(statuses.map((status) => storage.listByStatus(status)))
-  )
-    .flat()
-    .filter((checkpoint) => checkpoint.runId === runId)
-    .sort((a, b) => {
-      if (a.step === b.step) {
-        return a.updatedAt.getTime() - b.updatedAt.getTime();
-      }
-      return a.step - b.step;
+    const checkpoints = yield* Effect.tryPromise({
+      try: () => Promise.all(statuses.map((status) => storage.listByStatus(status))),
+      catch: (cause) => new Error(`Failed to load checkpoints: ${String(cause)}`),
     });
 
-  const deduped = new Map<string, Checkpoint>();
-  for (const checkpoint of checkpoints) {
-    deduped.set(`${checkpoint.step}:${checkpoint.status}`, checkpoint);
-  }
+    const filtered = checkpoints
+      .flat()
+      .filter((checkpoint) => checkpoint.runId === runId)
+      .sort((a, b) => {
+        if (a.step === b.step) {
+          return a.updatedAt.getTime() - b.updatedAt.getTime();
+        }
+        return a.step - b.step;
+      });
 
-  return [...deduped.values()];
+    const deduped = new Map<string, Checkpoint>();
+    for (const checkpoint of filtered) {
+      deduped.set(`${checkpoint.step}:${checkpoint.status}`, checkpoint);
+    }
+
+    return [...deduped.values()];
+  });
 }
 
 export const EvaluationServiceLive = Layer.effect(
@@ -92,10 +100,7 @@ export const EvaluationServiceLive = Layer.effect(
 
           const checkpoints =
             Option.isSome(checkpointService)
-              ? yield* Effect.tryPromise({
-                  try: () => listAllCheckpointsForRun(runId, checkpointService.value),
-                  catch: (cause) => new Error(`Failed to load checkpoints: ${String(cause)}`),
-                })
+              ? yield* listAllCheckpointsForRun(runId, checkpointService.value)
               : [];
 
           const artifact = normalizeRunRecord({
