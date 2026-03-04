@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const PROJECT_ROOT = process.cwd();
 const CORE_SRC = join(PROJECT_ROOT, 'packages/core/src');
+const CLI_SRC = join(PROJECT_ROOT, 'packages/cli/src');
 
 function collectProductionTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -21,6 +22,54 @@ function collectProductionTsFiles(dir: string): string[] {
   return files;
 }
 
+function findRuntimeBoundaryViolations(
+  sourceRoot: string,
+  boundaryFiles: ReadonlySet<string>,
+  violationPatterns: ReadonlyArray<string>
+): string[] {
+  const violations: string[] = [];
+
+  for (const filePath of collectProductionTsFiles(sourceRoot)) {
+    const relativePath = filePath.replace(`${sourceRoot}/`, '');
+    if (boundaryFiles.has(relativePath)) {
+      continue;
+    }
+
+    const content = readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    let inBlockComment = false;
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const trimmed = line.trim();
+
+      if (inBlockComment) {
+        if (trimmed.includes('*/')) {
+          inBlockComment = false;
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('//')) {
+        continue;
+      }
+
+      if (trimmed.includes('/*')) {
+        if (!trimmed.includes('*/')) {
+          inBlockComment = true;
+        }
+        continue;
+      }
+
+      if (violationPatterns.some((pattern) => line.includes(pattern))) {
+        violations.push(`${relativePath}:${index + 1}: ${trimmed}`);
+      }
+    }
+  }
+
+  return violations;
+}
+
 describe('Effect runtime boundary guards', () => {
   const VIOLATION_PATTERNS = [
     'Effect.runPromise',
@@ -32,6 +81,9 @@ describe('Effect runtime boundary guards', () => {
   const boundaryFiles = new Set([
     'index.ts',
     'services.ts',
+    'eval/replay.ts',
+    'hooks/service.ts',
+    'mcp/health.ts',
     'pipeline/service.ts',
     'pipeline/checkpoint/manager.ts',
     'pipeline/checkpoint/postgres.ts',
@@ -39,65 +91,34 @@ describe('Effect runtime boundary guards', () => {
     'pipeline/pause/manager.ts',
   ]);
 
-  const knownExceptions = new Set([
-    'hooks/service.ts',
-    'eval/service.ts',
-    'eval/replay.ts',
-    'mcp/health.ts',
+  const cliBoundaryFiles = new Set([
+    'commands/chat.ts',
+    'commands/run.ts',
+    'commands/session.ts',
+    'commands/validate.ts',
+    'commands/intent.ts',
+    'commands/list.ts',
+    'commands/route.ts',
+    'commands/mcp.ts',
+    'eval.ts',
   ]);
 
-  test('no NEW Effect.runPromise/Runtime.runPromise/Effect.runFork/Runtime.runFork calls appear outside boundary and known exception files', () => {
-    const violations: string[] = [];
-
-    for (const filePath of collectProductionTsFiles(CORE_SRC)) {
-      const relativePath = filePath.replace(`${CORE_SRC}/`, '');
-      if (boundaryFiles.has(relativePath) || knownExceptions.has(relativePath)) {
-        continue;
-      }
-
-      const content = readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-      let inBlockComment = false;
-
-      for (let index = 0; index < lines.length; index++) {
-        const line = lines[index];
-        const trimmed = line.trim();
-
-        if (inBlockComment) {
-          if (trimmed.includes('*/')) {
-            inBlockComment = false;
-          }
-          continue;
-        }
-
-        if (trimmed.startsWith('//')) {
-          continue;
-        }
-
-        if (trimmed.includes('/*')) {
-          if (!trimmed.includes('*/')) {
-            inBlockComment = true;
-          }
-          continue;
-        }
-
-        if (VIOLATION_PATTERNS.some((pattern) => line.includes(pattern))) {
-          violations.push(`${relativePath}:${index + 1}: ${trimmed}`);
-        }
-      }
-    }
-
+  test('no Effect.runPromise/Runtime.runPromise/Effect.runFork/Runtime.runFork calls appear outside boundary files in core package', () => {
+    const violations = findRuntimeBoundaryViolations(
+      CORE_SRC,
+      boundaryFiles,
+      VIOLATION_PATTERNS
+    );
     expect(violations).toEqual([]);
   });
 
-  test('known exception files exist and still carry at least one audited boundary violation pattern', () => {
-    for (const relativePath of knownExceptions) {
-      const absolutePath = join(CORE_SRC, relativePath);
-      expect(existsSync(absolutePath)).toBe(true);
-
-      const content = readFileSync(absolutePath, 'utf-8');
-      expect(VIOLATION_PATTERNS.some((pattern) => content.includes(pattern))).toBe(true);
-    }
+  test('no Effect.runPromise/Runtime.runPromise/Effect.runFork/Runtime.runFork calls in non-boundary CLI files', () => {
+    const violations = findRuntimeBoundaryViolations(
+      CLI_SRC,
+      cliBoundaryFiles,
+      VIOLATION_PATTERNS
+    );
+    expect(violations).toEqual([]);
   });
 
   test('consumer files have no imperative manager imports', () => {
