@@ -94,6 +94,7 @@ Progress: ████████████████████ 100% (233
 - Phase 46.2 verified passed: 5/5 must-haves met; milestone v0.3.0 execution and verification complete
 - Phase 47 added: Update Package READMEs — extract package-specific documentation from root README into per-package README files (docs only, no implementation changes)
 - Phase 47 execution started: 47-01 completed (5 provider READMEs and core package README created)
+- Phase 49 added: Peripheral Boundary Migration — eliminate remaining non-boundary runPromise/runFork from eval, hooks, MCP; clean up doc false positives; add CLI boundary guard; finalize guard to zero exceptions
 
 ### Decisions (v0.3.0)
 

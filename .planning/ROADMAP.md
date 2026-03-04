@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-48 (incl. 45.1, 45.2, 46.1, 46.2)
+- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-49 (incl. 45.1, 45.2, 46.1, 46.2)
 
 ---
 
@@ -380,6 +380,17 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 </details>
 
+### Phase 49: Peripheral Boundary Migration (GAP CLOSURE)
+
+**Goal:** Eliminate remaining non-boundary `runPromise`/`runFork` calls from peripheral modules (eval, hooks, MCP). Clean up doc-only false positives in observability and effect modules. Add CLI boundary guard. Finalize boundary guard test to zero known exceptions.
+**Depends on:** Phase 48
+**Requirements:** CONS-04
+**Gap Closure:** Completes CONS-04 boundary cleanup started in Phase 48
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 49 to break down)
+
 ---
 
-*Last updated: 2026-03-04 — Phase 48 (gap closure) added for CONS-04 boundary migration.*
+*Last updated: 2026-03-04 — Phase 49 added for peripheral boundary migration (CONS-04 completion).*
