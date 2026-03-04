@@ -228,8 +228,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 47-01-PLAN.md — Create provider and core package READMEs
-- [ ] 47-02-PLAN.md — Slim root README and update dev README
+- [x] 47-01-PLAN.md — Create provider and core package READMEs
+- [x] 47-02-PLAN.md — Slim root README and update dev README
 
 ---
 
@@ -336,7 +336,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
-| 47. Update Package READMEs | 0/2 | Planned | — |
+| 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
 
 ---
 
@@ -372,4 +372,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-04 — Phase 46.2 complete and verified (4/4 plans, 5/5 must-haves).*
+*Last updated: 2026-03-04 — Phase 47 complete and verified (2/2 plans, 10/10 must-haves).*
