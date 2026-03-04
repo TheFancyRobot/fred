@@ -207,7 +207,7 @@ Plans:
 
 **Goal:** Fix Example 04 anti-pattern (hardcoded inline array in ETA loop) and migrate all examples from root-level `agents/` to `src/agents/` to match TypeScript developer expectations.
 **Depends on:** Phase 46.1
-**Plans:** 2 plans
+**Plans:** 4 plans
 **Success Criteria** (what must be TRUE):
   1. Example 04 uses `addTemplateContext('departments', ...)` instead of hardcoded inline array
   2. Default convention in initializer.ts checks `./src/agents` before `./agents`
@@ -216,8 +216,10 @@ Plans:
   5. All tests pass, build succeeds
 
 Plans:
-- [ ] 46.2-01-PLAN.md — Fix Example 04 anti-pattern, update default convention, remove README justification
-- [ ] 46.2-02-PLAN.md — Migrate all 12 examples from agents/ to src/agents/
+- [x] 46.2-01-PLAN.md — Fix Example 04 anti-pattern, update default convention, remove README justification
+- [x] 46.2-02-PLAN.md — Migrate examples 01-04 from agents/ to src/agents/
+- [x] 46.2-03-PLAN.md — Migrate examples 05-08 from agents/ to src/agents/
+- [x] 46.2-04-PLAN.md — Migrate examples 09-12 and run full verification
 
 ---
 
@@ -321,7 +323,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
-| 46.2. Gap Closure: Agents Convention (INSERTED) | 0/2 | Pending | — |
+| 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
 
 ---
 
@@ -357,4 +359,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-03 — Phase 46.1 complete (gap closure executed and verified: 5/5 plans).*
+*Last updated: 2026-03-04 — Phase 46.2 complete and verified (4/4 plans, 5/5 must-haves).*
