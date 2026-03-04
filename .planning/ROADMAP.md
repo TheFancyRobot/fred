@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-46 (incl. 45.1, 45.2, 46.1)
+- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-47 (incl. 45.1, 45.2, 46.1, 46.2)
 
 ---
 
@@ -221,6 +221,16 @@ Plans:
 - [x] 46.2-03-PLAN.md — Migrate examples 05-08 from agents/ to src/agents/
 - [x] 46.2-04-PLAN.md — Migrate examples 09-12 and run full verification
 
+### Phase 47: Update Package READMEs
+
+**Goal:** Extract package-specific documentation from the root README and move it into dedicated README files at the root of each package (core, cli, dev, provider-openai, provider-anthropic, provider-google, provider-groq, provider-openrouter). The root README should link to package READMEs for details. No implementation changes — documentation only.
+**Depends on:** Phase 46.2
+**Plans:** 2 plans
+
+Plans:
+- [ ] 47-01-PLAN.md — Create provider and core package READMEs
+- [ ] 47-02-PLAN.md — Slim root README and update dev README
+
 ---
 
 ## Phase Dependencies
@@ -245,6 +255,8 @@ Phase 46 (Showcase Examples)
 Phase 46.1 (Refactor Examples: .md Agents + ETA) ← INSERTED
     ↓
 Phase 46.2 (Gap Closure: Agents Convention) ← INSERTED
+    ↓
+Phase 47 (Update Package READMEs)
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -310,7 +322,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -324,6 +336,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
+| 47. Update Package READMEs | 0/2 | Planned | — |
 
 ---
 
