@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 48 verified complete
-last_updated: "2026-03-04T22:19:44Z"
-last_activity: 2026-03-04 - Phase 48 verified passed (6/6 must-haves)
+status: in_progress
+stopped_at: Completed 49-02-PLAN.md
+last_updated: "2026-03-04T23:46:03Z"
+last_activity: 2026-03-04 - Completed 49-02-PLAN.md
 progress:
   total_phases: 13
-  completed_phases: 12
-  total_plans: 237
-  completed_plans: 237
+  completed_phases: 13
+  total_plans: 239
+  completed_plans: 239
   percent: 100
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 48 of 49 (Effect Boundary Migration)
-Plan: 4 of 4 in current phase
-Status: Phase verified complete
-Last activity: 2026-03-04 - Phase 48 verified passed (6/6 must-haves)
+Phase: 49 of 49 (Peripheral Boundary Migration)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-03-04 - Completed 49-02-PLAN.md
 
-Progress: ████████████████████ 100% (237/237 plans)
+Progress: ████████████████████ 100% (239/239 plans)
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Progress: ████████████████████ 100% (237
 - Phase 47 added: Update Package READMEs — extract package-specific documentation from root README into per-package README files (docs only, no implementation changes)
 - Phase 47 execution started: 47-01 completed (5 provider READMEs and core package README created)
 - Phase 49 added: Peripheral Boundary Migration — eliminate remaining non-boundary runPromise/runFork from eval, hooks, MCP; clean up doc false positives; add CLI boundary guard; finalize guard to zero exceptions
+- Phase 49 execution started: 49-01 completed (eval/hooks/MCP boundary migration complete and boundary guard finalized to zero exceptions with CLI coverage)
 - Phase 48 execution started: 48-01 completed (runtime boundary guard renamed/genericized, runFork detection added, JSDoc block comments skipped, and pipeline domain files moved from exceptions into active violations)
 - Phase 48 execution progressed: 48-02 completed (checkpoint/pause trace helpers converted to Effect combinators, runFork removed from those files, and guard classification moved from exceptions to boundary files)
 - Phase 48 execution progressed: 48-03 completed (executor converted to ExecutorService Effect composition, internal runFork/runPromise escapes removed, and executor tests migrated to service-layer Effect boundaries)
@@ -216,6 +217,8 @@ Progress: ████████████████████ 100% (237
 | 48-02 | Checkpoint/pause trace helpers now return Effect and execute via boundary-level runPromise, with files reclassified from exceptions to boundary files | Removes runFork escapes in checkpoint/pause domain while preserving valid Promise API boundary semantics |
 | 48-03 | Executor internals now compose through `ExecutorService` + `executePipelineV2Effect`, with retry handling via `Effect.either` and only deprecated Promise wrapper boundary left | Removes executor domain runtime escapes while preserving compatibility for pending 48-04 PipelineService wiring |
 | 48-04 | PipelineService delegates V2/resume/graph execution through `ExecutorService` and `GraphExecutorService`, with compatibility wrappers shifted to `runCallback` and boundary guard passing cleanly | Completes pipeline-domain runtime boundary migration while preserving Promise API compatibility without runPromise/runFork escapes |
+| 49-01 | Peripheral eval/hooks/MCP helpers now compose in Effect with runPromise left only at orchestrator/callback/timer boundaries | Completes first half of CONS-04 gap closure and removes all guard exceptions |
+| 49-02 | JSDoc examples in observability/effect modules now use composition-first Effect pipelines with no runPromise references | Aligns developer guidance with boundary-only runtime execution policy and closes final CONS-04 documentation gap |
 
 ### Quick Tasks Completed
 
@@ -226,12 +229,12 @@ Progress: ████████████████████ 100% (237
 
 ## Session Continuity
 
-Last session: 2026-03-04T22:19:44Z
-Stopped at: Phase 48 verified complete
+Last session: 2026-03-04T23:46:03Z
+Stopped at: Completed 49-02-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-04 — Phase 48 verified complete (4/4 plans, 6/6 must-haves).*
+*Last updated: 2026-03-04 — Completed 49-02-PLAN.md (Phase 49 complete, 2/2 plans).*
