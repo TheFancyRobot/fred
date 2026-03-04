@@ -273,6 +273,8 @@ Phase 46.2 (Gap Closure: Agents Convention) ← INSERTED
 Phase 47 (Update Package READMEs)
     ↓
 Phase 48 (Effect Boundary Migration — Gap Closure) ← GAP CLOSURE
+    ↓
+Phase 49 (Peripheral Boundary Migration — Gap Closure) ← GAP CLOSURE
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -314,7 +316,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | CONS-01 | 44 | dev-chat.ts uses Effect API |
 | CONS-02 | 44 | CLI chat.ts uses Effect API |
 | CONS-03 | 44 | CLI run.ts uses Effect API |
-| CONS-04 | 48 | Effect.runPromise/runFork at boundaries only (gap closure) |
+| CONS-04 | 48, 49 | Effect.runPromise/runFork at boundaries only (gap closure across both phases) |
 | API-01 | 45 | 5/5 | Complete    | 2026-03-01 | 45 | exports.ts exports Effect service tags |
 | API-03 | 45 | services.ts Layer provides all services |
 | API-04 | 45 | Breaking changes in CHANGELOG |
@@ -338,7 +340,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48 → 49
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -354,6 +356,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
 | 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
 | 48. Effect Boundary Migration (Gap Closure) | 4/4 | Complete | 2026-03-04 |
+| 49. Peripheral Boundary Migration (Gap Closure) | 0/2 | Planning | — |
 
 ---
 
@@ -393,11 +396,12 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 **Depends on:** Phase 48
 **Requirements:** CONS-04
 **Gap Closure:** Completes CONS-04 boundary cleanup started in Phase 48
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 49 to break down)
+- [ ] 49-01-PLAN.md — Migrate eval/hooks/MCP to Effect composition, finalize guard with CLI section
+- [ ] 49-02-PLAN.md — Rewrite JSDoc examples to idiomatic Effect patterns, final verification
 
 ---
 
-*Last updated: 2026-03-04 — Phase 48 verified complete (4/4 plans, 6/6 must-haves); Phase 49 queued for peripheral boundary migration.*
+*Last updated: 2026-03-04 — Phase 49 planned (2 plans in 2 waves).*
