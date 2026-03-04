@@ -290,15 +290,18 @@ function executeStepWithHooks(
         });
       }
 
-      try {
-        result = yield* executeStepWithRetry(step, context, options, attempt);
+      const attemptResult = yield* executeStepWithRetry(step, context, options, attempt).pipe(Effect.either);
+      if (attemptResult._tag === 'Right') {
+        result = attemptResult.right;
         lastError = undefined;
         if (attempt > 0) {
           stepSpan?.addEvent('retry.success', { 'retry.attempt': attempt });
         }
         break;
-      } catch (error) {
-        lastError = toError(error);
+      }
+
+      {
+        lastError = toError(attemptResult.left);
         if (attempt > 0) {
           stepSpan?.addEvent('retry.error', {
             'retry.attempt': attempt,
