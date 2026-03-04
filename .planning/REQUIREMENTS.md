@@ -53,7 +53,7 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 - [ ] **CONS-01**: `packages/dev/src/dev-chat.ts` uses Effect-based API (no imperative Fred class methods or direct manager access)
 - [ ] **CONS-02**: `packages/cli/src/commands/chat.ts` uses Effect-based API
 - [ ] **CONS-03**: `packages/cli/src/commands/run.ts` uses Effect-based API
-- [ ] **CONS-04**: All consumers use `Effect.runPromise` or `Effect.runFork` at the boundary only (no Effect.runPromise scattered through business logic)
+- [x] **CONS-04**: All consumers use `Effect.runPromise` or `Effect.runFork` at the boundary only (no Effect.runPromise scattered through business logic)
 
 ### Public API Surface
 
@@ -148,7 +148,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-01 | Phase 44 | Pending |
 | CONS-02 | Phase 44 | Pending |
 | CONS-03 | Phase 44 | Pending |
-| CONS-04 | Phase 48 | Pending |
+| CONS-04 | Phase 48 | Complete |
 | API-01 | Phase 45 | Complete |
 | API-02 | Phase 45 | Complete |
 | API-03 | Phase 45 | Complete |

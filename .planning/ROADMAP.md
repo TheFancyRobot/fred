@@ -230,10 +230,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 48-01-PLAN.md — Rename and extend boundary guard test (runFork detection, comment fix)
-- [ ] 48-02-PLAN.md — Convert checkpoint/pause trace() to Effect combinators
-- [ ] 48-03-PLAN.md — Convert executor.ts to ExecutorService (full Effect)
-- [ ] 48-04-PLAN.md — Convert graph-executor.ts to GraphExecutorService, wire PipelineService
+- [x] 48-01-PLAN.md — Rename and extend boundary guard test (runFork detection, comment fix)
+- [x] 48-02-PLAN.md — Convert checkpoint/pause trace() to Effect combinators
+- [x] 48-03-PLAN.md — Convert executor.ts to ExecutorService (full Effect)
+- [x] 48-04-PLAN.md — Convert graph-executor.ts to GraphExecutorService, wire PipelineService
 
 ### Phase 47: Update Package READMEs
 
@@ -353,7 +353,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
 | 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
-| 48. Effect Boundary Migration (Gap Closure) | 0/4 | Pending | — |
+| 48. Effect Boundary Migration (Gap Closure) | 4/4 | Complete | 2026-03-04 |
 
 ---
 
@@ -400,4 +400,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-03-04 — Phase 49 added for peripheral boundary migration (CONS-04 completion).*
+*Last updated: 2026-03-04 — Phase 48 verified complete (4/4 plans, 6/6 must-haves); Phase 49 queued for peripheral boundary migration.*
