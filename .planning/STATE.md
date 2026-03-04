@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 47 context gathered
-last_updated: "2026-03-04T17:17:21.144Z"
-last_activity: 2026-03-04 - Phase 46.2 verified complete
+status: complete
+stopped_at: Completed 47-02-PLAN.md
+last_updated: "2026-03-04T17:37:10Z"
+last_activity: 2026-03-04 - Completed 47-02-PLAN.md
 progress:
-  total_phases: 12
-  completed_phases: 10
-  total_plans: 60
-  completed_plans: 59
+  total_phases: 11
+  completed_phases: 11
+  total_plans: 233
+  completed_plans: 233
   percent: 100
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 46.2 of 46.2 (Gap Closure: Agents Convention)
-Plan: 4 of 4 in current phase
-Status: Milestone complete (all phases verified)
-Last activity: 2026-03-04 - Phase 46.2 verified complete
+Phase: 47 of 47 (Update Package READMEs)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-03-04 - Completed 47-02-PLAN.md
 
-Progress: ████████████████████ 100% (231/231 plans)
+Progress: ████████████████████ 100% (233/233 plans)
 
 ## Performance Metrics
 
@@ -93,6 +93,7 @@ Progress: ████████████████████ 100% (231
 - Phase 46.2 complete: 46.2-04 completed (examples 09-12 path-migrated into `src/agents/`, with full examples guard, build, and directory convention verification passing)
 - Phase 46.2 verified passed: 5/5 must-haves met; milestone v0.3.0 execution and verification complete
 - Phase 47 added: Update Package READMEs — extract package-specific documentation from root README into per-package README files (docs only, no implementation changes)
+- Phase 47 execution started: 47-01 completed (5 provider READMEs and core package README created)
 
 ### Decisions (v0.3.0)
 
@@ -203,6 +204,8 @@ Progress: ████████████████████ 100% (231
 | 46.2-03 | Examples 05-06 markdown agents are path-migrated into `src/agents/` via rename-only commits | Extends convention alignment to pipeline examples while preserving exact prompt content |
 | 46.2-03 | Example 07 `partials/` remains untouched while examples 07-08 are validated on `src/agents` layout | Preserves non-agent assets during convention migration |
 | 46.2-04 | Examples 09-12 are migrated via path-only renames into `src/agents/` and validated with full phase verification checks | Closes the final migration slice while preserving markdown content exactly |
+| 47-01 | Provider docs use one shared README template and core docs use markdown-agent-first tutorial structure | Keeps package docs consistent and package-local while preserving user-facing abstraction boundaries |
+| 47-02 | Root README is now a slim documentation hub while server endpoint details live in dev package docs | Removes cross-package duplication and keeps package-level ownership clear |
 
 ### Quick Tasks Completed
 
@@ -213,12 +216,12 @@ Progress: ████████████████████ 100% (231
 
 ## Session Continuity
 
-Last session: 2026-03-04T17:17:21.138Z
-Stopped at: Phase 47 context gathered
-Resume file: .planning/phases/47-update-package-readmes/47-CONTEXT.md
+Last session: 2026-03-04T17:37:10Z
+Stopped at: Completed 47-02-PLAN.md
+Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-04 — Phase 46.2 verified complete (4/4 plans, 5/5 must-haves), milestone v0.3.0 complete.*
+*Last updated: 2026-03-04 — Completed 47-02-PLAN.md (2/2 plans in Phase 47; milestone complete).*
