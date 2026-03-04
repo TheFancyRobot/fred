@@ -203,6 +203,22 @@ Plans:
 - [x] 46.1-04-PLAN.md — Final verification: guard test, full test suite, build, ETA coverage check, README update
 - [x] 46.1-05-PLAN.md — Gap closure: add per-message variable injection demo to Example 07
 
+### Phase 46.2: Gap Closure — Agents Convention & Anti-Pattern Fix (INSERTED)
+
+**Goal:** Fix Example 04 anti-pattern (hardcoded inline array in ETA loop) and migrate all examples from root-level `agents/` to `src/agents/` to match TypeScript developer expectations.
+**Depends on:** Phase 46.1
+**Plans:** 2 plans
+**Success Criteria** (what must be TRUE):
+  1. Example 04 uses `addTemplateContext('departments', ...)` instead of hardcoded inline array
+  2. Default convention in initializer.ts checks `./src/agents` before `./agents`
+  3. All 12 examples have agents in `src/agents/` directory
+  4. No root-level `agents/` directories remain in examples
+  5. All tests pass, build succeeds
+
+Plans:
+- [ ] 46.2-01-PLAN.md — Fix Example 04 anti-pattern, update default convention, remove README justification
+- [ ] 46.2-02-PLAN.md — Migrate all 12 examples from agents/ to src/agents/
+
 ---
 
 ## Phase Dependencies
@@ -225,6 +241,8 @@ Phase 45.2 (ETA for Templating Prompts) ← INSERTED
 Phase 46 (Showcase Examples)
     ↓
 Phase 46.1 (Refactor Examples: .md Agents + ETA) ← INSERTED
+    ↓
+Phase 46.2 (Gap Closure: Agents Convention) ← INSERTED
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -290,7 +308,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -303,6 +321,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 45.2. ETA for Templating Prompts (INSERTED) | 3/3 | Complete | 2026-03-02 |
 | 46. Showcase Examples & Framework Differentiation | 11/11 | Complete | 2026-03-03 |
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
+| 46.2. Gap Closure: Agents Convention (INSERTED) | 0/2 | Pending | — |
 
 ---
 

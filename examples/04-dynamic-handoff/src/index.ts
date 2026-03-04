@@ -12,6 +12,9 @@ async function main() {
   );
 
   fred.registerTool(handoffTool as unknown as Tool);
+  fred.addTemplateContext('departments', () => ({
+    available: ['billing-specialist', 'tech-specialist'],
+  }));
   await fred.initializeFromConfig('./config.yaml');
 
   const conversationId = fred.generateConversationId();
