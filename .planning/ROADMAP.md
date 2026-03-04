@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-47 (incl. 45.1, 45.2, 46.1, 46.2)
+- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-48 (incl. 45.1, 45.2, 46.1, 46.2)
 
 ---
 
@@ -221,6 +221,13 @@ Plans:
 - [x] 46.2-03-PLAN.md — Migrate examples 05-08 from agents/ to src/agents/
 - [x] 46.2-04-PLAN.md — Migrate examples 09-12 and run full verification
 
+### Phase 48: Effect Boundary Migration — Eliminate Non-Boundary runPromise/runFork (GAP CLOSURE)
+
+**Goal:** Remove all non-boundary `Effect.runPromise`/`Effect.runFork` calls from core business logic, satisfying CONS-04 fully. Compose observability annotations, agent calls, and storage access into Effect pipelines instead of fire-and-forget side-effects. Update boundary guard test to enforce zero exceptions.
+**Depends on:** Phase 47
+**Requirements:** CONS-04
+**Gap Closure:** Closes gap from v0.3.0 audit
+
 ### Phase 47: Update Package READMEs
 
 **Goal:** Extract package-specific documentation from the root README and move it into dedicated README files at the root of each package (core, cli, dev, provider-openai, provider-anthropic, provider-google, provider-groq, provider-openrouter). The root README should link to package READMEs for details. No implementation changes — documentation only.
@@ -257,6 +264,8 @@ Phase 46.1 (Refactor Examples: .md Agents + ETA) ← INSERTED
 Phase 46.2 (Gap Closure: Agents Convention) ← INSERTED
     ↓
 Phase 47 (Update Package READMEs)
+    ↓
+Phase 48 (Effect Boundary Migration — Gap Closure) ← GAP CLOSURE
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -298,7 +307,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | CONS-01 | 44 | dev-chat.ts uses Effect API |
 | CONS-02 | 44 | CLI chat.ts uses Effect API |
 | CONS-03 | 44 | CLI run.ts uses Effect API |
-| CONS-04 | 44 | Effect.runPromise at boundaries only |
+| CONS-04 | 48 | Effect.runPromise/runFork at boundaries only (gap closure) |
 | API-01 | 45 | 5/5 | Complete    | 2026-03-01 | 45 | exports.ts exports Effect service tags |
 | API-03 | 45 | services.ts Layer provides all services |
 | API-04 | 45 | Breaking changes in CHANGELOG |
@@ -322,7 +331,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -337,6 +346,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46.1. Refactor Examples: .md Agents + ETA (INSERTED) | 5/5 | Complete | 2026-03-03 |
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
 | 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
+| 48. Effect Boundary Migration (Gap Closure) | 0/0 | Pending | — |
 
 ---
 
@@ -372,4 +382,4 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 
 ---
 
-*Last updated: 2026-03-04 — Phase 47 complete and verified (2/2 plans, 10/10 must-haves).*
+*Last updated: 2026-03-04 — Phase 48 (gap closure) added for CONS-04 boundary migration.*

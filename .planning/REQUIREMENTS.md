@@ -148,7 +148,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-01 | Phase 44 | Pending |
 | CONS-02 | Phase 44 | Pending |
 | CONS-03 | Phase 44 | Pending |
-| CONS-04 | Phase 44 | Pending |
+| CONS-04 | Phase 48 | Pending |
 | API-01 | Phase 45 | Complete |
 | API-02 | Phase 45 | Complete |
 | API-03 | Phase 45 | Complete |
