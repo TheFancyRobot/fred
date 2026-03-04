@@ -220,8 +220,13 @@ export class ConfigInitializer {
 
     // Create agents (load order: .md files -> config agents)
     const discoveredAgentDirs = config.agentDirs ?? (() => {
-      const defaultAgentsDir = resolve(dirname(configPath), './agents');
-      return existsSync(defaultAgentsDir) ? ['./agents'] : [];
+      const srcAgentsDir = resolve(dirname(configPath), './src/agents');
+      if (existsSync(srcAgentsDir)) {
+        return ['./src/agents'];
+      }
+
+      const rootAgentsDir = resolve(dirname(configPath), './agents');
+      return existsSync(rootAgentsDir) ? ['./agents'] : [];
     })();
 
     const fileTemplateOptions = await this.buildAgentFileTemplateOptions(fred, config);
