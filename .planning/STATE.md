@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: complete
-stopped_at: Phase 46.1 verified complete
-last_updated: "2026-03-03T21:20:00Z"
-last_activity: 2026-03-03 - Phase 46.1 verified complete
+status: in_progress
+stopped_at: Completed 46.2-01-PLAN.md
+last_updated: "2026-03-04T03:09:57Z"
+last_activity: 2026-03-04 - Completed 46.2-01-PLAN.md
 progress:
   total_phases: 10
-  completed_phases: 10
-  total_plans: 227
-  completed_plans: 227
-  percent: 100
+  completed_phases: 9
+  total_plans: 231
+  completed_plans: 228
+  percent: 99
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 46.1 of 46.1 (Refactor Examples: .md Agents + ETA Templates)
-Plan: 5 of 5 in current phase
-Status: Milestone complete (all phases verified)
-Last activity: 2026-03-03 - Phase 46.1 verified complete
+Phase: 46.2 of 46.2 (Gap Closure: Agents Convention)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-03-04 - Completed 46.2-01-PLAN.md
 
-Progress: ████████████████████ 100% (227/227 plans)
+Progress: ███████████████████░ 99% (228/231 plans)
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Progress: ████████████████████ 100% (227
 - Phase 46.1 execution progressed: 46.1-03 completed (examples 09-12 migrated to markdown agents with eval/app split, Rosetta config mapping, MCP config wiring, and CLI/TUI agent extraction)
 - Phase 46.1 gap closure completed: 46.1-05 adds per-message ETA variable injection demo (`addTemplateContext('session', ...)`) to Example 07 with docs and full verification green
 - Phase 46.1 verified passed: 6/6 must-haves met; milestone v0.3.0 phase execution complete
+- Phase 46.2 execution started: 46.2-01 completed (Example 04 runtime template context injection, initializer default src/agents priority, examples docs convention update)
 
 ### Decisions (v0.3.0)
 
@@ -190,6 +191,9 @@ Progress: ████████████████████ 100% (227
 | 46.1-03 | Example 11 MCP server transport is declared in `config.yaml` `mcpServers` and consumed by initializeFromConfig | Aligns MCP setup with declarative config patterns enabled by FrameworkConfig support |
 | 46.1-04 | Top-level examples index now documents markdown agent/frontmatter conventions and ETA feature mapping | Keeps onboarding docs aligned with final migration architecture and verification outcomes |
 | 46.1-05 | Example 07 now injects `session.*` runtime values via `fred.addTemplateContext` before each message | Closes remaining ETA per-message variable verification gap while preserving existing hook and template behavior |
+| 46.2-01 | Example 04 specialist loop now reads `it.departments.available` populated via runtime `addTemplateContext('departments', ...)` | Removes hardcoded prompt literals while preserving handoff behavior and IDs |
+| 46.2-01 | ConfigInitializer default agent discovery now checks `./src/agents` before `./agents` fallback | Aligns runtime defaults with TypeScript project expectations without breaking legacy layouts |
+| 46.2-01 | Examples docs now standardize on `src/agents/*.md` and document context-driven ETA data for Example 04 | Removes legacy root-level rationale and teaches data-driven template patterns |
 
 ### Quick Tasks Completed
 
@@ -200,12 +204,12 @@ Progress: ████████████████████ 100% (227
 
 ## Session Continuity
 
-Last session: 2026-03-03T21:20:00Z
-Stopped at: Phase 46.1 verified complete
-Resume file: .planning/phases/46.1-refactor-examples-md-agents-eta-templates/46.1-CONTEXT.md
+Last session: 2026-03-04T03:09:57Z
+Stopped at: Completed 46.2-01-PLAN.md
+Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-03 — Phase 46.1 verified complete (6/6 must-haves, milestone v0.3.0 phase execution complete).*
+*Last updated: 2026-03-04 — Completed 46.2-01 plan; Phase 46.2 in progress (1/4 plans complete).*
