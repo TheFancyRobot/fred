@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 48-03-PLAN.md
-last_updated: "2026-03-04T21:59:34Z"
-last_activity: 2026-03-04 - Completed 48-03 executor Effect migration
+stopped_at: Completed 48-04-PLAN.md
+last_updated: "2026-03-04T22:14:49Z"
+last_activity: 2026-03-04 - Completed 48-04 pipeline boundary completion
 progress:
   total_phases: 13
   completed_phases: 11
   total_plans: 237
-  completed_plans: 236
-  percent: 99
+  completed_plans: 237
+  percent: 100
 ---
 
 # Project State
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 48 of 49 (Effect Boundary Migration)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-03-04 - Completed 48-03 executor Effect migration
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-03-04 - Completed 48-04 pipeline boundary completion
 
-Progress: ███████████████████░ 99% (236/237 plans)
+Progress: ████████████████████ 100% (237/237 plans)
 
 ## Performance Metrics
 
@@ -64,7 +64,7 @@ Progress: ███████████████████░ 99% (236/
 - **Corresponding Effect services** exist for all 8: ToolRegistryService, AgentService, PipelineService, ContextStorageService, HookManagerService, ProviderRegistryService, MessageProcessorService, MessageRouterService
 - **Fred facade** now delegates message/routing/tool/agent/pipeline boundaries through runtime services; compatibility seams remain for next-plan cleanup
 - **PipelineService resume methods now implemented** - `resume()` and `resumeWithHumanInput()` are standalone Effect state machines
-- **PipelineService graph execution stub remains** - graph methods still return "not yet migrated to Effect fibers"
+- **PipelineService graph execution path is Effect-native** - graph methods now delegate through GraphExecutorService
 - **All consumers** (dev-chat, CLI) use 100% imperative API via `fred.processMessage()`, `fred.streamMessage()`, etc.
 - **~3,000-4,000 lines of duplication** between imperative classes and Effect services
 
@@ -98,6 +98,7 @@ Progress: ███████████████████░ 99% (236/
 - Phase 48 execution started: 48-01 completed (runtime boundary guard renamed/genericized, runFork detection added, JSDoc block comments skipped, and pipeline domain files moved from exceptions into active violations)
 - Phase 48 execution progressed: 48-02 completed (checkpoint/pause trace helpers converted to Effect combinators, runFork removed from those files, and guard classification moved from exceptions to boundary files)
 - Phase 48 execution progressed: 48-03 completed (executor converted to ExecutorService Effect composition, internal runFork/runPromise escapes removed, and executor tests migrated to service-layer Effect boundaries)
+- Phase 48 complete: 48-04 completed (graph executor migrated to GraphExecutorService, PipelineService wired to executor tags, boundary guard finalized with clean pipeline domain)
 
 ### Decisions (v0.3.0)
 
@@ -213,6 +214,7 @@ Progress: ███████████████████░ 99% (236/
 | 48-01 | Runtime boundary guard now scans for runPromise + runFork patterns with multiline block-comment skipping, and pipeline domain files are no longer exceptions | Starts test-driven Phase 48 migration by surfacing intentional pipeline violations while removing JSDoc false-positive exception files |
 | 48-02 | Checkpoint/pause trace helpers now return Effect and execute via boundary-level runPromise, with files reclassified from exceptions to boundary files | Removes runFork escapes in checkpoint/pause domain while preserving valid Promise API boundary semantics |
 | 48-03 | Executor internals now compose through `ExecutorService` + `executePipelineV2Effect`, with retry handling via `Effect.either` and only deprecated Promise wrapper boundary left | Removes executor domain runtime escapes while preserving compatibility for pending 48-04 PipelineService wiring |
+| 48-04 | PipelineService delegates V2/resume/graph execution through `ExecutorService` and `GraphExecutorService`, with compatibility wrappers shifted to `runCallback` and boundary guard passing cleanly | Completes pipeline-domain runtime boundary migration while preserving Promise API compatibility without runPromise/runFork escapes |
 
 ### Quick Tasks Completed
 
@@ -223,12 +225,12 @@ Progress: ███████████████████░ 99% (236/
 
 ## Session Continuity
 
-Last session: 2026-03-04T21:59:34Z
-Stopped at: Completed 48-03-PLAN.md
+Last session: 2026-03-04T22:14:49Z
+Stopped at: Completed 48-04-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-04 — Completed 48-03 plan execution (3/4 plans in Phase 48).*
+*Last updated: 2026-03-04 — Completed 48-04 plan execution (4/4 plans in Phase 48).*
