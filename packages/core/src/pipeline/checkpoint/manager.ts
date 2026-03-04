@@ -14,11 +14,11 @@ import type { PauseMetadata } from '../pause/types';
 import { withFredSpan } from '../../observability/otel';
 
 /**
- * Fire-and-forget tracing helper.
- * Casts Effect to remove requirements channel for fire-and-forget observability.
+ * Tracing combinator.
+ * Casts Effect to remove requirements and ignores tracing failures.
  */
-function trace(effect: Effect.Effect<void, unknown, unknown>): void {
-  Effect.runFork(effect as Effect.Effect<void, never, never>);
+function trace(effect: Effect.Effect<void, unknown, unknown>): Effect.Effect<void> {
+  return (effect as Effect.Effect<void, never, never>).pipe(Effect.ignore);
 }
 
 /**
@@ -97,14 +97,16 @@ export class CheckpointManager {
     const expiresAt = options.expiresAt ?? new Date(now.getTime() + this.defaultTtlMs);
 
     // Fire-and-forget span annotation to avoid blocking
-    trace(
-      withFredSpan('checkpoint.save', {
-        runId: options.runId,
-        workflowId: options.pipelineId,
-        stepName: options.stepName,
-        'checkpoint.step': options.step,
-        'checkpoint.status': options.status,
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.save', {
+          runId: options.runId,
+          workflowId: options.pipelineId,
+          stepName: options.stepName,
+          'checkpoint.step': options.step,
+          'checkpoint.status': options.status,
+        })(Effect.void)
+      )
     );
 
     try {
@@ -122,13 +124,15 @@ export class CheckpointManager {
       });
     } catch (error) {
       // Annotate span with error status
-      trace(
-        withFredSpan('checkpoint.save.error', {
-          runId: options.runId,
-          workflowId: options.pipelineId,
-          stepName: options.stepName,
-          'error.message': error instanceof Error ? error.message : String(error),
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.save.error', {
+            runId: options.runId,
+            workflowId: options.pipelineId,
+            stepName: options.stepName,
+            'error.message': error instanceof Error ? error.message : String(error),
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -142,20 +146,24 @@ export class CheckpointManager {
    */
   async getLatestCheckpoint(runId: string): Promise<Checkpoint | null> {
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.get_latest', {
-        runId,
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.get_latest', {
+          runId,
+        })(Effect.void)
+      )
     );
 
     try {
       return await this.storage.getLatest(runId);
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.get_latest.error', {
-          runId,
-          'error.message': error instanceof Error ? error.message : String(error),
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.get_latest.error', {
+            runId,
+            'error.message': error instanceof Error ? error.message : String(error),
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -181,23 +189,27 @@ export class CheckpointManager {
    */
   async updateStatus(runId: string, step: number, status: CheckpointStatus): Promise<void> {
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.update_status', {
-        runId,
-        'checkpoint.step': step,
-        'checkpoint.status': status,
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.update_status', {
+          runId,
+          'checkpoint.step': step,
+          'checkpoint.status': status,
+        })(Effect.void)
+      )
     );
 
     try {
       await this.storage.updateStatus(runId, step, status);
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.update_status.error', {
-          runId,
-          'checkpoint.step': step,
-          'error.message': error instanceof Error ? error.message : String(error),
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.update_status.error', {
+            runId,
+            'checkpoint.step': step,
+            'error.message': error instanceof Error ? error.message : String(error),
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -233,20 +245,24 @@ export class CheckpointManager {
    */
   async deleteRun(runId: string): Promise<void> {
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.delete_run', {
-        runId,
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.delete_run', {
+          runId,
+        })(Effect.void)
+      )
     );
 
     try {
       await this.storage.deleteRun(runId);
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.delete_run.error', {
-          runId,
-          'error.message': error instanceof Error ? error.message : String(error),
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.delete_run.error', {
+            runId,
+            'error.message': error instanceof Error ? error.message : String(error),
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -260,26 +276,32 @@ export class CheckpointManager {
    */
   async deleteExpired(): Promise<number> {
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.delete_expired', {})(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.delete_expired', {})(Effect.void)
+      )
     );
 
     try {
       const count = await this.storage.deleteExpired();
 
       // Log cleanup count
-      trace(
-        withFredSpan('checkpoint.delete_expired.complete', {
-          'checkpoint.deleted_count': count,
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.delete_expired.complete', {
+            'checkpoint.deleted_count': count,
+          })(Effect.void)
+        )
       );
 
       return count;
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.delete_expired.error', {
-          'error.message': error instanceof Error ? error.message : String(error),
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.delete_expired.error', {
+            'error.message': error instanceof Error ? error.message : String(error),
+          })(Effect.void)
+        )
       );
       throw error;
     }
