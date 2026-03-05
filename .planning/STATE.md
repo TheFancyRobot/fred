@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 49 verified complete
-last_updated: "2026-03-04T23:51:02Z"
-last_activity: 2026-03-04 - Phase 49 verified passed (9/9 must-haves)
+status: in_progress
+stopped_at: Completed 50-02-PLAN.md
+last_updated: "2026-03-05T06:04:32Z"
+last_activity: 2026-03-05 - Completed 50-02-PLAN.md
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 13
-  total_plans: 239
-  completed_plans: 239
-  percent: 100
+  total_plans: 242
+  completed_plans: 240
+  percent: 99
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 49 of 49 (Peripheral Boundary Migration)
-Plan: 2 of 2 in current phase
-Status: Phase verified complete
-Last activity: 2026-03-04 - Phase 49 verified passed (9/9 must-haves)
+Phase: 50 of 14 (Security Hardening Baseline)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-05 - Completed 50-02-PLAN.md
 
-Progress: ████████████████████ 100% (239/239 plans)
+Progress: ███████████████████░ 99% (239/240 plans)
 
 ## Performance Metrics
 
@@ -98,6 +98,8 @@ Progress: ████████████████████ 100% (239
 - Phase 49 execution started: 49-01 completed (eval/hooks/MCP boundary migration complete and boundary guard finalized to zero exceptions with CLI coverage)
 - Phase 49 complete: 49-02 completed (JSDoc examples rewritten to composition-first Effect patterns; full test/build and boundary guard verification green)
 - Phase 49 verified passed: 9/9 must-haves met; milestone v0.3.0 phase execution complete
+- Phase 50 added: Security Hardening Baseline from security audit — dev auth/CORS hardening, tightened request/rate limits, MCP command/url allowlist + env minimization, CI security scans (gitleaks/semgrep/dependency audit)
+- Phase 50 execution progressed: 50-02 completed (MCP command and URL allowlist validation plus stdio env allowlist filtering with trust-boundary tests and full MCP/build verification green)
 - Phase 48 execution started: 48-01 completed (runtime boundary guard renamed/genericized, runFork detection added, JSDoc block comments skipped, and pipeline domain files moved from exceptions into active violations)
 - Phase 48 execution progressed: 48-02 completed (checkpoint/pause trace helpers converted to Effect combinators, runFork removed from those files, and guard classification moved from exceptions to boundary files)
 - Phase 48 execution progressed: 48-03 completed (executor converted to ExecutorService Effect composition, internal runFork/runPromise escapes removed, and executor tests migrated to service-layer Effect boundaries)
@@ -221,6 +223,7 @@ Progress: ████████████████████ 100% (239
 | 48-04 | PipelineService delegates V2/resume/graph execution through `ExecutorService` and `GraphExecutorService`, with compatibility wrappers shifted to `runCallback` and boundary guard passing cleanly | Completes pipeline-domain runtime boundary migration while preserving Promise API compatibility without runPromise/runFork escapes |
 | 49-01 | Peripheral eval/hooks/MCP helpers now compose in Effect with runPromise left only at orchestrator/callback/timer boundaries | Completes first half of CONS-04 gap closure and removes all guard exceptions |
 | 49-02 | JSDoc examples in observability/effect modules now use composition-first Effect pipelines with no runPromise references | Aligns developer guidance with boundary-only runtime execution policy and closes final CONS-04 documentation gap |
+| 50-02 | MCP client now validates stdio commands and http/sse URL hosts/schemes before transport creation, and stdio env passthrough is allowlist-filtered by default | Establishes SEC-03 trust boundaries while preserving backward-compatible pass-through when allowlists are unset |
 
 ### Quick Tasks Completed
 
@@ -231,12 +234,12 @@ Progress: ████████████████████ 100% (239
 
 ## Session Continuity
 
-Last session: 2026-03-04T23:51:02Z
-Stopped at: Phase 49 verified complete
+Last session: 2026-03-05T06:04:32Z
+Stopped at: Completed 50-02-PLAN.md
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-04 — Phase 49 verified complete (2/2 plans, 9/9 must-haves).*
+*Last updated: 2026-03-05 — Completed 50-02 plan execution and recorded SEC-03 trust-boundary hardening.*
