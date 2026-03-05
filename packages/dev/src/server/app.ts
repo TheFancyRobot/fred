@@ -4,6 +4,13 @@ import { ServerHandlers } from './handlers';
 import { Router } from './routes';
 import { ChatRoutes } from './chat/routes';
 import { ChatHandlers } from './chat/handlers';
+import {
+  checkAuth,
+  DEFAULT_SECURITY_CONFIG,
+  matchOrigin,
+  type ServerSecurityConfig,
+} from './security';
+import { RateLimiter } from './rate-limiter';
 
 /**
  * HTTP server application
@@ -14,10 +21,20 @@ export class ServerApp {
   private router: Router;
   private chatRoutes: ChatRoutes;
   private server: any;
+  private securityConfig: ServerSecurityConfig;
+  private rateLimiter: RateLimiter;
 
-  constructor(framework: Fred) {
+  constructor(framework: Fred, securityConfig?: Partial<ServerSecurityConfig>) {
     this.framework = framework;
     this.handlers = new ServerHandlers(framework);
+    this.securityConfig = {
+      ...DEFAULT_SECURITY_CONFIG,
+      ...securityConfig,
+    };
+    this.rateLimiter = new RateLimiter(
+      this.securityConfig.rateLimitMaxRequests,
+      this.securityConfig.rateLimitWindowMs
+    );
 
     // Initialize chat routes
     const chatContextAdapter = {
@@ -39,16 +56,49 @@ export class ServerApp {
     this.server = Bun.serve({
       port,
       hostname,
-      fetch: async (req) => {
+      maxRequestBodySize: this.securityConfig.maxRequestBodySize,
+      idleTimeout: this.securityConfig.requestTimeoutSeconds,
+      fetch: async (req, server) => {
+        const origin = req.headers.get('Origin');
+
         // Handle CORS
         if (req.method === 'OPTIONS') {
+          const corsAllowed = origin ? matchOrigin(origin, this.securityConfig.corsAllowedOrigins) : false;
+
+          if (!corsAllowed || !origin) {
+            return new Response(null, { status: 204 });
+          }
+
           return new Response(null, {
             status: 204,
             headers: {
-              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Origin': origin,
               'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             },
+          });
+        }
+
+        const clientIP = server.requestIP(req)?.address ?? 'unknown';
+        const rateLimitResult = this.rateLimiter.check(clientIP);
+        if (!rateLimitResult.allowed) {
+          const retryAfterSeconds = Math.max(1, Math.ceil((rateLimitResult.retryAfterMs ?? 0) / 1000));
+          return new Response('Too Many Requests', {
+            status: 429,
+            headers: {
+              'Retry-After': String(retryAfterSeconds),
+            },
+          });
+        }
+
+        const authResult = checkAuth(
+          clientIP,
+          req.headers.get('Authorization'),
+          this.securityConfig
+        );
+        if (!authResult.allowed) {
+          return new Response('Unauthorized', {
+            status: authResult.status ?? 401,
           });
         }
 
@@ -56,9 +106,12 @@ export class ServerApp {
           const response = await this.router.handleRequest(req);
 
           // Add CORS headers to response
-          response.headers.set('Access-Control-Allow-Origin', '*');
-          response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-          response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+          const corsAllowed = origin ? matchOrigin(origin, this.securityConfig.corsAllowedOrigins) : false;
+          if (corsAllowed && origin) {
+            response.headers.set('Access-Control-Allow-Origin', origin);
+            response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          }
 
           return response;
         } catch (error) {
@@ -86,6 +139,7 @@ export class ServerApp {
     if (this.server) {
       this.server.stop();
     }
+    this.rateLimiter.dispose();
     console.log('HTTP server stopped');
   }
 
