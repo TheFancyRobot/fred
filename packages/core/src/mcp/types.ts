@@ -19,10 +19,14 @@ export interface MCPServerConfig {
   command?: string;              // Command to run (e.g., 'npx', 'node')
   args?: string[];               // Arguments (e.g., ['-m', '@modelcontextprotocol/server-filesystem'])
   env?: Record<string, string>;  // Environment variables
+  allowedCommands?: string[];    // Allowed executables for stdio transport
+  envAllowlist?: string[];       // Allowed inherited env vars for stdio child process
   
   // For HTTP/SSE transport
   url?: string;                  // Server URL
   headers?: Record<string, string>; // Optional headers
+  allowedHosts?: string[];       // Allowed URL hosts for http/sse transport
+  allowedSchemes?: string[];     // Allowed URL schemes for http/sse transport
   
   // Optional configuration
   enabled?: boolean;             // Enable/disable this server (default: true)
