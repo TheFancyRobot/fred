@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
-status: in_progress
-stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-03-05T06:04:45Z"
-last_activity: 2026-03-05 - Completed 50-01-PLAN.md
+status: milestone_complete
+stopped_at: Phase 50 verified passed; milestone v0.3.0 complete
+last_updated: "2026-03-05T06:18:08Z"
+last_activity: 2026-03-05 - Phase 50 verified passed (14/14), milestone complete
 progress:
   total_phases: 14
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 242
-  completed_plans: 241
-  percent: 99
+  completed_plans: 242
+  percent: 100
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 50 of 14 (Security Hardening Baseline)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-05 - Completed 50-01-PLAN.md
+Phase: 50 complete (Security Hardening Baseline)
+Plan: 3 of 3 in current phase
+Status: Milestone complete
+Last activity: 2026-03-05 - Phase 50 verified passed (14/14), milestone complete
 
-Progress: ███████████████████░ 99% (241/242 plans)
+Progress: ████████████████████ 100% (242/242 plans)
 
 ## Performance Metrics
 
@@ -97,10 +97,12 @@ Progress: ███████████████████░ 99% (241/
 - Phase 49 added: Peripheral Boundary Migration — eliminate remaining non-boundary runPromise/runFork from eval, hooks, MCP; clean up doc false positives; add CLI boundary guard; finalize guard to zero exceptions
 - Phase 49 execution started: 49-01 completed (eval/hooks/MCP boundary migration complete and boundary guard finalized to zero exceptions with CLI coverage)
 - Phase 49 complete: 49-02 completed (JSDoc examples rewritten to composition-first Effect patterns; full test/build and boundary guard verification green)
+- Phase 50 complete: 50-03 completed (PR security CI with gitleaks/semgrep/dependency audit plus finalized security validation runbook and full verification green)
 - Phase 49 verified passed: 9/9 must-haves met; milestone v0.3.0 phase execution complete
 - Phase 50 added: Security Hardening Baseline from security audit — dev auth/CORS hardening, tightened request/rate limits, MCP command/url allowlist + env minimization, CI security scans (gitleaks/semgrep/dependency audit)
 - Phase 50 execution progressed: 50-02 completed (MCP command and URL allowlist validation plus stdio env allowlist filtering with trust-boundary tests and full MCP/build verification green)
 - Phase 50 execution progressed: 50-01 completed (dev server auth/CORS hardening with request size/timeout limits and per-IP rate limiting; unit tests + build + wildcard CORS grep verification green)
+- Phase 50 verified passed: 14/14 must-haves met; security hardening baseline complete and milestone v0.3.0 fully executed
 - Phase 48 execution started: 48-01 completed (runtime boundary guard renamed/genericized, runFork detection added, JSDoc block comments skipped, and pipeline domain files moved from exceptions into active violations)
 - Phase 48 execution progressed: 48-02 completed (checkpoint/pause trace helpers converted to Effect combinators, runFork removed from those files, and guard classification moved from exceptions to boundary files)
 - Phase 48 execution progressed: 48-03 completed (executor converted to ExecutorService Effect composition, internal runFork/runPromise escapes removed, and executor tests migrated to service-layer Effect boundaries)
@@ -226,6 +228,7 @@ Progress: ███████████████████░ 99% (241/
 | 49-02 | JSDoc examples in observability/effect modules now use composition-first Effect pipelines with no runPromise references | Aligns developer guidance with boundary-only runtime execution policy and closes final CONS-04 documentation gap |
 | 50-01 | ServerApp now enforces security chain (rate-limit -> auth -> route -> conditional CORS) using `server.requestIP(req)?.address` for request identity | Closes SEC-01/SEC-02 baseline gaps while preserving localhost ergonomics and removing wildcard ACAO headers |
 | 50-02 | MCP client now validates stdio commands and http/sse URL hosts/schemes before transport creation, and stdio env passthrough is allowlist-filtered by default | Establishes SEC-03 trust boundaries while preserving backward-compatible pass-through when allowlists are unset |
+| 50-03 | Security CI runs gitleaks, semgrep (`--severity ERROR`), and Bun dependency audit on pull requests to main; runbook now documents exact local and CI verification commands | Closes SEC-04/SEC-05 with enforceable CI gates and operator-ready validation guidance |
 
 ### Quick Tasks Completed
 
@@ -236,12 +239,12 @@ Progress: ███████████████████░ 99% (241/
 
 ## Session Continuity
 
-Last session: 2026-03-05T06:04:45Z
-Stopped at: Completed 50-01-PLAN.md
+Last session: 2026-03-05T06:18:08Z
+Stopped at: Phase 50 verified passed; milestone v0.3.0 complete
 Resume file: None
 
 ---
 
 *State file tracks current milestone progress*
 *Archives in .planning/milestones/ contain historical data*
-*Last updated: 2026-03-05 — Completed 50-01 plan execution and recorded SEC-01/SEC-02 server hardening baseline.*
+*Last updated: 2026-03-05 — Phase 50 verified passed and milestone v0.3.0 marked complete.*

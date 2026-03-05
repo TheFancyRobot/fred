@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-49 (incl. 45.1, 45.2, 46.1, 46.2)
+- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-50 (incl. 45.1, 45.2, 46.1, 46.2)
 
 ---
 
@@ -364,7 +364,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
 | 48. Effect Boundary Migration (Gap Closure) | 4/4 | Complete | 2026-03-04 |
 | 49. Peripheral Boundary Migration (Gap Closure) | 2/2 | Complete | 2026-03-04 |
-| 50. Security Hardening Baseline (Gap Closure) | 0/3 | Planned | — |
+| 50. Security Hardening Baseline (Gap Closure) | 3/3 | Complete | 2026-03-05 |
 
 ---
 
@@ -425,10 +425,10 @@ Plans:
   5. A validation checklist documents exact local and CI commands to verify all hardening controls
 
 Plans:
-- [ ] 50-01-PLAN.md — Dev server auth, CORS allowlist, rate limiting, and request limits
-- [ ] 50-02-PLAN.md — MCP trust boundaries: command/URL allowlists and env minimization
-- [ ] 50-03-PLAN.md — CI security scanning workflow and validation runbook
+- [x] 50-01-PLAN.md — Dev server auth, CORS allowlist, rate limiting, and request limits
+- [x] 50-02-PLAN.md — MCP trust boundaries: command/URL allowlists and env minimization
+- [x] 50-03-PLAN.md — CI security scanning workflow and validation runbook
 
 ---
 
-*Last updated: 2026-03-05 — Phase 50 planned with 3 plans in 2 waves.*
+*Last updated: 2026-03-05 — Phase 50 executed and verified passed (3/3 plans complete, 14/14 must-haves).*
