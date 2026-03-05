@@ -12,6 +12,7 @@ import { MCPTransportInterface } from './types';
 import { StdioTransport } from './stdio-transport';
 import { HttpTransport } from './http-transport';
 import { MCPServerConfig } from './types';
+import { validateCommand, validateUrl } from './security';
 
 /**
  * MCP client implementation
@@ -34,15 +35,18 @@ export class MCPClientImpl implements MCPClient {
       if (!config.command) {
         throw new Error('stdio transport requires command');
       }
+      validateCommand(config.command, config.allowedCommands);
       this.transport = new StdioTransport(
         config.command,
         config.args || [],
-        config.env
+        config.env,
+        config.envAllowlist
       );
     } else if (config.transport === 'http' || config.transport === 'sse') {
       if (!config.url) {
         throw new Error('http/sse transport requires url');
       }
+      validateUrl(config.url, config.allowedHosts, config.allowedSchemes);
       this.transport = new HttpTransport(
         config.url,
         config.headers,

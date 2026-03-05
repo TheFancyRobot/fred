@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { MCPTransportInterface, MCPRequest, MCPResponse, MCPNotification } from './types';
+import { filterEnv } from './security';
 
 /**
  * MCP stdio transport implementation
@@ -18,6 +19,7 @@ export class StdioTransport implements MCPTransportInterface {
   private command: string;
   private args: string[];
   private env?: Record<string, string>;
+  private envAllowlist?: string[];
   private connected = false;
 
   // Track bound event handlers for cleanup
@@ -28,10 +30,16 @@ export class StdioTransport implements MCPTransportInterface {
     onError: (error: Error) => void;
   };
 
-  constructor(command: string, args: string[] = [], env?: Record<string, string>) {
+  constructor(
+    command: string,
+    args: string[] = [],
+    env?: Record<string, string>,
+    envAllowlist?: string[]
+  ) {
     this.command = command;
     this.args = args;
     this.env = env;
+    this.envAllowlist = envAllowlist;
     this.serverRequestHandlers = new Map();
   }
 
@@ -41,8 +49,7 @@ export class StdioTransport implements MCPTransportInterface {
     }
 
     return new Promise((resolve, reject) => {
-      // Merge environment variables
-      const processEnv = { ...process.env, ...this.env };
+      const processEnv = filterEnv(this.envAllowlist, this.env);
 
       this.process = spawn(this.command, this.args, {
         env: processEnv,
