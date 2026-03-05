@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- 🔄 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-49 (incl. 45.1, 45.2, 46.1, 46.2)
+- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-49 (incl. 45.1, 45.2, 46.1, 46.2)
 
 ---
 
@@ -275,6 +275,8 @@ Phase 47 (Update Package READMEs)
 Phase 48 (Effect Boundary Migration — Gap Closure) ← GAP CLOSURE
     ↓
 Phase 49 (Peripheral Boundary Migration — Gap Closure) ← GAP CLOSURE
+    ↓
+Phase 50 (Security Hardening Baseline — Gap Closure) ← GAP CLOSURE
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -330,17 +332,22 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | MDAGENT-04 | 45.1 | Coexistence validation (duplicate IDs, ambiguous .md files) |
 | MDAGENT-05 | 45.1 | Hot reload via file watcher with debounce |
 | MDAGENT-06 | 45.1 | Extend FrameworkConfig with agentDirs field |
+| SEC-01 | 50 | Dev server auth gates and strict CORS allowlist controls |
+| SEC-02 | 50 | Tightened request size/time/concurrency/rate limits on public dev endpoints |
+| SEC-03 | 50 | MCP trust boundaries: command/url allowlists + env passthrough minimization |
+| SEC-04 | 50 | CI security scanners: gitleaks, semgrep, dependency audit |
+| SEC-05 | 50 | Security validation checks and hardening runbook documented |
 
 **Coverage:**
-- Total requirements: 47
-- Mapped: 47
+- Total requirements: 52
+- Mapped: 52
 - Unmapped: 0
 
 ---
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48 → 49
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48 → 49 → 50
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -356,7 +363,8 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 46.2. Gap Closure: Agents Convention (INSERTED) | 4/4 | Complete | 2026-03-04 |
 | 47. Update Package READMEs | 2/2 | Complete | 2026-03-04 |
 | 48. Effect Boundary Migration (Gap Closure) | 4/4 | Complete | 2026-03-04 |
-| 49. Peripheral Boundary Migration (Gap Closure) | 0/2 | Planning | — |
+| 49. Peripheral Boundary Migration (Gap Closure) | 2/2 | Complete | 2026-03-04 |
+| 50. Security Hardening Baseline (Gap Closure) | 0/3 | Planned | — |
 
 ---
 
@@ -399,9 +407,28 @@ See `.planning/milestones/v0.2.0-ROADMAP.md` for complete details.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 49-01-PLAN.md — Migrate eval/hooks/MCP to Effect composition, finalize guard with CLI section
-- [ ] 49-02-PLAN.md — Rewrite JSDoc examples to idiomatic Effect patterns, final verification
+- [x] 49-01-PLAN.md — Migrate eval/hooks/MCP to Effect composition, finalize guard with CLI section
+- [x] 49-02-PLAN.md — Rewrite JSDoc examples to idiomatic Effect patterns, final verification
+
+### Phase 50: Security Hardening Baseline from Security Audit (GAP CLOSURE)
+
+**Goal:** Apply baseline security hardening from audit findings across the dev server, request-abuse controls, MCP trust boundaries, and CI security checks.
+**Depends on:** Phase 49
+**Requirements:** SEC-01, SEC-02, SEC-03, SEC-04, SEC-05
+**Gap Closure:** Closes audited hardening gaps not covered by architecture migration phases.
+**Plans:** 3 plans
+**Success Criteria** (what must be TRUE):
+  1. Dev server auth is enforced outside local development and CORS is restricted to explicit allowlisted origins
+  2. Request and rate limits are tightened with deterministic defaults and tested rejection behavior
+  3. MCP command and URL execution paths are restricted to allowlists, with minimal environment passthrough by default
+  4. PR CI includes gitleaks, semgrep, and dependency audit checks with failing thresholds for actionable findings
+  5. A validation checklist documents exact local and CI commands to verify all hardening controls
+
+Plans:
+- [ ] 50-01-PLAN.md — Dev server auth, CORS allowlist, rate limiting, and request limits
+- [ ] 50-02-PLAN.md — MCP trust boundaries: command/URL allowlists and env minimization
+- [ ] 50-03-PLAN.md — CI security scanning workflow and validation runbook
 
 ---
 
-*Last updated: 2026-03-04 — Phase 49 planned (2 plans in 2 waves).*
+*Last updated: 2026-03-05 — Phase 50 planned with 3 plans in 2 waves.*
