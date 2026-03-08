@@ -25,6 +25,7 @@ import { GraphExecutorServiceLive } from './pipeline/graph-executor';
 import { MessageProcessorService, MessageProcessorServiceLive } from './message-processor/service';
 import { IntentMatcherService, IntentMatcherServiceLive } from './intent/service';
 import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
+import { SubagentService, SubagentServiceLive } from './subagent/service';
 import {
   MessageRouterService,
   MessageRouterServiceLiveWithConfig,
@@ -50,6 +51,7 @@ export type FredServices =
   | PauseService
   | PipelineService
   | MessageProcessorService
+  | SubagentService
   | IntentMatcherService
   | IntentRouterService
   | MessageRouterService
@@ -306,6 +308,8 @@ const messageProcessorLayer = MessageProcessorServiceLive.pipe(
   Layer.provide(ContextStorageServiceLive)
 );
 
+const subagentLayer = SubagentServiceLive;
+
 /**
  * Standalone intent layers.
  * Wave 6: IntentMatcherService, IntentRouterService
@@ -368,6 +372,7 @@ export const FredLayers = Layer.mergeAll(
   workflowLayer,
   pipelineLayer,
   messageProcessorLayer,
+  subagentLayer,
   intentLayer,
   defaultRouterLayer
 );
@@ -478,6 +483,8 @@ export {
   PipelineServiceLive,
   MessageProcessorService,
   MessageProcessorServiceLive,
+  SubagentService,
+  SubagentServiceLive,
   IntentMatcherService,
   IntentMatcherServiceLive,
   IntentRouterService,

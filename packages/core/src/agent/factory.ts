@@ -25,6 +25,9 @@ import { buildBodyContext } from '../template/context';
 import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import type { ToolGateServiceApi, ToolGateContext } from '../tool-gate/types';
 import type { FrameworkConfig } from '../config/types';
+import { createSubagentExecutionContext, withSubagentExecutionContext } from '../subagent/context';
+
+const SUBAGENT_TIMEOUT_RESERVE_MS = 2_500;
 
 type ObservabilityServiceApi = {
   logStructured: (options: {
@@ -604,17 +607,26 @@ export class AgentFactory {
           // Execute tool with timeout
           const executeWithTimeout = async (): Promise<any> => {
             let timeoutId: ReturnType<typeof setTimeout> | undefined;
+            const executionContext = createSubagentExecutionContext({
+              timeoutMs: toolTimeout,
+              reserveTimeoutMs: SUBAGENT_TIMEOUT_RESERVE_MS,
+            });
             const timeoutPromise = new Promise<never>((_, reject) => {
               timeoutId = setTimeout(() => {
                 const timeoutError = new Error(`Tool "${toolId}" execution timed out after ${toolTimeout}ms`);
                 timeoutError.name = 'ToolTimeoutError';
-                reject(timeoutError);
+                void executionContext.cancelActiveSubagents().finally(() => {
+                  reject(timeoutError);
+                });
               }, toolTimeout);
             });
 
             try {
               const result = await Promise.race([
-                Promise.resolve(validatedExecute ? validatedExecute(input as Record<string, any>) : undefined),
+                withSubagentExecutionContext(
+                  executionContext,
+                  async () => Promise.resolve(validatedExecute ? validatedExecute(input as Record<string, any>) : undefined),
+                ),
                 timeoutPromise,
               ]);
               return result;

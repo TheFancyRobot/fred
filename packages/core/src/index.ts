@@ -35,6 +35,12 @@ import type { ProcessingOptions, MemoryDefaults } from './message-processor/type
 import type { RouteResult } from './message-processor/types';
 import { ConfigInitializer, type FredLike } from './config/initializer';
 import type {
+  ExecuteSubagentOptions,
+  ExecuteSubagentResult,
+  SpawnSubagentOptions,
+  SubagentInfo,
+} from './subagent/service';
+import type {
   ContextStorage,
   SessionDetails,
   SessionExportJson,
@@ -60,6 +66,8 @@ import {
   IntentMatcherService,
   IntentRouterService,
   PauseService,
+  SubagentService,
+  SubagentServiceLive,
 } from './services';
 import { normalizeRunRecord, normalizeLegacyGoldenTrace } from './eval/normalizer';
 import { FileTraceStorageLive } from './eval/storage';
@@ -1341,6 +1349,55 @@ export class Fred {
     );
   }
 
+  // --- Subagent Management ---
+
+  get subagents(): {
+    spawn: (options: SpawnSubagentOptions) => Promise<SubagentInfo>;
+    list: () => Promise<SubagentInfo[]>;
+    inspect: (id: string) => Promise<SubagentInfo | null>;
+    execute: (id: string, options?: ExecuteSubagentOptions) => Promise<ExecuteSubagentResult>;
+    destroy: (id: string) => Promise<boolean>;
+  } {
+    return {
+      spawn: (options) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.spawnSubagent(options);
+        }),
+        `Failed to spawn subagent: ${options.name}`,
+      ),
+      list: () => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.listSubagents();
+        }),
+        'Failed to list subagents',
+      ),
+      inspect: (id) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          const result = yield* subagents.inspectSubagent(id);
+          return result ?? null;
+        }),
+        `Failed to inspect subagent: ${id}`,
+      ),
+      execute: (id, options) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.executeSubagent(id, options);
+        }),
+        `Failed to execute subagent: ${id}`,
+      ),
+      destroy: (id) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.destroySubagent(id);
+        }),
+        `Failed to destroy subagent: ${id}`,
+      ),
+    };
+  }
+
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
@@ -1619,6 +1676,8 @@ export class Fred {
         Effect.gen(function* () {
           const agents = yield* AgentService;
           const pipelines = yield* PipelineService;
+          const subagents = yield* SubagentService;
+          yield* subagents.destroyAllSubagents();
           yield* agents.clear();
           yield* pipelines.clear();
         })
@@ -1691,6 +1750,8 @@ export {
   PipelineServiceLive,
   MessageProcessorService,
   MessageProcessorServiceLive,
+  SubagentService,
+  SubagentServiceLive,
   IntentMatcherService,
   IntentMatcherServiceLive,
   IntentRouterService,

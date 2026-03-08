@@ -141,6 +141,24 @@ export {
 // ─── Workflow Types ─────────────────────────────────────────────────────────
 export type { Workflow } from './workflow/manager';
 
+// ─── Subagents ───────────────────────────────────────────────────────────────
+export type {
+  SpawnSubagentOptions,
+  ExecuteSubagentOptions,
+  SubagentExecutionSummary,
+  SubagentInfo,
+  ExecuteSubagentResult,
+  SubagentStatus,
+} from './subagent/service';
+export {
+  SubagentAlreadyExistsError,
+  SubagentNotFoundError,
+  SubagentBusyError,
+  SubagentDestroyedError,
+  SubagentExecutionError,
+  SubagentTimeoutError,
+} from './subagent/errors';
+
 // ─── Tracing ────────────────────────────────────────────────────────────────
 export type { Tracer } from './tracing/tracer';
 export { NoOpTracer } from './tracing/noop-tracer';
