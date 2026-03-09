@@ -681,8 +681,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                 process.exit(0);
               },
               onError: (_error) => {
-                // Streaming errors are displayed in the TUI status bar.
-                // Don't exit — let the user see the error and retry or quit manually.
+                // Abort the active stream so the for-await loop exits cleanly.
+                // Errors are already displayed in the TUI status bar by failAssistantStream.
+                activeStreamAbort?.abort();
               },
             },
             {

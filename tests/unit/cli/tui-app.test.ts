@@ -1650,6 +1650,23 @@ describe('TUI App (OpenTUI integration)', () => {
       expect(capturedError).toContain('timed out');
     });
 
+    test('onError callback is invoked when failAssistantStream fires in fail mode', async () => {
+      const errors: Error[] = [];
+      await createTestApp({
+        onError: (error) => { errors.push(error); },
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.isStreaming).toBe(true);
+
+      const timeoutError = new Error('Response timed out — stream aborted');
+      app.failAssistantStream(timeoutError);
+
+      expect(errors.length).toBeGreaterThanOrEqual(1);
+      expect(errors.some(e => e.message.includes('stream aborted'))).toBe(true);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
     test('custom patienceIntervalMs is respected', async () => {
       await createTestApp({}, {
         streamTimeoutMode: 'patient',
