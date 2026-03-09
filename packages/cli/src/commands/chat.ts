@@ -4,7 +4,11 @@
  */
 
 import { Effect } from 'effect';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Fred } from '@fancyrobot/fred';
+import type { SubagentExecutionSummary, SubagentInfo } from '@fancyrobot/fred';
 import { SqliteContextStorage } from '@fancyrobot/fred/context/sqlite';
 import {
   DEV_CHAT_PROVIDER_PACKAGES,
@@ -15,6 +19,7 @@ import {
 import { detectTerminalMode } from '../runtime/tty-mode.js';
 import { withTerminalLifecycle } from '../runtime/terminal-lifecycle.js';
 import { createFredTuiApp, type PluginSlashCommandRuntime } from '../tui/app.js';
+import { DEFAULT_PATIENCE_MESSAGES } from '../tui/patience.js';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
@@ -32,6 +37,8 @@ export interface ChatDependencies {
   createStorage: (opts: { path: string }) => unknown;
   /** Resolve project config. */
   resolveProjectConfig: typeof resolveProjectConfig;
+  /** Load an optional project runtime hook. */
+  loadProjectRuntimeHook: typeof loadProjectRuntimeHook;
   /** Ensure a default chat agent exists. */
   ensureDefaultChatAgent: typeof ensureDefaultChatAgent;
   /** Create the TUI app. */
@@ -42,9 +49,133 @@ const DEFAULT_DEPS: ChatDependencies = {
   createFred: () => new Fred(),
   createStorage: (opts) => new SqliteContextStorage(opts),
   resolveProjectConfig,
+  loadProjectRuntimeHook,
   ensureDefaultChatAgent,
   createFredTuiApp,
 };
+
+export type ProjectRuntimeHook = (
+  fred: Fred,
+  context: { configPath: string; projectRoot: string }
+) => Promise<void> | void;
+
+export async function loadProjectRuntimeHook(configPath: string): Promise<ProjectRuntimeHook | null> {
+  const projectRoot = dirname(configPath);
+  const candidates = [
+    join(projectRoot, 'fred.runtime.ts'),
+    join(projectRoot, 'fred.runtime.js'),
+    join(projectRoot, 'fred.runtime.mjs'),
+  ];
+
+  const hookPath = candidates.find((candidate) => existsSync(candidate));
+  if (!hookPath) {
+    return null;
+  }
+
+  const runtimeModule = await import(pathToFileURL(hookPath).href);
+  const hook = runtimeModule.setupFredProject;
+  return typeof hook === 'function' ? hook as ProjectRuntimeHook : null;
+}
+
+function formatSubagentList(subagents: SubagentInfo[]): string {
+  if (subagents.length === 0) {
+    return 'No active subagents.';
+  }
+
+  return [
+    'Active subagents',
+    '',
+    ...subagents.map((subagent) => {
+      const currentPid = subagent.currentExecution?.pid;
+      const executionSuffix = currentPid ? ` pid=${currentPid}` : '';
+      return `- ${subagent.id} (${subagent.name}) status=${subagent.status} executions=${subagent.executionCount}${executionSuffix}`;
+    }),
+  ].join('\n');
+}
+
+function formatExecutionBlock(
+  label: string,
+  execution: SubagentExecutionSummary | undefined,
+): string[] {
+  if (!execution) {
+    return [`- ${label}: none`];
+  }
+
+  return [
+    `- ${label}: started=${execution.startedAt}${execution.endedAt ? ` ended=${execution.endedAt}` : ''}`,
+    `  args: ${execution.args.join(' ') || '(none)'}`,
+    `  pid: ${execution.pid ?? 'n/a'} exit=${execution.exitCode ?? 'n/a'} signal=${execution.signal ?? 'none'} timedOut=${execution.timedOut === true ? 'yes' : 'no'}`,
+    ...(execution.stdoutPreview ? [`  stdout: ${execution.stdoutPreview}`] : []),
+    ...(execution.stderrPreview ? [`  stderr: ${execution.stderrPreview}`] : []),
+  ];
+}
+
+function formatSubagentDetails(subagent: SubagentInfo): string {
+  const commandLine = [subagent.command, ...subagent.args].join(' ').trim();
+  return [
+    `Subagent ${subagent.id}`,
+    '',
+    `- name: ${subagent.name}`,
+    `- status: ${subagent.status}`,
+    `- command: ${commandLine || subagent.command}`,
+    `- cwd: ${subagent.cwd ?? '(inherit)'}`,
+    `- env keys: ${subagent.envKeys.join(', ') || '(none)'}`,
+    `- execution count: ${subagent.executionCount}`,
+    `- metadata: ${JSON.stringify(subagent.metadata)}`,
+    ...formatExecutionBlock('current', subagent.currentExecution),
+    ...formatExecutionBlock('last', subagent.lastExecution),
+  ].join('\n');
+}
+
+function parseSubagentIdArg(args: string, usage: string): string {
+  const subagentId = args.trim();
+  if (subagentId.length === 0) {
+    throw new Error(`Missing subagent id. Usage: ${usage}`);
+  }
+  return subagentId;
+}
+
+export function buildBuiltinSlashCommands(fred: Fred): PluginSlashCommandRuntime[] {
+  return [
+    {
+      pluginId: 'fred',
+      commandId: 'subagents',
+      summary: 'List active subagents',
+      usage: '/fred:subagents',
+      available: true,
+      execute: async () => formatSubagentList(await fred.subagents.list()),
+    },
+    {
+      pluginId: 'fred',
+      commandId: 'subagent-inspect',
+      summary: 'Inspect one subagent',
+      usage: '/fred:subagent-inspect <id>',
+      available: true,
+      execute: async (args) => {
+        const subagentId = parseSubagentIdArg(args, '/fred:subagent-inspect <id>');
+        const subagent = await fred.subagents.inspect(subagentId);
+        if (!subagent) {
+          return `Subagent not found: ${subagentId}`;
+        }
+        return formatSubagentDetails(subagent);
+      },
+    },
+    {
+      pluginId: 'fred',
+      commandId: 'subagent-destroy',
+      summary: 'Destroy one subagent',
+      usage: '/fred:subagent-destroy <id>',
+      available: true,
+      execute: async (args) => {
+        const subagentId = parseSubagentIdArg(args, '/fred:subagent-destroy <id>');
+        const destroyed = await fred.subagents.destroy(subagentId);
+        return destroyed
+          ? `Destroyed subagent: ${subagentId}`
+          : `Subagent not found or already destroyed: ${subagentId}`;
+      },
+    },
+  ];
+}
 
 export interface NonInteractiveFallbackPayload {
   mode: 'non-interactive';
@@ -52,6 +183,32 @@ export interface NonInteractiveFallbackPayload {
   suggestion: string;
   help: string;
 }
+
+type GlobalProgressSink = {
+  start: (event: {
+    toolCallId: string;
+    toolName: string;
+    input?: Record<string, unknown>;
+    originAgentId?: string;
+    startedAt?: number;
+    kind?: 'tool' | 'task';
+    depth?: number;
+  }) => void;
+  complete: (event: {
+    toolCallId: string;
+    toolName: string;
+    output?: unknown;
+    completedAt?: number;
+    durationMs?: number;
+  }) => void;
+  fail: (event: {
+    toolCallId: string;
+    toolName: string;
+    error: { message: string };
+    completedAt?: number;
+    durationMs?: number;
+  }) => void;
+};
 
 export function createNonInteractiveFallbackPayload(reason: string): NonInteractiveFallbackPayload {
   return {
@@ -102,7 +259,7 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
   startupWarning: string | null;
 }> {
   const fred = await deps.createFred();
-  let pluginSlashCommands: PluginSlashCommandRuntime[] = [];
+  let pluginSlashCommands: PluginSlashCommandRuntime[] = buildBuiltinSlashCommands(fred);
   let startupWarning: string | null = null;
 
   // Try to load project config
@@ -111,12 +268,23 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
   if (configResult.success && configResult.config && configResult.configPath) {
     // Config found - initialize from it
     try {
-      if (configResult.config.plugins && configResult.config.plugins.length > 0) {
-        const pluginResult = loadPluginsFromConfig(configResult.config.plugins, configResult.configPath);
-        pluginSlashCommands = await buildPluginSlashRuntime(pluginResult.plugins);
-      }
+        if (configResult.config.plugins && configResult.config.plugins.length > 0) {
+          const pluginResult = loadPluginsFromConfig(configResult.config.plugins, configResult.configPath);
+          pluginSlashCommands = [
+            ...buildBuiltinSlashCommands(fred),
+            ...(await buildPluginSlashRuntime(pluginResult.plugins)),
+          ];
+        }
 
-      await fred.initializeFromConfig(configResult.configPath);
+      const runtimeHook = await deps.loadProjectRuntimeHook(configResult.configPath);
+      if (runtimeHook) {
+        await runtimeHook(fred, {
+          configPath: configResult.configPath,
+          projectRoot: dirname(configResult.configPath),
+        });
+      } else {
+        await fred.initializeFromConfig(configResult.configPath);
+      }
 
       const result = await deps.ensureDefaultChatAgent(fred, {
         agentId: '__tui_agent__',
@@ -239,6 +407,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
       const { fred, model, provider, pluginSlashCommands, startupWarning } = initResult;
       const contextManager = fred;
 
+      // Track active stream abort controller for explicit exit cancellation
+      let activeStreamAbort: AbortController | null = null;
+
       // Create TUI app — resolves a long-lived app that runs until quit
       const app = yield* Effect.tryPromise({
         try: () =>
@@ -248,18 +419,76 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                 const activeSessionId = sessionId ?? contextManager.generateConversationId();
                 // Fire-and-forget async streaming (don't await to avoid blocking TUI)
                 (async () => {
+                  const globalWithProgress = globalThis as typeof globalThis & {
+                    __FRED_TUI_TOOL_PROGRESS__?: GlobalProgressSink;
+                  };
+                  let progressSink: GlobalProgressSink | null = null;
                   try {
+                    activeStreamAbort = new AbortController();
                     const streamResult = fred.streamMessage(text, {
                       conversationId: activeSessionId,
+                      signal: activeStreamAbort.signal,
                     });
 
                     // Buffer for XML-aware token filtering.
                     // XML tags may span multiple token deltas, so we accumulate
                     // and only flush text that is safe (no partial opening tags).
                     let tokenBuffer = '';
+                    let renderedAssistantText = '';
+                    const pendingHandoffs = new Map<number, {
+                      toolCallId: string;
+                      toAgentId: string;
+                      startedAt: number;
+                    }>();
+                    const activeRuns: Array<{
+                      runId: string;
+                      depth: number;
+                      handoffToolCallId?: string;
+                      handoffAgentId?: string;
+                      suppressVisibleOutput?: boolean;
+                    }> = [];
                     const MAX_TOKEN_BUFFER_CHARS = 8_192;
                     const MAX_XML_FILTER_PASSES = 8;
                     const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
+
+                    const getCurrentToolDepth = (): number => {
+                      const currentRun = activeRuns[activeRuns.length - 1];
+                      return currentRun ? currentRun.depth + 1 : 1;
+                    };
+                    progressSink = {
+                      start: ({ toolCallId, toolName, input, originAgentId, startedAt, kind, depth }) => {
+                        app.pushToolCall({
+                          messageId: `external_${toolCallId}`,
+                          step: depth ?? getCurrentToolDepth(),
+                          toolCallId,
+                          toolName,
+                          input: input ?? {},
+                          originAgentId,
+                          startedAt: startedAt ?? Date.now(),
+                          kind: kind ?? 'task',
+                          depth: depth ?? (getCurrentToolDepth() + 1),
+                        });
+                      },
+                      complete: ({ toolCallId, toolName, output, completedAt, durationMs }) => {
+                        app.pushToolResult({
+                          toolCallId,
+                          toolName,
+                          output: output ?? 'completed',
+                          completedAt: completedAt ?? Date.now(),
+                          durationMs: durationMs ?? 0,
+                        });
+                      },
+                      fail: ({ toolCallId, toolName, error, completedAt, durationMs }) => {
+                        app.pushToolError({
+                          toolCallId,
+                          toolName,
+                          error,
+                          completedAt: completedAt ?? Date.now(),
+                          durationMs: durationMs ?? 0,
+                        });
+                      },
+                    };
+                    globalWithProgress.__FRED_TUI_TOOL_PROGRESS__ = progressSink;
 
                     const filterXmlTags = (text: string): string => {
                       let filtered = text;
@@ -272,9 +501,49 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       }
                       return filtered;
                     };
+                    const splitDisplaySegments = (text: string): string[] => {
+                      const matches = text.match(/\s+|[A-Za-z0-9_]+|[^\sA-Za-z0-9_]/g);
+                      return matches ?? [text];
+                    };
+                    const pushVisibleText = (text: string): void => {
+                      if (!text) {
+                        return;
+                      }
+                      renderedAssistantText += text;
+                      const segments = splitDisplaySegments(text);
+                      for (let index = 0; index < segments.length; index += 1) {
+                        app.pushAssistantToken(segments[index], index === 0 ? 1 : 0);
+                      }
+                    };
 
                     for await (const event of streamResult.fullStream) {
-                      if (event.type === 'token' && event.delta) {
+                      if (activeStreamAbort?.signal.aborted) break;
+                      if (event.type === 'run-start') {
+                        const pendingDepths = Array.from(pendingHandoffs.keys()).sort((left, right) => right - left);
+                        const pendingDepth = pendingDepths[0];
+                        const pendingHandoff = pendingDepth !== undefined
+                          ? pendingHandoffs.get(pendingDepth)
+                          : undefined;
+
+                        activeRuns.push({
+                          runId: event.runId,
+                          depth: pendingDepth ?? 0,
+                          handoffToolCallId: pendingHandoff?.toolCallId,
+                          handoffAgentId: pendingHandoff?.toAgentId,
+                          suppressVisibleOutput: false,
+                        });
+
+                        if (pendingDepth !== undefined) {
+                          pendingHandoffs.delete(pendingDepth);
+                        }
+                      } else if (event.type === 'handoff-start') {
+                        const toolCallId = `handoff_${event.handoffDepth}_${event.sequence}`;
+                        pendingHandoffs.set(event.handoffDepth, {
+                          toolCallId,
+                          toAgentId: event.toAgentId,
+                          startedAt: event.emittedAt,
+                        });
+                      } else if (event.type === 'token' && event.delta) {
                         tokenBuffer += event.delta;
 
                         // Check if buffer might contain a partial opening XML tag
@@ -286,13 +555,21 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                             // Flush everything before the potential tag
                             const safe = tokenBuffer.slice(0, lastOpenBracket);
                             if (safe) {
-                              app.pushAssistantToken(filterXmlTags(safe), 1);
+                              const visible = filterXmlTags(safe);
+                              const currentRun = activeRuns[activeRuns.length - 1];
+                              if (visible && !currentRun?.suppressVisibleOutput) {
+                                pushVisibleText(visible);
+                              }
                             }
                             tokenBuffer = afterBracket;
 
                             // Safety: cap buffered partial tags to prevent unbounded growth
                             if (tokenBuffer.length > MAX_TOKEN_BUFFER_CHARS) {
-                              app.pushAssistantToken(filterXmlTags(tokenBuffer), 1);
+                              const visible = filterXmlTags(tokenBuffer);
+                              const currentRun = activeRuns[activeRuns.length - 1];
+                              if (visible && !currentRun?.suppressVisibleOutput) {
+                                pushVisibleText(visible);
+                              }
                               tokenBuffer = '';
                             }
                             continue;
@@ -301,11 +578,21 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
 
                         // No partial tags -- filter complete XML tags and flush
                         const filtered = filterXmlTags(tokenBuffer);
-                        if (filtered) {
-                          app.pushAssistantToken(filtered, 1);
+                        const currentRun = activeRuns[activeRuns.length - 1];
+                        if (filtered && !currentRun?.suppressVisibleOutput) {
+                          pushVisibleText(filtered);
                         }
                         tokenBuffer = '';
                       } else if (event.type === 'tool-call') {
+                        if (event.toolName === 'handoff_to_agent') {
+                          const currentRun = activeRuns[activeRuns.length - 1];
+                          if (currentRun) {
+                            currentRun.suppressVisibleOutput = true;
+                          }
+                          app.clearAssistantStreamContent();
+                          renderedAssistantText = '';
+                          continue;
+                        }
                         app.pushToolCall({
                           messageId: event.messageId,
                           step: event.step,
@@ -313,8 +600,12 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           toolName: event.toolName,
                           input: event.input,
                           startedAt: event.startedAt,
+                          depth: getCurrentToolDepth(),
                         });
                       } else if (event.type === 'tool-result') {
+                        if (event.toolName === 'handoff_to_agent') {
+                          continue;
+                        }
                         app.pushToolResult({
                           toolCallId: event.toolCallId,
                           toolName: event.toolName,
@@ -324,6 +615,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           error: event.error ? { message: event.error.message } : undefined,
                         });
                       } else if (event.type === 'tool-error') {
+                        if (event.toolName === 'handoff_to_agent') {
+                          continue;
+                        }
                         app.pushToolError({
                           toolCallId: event.toolCallId,
                           toolName: event.toolName,
@@ -331,21 +625,48 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           completedAt: event.completedAt,
                           durationMs: event.durationMs,
                         });
+                      } else if (event.type === 'run-end') {
+                        const finalVisible = filterXmlTags(event.result.content ?? '');
+                        const completedRun = activeRuns.pop();
+
+                        if (!event.result.handoff && !completedRun?.suppressVisibleOutput) {
+                          if (finalVisible && finalVisible.startsWith(renderedAssistantText)) {
+                            const missingSuffix = finalVisible.slice(renderedAssistantText.length);
+                            if (missingSuffix) {
+                              pushVisibleText(missingSuffix);
+                            }
+                          } else if (finalVisible && renderedAssistantText.length === 0) {
+                            pushVisibleText(finalVisible);
+                          }
+                        }
                       }
                     }
 
                     // Flush any remaining buffered tokens (partial tag never closed)
                     if (tokenBuffer) {
                       const finalFiltered = filterXmlTags(tokenBuffer);
-                      if (finalFiltered) {
-                        app.pushAssistantToken(finalFiltered, 1);
+                      const currentRun = activeRuns[activeRuns.length - 1];
+                      if (finalFiltered && !currentRun?.suppressVisibleOutput) {
+                        pushVisibleText(finalFiltered);
                       }
                       tokenBuffer = '';
                     }
 
                     app.completeAssistantStream();
+                    if (progressSink && globalWithProgress.__FRED_TUI_TOOL_PROGRESS__ === progressSink) {
+                      delete globalWithProgress.__FRED_TUI_TOOL_PROGRESS__;
+                    }
                   } catch (error) {
+                    if (progressSink && globalWithProgress.__FRED_TUI_TOOL_PROGRESS__ === progressSink) {
+                      delete globalWithProgress.__FRED_TUI_TOOL_PROGRESS__;
+                    }
+                    // User-initiated exit aborts the stream — don't show error
+                    if (activeStreamAbort?.signal.aborted) {
+                      return;
+                    }
                     app.failAssistantStream(error);
+                  } finally {
+                    activeStreamAbort = null;
                   }
                 })().catch((error) => {
                   app.stop();
@@ -354,6 +675,8 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                 });
               },
               onQuit: () => {
+                // Abort any active stream before exiting
+                activeStreamAbort?.abort();
                 console.log('Exiting Fred chat...');
                 process.exit(0);
               },
@@ -365,6 +688,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
             {
               sessionService: { contextManager },
               initialSessionId: null,
+              streamingFlushStrategy: 'token',
               pluginSlashCommands,
               startupWarning,
             }

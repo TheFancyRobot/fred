@@ -61,6 +61,8 @@ export interface ProcessingOptions {
   userId?: string;
   role?: string;
   policyMetadata?: Record<string, unknown>;
+  /** AbortSignal for user-initiated stream cancellation (e.g. /exit, Ctrl+C) */
+  signal?: AbortSignal;
 }
 
 /**

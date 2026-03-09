@@ -20,7 +20,7 @@ import type { EffectProviderFactory } from './platform/base';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
-import { Effect, Layer, Runtime, Stream } from 'effect';
+import { Cause, Effect, Exit, Layer, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
 import { createStreamResultFromIterable } from './stream/result';
@@ -359,12 +359,20 @@ export class Fred {
     errorMessage: string
   ): Promise<A> {
     const runtime = await this.ensureRuntime();
-    try {
-      return await Runtime.runPromise(runtime)(effect);
-    } catch (error) {
-      // Wrap Effect error as standard Error with cause
-      throw new Error(errorMessage, { cause: error });
+    // Wrap with Effect.exit so the fiber always succeeds. This prevents
+    // Effect's runtime from logging "Fiber terminated with an unhandled
+    // error" to stderr, which corrupts TUI displays that use alternate
+    // screen mode. We inspect the Exit value ourselves and re-throw.
+    const exit = await Runtime.runPromise(runtime)(Effect.exit(effect));
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
     }
+    // Extract the original error from the Cause for the wrapper
+    const failure = Cause.failureOption(exit.cause);
+    const cause = failure._tag === 'Some'
+      ? failure.value
+      : Cause.defects(exit.cause)[0] ?? exit.cause;
+    throw new Error(errorMessage, { cause });
   }
 
   /**
@@ -387,6 +395,30 @@ export class Fred {
    */
   async getRuntime(): Promise<FredRuntime> {
     return this.ensureRuntime();
+  }
+
+  /**
+   * Run an Effect program with Fred services, without fiber failure logging.
+   *
+   * Unlike calling `Runtime.runPromise(runtime)(effect)` directly, this method
+   * wraps the program with `Effect.exit` to prevent Effect's runtime from
+   * logging "Fiber terminated with an unhandled error" to stderr. This is
+   * important in TUI environments where stderr writes corrupt the display.
+   *
+   * @example
+   * ```typescript
+   * const fred = await Fred.create();
+   *
+   * const result = await fred.runSafe(
+   *   Effect.gen(function* () {
+   *     const toolService = yield* ToolRegistryService;
+   *     return yield* toolService.size();
+   *   })
+   * );
+   * ```
+   */
+  async runSafe<A, E>(effect: Effect.Effect<A, E, FredServices>): Promise<A> {
+    return this.runEffect(effect, 'Effect execution failed');
   }
 
   /**
@@ -1137,11 +1169,33 @@ export class Fred {
     const streamPromise = this.runEffect(
       Effect.gen(function* () {
         const processor = yield* MessageProcessorService;
-        return processor.streamMessage(message, options).pipe(
+        let effectStream = processor.streamMessage(message, options).pipe(
           Stream.mapError((error) =>
             error instanceof Error ? error : new Error(String(error))
           )
         );
+
+        // When an AbortSignal is provided, interrupt the stream on abort
+        if (options?.signal) {
+          const signal = options.signal;
+          effectStream = effectStream.pipe(
+            Stream.interruptWhen(
+              Effect.async<void, never>((resume) => {
+                if (signal.aborted) {
+                  resume(Effect.succeed(undefined));
+                  return;
+                }
+                const onAbort = () => resume(Effect.succeed(undefined));
+                signal.addEventListener('abort', onAbort, { once: true });
+                return Effect.sync(() => {
+                  signal.removeEventListener('abort', onAbort);
+                });
+              })
+            )
+          );
+        }
+
+        return effectStream;
       }),
       'Failed to stream message'
     );
