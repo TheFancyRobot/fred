@@ -49,6 +49,7 @@ import {
   toggleSidebarVisibility,
   addToolCall,
   completeToolCall,
+  clearStreamingAssistant,
   failToolCall,
   hasInProgressToolBlocks,
   getToolBlocksForMessage,
@@ -69,15 +70,17 @@ import {
   buildAssistantMessageRenderable,
   buildThinkingRenderable,
   getSpinnerFrame,
+  getToolBlockSummaryPresentation,
   THINKING_SPINNER_ID_PREFIX,
   buildStreamingCursorText,
   buildToolGroupRenderable,
+  sortToolBlocksByParent,
   buildSystemNoticeRenderable,
   sanitizeForTerminalDisplay,
   DEFAULT_LAYOUT,
   type InputPlaceholder,
 } from './layout.js';
-import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme, getStreamingMarkdownSyntaxTheme } from './theme.js';
+import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme } from './theme.js';
 import {
   createStreamingController,
   type StreamingController,
@@ -100,10 +103,35 @@ export interface TuiAppConfig {
   showStartupHint?: boolean;
   startupWarning?: string | null;
   streamingFrameMs?: number;
+  streamingFlushStrategy?: 'frame' | 'token';
   maxRenderQueue?: number;
   sessionService?: SessionServiceDependencies;
   initialSessionId?: string | null;
   pluginSlashCommands?: ReadonlyArray<PluginSlashCommandRuntime>;
+
+  /**
+   * How to handle stream timeouts when waiting for the first token.
+   * - 'fail' (default): Show error and abort after STREAM_TIMEOUT_MS
+   * - 'patient': Suppress error, keep streaming, optionally show messages
+   */
+  streamTimeoutMode?: 'fail' | 'patient';
+
+  /**
+   * Message(s) to display while waiting in patient mode. Only used when
+   * streamTimeoutMode is 'patient'.
+   *
+   * - string: show the same message on every tick
+   * - string[]: rotate through messages in order, cycling back to start
+   * - () => string: call on each tick, display the return value
+   * - undefined: no message, just silently keep waiting
+   */
+  patienceMessage?: string | readonly string[] | (() => string);
+
+  /**
+   * Interval in milliseconds between patience messages (default: 15000).
+   * Only used when streamTimeoutMode is 'patient'.
+   */
+  patienceIntervalMs?: number;
 }
 
 export interface PluginSlashCommandRuntime {
@@ -176,6 +204,13 @@ export class FredTuiApp {
   // Stream timeout timer (fires if no tokens arrive within 30s)
   private streamTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly STREAM_TIMEOUT_MS = 30_000;
+  private static readonly DEFAULT_PATIENCE_INTERVAL_MS = 15_000;
+
+  // Patient timeout mode config
+  private streamTimeoutMode: 'fail' | 'patient';
+  private patienceMessage?: string | readonly string[] | (() => string);
+  private patienceIntervalMs?: number;
+  private patienceTickIndex = 0;
 
   // Thinking spinner — absolutely positioned at top-right of user message
   private thinkingSpinnerId: string | null = null;
@@ -200,6 +235,7 @@ export class FredTuiApp {
     this.inputPlaceholder = selectInputPlaceholder();
     this.streamingController = createStreamingController({
       frameMs: config.streamingFrameMs,
+      flushStrategy: config.streamingFlushStrategy,
       maxRenderQueue: config.maxRenderQueue,
       callbacks: {
         onBatch: (batch) => this.handleStreamingBatch(batch),
@@ -207,8 +243,11 @@ export class FredTuiApp {
       },
     });
     this.sessionService = config.sessionService;
+    this.streamTimeoutMode = config.streamTimeoutMode ?? 'fail';
+    this.patienceMessage = config.patienceMessage;
+    this.patienceIntervalMs = config.patienceIntervalMs;
     this.syntaxStyle = SyntaxStyle.fromTheme(getMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
-    this.streamingSyntaxStyle = SyntaxStyle.fromTheme(getStreamingMarkdownSyntaxTheme(DEFAULT_TUI_THEME));
+    this.streamingSyntaxStyle = this.syntaxStyle;
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
     }
@@ -712,13 +751,8 @@ export class FredTuiApp {
     this.startSpinnerInterval();
     this.showThinkingAnimation();
 
-    // Start stream timeout — auto-fail if no tokens arrive
-    this.clearStreamTimeout();
-    this.streamTimeoutTimer = setTimeout(() => {
-      if (this.state.streaming.waitingForFirstToken) {
-        this.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
-      }
-    }, FredTuiApp.STREAM_TIMEOUT_MS);
+    // Start stream timeout — auto-fail if no tokens arrive (or patience tick in patient mode)
+    this.resetStreamTimeout();
 
     this.refreshSessionCost(true);
     this.events.onStateChange?.(this.state);
@@ -729,9 +763,17 @@ export class FredTuiApp {
     this.streamingController.pushToken(token, tokenCount);
   }
 
+  clearAssistantStreamContent(nowMs = Date.now()): void {
+    this.streamingController.clear();
+    this.state = clearStreamingAssistant(this.state, nowMs);
+    this.events.onStateChange?.(this.state);
+    this.syncStateToUI();
+  }
+
   completeAssistantStream(nowMs = Date.now()): void {
     this.streamingController.finish();
     this.clearStreamTimeout();
+    this.clearPatienceState();
     this.hideThinkingAnimationImmediate();
     this.finalizeStreamingTelemetry();
     this.state = finishStreaming(this.state, nowMs);
@@ -747,15 +789,17 @@ export class FredTuiApp {
   failAssistantStream(error: unknown, nowMs = Date.now()): void {
     this.streamingController.fail(error);
     this.clearStreamTimeout();
+    this.clearPatienceState();
     this.hideThinkingAnimationImmediate();
-    const message = error instanceof Error ? error.message : String(error);
+    const normalized = error instanceof Error ? error : new Error(String(error));
+    const message = sanitizeErrorForCli(normalized);
     this.finalizeStreamingTelemetry();
     this.state = recordStreamingError(this.state, message, nowMs);
     // Show error in transcript so the user can see what went wrong
     this.state = appendAssistant(this.state, `[Error: ${message}]`, 0, nowMs);
     this.stopSpinnerInterval();
     this.refreshSessionCost(false);
-    this.events.onError?.(error instanceof Error ? error : new Error(message));
+    this.events.onError?.(normalized);
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
 
@@ -783,8 +827,12 @@ export class FredTuiApp {
     toolName: string;
     input: Record<string, unknown>;
     startedAt: number;
+    originAgentId?: string;
+    depth?: number;
+    kind?: 'tool' | 'task';
   }): void {
     this.state = addToolCall(this.state, event);
+    this.resetStreamTimeout();
     this.startSpinnerInterval();
     this.events.onStateChange?.(this.state);
     this.syncStateToUI();
@@ -808,6 +856,7 @@ export class FredTuiApp {
       durationMs: event.durationMs,
       error: event.error,
     });
+    this.resetStreamTimeout();
     if (!hasInProgressToolBlocks(this.state)) {
       this.stopSpinnerInterval();
     }
@@ -831,6 +880,7 @@ export class FredTuiApp {
       completedAt: event.completedAt,
       durationMs: event.durationMs,
     });
+    this.resetStreamTimeout();
     if (!hasInProgressToolBlocks(this.state)) {
       this.stopSpinnerInterval();
     }
@@ -908,6 +958,69 @@ export class FredTuiApp {
     if (this.streamTimeoutTimer !== null) {
       clearTimeout(this.streamTimeoutTimer);
       this.streamTimeoutTimer = null;
+    }
+  }
+
+  /**
+   * Reset the stream timeout timer. Called when activity (tool call start/complete)
+   * proves the stream is alive even though no text tokens have arrived yet.
+   */
+  private resetStreamTimeout(): void {
+    if (!this.state.streaming.isStreaming) return;
+    this.clearStreamTimeout();
+
+    if (this.streamTimeoutMode === 'patient') {
+      const intervalMs = this.patienceIntervalMs ?? FredTuiApp.DEFAULT_PATIENCE_INTERVAL_MS;
+      this.streamTimeoutTimer = setTimeout(() => {
+        if (this.state.streaming.waitingForFirstToken) {
+          const message = this.resolvePatienceMessage();
+          if (message) {
+            this.setSystemNotice(message);
+          }
+          this.resetStreamTimeout(); // Re-arm for next tick
+        }
+      }, intervalMs);
+    } else {
+      // Default: fail after 30s
+      this.streamTimeoutTimer = setTimeout(() => {
+        if (this.state.streaming.waitingForFirstToken) {
+          this.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
+        }
+      }, FredTuiApp.STREAM_TIMEOUT_MS);
+    }
+  }
+
+  /**
+   * Resolve the next patience message from the configured source.
+   */
+  private resolvePatienceMessage(): string | null {
+    const config = this.patienceMessage;
+    if (config === undefined) return null;
+
+    if (typeof config === 'string') {
+      return config;
+    }
+
+    if (typeof config === 'function') {
+      return config();
+    }
+
+    if (Array.isArray(config) && config.length > 0) {
+      const message = config[this.patienceTickIndex % config.length];
+      this.patienceTickIndex++;
+      return message;
+    }
+
+    return null;
+  }
+
+  /**
+   * Clear patience state between streaming turns.
+   */
+  private clearPatienceState(): void {
+    this.patienceTickIndex = 0;
+    if (this.state.systemNotice) {
+      this.setSystemNotice(null);
     }
   }
 
@@ -1055,13 +1168,8 @@ export class FredTuiApp {
     this.startSpinnerInterval();
     this.showThinkingAnimation();
 
-    // Start stream timeout — auto-fail if no tokens arrive
-    this.clearStreamTimeout();
-    this.streamTimeoutTimer = setTimeout(() => {
-      if (this.state.streaming.waitingForFirstToken) {
-        this.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
-      }
-    }, FredTuiApp.STREAM_TIMEOUT_MS);
+    // Start stream timeout — auto-fail if no tokens arrive (or patience tick in patient mode)
+    this.resetStreamTimeout();
 
     this.refreshSessionCost(true);
     this.events.onStateChange?.(this.state);
@@ -1126,13 +1234,8 @@ export class FredTuiApp {
       this.startSpinnerInterval();
       this.showThinkingAnimation();
 
-      // Start stream timeout — auto-fail if no tokens arrive
-      this.clearStreamTimeout();
-      this.streamTimeoutTimer = setTimeout(() => {
-        if (this.state.streaming.waitingForFirstToken) {
-          this.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
-        }
-      }, FredTuiApp.STREAM_TIMEOUT_MS);
+      // Start stream timeout — auto-fail if no tokens arrive (or patience tick in patient mode)
+      this.resetStreamTimeout();
 
       this.refreshSessionCost(true);
       this.events.onStateChange?.(this.state);
@@ -1531,12 +1634,16 @@ export class FredTuiApp {
       return;
     }
 
+    const contentParts = Array.isArray(lastAssistantMsg.content)
+      ? (lastAssistantMsg.content as Array<{ type?: string; text?: string }>)
+      : null;
+
     const content = typeof lastAssistantMsg.content === 'string'
       ? lastAssistantMsg.content
-      : Array.isArray(lastAssistantMsg.content)
-        ? lastAssistantMsg.content
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text ?? '')
+      : contentParts
+        ? contentParts
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text ?? '')
             .join('')
         : String(lastAssistantMsg.content);
 
@@ -1599,7 +1706,7 @@ export class FredTuiApp {
   /**
    * Push current state to OpenTUI renderables
    */
-  private syncStateToUI(): void {
+  private syncStateToUI(forceTranscriptRefresh = false): void {
     const r = this.renderer;
     const theme = DEFAULT_TUI_THEME;
 
@@ -1688,7 +1795,8 @@ export class FredTuiApp {
     );
 
     // Transcript content
-    this.syncTranscriptToUI(r, theme);
+    this.syncTranscriptToUI(r, theme, forceTranscriptRefresh);
+    this.refreshDynamicTranscriptElements(theme);
 
     this.inputBar.remove('input-text');
     this.inputText.destroy();
@@ -1796,6 +1904,65 @@ export class FredTuiApp {
     }
   }
 
+  private refreshDynamicTranscriptElements(theme: typeof DEFAULT_TUI_THEME): void {
+    const messages = getTranscriptMessages(this.state);
+    const lastMessage = messages[messages.length - 1];
+
+    if (
+      this.activeStreamingMdId
+      && this.state.streaming.isStreaming
+      && lastMessage?.role === 'assistant'
+    ) {
+      const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
+      if (existingMd && existingMd instanceof CodeRenderable) {
+        existingMd.content = sanitizeForTerminalDisplay(lastMessage.content) + buildStreamingCursorText();
+      }
+    }
+
+    if (this.thinkingSpinnerId && this.state.streaming.waitingForFirstToken) {
+      const spinnerEl = this.transcriptContent.findDescendantById(this.thinkingSpinnerId);
+      if (spinnerEl && spinnerEl instanceof TextRenderable) {
+        spinnerEl.content = getSpinnerFrame(Date.now());
+      }
+    }
+
+    const nowMs = Date.now();
+    for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+      if (messages[messageIndex]?.role !== 'user') {
+        continue;
+      }
+
+      const toolBlocks = sortToolBlocksByParent(getToolBlocksForMessage(this.state, messageIndex));
+      for (let blockIndex = 0; blockIndex < toolBlocks.length; blockIndex += 1) {
+        const summaryId = `tool-summary-msg-${messageIndex}-${blockIndex}`;
+        const summaryEl = this.transcriptContent.findDescendantById(summaryId);
+        if (!(summaryEl instanceof TextRenderable)) {
+          continue;
+        }
+
+        const presentation = getToolBlockSummaryPresentation(
+          toolBlocks[blockIndex],
+          blockIndex === toolBlocks.length - 1,
+          nowMs,
+          theme,
+        );
+        // Truncate with ellipsis when content overflows the clip box.
+        // The clip box uses overflow:hidden for responsive clipping, but we
+        // also want a visual `…` indicator at the truncation point.
+        const clipId = `tool-summary-clip-msg-${messageIndex}-${blockIndex}`;
+        const clipEl = this.transcriptContent.findDescendantById(clipId);
+        const clipWidth = clipEl instanceof BoxRenderable ? clipEl.width : 0;
+        if (clipWidth > 4 && presentation.content.length > clipWidth) {
+          summaryEl.content = presentation.content.slice(0, clipWidth - 1) + '\u2026';
+        } else {
+          summaryEl.content = presentation.content;
+        }
+        summaryEl.fg = presentation.fg;
+        summaryEl.attributes = presentation.attributes;
+      }
+    }
+  }
+
   /**
    * Sync transcript pane to renderables.
    *
@@ -1803,7 +1970,11 @@ export class FredTuiApp {
    * For normal messages, builds per-message renderables with distinct styling.
    * During streaming, updates the active CodeRenderable content in place.
    */
-  private syncTranscriptToUI(r: CliRenderer, theme: typeof DEFAULT_TUI_THEME): void {
+  private syncTranscriptToUI(
+    r: CliRenderer,
+    theme: typeof DEFAULT_TUI_THEME,
+    forceTranscriptRefresh = false,
+  ): void {
     const messages = getTranscriptMessages(this.state);
     const isStartupChooser = this.state.startup.chooser.isOpen;
     const hasPending = this.state.input.pendingSubmissions.length > 0;
@@ -1817,12 +1988,12 @@ export class FredTuiApp {
     const lastToolStatus = toolBlockCount > 0
       ? this.state.toolBlocks.groups[toolBlockCount - 1].blocks.map(b => b.status).join(',')
       : '';
-    const transcriptFingerprint = `${isStartupChooser}|${messages.length}|${lastMsg?.role ?? ''}|${lastMsg?.content.length ?? 0}|${this.state.streaming.isStreaming}|${this.state.streaming.waitingForFirstToken}|${this.state.streaming.lastError ?? ''}|${pendingCount}|${toolBlockCount}|${lastToolStatus}|${this.state.startup.chooser.selected}|${this.state.focusedPane}|${this.state.systemNotice ?? ''}`;
+    const transcriptFingerprint = `${isStartupChooser}|${messages.length}|${lastMsg?.role ?? ''}|${this.state.streaming.isStreaming}|${this.state.streaming.waitingForFirstToken}|${this.state.streaming.lastError ?? ''}|${pendingCount}|${toolBlockCount}|${lastToolStatus}|${this.state.startup.chooser.selected}|${this.state.focusedPane}|${this.state.systemNotice ?? ''}`;
 
     // Startup chooser and empty state (no pending): use legacy string-line path
     if (isStartupChooser || isEmpty) {
       // Check fingerprint to avoid redundant rebuilds even for startup chooser
-      if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+      if (!forceTranscriptRefresh && transcriptFingerprint === this.lastTranscriptFingerprint) {
         return;
       }
       this.lastTranscriptFingerprint = transcriptFingerprint;
@@ -1877,7 +2048,6 @@ export class FredTuiApp {
     if (
       this.activeStreamingMdId
       && this.state.streaming.isStreaming
-      && this.state.toolBlocks.groups.length === 0
       && messages.length === this.lastRenderedMessageCount
       && messages.length > 0
       && messages[messages.length - 1].role === 'assistant'
@@ -1886,6 +2056,7 @@ export class FredTuiApp {
       if (existingMd && existingMd instanceof CodeRenderable) {
         const lastMsg = messages[messages.length - 1];
         existingMd.content = sanitizeForTerminalDisplay(lastMsg.content) + buildStreamingCursorText();
+        this.lastTranscriptFingerprint = transcriptFingerprint;
         return;
       }
 
@@ -1895,7 +2066,7 @@ export class FredTuiApp {
 
     // Full rebuild: clear and rebuild all message renderables
     // Skip if transcript fingerprint hasn't changed (avoids flicker on unrelated state changes)
-    if (transcriptFingerprint === this.lastTranscriptFingerprint) {
+    if (!forceTranscriptRefresh && transcriptFingerprint === this.lastTranscriptFingerprint) {
       return;
     }
     this.lastTranscriptFingerprint = transcriptFingerprint;
@@ -1911,14 +2082,12 @@ export class FredTuiApp {
     const normalSyntaxStyle = this.syntaxStyle!;
     const streamingSyntaxStyle = this.streamingSyntaxStyle!;
     const nowMs = Date.now();
-    // Track tool block group index: each group corresponds to a tool-calling step
-    let toolGroupIndex = 0;
-
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       const msgId = String(i);
       const isLastMessage = i === messages.length - 1;
       const isStreamingThis = isLastMessage && this.state.streaming.isStreaming && msg.role === 'assistant';
+      const hasAssistantText = msg.role === 'assistant' && msg.content.trim().length > 0;
 
       if (msg.role === 'user') {
         const showSpinner = isLastMessage && this.state.streaming.waitingForFirstToken;
@@ -1932,9 +2101,22 @@ export class FredTuiApp {
         }
 
         this.transcriptContent.add(userRenderable);
+
+        const toolBlocks = getToolBlocksForMessage(this.state, i);
+        if (toolBlocks.length > 0) {
+          const toolGroup = buildToolGroupRenderable(
+            r,
+            theme,
+            toolBlocks,
+            `msg-${msgId}`,
+            nowMs,
+          );
+          if (toolGroup) {
+            this.transcriptContent.add(toolGroup);
+          }
+        }
       } else if (msg.role === 'assistant') {
-        // Detect thinking blocks
-        const isThinking = msg.content.startsWith('<thinking>');
+        const isThinking = hasAssistantText && msg.content.startsWith('<thinking>');
 
         if (isThinking) {
           // Extract thinking content (strip tags)
@@ -1944,7 +2126,7 @@ export class FredTuiApp {
           this.transcriptContent.add(
             buildThinkingRenderable(r, theme, thinkingContent, msgId),
           );
-        } else {
+        } else if (hasAssistantText) {
           const displayContent = isStreamingThis
             ? msg.content + buildStreamingCursorText()
             : msg.content;
@@ -1961,22 +2143,6 @@ export class FredTuiApp {
             this.activeStreamingMdId = `msg-assistant-md-${msgId}`;
           }
         }
-
-        // Append tool blocks for this assistant message if any exist
-        const toolBlocks = getToolBlocksForMessage(this.state, toolGroupIndex);
-        if (toolBlocks.length > 0) {
-          const toolGroup = buildToolGroupRenderable(
-            r,
-            theme,
-            toolBlocks,
-            `msg-${msgId}`,
-            nowMs,
-          );
-          if (toolGroup) {
-            this.transcriptContent.add(toolGroup);
-          }
-        }
-        toolGroupIndex++;
         // NOTE: Manual expand/toggle for tool blocks could be added via keymap later
       } else {
         // System or other roles: render as plain text
