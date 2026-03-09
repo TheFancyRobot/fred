@@ -132,6 +132,62 @@ function transformFieldsForStrictMode(
   return transformedFields;
 }
 
+function appendUsage(
+  total: { inputTokens: number; outputTokens: number; totalTokens: number },
+  stepUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined
+): void {
+  total.inputTokens += stepUsage?.inputTokens ?? 0;
+  total.outputTokens += stepUsage?.outputTokens ?? 0;
+  total.totalTokens += stepUsage?.totalTokens ?? 0;
+}
+
+function buildNextStepMessages(
+  currentMessages: Prompt.MessageEncoded[],
+  stepText: string,
+  stepToolCalls: Array<{ id: string; name: string; params: Record<string, unknown> }>,
+  stepToolResults: Map<string, { result: unknown; isFailure?: boolean }>
+): Prompt.MessageEncoded[] {
+  const assistantParts: Array<Prompt.AssistantMessagePartEncoded> = [];
+
+  if (stepText.trim()) {
+    assistantParts.push(Prompt.makePart('text', { text: stepText }));
+  }
+
+  for (const toolCall of stepToolCalls) {
+    assistantParts.push(
+      Prompt.makePart('tool-call', {
+        id: toolCall.id,
+        name: toolCall.name,
+        params: toolCall.params,
+        providerExecuted: false,
+      })
+    );
+  }
+
+  const toolResultMessages: Prompt.MessageEncoded[] = stepToolCalls.map((toolCall) => {
+    const toolResult = stepToolResults.get(toolCall.id);
+
+    return {
+      role: 'tool',
+      content: [
+        Prompt.makePart('tool-result', {
+          id: toolCall.id,
+          name: toolCall.name,
+          result: toolResult?.result,
+          isFailure: toolResult?.isFailure === true,
+          providerExecuted: false,
+        }),
+      ],
+    } as Prompt.MessageEncoded;
+  });
+
+  return [
+    ...currentMessages,
+    { role: 'assistant', content: assistantParts },
+    ...toolResultMessages,
+  ];
+}
+
 function getSafeToolErrorMessage(toolId: string, error: unknown): string {
   // Extract user-friendly error message
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -433,6 +489,7 @@ export class AgentFactory {
       backoffMs: config.toolRetry?.backoffMs ?? 1000,
       maxBackoffMs: config.toolRetry?.maxBackoffMs ?? 10000,
       jitterMs: config.toolRetry?.jitterMs ?? 200,
+      timeoutBackoffMs: config.toolRetry?.timeoutBackoffMs ?? 15_000,
     };
 
     if (this.handoffHandler) {
@@ -477,9 +534,16 @@ export class AgentFactory {
     const effectTools: EffectTool.Any[] = [];
 
     // Helper to compute backoff with jitter
-    const computeBackoff = (attempt: number): number => {
-      const exponentialBackoff = retryPolicy.backoffMs * Math.pow(2, attempt);
-      const boundedBackoff = Math.min(exponentialBackoff, retryPolicy.maxBackoffMs);
+    // Timeout errors use a longer base delay to let upstream services recover
+    const computeBackoff = (attempt: number, isTimeout = false): number => {
+      const baseMs = isTimeout
+        ? (retryPolicy.timeoutBackoffMs ?? 15_000)
+        : retryPolicy.backoffMs;
+      const maxMs = isTimeout
+        ? Math.max(retryPolicy.maxBackoffMs, 30_000)
+        : retryPolicy.maxBackoffMs;
+      const exponentialBackoff = baseMs * Math.pow(2, attempt);
+      const boundedBackoff = Math.min(exponentialBackoff, maxMs);
       const jitter = Math.random() * retryPolicy.jitterMs;
       return boundedBackoff + jitter;
     };
@@ -685,8 +749,9 @@ export class AgentFactory {
                   throw err;
                 }
 
-                // Wait before retrying
-                const backoffMs = computeBackoff(attempt);
+                // Wait before retrying — timeout errors get a longer delay
+                const isTimeout = err.name === 'ToolTimeoutError';
+                const backoffMs = computeBackoff(attempt, isTimeout);
                 if (toolSpan) {
                   toolSpan.addEvent('retry.backoff', {
                     'retry.attempt': attempt,
@@ -982,78 +1047,128 @@ export class AgentFactory {
           const modelWithClient = Layer.provide(model, providerWithHttp);
           const fullLayer = Layer.mergeAll(modelWithClient, runtimeToolLayer, BunContext.layer);
 
-          // Use @effect/ai's built-in multi-step execution
-          // This prevents double execution (no manual loop to duplicate toolkit execution)
-          // Use conservative maxSteps to prevent runaway tool calling
           const maxSteps = Math.min(config.maxSteps ?? 3, 3);
+          const runGenerationStep = (
+            stepMessages: Prompt.MessageEncoded[],
+            stepToolChoice: AgentConfig['toolChoice'] | undefined
+          ): Effect.Effect<any, Error> => {
+            const prompt = Prompt.make(stepMessages);
+            const generateOptions = {
+              prompt,
+              toolkit: runtimeToolkit,
+              toolChoice: stepToolChoice,
+              temperature: config.temperature,
+            } as unknown as Parameters<typeof LanguageModel.generateText>[0];
+            const program = LanguageModel.generateText(generateOptions);
+            const providedProgram = Effect.provide(
+              program as Effect.Effect<any, any, any>,
+              fullLayer as any
+            ) as Effect.Effect<any, any, never>;
 
-          const prompt = Prompt.make(promptMessages);
-          // Cast options via unknown to satisfy TypeScript - the runtime types are correct
-          const generateOptions = {
-            prompt,
-            toolkit: runtimeToolkit,
-            maxSteps,
-            toolChoice: config.toolChoice,
-            temperature: config.temperature,
-          } as unknown as Parameters<typeof LanguageModel.generateText>[0];
-          const program = LanguageModel.generateText(generateOptions);
+            return providedProgram.pipe(
+              Effect.catchAll((providerError: any) => {
+                const diagnostics: RetryDiagnostics | undefined =
+                  hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
+                  : hasRetryDiagnostics((providerError as any)?.cause) ? (providerError as any).cause._retryDiagnostics
+                  : undefined;
 
-          // Provide layer and cast to satisfy requirements
-          const providedProgram = Effect.provide(
-            program as Effect.Effect<any, any, any>,
-            fullLayer as any
-          ) as Effect.Effect<any, any, never>;
+                if (diagnostics) {
+                  const enrichedError = providerError instanceof Error
+                    ? providerError
+                    : new Error(String(providerError));
+                  (enrichedError as any)._retryDiagnostics = diagnostics;
+                  return Effect.fail(enrichedError);
+                }
 
-          // Retry boundary: providers (e.g. Groq) attach _retryDiagnostics to errors
-          // after exhausting their internal retries. The factory normalizes this metadata
-          // so downstream consumers (CLI --json) can emit structured diagnostics.
-          const result: any = yield* providedProgram.pipe(
-            Effect.catchAll((providerError: any) => {
-              // Look for RetryDiagnostics on the error or its cause chain
-              const diagnostics: RetryDiagnostics | undefined =
-                hasRetryDiagnostics(providerError) ? providerError._retryDiagnostics
-                : hasRetryDiagnostics((providerError as any)?.cause) ? (providerError as any).cause._retryDiagnostics
-                : undefined;
+                return Effect.fail(providerError);
+              })
+            );
+          };
 
-              if (diagnostics) {
-                // Attach normalized retry metadata for CLI structured error payloads
-                const enrichedError = providerError instanceof Error
-                  ? providerError
-                  : new Error(String(providerError));
-                (enrichedError as any)._retryDiagnostics = diagnostics;
-                return Effect.fail(enrichedError);
-              }
-              return Effect.fail(providerError);
-            })
-          );
+          let currentMessages = promptMessages;
+          const allToolCalls: NonNullable<AgentResponse['toolCalls']> = [];
+          const usage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          };
+          let content = '';
 
-          // Extract tool calls from result
-          const allToolCalls = (result.toolCalls ?? []).map((tc: any) => {
-            const toolId = tc.name as string;
-            if (!allowedToolIds.has(toolId)) {
-              return {
-                toolId,
-                args: tc.params as Record<string, any>,
-                result: `Tool "${toolId}" denied by policy`,
-                error: {
-                  code: 'POLICY_DENIED',
-                  message: `Tool "${toolId}" denied by policy`,
-                },
-              };
+          for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
+            const result: any = yield* runGenerationStep(
+              currentMessages,
+              stepIndex === 0 ? config.toolChoice : undefined
+            );
+
+            if (typeof result.text === 'string' && result.text.length > 0) {
+              content += result.text;
             }
 
-            return {
-              toolId,
-              args: tc.params as Record<string, any>,
-              result: undefined,
-            };
-          });
+            appendUsage(usage, result.usage);
 
-          const usage = {
-            inputTokens: result.usage?.inputTokens ?? 0,
-            outputTokens: result.usage?.outputTokens ?? 0,
-            totalTokens: result.usage?.totalTokens ?? 0,
-          };
+            const stepToolCalls = (result.toolCalls ?? []) as Array<{
+              id: string;
+              name: string;
+              params: Record<string, unknown>;
+            }>;
+            const stepToolResults = new Map<string, {
+              result: unknown;
+              isFailure?: boolean;
+              metadata?: Record<string, unknown>;
+            }>(
+              ((result.toolResults ?? []) as Array<{
+                id: string;
+                result: unknown;
+                isFailure?: boolean;
+                metadata?: Record<string, unknown>;
+              }>).map((toolResult) => [toolResult.id, toolResult])
+            );
+
+            allToolCalls.push(
+              ...stepToolCalls.map((toolCall) => {
+                const toolId = toolCall.name;
+                if (!allowedToolIds.has(toolId)) {
+                  return {
+                    toolId,
+                    args: toolCall.params as Record<string, any>,
+                    result: `Tool "${toolId}" denied by policy`,
+                    error: {
+                      code: 'POLICY_DENIED',
+                      message: `Tool "${toolId}" denied by policy`,
+                    },
+                  };
+                }
+
+                const toolResult = stepToolResults.get(toolCall.id);
+                return {
+                  toolId,
+                  args: toolCall.params as Record<string, any>,
+                  result: toolResult?.result,
+                  metadata: toolResult?.metadata,
+                  error: toolResult?.isFailure
+                    ? {
+                        code: 'TOOL_EXECUTION_ERROR',
+                        message: `Tool "${toolId}" failed during execution`,
+                      }
+                    : undefined,
+                };
+              })
+            );
+
+            if (stepToolCalls.length === 0) {
+              break;
+            }
+
+            const resolvableToolCalls = stepToolCalls.filter((toolCall) => allowedToolIds.has(toolCall.name));
+            const canContinue = resolvableToolCalls.length > 0
+              && resolvableToolCalls.every((toolCall) => stepToolResults.has(toolCall.id));
+
+            if (!canContinue) {
+              break;
+            }
+
+            currentMessages = buildNextStepMessages(currentMessages, result.text ?? '', resolvableToolCalls, stepToolResults);
+          }
 
           // Annotate model span with token counts
           if (modelSpan && usage.totalTokens > 0) {
@@ -1096,7 +1211,7 @@ export class AgentFactory {
           const handoffCall = allToolCalls.find((call: any) => call.toolId === 'handoff_to_agent');
           if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result) {
             return {
-              content: result.text,
+              content,
               toolCalls: allToolCalls,
               usage,
               handoff: handoffCall.result as HandoffResult,
@@ -1104,7 +1219,7 @@ export class AgentFactory {
           }
 
           return {
-            content: result.text,
+            content,
             toolCalls: allToolCalls,
             usage,
           };

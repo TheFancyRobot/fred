@@ -65,6 +65,7 @@ export interface ToolRetryPolicy {
   backoffMs?: number; // Initial backoff delay in ms (default: 1000)
   maxBackoffMs?: number; // Maximum backoff delay in ms (default: 10000)
   jitterMs?: number; // Random jitter added to backoff in ms (default: 200)
+  timeoutBackoffMs?: number; // Base delay for timeout retries in ms (default: 15000)
 }
 
 /**
