@@ -691,6 +691,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
               streamingFlushStrategy: 'token',
               pluginSlashCommands,
               startupWarning,
+              streamTimeoutMode: 'patient',
+              patienceMessage: DEFAULT_PATIENCE_MESSAGES,
+              patienceIntervalMs: 15_000,
             }
           ),
         catch: (error) =>
