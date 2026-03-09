@@ -15,7 +15,7 @@ Roadmap is milestone-scoped; shipped milestones are archived under `.planning/mi
 - ✅ **v0.2.0 Observability & Safety** — Phases 22-26 (shipped 2026-02-07, archive: `.planning/milestones/v0.2.0-ROADMAP.md`)
 - ✅ **v0.2.1 CLI/TUI Developer Experience** — Phases 27-36 (shipped 2026-02-16, archive: `.planning/milestones/v0.2.1-ROADMAP.md`)
 - ✅ **v0.2.2 TUI Visual Polish** — Phases 37-40 (shipped 2026-02-22, archive: `.planning/milestones/v0.2.2-ROADMAP.md`)
-- ✅ **v0.3.0 Imperative-to-Effect Migration** — Phases 41-50 (incl. 45.1, 45.2, 46.1, 46.2)
+- 🔧 **v0.3.0 Imperative-to-Effect Migration** — Phases 41-53 (incl. 45.1, 45.2, 46.1, 46.2; gap closure 51-53)
 
 ---
 
@@ -106,8 +106,8 @@ Plans:
 - [x] 44-09-PLAN.md — Migrate 4 remaining tests (executor, tracing, workflow, gating) to structural mocks
 - [x] 44-10-PLAN.md — Remove stale pipeline/manager re-export from barrel file
 - [x] 44-11-PLAN.md — Delete dead MessageProcessor class and clean barrel re-export
-- [ ] 44-12-PLAN.md — Add Fred public context methods and migrate CLI consumers off getContextManager
-- [ ] 44-13-PLAN.md — Migrate dev consumers off getContextManager and remove proxy from Fred
+- [x] 44-12-PLAN.md — Add Fred public context methods and migrate CLI consumers off getContextManager
+- [x] 44-13-PLAN.md — Migrate dev consumers off getContextManager and remove proxy from Fred
 
 ### Phase 45: Public API Surface & Verification
 **Goal**: The public API exports only Effect services, the Layer composition is complete, breaking changes are documented, and the full test suite passes cleanly
@@ -277,6 +277,14 @@ Phase 48 (Effect Boundary Migration — Gap Closure) ← GAP CLOSURE
 Phase 49 (Peripheral Boundary Migration — Gap Closure) ← GAP CLOSURE
     ↓
 Phase 50 (Security Hardening Baseline — Gap Closure) ← GAP CLOSURE
+    ↓
+Phase 51 (Wire MCP Trust-Boundary Config to Runtime) ← GAP CLOSURE
+    ↓
+Phase 52 (Fix Agent Hot Reload ETA Frontmatter Resolution) ← GAP CLOSURE
+    ↓
+Phase 53 (Documentation Traceability Cleanup) ← GAP CLOSURE
+    ↓
+Phase 54 (Cancellation Propagation) ← GAP CLOSURE
 ```
 
 All phases are sequential. Each phase leaves the codebase in a buildable, testable state because the imperative classes remain available as fallbacks until Phase 44 removes them.
@@ -337,6 +345,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | SEC-03 | 50 | MCP trust boundaries: command/url allowlists + env passthrough minimization |
 | SEC-04 | 50 | CI security scanners: gitleaks, semgrep, dependency audit |
 | SEC-05 | 50 | Security validation checks and hardening runbook documented |
+| SEC-03 | 51 | MCP trust-boundary config→runtime wiring (gap closure) |
 
 **Coverage:**
 - Total requirements: 52
@@ -347,7 +356,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 
 ## Progress
 
-**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48 → 49 → 50
+**Execution Order:** 41 → 42 → 43 → 44 → 45 → 45.1 → 45.2 → 46 → 46.1 → 46.2 → 47 → 48 → 49 → 50 → 51 → 52 → 53 → 54
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -365,6 +374,10 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 48. Effect Boundary Migration (Gap Closure) | 4/4 | Complete | 2026-03-04 |
 | 49. Peripheral Boundary Migration (Gap Closure) | 2/2 | Complete | 2026-03-04 |
 | 50. Security Hardening Baseline (Gap Closure) | 3/3 | Complete | 2026-03-05 |
+| 51. Wire MCP Trust-Boundary Config to Runtime (Gap Closure) | 0/0 | Not started | — |
+| 52. Fix Agent Hot Reload ETA Frontmatter Resolution (Gap Closure) | 0/0 | Not started | — |
+| 53. Documentation Traceability Cleanup (Gap Closure) | 0/0 | Not started | — |
+| 54. Cancellation Propagation (Gap Closure) | 1/2 | In Progress|  |
 
 ---
 
@@ -431,4 +444,47 @@ Plans:
 
 ---
 
-*Last updated: 2026-03-05 — Phase 50 executed and verified passed (3/3 plans complete, 14/14 must-haves).*
+### Phase 51: Wire MCP Trust-Boundary Config to Runtime (GAP CLOSURE)
+
+**Goal:** Wire MCP trust-boundary hardening fields (command/URL allowlists, env passthrough) through the full config → loader → runtime server config mapping path so that config-driven MCP allowlist controls are actually propagated at runtime.
+**Depends on:** Phase 50
+**Requirements:** SEC-03
+**Gap Closure:** Closes SEC-03 audit gap, MCP config→runtime integration gap, and security flow breakpoint
+
+### Phase 52: Fix Agent Hot Reload ETA Frontmatter Resolution (GAP CLOSURE)
+
+**Goal:** Ensure the agent file watcher hot-reload path resolves ETA frontmatter expressions the same way cold-start loading does, eliminating the behavior mismatch between initial load and file-change reload.
+**Depends on:** Phase 51
+**Gap Closure:** Closes agent hot-reload integration gap and config/agent watcher flow breakpoint
+
+### Phase 53: Documentation Traceability Cleanup (GAP CLOSURE)
+
+**Goal:** Fix REQUIREMENTS.md checkbox drift (RMVL-01..08 and CONS-01..03 unchecked despite verification evidence) and ROADMAP.md plan checkbox drift (44-12/44-13 shown incomplete while SUMMARY artifacts exist). Documentation-only, no code changes.
+**Depends on:** Phase 52
+**Gap Closure:** Closes documentation-traceability tech debt from milestone audit
+
+---
+
+### Phase 54: Cancellation Propagation for Pipelines, Subagents, and Streaming
+
+**Goal:** When the TUI stream timeout fires, abort the underlying `fred.streamMessage()` so the runtime stops spawning new tool calls and subagent processes. Individual tool timeouts within a pipeline should trigger retries (already implemented), not cascade cancellation to sibling branches. The research pipeline should be resilient to individual search failures.
+
+**Depends on:** Phase 53
+**Gap Closure:** Closes orphaned-process gap observed during multi-agent workflow execution (Example 13) where TUI showed timeout error but runtime kept running
+
+**Plans:** 1/2 plans executed
+
+**Success Criteria** (what must be TRUE):
+  1. When the TUI stream timeout fires (`failAssistantStream`), the underlying `fred.streamMessage()` call is aborted via `AbortSignal` and no further tool calls or subagent processes are spawned
+  2. `ProcessingOptions` accepts an optional `signal?: AbortSignal` that interrupts the Effect stream via `Stream.interruptWhen` (following the existing pattern in `stream/openai.ts`)
+  3. The `for await` loop in `chat.ts` exits cleanly on abort without double-reporting the error
+  4. Individual tool timeouts within pipelines still trigger retries — no change to fork branch behavior or tool retry logic
+  5. Existing tests pass — abort is additive safety for the TUI boundary, not a behavioral change for successful paths
+
+**Architecture Notes:**
+- **TUI→Runtime boundary** (`packages/cli/src/commands/chat.ts:423`): Create `AbortController` per streaming session; wire `failAssistantStream` → `onError` → `abort()` to break the `for await` loop and interrupt the Effect stream
+- **Effect stream interruption** (`packages/core/src/index.ts:1168`): Thread `signal` through `ProcessingOptions` and wrap stream with `Stream.interruptWhen` — pattern already established in `packages/core/src/stream/openai.ts:92-112`
+- **Graph executor forks** (`packages/core/src/pipeline/graph-executor.ts:368`): `Effect.all` with `concurrency: 'unbounded'` already interrupts siblings on failure (correct Effect behavior). No change needed — tool retries handle transient failures within branches
+- **Subagent context** (`packages/core/src/subagent/context.ts`): Already has `cancelActiveSubagents()` called on tool timeout
+
+*Last updated: 2026-03-08 — Phase 54 added for cancellation propagation.*
