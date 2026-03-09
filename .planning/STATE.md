@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: milestone
 status: executing
-stopped_at: Completed 54-01-PLAN.md
-last_updated: "2026-03-09T05:17:42Z"
-last_activity: 2026-03-09 - Phase 54 plan 01 completed (patient stream timeout)
+stopped_at: Completed 54-02-PLAN.md
+last_updated: "2026-03-09T05:21:00Z"
+last_activity: 2026-03-09 - Phase 54 plan 02 completed (timeout backoff + stream abort on exit)
 progress:
-  total_phases: 15
-  completed_phases: 14
-  total_plans: 244
-  completed_plans: 243
+  total_phases: 19
+  completed_phases: 15
+  total_plans: 72
+  completed_plans: 72
   percent: 99
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 54 in progress (Cancellation Propagation)
-Plan: 1 of 2 complete in current phase
+Phase: 54 complete (Cancellation Propagation)
+Plan: 2 of 2 complete in current phase
 Status: Executing
-Last activity: 2026-03-09 - Phase 54 plan 01 completed (patient stream timeout)
+Last activity: 2026-03-09 - Phase 54 plan 02 completed (timeout backoff + stream abort on exit)
 
-Progress: ████████████████████ 99% (243/244 plans)
+Progress: ████████████████████ 100% (244/244 plans)
 
 ## Performance Metrics
 
@@ -232,6 +232,9 @@ Progress: ████████████████████ 99% (243/
 | 50-03 | Security CI runs gitleaks, semgrep (`--severity ERROR`), and Bun dependency audit on pull requests to main; runbook now documents exact local and CI verification commands | Closes SEC-04/SEC-05 with enforceable CI gates and operator-ready validation guidance |
 | 54-01 | Patient timeout mode wired as default in chat.ts replacing fatal 30s timeout with configurable message sources | Prevents long-running multi-agent workflows from being killed by aggressive client-side timer |
 | 54-01 | Inline timeout setups consolidated into resetStreamTimeout() with patience/fail branching | DRY improvement prevents future divergence between timeout setup locations |
+| 54-02 | Timeout backoff uses 15s default base delay with 30s max, separate from normal 1s/10s backoff | Gives slow APIs and rate-limited endpoints time to recover before retry |
+| 54-02 | AbortSignal threaded through ProcessingOptions and converted to Effect Stream interruption via Stream.interruptWhen | Enables user-initiated stream cancellation without orphan processing |
+| 54-02 | onQuit handler aborts active stream controller before process.exit to prevent orphan processing | Ensures cleanup on explicit user exit |
 
 ### Quick Tasks Completed
 
@@ -242,8 +245,8 @@ Progress: ████████████████████ 99% (243/
 
 ## Session Continuity
 
-Last session: 2026-03-09T05:17:42Z
-Stopped at: Completed 54-01-PLAN.md
+Last session: 2026-03-09T05:21:00Z
+Stopped at: Completed 54-02-PLAN.md
 Resume file: None
 
 ---

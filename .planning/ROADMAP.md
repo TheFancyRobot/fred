@@ -377,7 +377,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 51. Wire MCP Trust-Boundary Config to Runtime (Gap Closure) | 0/0 | Not started | — |
 | 52. Fix Agent Hot Reload ETA Frontmatter Resolution (Gap Closure) | 0/0 | Not started | — |
 | 53. Documentation Traceability Cleanup (Gap Closure) | 0/0 | Not started | — |
-| 54. Cancellation Propagation (Gap Closure) | 1/2 | In Progress|  |
+| 54. Cancellation Propagation (Gap Closure) | 2/2 | Complete   | 2026-03-09 |
 
 ---
 
@@ -472,7 +472,7 @@ Plans:
 **Depends on:** Phase 53
 **Gap Closure:** Closes orphaned-process gap observed during multi-agent workflow execution (Example 13) where TUI showed timeout error but runtime kept running
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 **Success Criteria** (what must be TRUE):
   1. When the TUI stream timeout fires (`failAssistantStream`), the underlying `fred.streamMessage()` call is aborted via `AbortSignal` and no further tool calls or subagent processes are spawned
