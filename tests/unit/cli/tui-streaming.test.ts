@@ -239,4 +239,46 @@ describe('TUI streaming controller', () => {
     expect(batches[0].text).toBe('hello world');
     expect(finishCalled).toBe(true);
   });
+
+  test('token flush strategy emits each token immediately', () => {
+    const batches: StreamingBatch[] = [];
+    const controller = createStreamingController({
+      flushStrategy: 'token',
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('he');
+    controller.pushToken('llo');
+
+    expect(batches).toHaveLength(2);
+    expect(batches[0]?.text).toBe('he');
+    expect(batches[1]?.text).toBe('llo');
+  });
+
+  test('flushes text even when later token slices carry zero token count', () => {
+    const batches: StreamingBatch[] = [];
+    const controller = createStreamingController({
+      flushStrategy: 'token',
+      callbacks: {
+        onBatch: (batch) => {
+          batches.push(batch);
+        },
+      },
+    });
+    activeControllers.push(controller);
+
+    controller.start();
+    controller.pushToken('Hello', 1);
+    controller.pushToken(' ', 0);
+    controller.pushToken('world', 0);
+
+    expect(batches.map((batch) => batch.text)).toEqual(['Hello', ' ', 'world']);
+    expect(controller.getMetricsSnapshot().tokensProcessed).toBe(1);
+  });
 });

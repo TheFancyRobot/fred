@@ -25,6 +25,7 @@ export function createSmokeTestDeps(options: {
     createFred: () => new FredClass() as any,
     createStorage: (opts) => new MockSqliteContextStorage(opts),
     resolveProjectConfig: () => ({ success: false, diagnostics: [] }) as any,
+    loadProjectRuntimeHook: async () => null,
     ensureDefaultChatAgent: async (fred: any) => {
       if (fred.getAgents().length === 0) {
         await fred.createAgent({
@@ -275,4 +276,3 @@ export function createMockFredClass(options: MockFredClassOptions = {}) {
     }
   };
 }
-

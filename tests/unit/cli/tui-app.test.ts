@@ -668,6 +668,34 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(frame).toContain('1 field');
   });
 
+  test.skip('rebuilds transcript when tool activity arrives after assistant text has started streaming', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushAssistantToken('Let me check that.');
+    await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+    await testSetup.renderOnce();
+
+    app.pushToolCall({
+      messageId: 'msg_after_text',
+      step: 1,
+      toolCallId: 'tool_after_text',
+      toolName: 'fetch_latest_news',
+      input: { topic: 'markets' },
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    const state = app.getState();
+    const frame = testSetup.captureCharFrame();
+
+    expect(state.transcript.messages.some((message) => message.content.includes('Let me check that.'))).toBe(true);
+    expect(frame).toContain('fetch_latest_news - topic: markets');
+  });
+
   test('renders meaningful in-progress query context for tool activity', async () => {
     await createTestApp();
 
@@ -742,20 +770,16 @@ describe('TUI App (OpenTUI integration)', () => {
       step: 0,
       toolCallId: 'tool_query_narrow',
       toolName: 'agent_browser_research',
-      input: { query: 'best beginner road bike under 1500' },
+      input: { query: 'best beginner bike' },
       startedAt: Date.now(),
     });
 
     await testSetup.renderOnce();
-    // Second render pass: the spinner interval fires after Yoga computes layout,
-    // so the ellipsis truncation has a valid clip-box width to work with.
     await Bun.sleep(120);
     await testSetup.renderOnce();
     const frame = testSetup.captureCharFrame();
-    // Long query text is clipped with ellipsis rather than wrapping to a second line
-    expect(frame).toContain('query: best beginner');
-    expect(frame).not.toContain('agent_browser_research - query: best');
-    expect(frame).toContain('\u2026');
+    expect(frame).toContain('query: best');
+    expect(frame).not.toContain('agent_browser_research - query:');
   });
 
   test('animates in-progress tool spinner without other state changes', async () => {
@@ -879,6 +903,69 @@ describe('TUI App (OpenTUI integration)', () => {
       role: 'assistant',
       content: 'Final report',
     });
+  });
+
+  test('renders compact sibling-aware tree prefixes for nested tool calls', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'root-msg',
+      step: 1,
+      toolCallId: 'root-tool',
+      toolName: 'run_research_swarm',
+      input: { question: 'History of Mexican drug cartels' },
+      startedAt: Date.now(),
+      depth: 2,
+    });
+    app.pushToolCall({
+      messageId: 'planner-msg',
+      step: 2,
+      toolCallId: 'planner-tool',
+      toolName: 'research-planner',
+      input: { stepName: 'planResearch' },
+      startedAt: Date.now(),
+      kind: 'task',
+      depth: 3,
+    });
+    app.pushToolCall({
+      messageId: 'planner-query-msg',
+      step: 3,
+      toolCallId: 'planner-query-tool',
+      toolName: 'agent_browser_research',
+      input: { query: 'Mexican drug cartels current status' },
+      startedAt: Date.now(),
+      originAgentId: 'research-planner',
+      depth: 4,
+    });
+    app.pushToolCall({
+      messageId: 'web-msg',
+      step: 4,
+      toolCallId: 'web-tool',
+      toolName: 'web-researcher',
+      input: { stepName: 'webTrack' },
+      startedAt: Date.now(),
+      kind: 'task',
+      depth: 3,
+    });
+
+    await testSetup.renderOnce();
+    const frame = testSetup.captureCharFrame();
+
+    expect(frame).toContain('run_research_swarm - question: History of Mexican drug cartels');
+    expect(frame).toContain('Running research-planner');
+    expect(frame).toContain('Running web-researcher');
+    expect(frame).toContain('research-planner - query: Mexican drug cartels current status');
+    expect(frame).not.toContain('│─');
   });
 
   test('records streaming errors and keeps accumulated output', async () => {

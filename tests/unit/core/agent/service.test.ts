@@ -24,7 +24,7 @@ describe('AgentService', () => {
     Layer.provide(ProviderLayer),
     Layer.provide(ToolGateLayer)
   );
-  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer);
+  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ToolLayer);
 
   const runTest = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
     Effect.runPromise(effect.pipe(Effect.provide(TestLayer)) as Effect.Effect<A, E, never>);
@@ -163,6 +163,32 @@ describe('AgentService', () => {
       expect(result.hasAfterFailure).toBe(false);
       expect(result.createdId).toBe('flaky');
       expect(result.hasAfterSuccess).toBe(true);
+    });
+
+    it('preserves configured tools when no tool policies are set', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const tools = yield* ToolRegistryService;
+          yield* tools.registerTool({
+            id: 'save-note',
+            name: 'save-note',
+            description: 'Save a note',
+            execute: () => 'saved',
+          });
+
+          const service = yield* AgentService;
+          const created = yield* service.createAgent(createAgentConfig('tool-user', {
+            tools: ['save-note'],
+          }));
+
+          return created.config.tools;
+        })
+      );
+
+      expect(result).toEqual(['save-note']);
     });
   });
 

@@ -26,7 +26,11 @@ const mockApp = {
   isRunning: () => true,
   getState: () => ({}),
   updateTelemetryModel: mock(() => {}),
+  clearAssistantStreamContent: mock(() => {}),
   pushAssistantToken: mock(() => {}),
+  pushToolCall: mock(() => {}),
+  pushToolResult: mock(() => {}),
+  pushToolError: mock(() => {}),
   completeAssistantStream: mock(() => {}),
   failAssistantStream: mock(() => {}),
 };
@@ -86,7 +90,11 @@ describe('Phase 28 streaming smoke', () => {
     process.env.OPENAI_API_KEY = 'sk-test-key-for-smoke-tests';
 
     mockCreateFredTuiApp.mockClear();
+    mockApp.clearAssistantStreamContent.mockClear();
     mockApp.pushAssistantToken.mockClear();
+    mockApp.pushToolCall.mockClear();
+    mockApp.pushToolResult.mockClear();
+    mockApp.pushToolError.mockClear();
     mockApp.completeAssistantStream.mockClear();
     mockApp.failAssistantStream.mockClear();
   });
@@ -137,6 +145,72 @@ describe('Phase 28 streaming smoke', () => {
     }
 
     expect(mockCreateFredTuiApp).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses project runtime hook when available', async () => {
+    const BaseFred = createMockFredClass();
+    const createdFreds: Array<InstanceType<typeof BaseFred> & { initializeCalls: number }> = [];
+
+    class HookFred extends BaseFred {
+      initializeCalls = 0;
+
+      override async initializeFromConfig() {
+        this.initializeCalls += 1;
+        await super.initializeFromConfig();
+      }
+    }
+
+    const runtimeHook = mock(async (fred: any) => {
+      await fred.createAgent({
+        id: 'hook-agent',
+        platform: 'openrouter',
+        model: 'google/gemini-2.5-flash',
+      });
+    });
+
+    const deps = createSmokeTestDeps({
+      createFredTuiApp: mockCreateFredTuiApp,
+    });
+    deps.createFred = () => {
+      const fred = new HookFred() as InstanceType<typeof HookFred> & { initializeCalls: number };
+      createdFreds.push(fred);
+      return fred as any;
+    };
+    deps.resolveProjectConfig = () => ({
+      success: true,
+      config: {},
+      configPath: '/tmp/fred.config.yaml',
+      diagnostics: [],
+    }) as any;
+    deps.loadProjectRuntimeHook = async () => runtimeHook as any;
+
+    const mockStdin = createStdinDouble({
+      isTTY: true,
+      isRaw: false,
+      setRawMode: mock(() => {}),
+    });
+    const mockStdout = createStdoutDouble({
+      isTTY: true,
+      columns: 120,
+      rows: 40,
+    });
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+    const chatPromise = handleChatCommand(deps).catch(() => {});
+
+    const deadline = Date.now() + 2000;
+    while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+      await Bun.sleep(20);
+    }
+
+    expect(runtimeHook).toHaveBeenCalledTimes(1);
+    expect(createdFreds[0]?.initializeCalls).toBe(0);
+
+    void chatPromise;
   });
 
   test('streams assistant output, opens palette, and preserves smart-scroll under load', async () => {
@@ -233,7 +307,7 @@ describe('Phase 28 streaming smoke', () => {
     const chunk = '/function=brave_search>{"query":"annual potato production"}</function>';
     const expectedFiltered = '/function=brave_search>{"query":"annual potato production"}';
     const originalStreamMessage = MockFred.prototype.streamMessage;
-    MockFred.prototype.streamMessage = function () {
+    (MockFred.prototype as any).streamMessage = function () {
       return {
         fullStream: (async function* () {
           yield { type: 'token', delta: chunk };
@@ -278,9 +352,336 @@ describe('Phase 28 streaming smoke', () => {
       events.onSubmit('test message');
       await Bun.sleep(40);
 
-      // XML filtering strips the </function> closing tag from the chunk
-      expect(mockApp.pushAssistantToken).toHaveBeenCalledWith(expectedFiltered, 1);
+      // XML filtering strips the </function> closing tag and display segmentation preserves content order
+      const rendered = ((mockApp.pushAssistantToken as any).mock.calls as Array<Array<unknown>>)
+        .map((call) => String(call[0] ?? ''))
+        .join('');
+      expect(rendered).toBe(expectedFiltered);
       expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
+    } finally {
+      MockFred.prototype.streamMessage = originalStreamMessage;
+    }
+  });
+
+  test('stream callback falls back to run-end content when no token deltas arrive', async () => {
+    const originalStreamMessage = MockFred.prototype.streamMessage;
+    (MockFred.prototype as any).streamMessage = function () {
+      return {
+        fullStream: (async function* () {
+          yield {
+            type: 'tool-call',
+            messageId: 'msg_1',
+            step: 0,
+            toolCallId: 'tool_1',
+            toolName: 'fetch_latest_news',
+            input: { topic: 'trump' },
+            startedAt: Date.now(),
+          };
+          yield {
+            type: 'tool-result',
+            toolCallId: 'tool_1',
+            toolName: 'fetch_latest_news',
+            output: { digest: 'news digest' },
+            completedAt: Date.now(),
+            durationMs: 25,
+          };
+          yield {
+            type: 'run-end',
+            sequence: 4,
+            emittedAt: Date.now(),
+            runId: 'run_1',
+            finishedAt: Date.now(),
+            durationMs: 100,
+            result: {
+              content: 'Top developments\n- Item 1',
+              toolCalls: [],
+            },
+          };
+        })(),
+      };
+    };
+
+    const mockStdin = createStdinDouble({
+      isTTY: true,
+      isRaw: false,
+      setRawMode: mock(() => {}),
+    });
+    const mockStdout = createStdoutDouble({
+      isTTY: true,
+      columns: 120,
+      rows: 40,
+    });
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    try {
+      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+
+      const deadline = Date.now() + 2000;
+      while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
+
+      const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
+      const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);
+      expect(typeof events?.onSubmit).toBe('function');
+      if (!events?.onSubmit) {
+        throw new Error('onSubmit callback not provided to createFredTuiApp');
+      }
+
+      events.onSubmit('what did trump say today');
+      await Bun.sleep(40);
+
+      expect(mockApp.pushToolCall).toHaveBeenCalledTimes(1);
+      expect(mockApp.pushToolResult).toHaveBeenCalledTimes(1);
+      const rendered = ((mockApp.pushAssistantToken as any).mock.calls as Array<Array<unknown>>)
+        .map((call) => String(call[0] ?? ''))
+        .join('');
+      expect(rendered).toBe('Top developments\n- Item 1');
+      expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
+
+      void chatPromise;
+    } finally {
+      MockFred.prototype.streamMessage = originalStreamMessage;
+    }
+  });
+
+  test('stream callback surfaces handoffs and nested tool depth', async () => {
+    const originalStreamMessage = MockFred.prototype.streamMessage;
+    (MockFred.prototype as any).streamMessage = function () {
+      return {
+        fullStream: (async function* () {
+          yield { type: 'run-start', runId: 'run_root' };
+          yield {
+            type: 'handoff-start',
+            runId: 'run_root',
+            sequence: 1,
+            emittedAt: Date.now(),
+            fromAgentId: 'concierge',
+            toAgentId: 'research-orchestrator',
+            message: 'research this',
+            handoffDepth: 1,
+          };
+          yield { type: 'run-start', runId: 'run_child' };
+          yield {
+            type: 'tool-call',
+            messageId: 'msg_child',
+            step: 0,
+            toolCallId: 'tool_nested',
+            toolName: 'run_research_swarm',
+            input: { question: 'history' },
+            startedAt: Date.now(),
+          };
+          yield {
+            type: 'tool-result',
+            toolCallId: 'tool_nested',
+            toolName: 'run_research_swarm',
+            output: 'done',
+            completedAt: Date.now(),
+            durationMs: 25,
+          };
+          yield {
+            type: 'run-end',
+            sequence: 5,
+            emittedAt: Date.now(),
+            runId: 'run_child',
+            finishedAt: Date.now(),
+            durationMs: 100,
+            result: { content: 'final', toolCalls: [] },
+          };
+        })(),
+      };
+    };
+
+    const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
+    const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    try {
+      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+
+      const deadline = Date.now() + 2000;
+      while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
+
+      const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
+      const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);
+      if (!events?.onSubmit) {
+        throw new Error('onSubmit callback not provided to createFredTuiApp');
+      }
+
+      events.onSubmit('research this');
+      await Bun.sleep(40);
+
+      expect(mockApp.pushToolCall).toHaveBeenCalledTimes(1);
+      const pushToolCallCalls = (mockApp.pushToolCall as any).mock.calls as Array<Array<unknown>>;
+      expect(pushToolCallCalls[0]?.[0]).toMatchObject({
+        toolName: 'run_research_swarm',
+        depth: 2,
+      });
+
+      void chatPromise;
+    } finally {
+      MockFred.prototype.streamMessage = originalStreamMessage;
+    }
+  });
+
+  test('stream callback splits large visible deltas into smaller display segments', async () => {
+    const originalStreamMessage = MockFred.prototype.streamMessage;
+    (MockFred.prototype as any).streamMessage = function () {
+      return {
+        fullStream: (async function* () {
+          yield {
+            type: 'token',
+            delta: 'Hello world.',
+          };
+          yield {
+            type: 'run-end',
+            sequence: 2,
+            emittedAt: Date.now(),
+            runId: 'run_1',
+            finishedAt: Date.now(),
+            durationMs: 25,
+            result: {
+              content: 'Hello world.',
+              toolCalls: [],
+            },
+          };
+        })(),
+      };
+    };
+
+    const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
+    const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    try {
+      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+
+      const deadline = Date.now() + 2000;
+      while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
+
+      const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
+      const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);
+      if (!events?.onSubmit) {
+        throw new Error('onSubmit callback not provided to createFredTuiApp');
+      }
+
+      events.onSubmit('hello');
+      await Bun.sleep(40);
+
+      expect(mockApp.pushAssistantToken.mock.calls.map((call: any[]) => call[0])).toEqual(['Hello', ' ', 'world', '.']);
+
+      void chatPromise;
+    } finally {
+      MockFred.prototype.streamMessage = originalStreamMessage;
+    }
+  });
+
+  test('handoff tool calls clear narrated transfer text from the transcript', async () => {
+    const originalStreamMessage = MockFred.prototype.streamMessage;
+    (MockFred.prototype as any).streamMessage = function () {
+      return {
+        fullStream: (async function* () {
+          yield { type: 'run-start', runId: 'run_root' };
+          yield { type: 'token', delta: "I've handed off your request to the research orchestrator." };
+          yield {
+            type: 'tool-call',
+            messageId: 'msg_root',
+            step: 0,
+            toolCallId: 'handoff_tool',
+            toolName: 'handoff_to_agent',
+            input: { agentId: 'research-orchestrator' },
+            startedAt: Date.now(),
+          };
+          yield {
+            type: 'tool-result',
+            toolCallId: 'handoff_tool',
+            toolName: 'handoff_to_agent',
+            output: { type: 'handoff', agentId: 'research-orchestrator', message: 'research this' },
+            completedAt: Date.now(),
+            durationMs: 10,
+          };
+          yield {
+            type: 'run-end',
+            sequence: 4,
+            emittedAt: Date.now(),
+            runId: 'run_root',
+            finishedAt: Date.now(),
+            durationMs: 20,
+            result: {
+              content: "I've handed off your request to the research orchestrator.",
+              handoff: { type: 'handoff', agentId: 'research-orchestrator', message: 'research this' },
+            },
+          };
+          yield {
+            type: 'handoff-start',
+            runId: 'run_root',
+            sequence: 5,
+            emittedAt: Date.now(),
+            fromAgentId: 'concierge',
+            toAgentId: 'research-orchestrator',
+            message: 'research this',
+            handoffDepth: 1,
+          };
+          yield { type: 'run-start', runId: 'run_child' };
+          yield { type: 'token', delta: 'Final answer' };
+          yield {
+            type: 'run-end',
+            sequence: 8,
+            emittedAt: Date.now(),
+            runId: 'run_child',
+            finishedAt: Date.now(),
+            durationMs: 40,
+            result: { content: 'Final answer' },
+          };
+        })(),
+      };
+    };
+
+    const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
+    const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
+
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
+    (process as any).exit = mock(() => {});
+
+    try {
+      const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
+      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+
+      const deadline = Date.now() + 2000;
+      while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
+
+      const calls = (mockCreateFredTuiApp as any).mock.calls as Array<Array<unknown>>;
+      const events = (calls[0]?.[0] as { onSubmit?: (text: string) => void } | undefined);
+      if (!events?.onSubmit) {
+        throw new Error('onSubmit callback not provided to createFredTuiApp');
+      }
+
+      events.onSubmit('research this');
+      await Bun.sleep(40);
+
+      expect(mockApp.clearAssistantStreamContent).toHaveBeenCalledTimes(1);
+      expect(mockApp.pushToolCall).not.toHaveBeenCalledWith(expect.objectContaining({ toolName: 'handoff_to_agent' }));
+
+      void chatPromise;
     } finally {
       MockFred.prototype.streamMessage = originalStreamMessage;
     }
