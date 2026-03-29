@@ -1,7 +1,7 @@
 import type { Fred } from '@fancyrobot/fred';
 
 const AGENT_BROWSER = 'agent-browser';
-const DEFAULT_TIMEOUT = 30_000;
+const DEFAULT_TIMEOUT = 60_000;
 let sessionCounter = 0;
 
 function makeSessionName(): string {
@@ -105,19 +105,19 @@ async function fetchPageExtractViaBrowser(
       fred,
       subagent.id,
       ['open', url],
-      { timeout: 20_000 },
+      { timeout: 30_000 },
     );
     await runAgentBrowser(
       fred,
       subagent.id,
       ['wait', '--load', 'networkidle'],
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
     const text = await runAgentBrowser(
       fred,
       subagent.id,
       ['get', 'text', 'body'],
-      { timeout: 10_000 },
+      { timeout: 15_000 },
     );
     const cleaned = stripContentBoundaries(text);
     return cleaned ? cleaned.slice(0, maxChars) : undefined;
@@ -137,8 +137,8 @@ export async function runBrowserResearch(
     readTopResults?: number;
   },
 ): Promise<string> {
-  const maxResults = Math.max(1, options.maxResults ?? 5);
-  const readTopResults = Math.max(0, Math.min(maxResults, options.readTopResults ?? 3));
+  const maxResults = Math.max(1, options.maxResults ?? 3);
+  const readTopResults = Math.max(0, Math.min(maxResults, options.readTopResults ?? 1));
   const session = makeSessionName();
   const subagent = await fred.subagents.spawn({
     name: `agent-browser:${session}`,
@@ -160,12 +160,12 @@ export async function runBrowserResearch(
   });
 
   try {
-    await runAgentBrowser(fred, subagent.id, ['open', options.searchUrl]);
+    await runAgentBrowser(fred, subagent.id, ['open', options.searchUrl], { timeout: 30_000 });
     await runAgentBrowser(
       fred,
       subagent.id,
       ['wait', '--load', 'networkidle'],
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
 
     const snapshot = await runAgentBrowser(fred, subagent.id, ['get', 'text', 'body']);

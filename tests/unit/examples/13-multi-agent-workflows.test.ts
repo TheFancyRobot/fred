@@ -7,8 +7,10 @@ import '@fancyrobot/fred-openrouter';
 import { extractDuckDuckGoResults } from '../../../examples/13-multi-agent-workflows/src/browser-research';
 import { appendNotebookEntry, queryNotebook } from '../../../examples/13-multi-agent-workflows/src/notes';
 import {
+  extractResearchAngles,
   normalizeOptionalLimit,
   normalizeReadTopResults,
+  planResearchExecution,
   runDeterministicSmokeChecks,
   setupExample,
 } from '../../../examples/13-multi-agent-workflows/src/runtime';
@@ -67,6 +69,41 @@ describe('example 13 helpers', () => {
     expect(normalizeReadTopResults('2')).toBe(2);
   });
 
+  test('extractResearchAngles parses compact bullet lists for parallel track fan-out', () => {
+    expect(extractResearchAngles([
+      '- map the cartel timeline from the 1970s onward',
+      '- identify the state and federal power vacuums that enabled expansion',
+      '- trace how trafficking routes shifted after major crackdowns',
+      '- map the cartel timeline from the 1970s onward',
+    ].join('\n'), 10)).toEqual([
+      'map the cartel timeline from the 1970s onward',
+      'identify the state and federal power vacuums that enabled expansion',
+      'trace how trafficking routes shifted after major crackdowns',
+    ]);
+  });
+
+  test('planResearchExecution trims background requests to the essential track', () => {
+    expect(
+      planResearchExecution('research the fall of rome and wrote a 500 word essay on your findings')
+    ).toEqual({
+      mode: 'background',
+      includeMarketTrack: false,
+      includeRiskTrack: false,
+      browserReadTopResults: 1,
+    });
+  });
+
+  test('planResearchExecution keeps decision tracks for comparisons', () => {
+    expect(
+      planResearchExecution('Research whether a carry-on backpack or rolling suitcase is better for a 3-day city trip')
+    ).toEqual({
+      mode: 'decision',
+      includeMarketTrack: true,
+      includeRiskTrack: true,
+      browserReadTopResults: 2,
+    });
+  });
+
   test('extractDuckDuckGoResults parses titles, urls, and snippets', () => {
     const html = `
       <div class="result results_links web-result">
@@ -104,7 +141,7 @@ describe('example 13 helpers', () => {
         expect(fred.getAgent('news-briefer')).toBeDefined();
         expect(fred.getAgent('daily-brief-agent')).toBeDefined();
         expect(await fred.getGlobalVariable('current_date')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        expect(fred.getAgent('official-researcher')?.config.tools).toContain('agent_browser_research');
+        expect(fred.getAgent('web-researcher')?.config.tools).toContain('agent_browser_research');
         expect(fred.getAgent('market-researcher')?.config.tools).toContain('agent_browser_research');
         expect(fred.getAgent('risk-analyst')?.config.tools).toContain('agent_browser_research');
       } finally {
@@ -124,6 +161,29 @@ describe('example 13 helpers', () => {
 
         const route = await fred.routeMessage(
           'What dog breeds are good for apartment living and first-time owners?'
+        );
+
+        expect(route.type).toBe('agent');
+        if (route.type === 'agent') {
+          expect(route.agentId).toBe('research-orchestrator');
+        }
+      } finally {
+        await fred.shutdown();
+      }
+    });
+  });
+
+  test('routes research essay prompts directly to research-orchestrator', async () => {
+    await withTempDir(async (dir) => {
+      const fred = await Fred.create();
+
+      try {
+        const notebookPath = path.join(dir, 'notebook.md');
+        const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
+        await setupExample(fred, { notebookPath, configPath });
+
+        const route = await fred.routeMessage(
+          'research the fall of rome and wrote a 500 word essay on your findings'
         );
 
         expect(route.type).toBe('agent');

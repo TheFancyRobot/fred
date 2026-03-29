@@ -78,6 +78,9 @@ import {
   buildSystemNoticeRenderable,
   sanitizeForTerminalDisplay,
   DEFAULT_LAYOUT,
+  normalizeToolBlockDepths,
+  isLastToolBlockSibling,
+  buildToolBlockTreePrefix,
   type InputPlaceholder,
 } from './layout.js';
 import { DEFAULT_TUI_THEME, getMarkdownSyntaxTheme } from './theme.js';
@@ -1932,19 +1935,23 @@ export class FredTuiApp {
         continue;
       }
 
-      const toolBlocks = sortToolBlocksByParent(getToolBlocksForMessage(this.state, messageIndex));
-      for (let blockIndex = 0; blockIndex < toolBlocks.length; blockIndex += 1) {
+      const rawBlocks = getToolBlocksForMessage(this.state, messageIndex);
+      const sortedBlocks = sortToolBlocksByParent(rawBlocks);
+      const normalizedBlocks = normalizeToolBlockDepths(sortedBlocks);
+      for (let blockIndex = 0; blockIndex < normalizedBlocks.length; blockIndex += 1) {
         const summaryId = `tool-summary-msg-${messageIndex}-${blockIndex}`;
         const summaryEl = this.transcriptContent.findDescendantById(summaryId);
         if (!(summaryEl instanceof TextRenderable)) {
           continue;
         }
 
+        const treePrefix = buildToolBlockTreePrefix(normalizedBlocks, blockIndex);
         const presentation = getToolBlockSummaryPresentation(
-          toolBlocks[blockIndex],
-          blockIndex === toolBlocks.length - 1,
+          normalizedBlocks[blockIndex],
+          isLastToolBlockSibling(normalizedBlocks, blockIndex),
           nowMs,
           theme,
+          treePrefix,
         );
         // Truncate with ellipsis when content overflows the clip box.
         // The clip box uses overflow:hidden for responsive clipping, but we
@@ -2090,7 +2097,7 @@ export class FredTuiApp {
       const hasAssistantText = msg.role === 'assistant' && msg.content.trim().length > 0;
 
       if (msg.role === 'user') {
-        const showSpinner = isLastMessage && this.state.streaming.waitingForFirstToken;
+        const showSpinner = isLastMessage && this.state.streaming.waitingForFirstToken && !hasInProgressToolBlocks(this.state);
         const userRenderable = buildUserMessageRenderable(
           r, theme, msg.content, msgId,
           showSpinner ? { spinner: true, nowMs } : undefined,
