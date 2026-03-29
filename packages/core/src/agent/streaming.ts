@@ -183,7 +183,8 @@ const processStreamPart = (
   state: StreamState,
   runId: string,
   threadId: string | undefined,
-  messageId: string
+  messageId: string,
+  agentId?: string,
 ): { event: StreamEvent | null; newState: StreamState } => {
   const emittedAt = Date.now();
 
@@ -241,6 +242,7 @@ const processStreamPart = (
       toolName: part.name,
       input: part.params as Record<string, unknown>,
       startedAt,
+      ...(agentId ? { originAgentId: agentId } : {}),
     };
     const newToolStarts = new Map(state.toolStarts);
     newToolStarts.set(part.id, { toolName: part.name, startedAt });
@@ -363,7 +365,7 @@ const streamSingleStep = (
       const eventStream = pipe(
         modelStream,
         Stream.map((part) => {
-          const { event, newState } = processStreamPart(part, state, runId, threadId, messageId);
+          const { event, newState } = processStreamPart(part, state, runId, threadId, messageId, agentId);
           state = newState;
           return event;
         }),
@@ -434,9 +436,10 @@ export const streamMultiStep = (
     runId: string;
     threadId?: string;
     messageId: string;
+    agentId?: string;
   }
 ): Stream.Stream<StreamEvent, Error, any> => {
-  const { runId, threadId, messageId } = options;
+  const { runId, threadId, messageId, agentId } = options;
   const messages = normalizeMessages(initialMessages);
 
   // Track tool calls and results per step
@@ -513,7 +516,7 @@ export const streamMultiStep = (
               stepToolInfo.toolResults.set(typedPart.id!, typedPart.result);
             }
 
-            const { event, newState } = processStreamPart(part, state, runId, threadId, messageId);
+            const { event, newState } = processStreamPart(part, state, runId, threadId, messageId, agentId);
             state = newState;
             return event;
           }),

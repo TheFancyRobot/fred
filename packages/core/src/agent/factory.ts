@@ -1328,6 +1328,7 @@ export class AgentFactory {
               runId,
               threadId,
               messageId,
+              agentId: config.id,
             }
           );
 
