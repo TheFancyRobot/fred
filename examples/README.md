@@ -51,6 +51,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 | 10 | [Config-Driven YAML](./10-config-driven-yaml/) | Compare declarative `config.yaml` setup with equivalent programmatic Fred API wiring |
 | 11 | [MCP Integration](./11-mcp-integration/) | Connect MCP servers, auto-discover MCP tools, and handle disconnected server states safely |
 | 12 | [CLI & TUI](./12-cli-and-tui/) | Use `fred chat` and `fred run` for interactive and headless config-driven workflows |
+| 13 | [Multi-Agent Workflows](./13-multi-agent-workflows/) | Combine a concierge, research swarm, notebook memory, and daily brief workflows for everyday tasks |
 
 ## Fred's Unique Capabilities Highlighted
 
@@ -58,6 +59,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 - **Pipeline checkpoint/resume (Example 05):** Built-in pause/resume orchestration for human-in-the-loop workflows.
 - **22-hook middleware lifecycle (Example 07):** Fine-grained interception points across routing, tool calls, context, and pipelines.
 - **Golden-trace evaluation (Example 09):** First-class local assertions against recorded traces without requiring external SaaS.
+- **Coordinator + worker orchestration (Example 13):** Parallel sub-agent research, notebook memory, and reusable daily brief flows in one workspace.
 
 ## ETA Template Coverage
 

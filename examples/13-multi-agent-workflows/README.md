@@ -21,7 +21,7 @@ The design follows a few reliable multi-agent patterns:
 For the research swarm, the work is intentionally split into:
 
 1. `research-planner` - turns the request into focused sub-questions
-2. `official-researcher` - looks for source-of-record style evidence
+2. `web-researcher` - looks for source-of-record style evidence via live web research
 3. `market-researcher` - looks for practical comparisons and user-facing tradeoffs
 4. `risk-analyst` - looks for caveats, failure modes, and blind spots
 5. `research-synthesizer` - merges the findings into one report

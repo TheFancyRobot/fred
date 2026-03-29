@@ -3,6 +3,8 @@ type ProgressSink = {
     toolCallId: string;
     toolName: string;
     input?: Record<string, unknown>;
+    originAgentId?: string;
+    parentToolCallId?: string;
     startedAt?: number;
     kind?: 'tool' | 'task';
     depth?: number;
@@ -34,6 +36,8 @@ export function emitTuiProgressStart(event: {
   toolCallId: string;
   toolName: string;
   input?: Record<string, unknown>;
+  originAgentId?: string;
+  parentToolCallId?: string;
   depth?: number;
   kind?: 'tool' | 'task';
 }): void {
@@ -71,6 +75,7 @@ export function emitTuiTaskStart(event: {
   toolName: string;
   input?: Record<string, unknown>;
   depth?: number;
+  parentToolCallId?: string;
 }): void {
   emitTuiProgressStart({
     ...event,

@@ -14,6 +14,7 @@ Priorities:
 
 - Use `agent_browser_research` for performance, pricing, product, market, or date-range questions that could have changed over time.
 - Search before concluding the user asked for impossible or unavailable information.
+- Prefer one strong search pass for a simple comparison. Only refine if pricing, availability, or product details are still unclear.
 - If the requested period ends before `<%= vars.current_date %>`, treat it as a historical range and summarize what actually happened in that period.
 - Focus on everyday-user usefulness, not abstract theory.
 - Compare realistic options, not every possible option.

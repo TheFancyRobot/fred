@@ -16,6 +16,7 @@ const EXPECTED_EXAMPLES = [
   '10-config-driven-yaml',
   '11-mcp-integration',
   '12-cli-and-tui',
+  '13-multi-agent-workflows',
 ] as const;
 
 const examplesDir = path.resolve(__dirname, '../../../examples');
@@ -149,7 +150,7 @@ describe('examples-guard', () => {
       throw new Error(`TypeScript compile failures:${report}`);
     }
   },
-    // Each tsc invocation takes ~2s; 12 examples ≈ 24s
+    // Each tsc invocation takes ~2s; 13 examples ≈ 26s
     60_000,
   );
 });
