@@ -5,7 +5,7 @@ import type { AnyPipelineConfig } from './pipeline/pipeline';
 import { isPipelineConfigV2 } from './pipeline/pipeline';
 import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
-import { executeGraphWorkflow as executeGraphWorkflowImpl } from './pipeline/graph-executor';
+import { executeGraphWorkflow as executeGraphWorkflowImpl, executeGraphWorkflowEffect } from './pipeline/graph-executor';
 import type { AgentManagerLike, HookManagerLike } from './pipeline/executor';
 import type { ResumeResult } from './pipeline/resume';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
@@ -910,12 +910,39 @@ export class Fred {
       })
     ).catch(() => undefined);
 
-    return executeGraphWorkflowImpl(config, input, {
+    const graphOptions = {
       agentManager,
       hookManager,
       tracer: this.tracer,
       ...options,
-    });
+    };
+
+    // Use the Effect-native path with the Fred runtime instead of the deprecated
+    // function which uses Effect.runCallback without a runtime, causing hangs
+    // when graph nodes call back into Runtime.runPromise.
+    const exit = await Runtime.runPromise(runtime)(
+      Effect.exit(executeGraphWorkflowEffect(config, input, graphOptions))
+    );
+
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+
+    // Mirror the deprecated function's error-to-result conversion
+    const error = Cause.squash(exit.cause);
+    return {
+      success: false,
+      context: {
+        pipelineId: config.id,
+        input,
+        outputs: {},
+        history: [],
+        metadata: {},
+      },
+      outputs: {},
+      executedNodes: [],
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
   }
 
   async executePipeline(

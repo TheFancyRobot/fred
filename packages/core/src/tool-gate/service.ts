@@ -292,6 +292,24 @@ class ToolGateServiceImpl implements ToolGateServiceApi {
     const self = this;
     return Effect.gen(function* () {
       const policies = yield* Ref.get(self.policiesRef);
+
+      if (!policies) {
+        const decision: ToolGateDecision = {
+          toolId: tool.id,
+          allowed: true,
+          requireApproval: false,
+          matchedRules: [],
+        };
+
+        if (self.hookManager) {
+          yield* self.emitAuditEvent(decision, context).pipe(
+            Effect.catchAll(() => Effect.succeed(undefined))
+          );
+        }
+
+        return decision;
+      }
+
       const scopedRules = collectScopedRules(policies, context);
       const matchedRules = collectRuleEvaluations(tool, scopedRules);
 

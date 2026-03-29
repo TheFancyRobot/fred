@@ -303,9 +303,10 @@ class SubagentServiceImpl implements SubagentService {
 
       const cleanupArgs = record.destroyConfig?.cleanupArgs ?? [];
       if (cleanupArgs.length > 0) {
-        const cleanupChild = yield* self.spawnChild(record, cleanupArgs, undefined);
+        const cleanupCommandArgs = [...record.args, ...cleanupArgs];
+        const cleanupChild = yield* self.spawnChild(record, cleanupCommandArgs, undefined);
         const cleanupController = createManagedProcessController(cleanupChild);
-        const cleanupCommand = formatCommand(record.command, [...record.args, ...cleanupArgs]);
+        const cleanupCommand = formatCommand(record.command, cleanupCommandArgs);
         const cleanupResult = yield* Effect.either(
           Effect.acquireUseRelease(
             Effect.succeed(cleanupChild),
