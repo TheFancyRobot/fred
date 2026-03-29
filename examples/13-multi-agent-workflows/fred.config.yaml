@@ -40,6 +40,7 @@ routing:
     - id: research-requests
       agent: research-orchestrator
       patterns:
+        - '\bresearch .+\b'
         - '\bresearch this for me\b'
         - '\bresearch whether\b'
         - '\bcompare these options\b'
@@ -52,6 +53,7 @@ routing:
         - '\bhelp me investigate\b'
         - '\bgive me a recommendation\b'
         - '\bwhat is the best option\b'
+        - '\b(?:write|wrote|draft) .*\b(?:essay|report|summary|analysis)\b'
         - '\bwrite .* essay on .* from .* to .*\b'
         - '\bwrite .* report on .* from .* to .*\b'
         - '\bperformance of .* from .* to .*\b'
