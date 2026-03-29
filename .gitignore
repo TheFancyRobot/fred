@@ -102,3 +102,6 @@ Desktop.ini
 /fred.db
 /fred.db-shm
 /fred.db-wal
+
+# Example runtime data
+examples/*/data/notebook.md
