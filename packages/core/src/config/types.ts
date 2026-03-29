@@ -106,12 +106,20 @@ export interface MCPGlobalServerConfig {
   args?: string[];
   /** Environment variables for subprocess (stdio transport only) */
   env?: Record<string, string>;
+  /** Allowlisted executables for stdio transport */
+  allowedCommands?: string[];
+  /** Allowlisted inherited environment variables for stdio transport */
+  envAllowlist?: string[];
 
   // http/sse transport fields
   /** Server URL (http/sse transport only) */
   url?: string;
   /** HTTP headers (http/sse transport only) */
   headers?: Record<string, string>;
+  /** Allowlisted hosts for http/sse transport */
+  allowedHosts?: string[];
+  /** Allowlisted URL schemes for http/sse transport */
+  allowedSchemes?: string[];
 
   // Common configuration
   /** Connection timeout in milliseconds (default: 30000) */

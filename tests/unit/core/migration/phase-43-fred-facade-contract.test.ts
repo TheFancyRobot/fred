@@ -148,7 +148,7 @@ describe('Consumer compatibility contracts', () => {
     const id = fred.generateConversationId();
 
     expect(typeof id).toBe('string');
-    expect(id).toMatch(/^conv_\d+_[a-z0-9]+$/);
+    expect(id).toMatch(/^conv_[0-9a-f-]{36}$/);
   });
 
   test('setDefaultPolicy stores policy pre-runtime for replay', () => {

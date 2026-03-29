@@ -82,6 +82,35 @@ describe('SubagentService', () => {
     }
   });
 
+  test('execute does not leak the full parent environment to subagents', async () => {
+    const fred = await Fred.create();
+    const originalSecret = process.env.TEST_SUBAGENT_SECRET;
+    process.env.TEST_SUBAGENT_SECRET = 'top-secret-value';
+
+    try {
+      const subagent = await fred.subagents.spawn({
+        name: 'env-subagent',
+        command: process.execPath,
+      });
+
+      const result = await fred.subagents.execute(subagent.id, {
+        args: [
+          '-e',
+          'process.stdout.write(JSON.stringify({ leaked: process.env.TEST_SUBAGENT_SECRET ?? null, hasPath: typeof process.env.PATH === "string" }))',
+        ],
+      });
+
+      expect(JSON.parse(result.stdout)).toEqual({ leaked: null, hasPath: true });
+    } finally {
+      if (originalSecret === undefined) {
+        delete process.env.TEST_SUBAGENT_SECRET;
+      } else {
+        process.env.TEST_SUBAGENT_SECRET = originalSecret;
+      }
+      await fred.shutdown();
+    }
+  });
+
   test('destroy terminates a running subagent process', async () => {
     const fred = await Fred.create();
 

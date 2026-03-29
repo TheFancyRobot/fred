@@ -184,7 +184,7 @@ class ContextStorageServiceImpl implements ContextStorageService {
   ) {}
 
   generateConversationId(): Effect.Effect<string> {
-    return Effect.succeed(`conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    return Effect.sync(() => `conv_${crypto.randomUUID()}`);
   }
 
   getContext(

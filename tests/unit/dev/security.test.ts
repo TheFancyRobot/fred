@@ -4,6 +4,7 @@ import { checkAuth, matchOrigin, type ServerSecurityConfig } from '../../../pack
 const baseConfig = (overrides: Partial<ServerSecurityConfig> = {}): ServerSecurityConfig => ({
   requireAuth: true,
   authToken: 'test-token',
+  allowLocalRequestsWithoutAuth: false,
   corsAllowedOrigins: ['http://localhost:*', 'http://127.0.0.1:*', 'http://example.com'],
   maxRequestBodySize: 1_048_576,
   requestTimeoutSeconds: 30,
@@ -13,9 +14,9 @@ const baseConfig = (overrides: Partial<ServerSecurityConfig> = {}): ServerSecuri
 });
 
 describe('checkAuth', () => {
-  it('allows local requests without auth header', () => {
+  it('rejects local requests without auth header by default', () => {
     const result = checkAuth('127.0.0.1', null, baseConfig());
-    expect(result).toEqual({ allowed: true });
+    expect(result).toEqual({ allowed: false, status: 401 });
   });
 
   it('rejects non-local requests without auth header', () => {
@@ -30,6 +31,15 @@ describe('checkAuth', () => {
 
   it('allows non-local requests with matching bearer token', () => {
     const result = checkAuth('10.0.0.1', 'Bearer test-token', baseConfig());
+    expect(result).toEqual({ allowed: true });
+  });
+
+  it('allows local requests without auth when explicitly enabled', () => {
+    const result = checkAuth(
+      '127.0.0.1',
+      null,
+      baseConfig({ allowLocalRequestsWithoutAuth: true })
+    );
     expect(result).toEqual({ allowed: true });
   });
 

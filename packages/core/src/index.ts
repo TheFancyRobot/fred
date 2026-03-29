@@ -369,9 +369,10 @@ export class Fred {
     }
     // Extract the original error from the Cause for the wrapper
     const failure = Cause.failureOption(exit.cause);
+    const defects = Array.from(Cause.defects(exit.cause));
     const cause = failure._tag === 'Some'
       ? failure.value
-      : Cause.defects(exit.cause)[0] ?? exit.cause;
+      : defects[0] ?? exit.cause;
     throw new Error(errorMessage, { cause });
   }
 
@@ -1254,7 +1255,7 @@ export class Fred {
 
   generateConversationId(): string {
     if (!this.runtime) {
-      return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      return `conv_${crypto.randomUUID()}`;
     }
     return Runtime.runSync(this.runtime)(
       Effect.gen(function* () {

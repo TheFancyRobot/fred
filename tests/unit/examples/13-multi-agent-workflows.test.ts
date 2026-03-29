@@ -44,6 +44,27 @@ describe('example 13 helpers', () => {
     });
   });
 
+  test('queryNotebook matches multi-word queries by token overlap', async () => {
+    await withTempDir(async (dir) => {
+      const notebookPath = path.join(dir, 'notebook.md');
+
+      await appendNotebookEntry(notebookPath, {
+        title: 'Travel preference',
+        content: 'Prefer aisle seats and morning flights.',
+        tags: ['travel'],
+        timestamp: new Date('2026-03-06T12:00:00.000Z'),
+      });
+
+      const result = await queryNotebook(notebookPath, {
+        query: 'travel preferences seat flight timing',
+        limit: 1,
+      });
+
+      expect(result).toContain('Travel preference');
+      expect(result).toContain('Prefer aisle seats and morning flights.');
+    });
+  });
+
   test('runDeterministicSmokeChecks returns notebook and news previews', async () => {
     await withTempDir(async (dir) => {
       const notebookPath = path.join(dir, 'notebook.md');

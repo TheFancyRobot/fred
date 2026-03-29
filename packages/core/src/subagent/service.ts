@@ -13,6 +13,24 @@ import { getCurrentSubagentExecutionContext } from './context';
 const DEFAULT_OUTPUT_PREVIEW_CHARS = 4000;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 30_000;
 const DEFAULT_TERMINATION_GRACE_MS = 2_000;
+const DEFAULT_SUBAGENT_ENV_ALLOWLIST = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'NODE_ENV',
+  'LANG',
+  'TERM',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'SystemRoot',
+  'ComSpec',
+  'PATHEXT',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'USERPROFILE',
+] as const;
 
 export type SubagentStatus = 'idle' | 'running' | 'failed' | 'destroyed';
 
@@ -385,7 +403,7 @@ class SubagentServiceImpl implements SubagentService {
       try: () => {
         const child = spawn(record.command, [...args], {
           cwd: record.cwd,
-          env: record.env ? { ...process.env, ...record.env } : process.env,
+          env: buildSubagentEnv(record.env),
           stdio: ['pipe', 'pipe', 'pipe'],
           detached: process.platform !== 'win32',
         });
@@ -470,6 +488,22 @@ class SubagentServiceImpl implements SubagentService {
       };
     });
   }
+}
+
+function buildSubagentEnv(explicitEnv?: Record<string, string>): Record<string, string> {
+  const filtered: Record<string, string> = {};
+
+  for (const key of DEFAULT_SUBAGENT_ENV_ALLOWLIST) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      filtered[key] = value;
+    }
+  }
+
+  return {
+    ...filtered,
+    ...explicitEnv,
+  };
 }
 
 function resolveExecutionTimeout(options: ExecuteSubagentOptions): number {

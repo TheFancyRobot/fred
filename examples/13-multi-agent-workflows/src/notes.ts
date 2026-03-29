@@ -88,9 +88,21 @@ export async function queryNotebook(
   const fallbackLimit = sections.length > 0 ? sections.length : 1;
   const limit = Math.max(1, Math.min(options.limit ?? fallbackLimit, 20));
   const query = options.query?.trim().toLowerCase();
+  const queryTokens = query
+    ? Array.from(new Set(query.split(/[^a-z0-9]+/g).filter((token) => token.length >= 4)))
+    : [];
+  const requiredTokenMatches = queryTokens.length > 1 ? 2 : 1;
 
   const matchingSections = query
-    ? sections.filter((section) => section.toLowerCase().includes(query))
+    ? sections.filter((section) => {
+      const normalized = section.toLowerCase();
+      if (normalized.includes(query)) {
+        return true;
+      }
+
+      const tokenMatches = queryTokens.filter((token) => normalized.includes(token)).length;
+      return tokenMatches >= Math.min(requiredTokenMatches, queryTokens.length);
+    })
     : sections;
 
   const selected = matchingSections.slice(-limit);

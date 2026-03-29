@@ -882,8 +882,12 @@ export function extractMCPServers(
       command: serverConfig.command,
       args: serverConfig.args,
       env: resolvedEnv,
+      allowedCommands: serverConfig.allowedCommands,
+      envAllowlist: serverConfig.envAllowlist,
       url: resolvedUrl,
       headers: resolvedHeaders,
+      allowedHosts: serverConfig.allowedHosts,
+      allowedSchemes: serverConfig.allowedSchemes,
       timeout: serverConfig.timeout ?? 30000, // default 30s
       enabled: serverConfig.enabled ?? true, // default enabled
       lazy: serverConfig.lazy ?? false, // default auto-start

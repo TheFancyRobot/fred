@@ -141,6 +141,45 @@ function appendUsage(
   total.totalTokens += stepUsage?.totalTokens ?? 0;
 }
 
+function extractToolResultText(result: unknown): string {
+  if (typeof result === 'string') {
+    return result.trim();
+  }
+
+  if (result && typeof result === 'object') {
+    for (const key of ['content', 'text', 'message', 'summary', 'brief', 'digest', 'finalReport']) {
+      const value = (result as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+  }
+
+  if (result === undefined || result === null) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
+  }
+}
+
+function synthesizeToolOnlyContent(toolCalls: NonNullable<AgentResponse['toolCalls']>): string {
+  return toolCalls
+    .map((toolCall) => {
+      if (toolCall.error?.message) {
+        return toolCall.error.message.trim();
+      }
+
+      return extractToolResultText(toolCall.result);
+    })
+    .filter((value) => value.length > 0)
+    .join('\n\n')
+    .trim();
+}
+
 function buildNextStepMessages(
   currentMessages: Prompt.MessageEncoded[],
   stepText: string,
@@ -1218,8 +1257,10 @@ export class AgentFactory {
             };
           }
 
+          const finalContent = content.trim().length > 0 ? content : synthesizeToolOnlyContent(allToolCalls);
+
           return {
-            content,
+            content: finalContent,
             toolCalls: allToolCalls,
             usage,
           };

@@ -1,6 +1,7 @@
 export interface ServerSecurityConfig {
   requireAuth: boolean;
   authToken?: string;
+  allowLocalRequestsWithoutAuth: boolean;
   corsAllowedOrigins: string[];
   maxRequestBodySize: number;
   requestTimeoutSeconds: number;
@@ -10,6 +11,7 @@ export interface ServerSecurityConfig {
 
 export const DEFAULT_SECURITY_CONFIG: ServerSecurityConfig = {
   requireAuth: true,
+  allowLocalRequestsWithoutAuth: false,
   corsAllowedOrigins: ['http://localhost:*', 'http://127.0.0.1:*'],
   maxRequestBodySize: 1_048_576,
   requestTimeoutSeconds: 30,
@@ -46,7 +48,7 @@ export function checkAuth(
   authHeader: string | null,
   config: ServerSecurityConfig
 ): { allowed: boolean; status?: number } {
-  if (!config.requireAuth || isLocalRequest(ip)) {
+  if (!config.requireAuth || (config.allowLocalRequestsWithoutAuth && isLocalRequest(ip))) {
     return { allowed: true };
   }
 

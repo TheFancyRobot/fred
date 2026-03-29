@@ -430,6 +430,67 @@ describe('AgentFactory', () => {
       generateSpy.mockRestore();
     });
 
+    test('processMessage falls back to tool result text when the final model step is empty', async () => {
+      toolRegistry.registerTool({
+        id: 'fetch_latest_news',
+        name: 'Fetch Latest News',
+        description: 'Fetches recent news',
+        execute: async () => 'Latest news (last 24 hours):\n- Transit workers reach agreement',
+      } as any);
+
+      let callCount = 0;
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation((options: any) => {
+        callCount += 1;
+
+        if (callCount === 1) {
+          expect(options.toolChoice).toBe('required');
+          return Effect.succeed({
+            text: '',
+            toolCalls: [{ id: 'call_1', name: 'fetch_latest_news', params: { topic: 'general' } }],
+            toolResults: [{ id: 'call_1', result: 'Latest news (last 24 hours):\n- Transit workers reach agreement', isFailure: false }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          } as any) as any;
+        }
+
+        return Effect.succeed({
+          text: '',
+          toolCalls: [],
+          toolResults: [],
+          usage: { inputTokens: 8, outputTokens: 0, totalTokens: 8 },
+        } as any) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent({
+        id: 'tool-only-agent',
+        systemMessage: 'Use tools when needed.',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['fetch_latest_news'],
+        toolChoice: 'required',
+      }, testProvider as any));
+
+      const response = await Effect.runPromise(agent.processMessage('What happened in the news?', []));
+
+      expect(callCount).toBe(2);
+      expect(response.content).toBe('Latest news (last 24 hours):\n- Transit workers reach agreement');
+      expect(response.toolCalls).toEqual([
+        {
+          toolId: 'fetch_latest_news',
+          args: { topic: 'general' },
+          result: 'Latest news (last 24 hours):\n- Transit workers reach agreement',
+          metadata: undefined,
+          error: undefined,
+        },
+      ]);
+
+      generateSpy.mockRestore();
+    });
+
     test('should create agent with temperature configuration', async () => {
       const config: AgentConfig = {
         id: 'temp-agent',

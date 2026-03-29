@@ -23,6 +23,7 @@ export class ServerApp {
   private server: any;
   private securityConfig: ServerSecurityConfig;
   private rateLimiter: RateLimiter;
+  private generatedAuthToken = false;
 
   constructor(framework: Fred, securityConfig?: Partial<ServerSecurityConfig>) {
     this.framework = framework;
@@ -31,6 +32,14 @@ export class ServerApp {
       ...DEFAULT_SECURITY_CONFIG,
       ...securityConfig,
     };
+    if (
+      this.securityConfig.requireAuth &&
+      !this.securityConfig.authToken &&
+      !process.env.FRED_DEV_SERVER_TOKEN
+    ) {
+      this.securityConfig.authToken = crypto.randomUUID();
+      this.generatedAuthToken = true;
+    }
     this.rateLimiter = new RateLimiter(
       this.securityConfig.rateLimitMaxRequests,
       this.securityConfig.rateLimitWindowMs
@@ -130,6 +139,9 @@ export class ServerApp {
 
     const displayHost = hostname === '0.0.0.0' ? 'localhost' : hostname;
     console.log(`Server running on http://${displayHost}:${port}`);
+    if (this.generatedAuthToken && this.securityConfig.authToken) {
+      console.log(`Dev server auth token: ${this.securityConfig.authToken}`);
+    }
   }
 
   /**

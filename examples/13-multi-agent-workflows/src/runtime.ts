@@ -603,17 +603,13 @@ function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['bui
     .build();
 }
 
-function buildDailyBriefWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['build']> {
+function buildDailyBriefWorkflow(fred: Fred, notebookPath: string): ReturnType<GraphWorkflowBuilder['build']> {
   return new GraphWorkflowBuilder('daily-brief')
     .addForkNode('collectBriefInputs', ['noteSnapshot', 'newsSnapshot'])
     .addNode('noteSnapshot', {
       type: 'function',
       fn: async () => ({
-        noteSummary: await runAgentPrompt(
-          fred,
-          'note-taker',
-          'Read the saved notebook and summarize the most relevant reminders, preferences, and open loops for a daily brief.',
-        ),
+        noteSummary: await queryNotebook(notebookPath, { limit: 5 }),
       }),
     })
     .addNode('newsSnapshot', {
@@ -923,7 +919,7 @@ export async function setupExample(
   await fred.initializeFromConfig(configPath);
 
   fred.registerGraphWorkflow(buildResearchWorkflow(fred));
-  fred.registerGraphWorkflow(buildDailyBriefWorkflow(fred));
+  fred.registerGraphWorkflow(buildDailyBriefWorkflow(fred, notebookPath));
 
   return {
     notebookPath,

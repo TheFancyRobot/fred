@@ -150,7 +150,9 @@ describe('examples-guard', () => {
       throw new Error(`TypeScript compile failures:${report}`);
     }
   },
-    // Each tsc invocation takes ~2s; 13 examples ≈ 26s
-    60_000,
+    // Each tsc invocation takes ~2s alone, but can exceed a minute when the
+    // full suite is competing for CPU. Keep this guard generous so plain
+    // `bun test` remains reliable.
+    180_000,
   );
 });

@@ -31,14 +31,14 @@
     "@fancyrobot/fred-groq": "workspace:^",
     "@fancyrobot/fred-openai": "workspace:^",
     "@fancyrobot/fred-openrouter": "workspace:^",
-    "@opentui/core": "^0.1.77",
+    "@opentui/core": "^0.1.92",
     "semver": "^7.7.4"
   },
   "peerDependencies": {
-    "effect": "^3.19.0"
+    "effect": "^3.21.0"
   },
   "devDependencies": {
-    "effect": "^3.19.15",
+    "effect": "^3.21.0",
     "@types/bun": "latest"
   },
   "publishConfig": {

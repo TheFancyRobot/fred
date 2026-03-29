@@ -10,6 +10,6 @@
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-openrouter": "workspace:*",
-    "effect": "workspace:*"
+    "effect": "^3.21.0"
   }
 }
