@@ -91,6 +91,7 @@ Desktop.ini
 
 # Planning documents (local only)
 /.planning/
+/.agent-vault/
 
 # Claude
 /.claude/

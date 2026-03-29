@@ -39,20 +39,20 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 
 ### Imperative Class Removal
 
-- [ ] **RMVL-01**: `tool/registry.ts` (ToolRegistry class) is deleted
-- [ ] **RMVL-02**: `agent/manager.ts` (AgentManager class) is deleted
-- [ ] **RMVL-03**: `pipeline/manager.ts` (PipelineManager class) is deleted
-- [ ] **RMVL-04**: `context/manager.ts` (ContextManager class) is deleted
-- [ ] **RMVL-05**: `hooks/manager.ts` (HookManager class) is deleted
-- [ ] **RMVL-06**: `platform/registry.ts` (ProviderRegistry class) is deleted
-- [ ] **RMVL-07**: `message-processor/processor.ts` imperative wrapper methods removed (processMessage, routeMessage, streamMessage Promise wrappers)
-- [ ] **RMVL-08**: No remaining `new ToolRegistry()`, `new AgentManager()`, `new PipelineManager()`, `new ContextManager()`, `new HookManager()`, or `new ProviderRegistry()` calls exist in the codebase
+- [x] **RMVL-01**: `tool/registry.ts` (ToolRegistry class) is deleted
+- [x] **RMVL-02**: `agent/manager.ts` (AgentManager class) is deleted
+- [x] **RMVL-03**: `pipeline/manager.ts` (PipelineManager class) is deleted
+- [x] **RMVL-04**: `context/manager.ts` (ContextManager class) is deleted
+- [x] **RMVL-05**: `hooks/manager.ts` (HookManager class) is deleted
+- [x] **RMVL-06**: `platform/registry.ts` (ProviderRegistry class) is deleted
+- [x] **RMVL-07**: `message-processor/processor.ts` imperative wrapper methods removed (processMessage, routeMessage, streamMessage Promise wrappers)
+- [x] **RMVL-08**: No remaining `new ToolRegistry()`, `new AgentManager()`, `new PipelineManager()`, `new ContextManager()`, `new HookManager()`, or `new ProviderRegistry()` calls exist in the codebase
 
 ### Consumer Migration
 
-- [ ] **CONS-01**: `packages/dev/src/dev-chat.ts` uses Effect-based API (no imperative Fred class methods or direct manager access)
-- [ ] **CONS-02**: `packages/cli/src/commands/chat.ts` uses Effect-based API
-- [ ] **CONS-03**: `packages/cli/src/commands/run.ts` uses Effect-based API
+- [x] **CONS-01**: `packages/dev/src/dev-chat.ts` uses Effect-based API (no imperative Fred class methods or direct manager access)
+- [x] **CONS-02**: `packages/cli/src/commands/chat.ts` uses Effect-based API
+- [x] **CONS-03**: `packages/cli/src/commands/run.ts` uses Effect-based API
 - [x] **CONS-04**: All consumers use `Effect.runPromise` or `Effect.runFork` at the boundary only (no Effect.runPromise scattered through business logic)
 
 ### Public API Surface
@@ -82,7 +82,7 @@ Requirements for the Imperative-to-Effect migration milestone. Eliminate the dua
 
 - [x] **SEC-01**: Dev server auth is enforced outside local development and CORS is restricted to explicit allowlisted origins
 - [x] **SEC-02**: Request and abuse limits are tightened with deterministic defaults and tested rejection behavior
-- [x] **SEC-03**: MCP command and URL execution paths are restricted to allowlists with minimal environment passthrough
+- [ ] **SEC-03**: MCP command and URL execution paths are restricted to allowlists with minimal environment passthrough
 - [x] **SEC-04**: CI pull requests run gitleaks, semgrep, and dependency audit security checks
 - [x] **SEC-05**: Security validation checklist documents exact local and CI hardening verification commands
 
@@ -145,17 +145,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FRED-07 | Phase 43 | Complete |
 | FRED-08 | Phase 43 | Complete |
 | FRED-09 | Phase 43 | Complete |
-| RMVL-01 | Phase 44 | Pending |
-| RMVL-02 | Phase 44 | Pending |
-| RMVL-03 | Phase 44 | Pending |
-| RMVL-04 | Phase 44 | Pending |
-| RMVL-05 | Phase 44 | Pending |
-| RMVL-06 | Phase 44 | Pending |
-| RMVL-07 | Phase 44 | Pending |
-| RMVL-08 | Phase 44 | Pending |
-| CONS-01 | Phase 44 | Pending |
-| CONS-02 | Phase 44 | Pending |
-| CONS-03 | Phase 44 | Pending |
+| RMVL-01 | Phase 44 | Complete |
+| RMVL-02 | Phase 44 | Complete |
+| RMVL-03 | Phase 44 | Complete |
+| RMVL-04 | Phase 44 | Complete |
+| RMVL-05 | Phase 44 | Complete |
+| RMVL-06 | Phase 44 | Complete |
+| RMVL-07 | Phase 44 | Complete |
+| RMVL-08 | Phase 44 | Complete |
+| CONS-01 | Phase 44 | Complete |
+| CONS-02 | Phase 44 | Complete |
+| CONS-03 | Phase 44 | Complete |
 | CONS-04 | Phase 48, 49 | Complete |
 | API-01 | Phase 45 | Complete |
 | API-02 | Phase 45 | Complete |
@@ -173,7 +173,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MDAGENT-06 | Phase 45.1 | Complete |
 | SEC-01 | Phase 50 | Complete |
 | SEC-02 | Phase 50 | Complete |
-| SEC-03 | Phase 50 | Complete |
+| SEC-03 | Phase 51 | Pending |
 | SEC-04 | Phase 50 | Complete |
 | SEC-05 | Phase 50 | Complete |
 
@@ -184,4 +184,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-03-05 after Phase 50 completion and verification*
+*Last updated: 2026-03-05 — gap closure phases 51-53 added; SEC-03 reassigned to Phase 51; RMVL/CONS checkbox drift fixed*

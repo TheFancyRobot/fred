@@ -377,7 +377,7 @@ All phases are sequential. Each phase leaves the codebase in a buildable, testab
 | 51. Wire MCP Trust-Boundary Config to Runtime (Gap Closure) | 0/0 | Not started | — |
 | 52. Fix Agent Hot Reload ETA Frontmatter Resolution (Gap Closure) | 0/0 | Not started | — |
 | 53. Documentation Traceability Cleanup (Gap Closure) | 0/0 | Not started | — |
-| 54. Cancellation Propagation (Gap Closure) | 3/3 | Complete   | 2026-03-09 |
+| 54. Cancellation Propagation (Gap Closure) | 3/3 | Complete    | 2026-03-09 |
 
 ---
 
