@@ -27,6 +27,7 @@ export interface StreamingControllerCallbacks {
 export interface StreamingControllerOptions {
   frameMs?: number;
   maxRenderQueue?: number;
+  flushStrategy?: 'frame' | 'token';
   now?: () => number;
   callbacks?: StreamingControllerCallbacks;
 }
@@ -34,6 +35,7 @@ export interface StreamingControllerOptions {
 export interface StreamingController {
   start: () => void;
   stop: () => void;
+  clear: () => void;
   pushToken: (token: string, tokenCount?: number) => void;
   finish: () => void;
   fail: (error: unknown) => void;
@@ -45,6 +47,7 @@ const DEFAULT_FRAME_MS = 16;
 
 export function createStreamingController(options: StreamingControllerOptions = {}): StreamingController {
   const frameMs = options.frameMs ?? DEFAULT_FRAME_MS;
+  const flushStrategy = options.flushStrategy ?? 'frame';
   const now = options.now ?? Date.now;
   const callbacks = options.callbacks ?? {};
 
@@ -86,7 +89,7 @@ export function createStreamingController(options: StreamingControllerOptions = 
   };
 
   const flushPending = (): void => {
-    if (pendingTokens === 0 || pendingText.length === 0) {
+    if (pendingText.length === 0) {
       emitMetrics();
       return;
     }
@@ -118,9 +121,11 @@ export function createStreamingController(options: StreamingControllerOptions = 
     pendingTokens = 0;
     lastError = null;
 
-    intervalId = setInterval(() => {
-      flushPending();
-    }, frameMs);
+    if (flushStrategy === 'frame') {
+      intervalId = setInterval(() => {
+        flushPending();
+      }, frameMs);
+    }
     emitMetrics();
   };
 
@@ -153,6 +158,16 @@ export function createStreamingController(options: StreamingControllerOptions = 
     pendingText += token;
     pendingTokens += tokenCount;
     tokensProcessed += tokenCount;
+
+    if (flushStrategy === 'token') {
+      flushPending();
+    }
+  };
+
+  const clear = (): void => {
+    pendingText = '';
+    pendingTokens = 0;
+    emitMetrics();
   };
 
   const finish = (): void => {
@@ -200,6 +215,7 @@ export function createStreamingController(options: StreamingControllerOptions = 
   return {
     start,
     stop,
+    clear,
     pushToken,
     finish,
     fail,

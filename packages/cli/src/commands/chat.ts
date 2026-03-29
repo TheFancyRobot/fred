@@ -190,6 +190,7 @@ type GlobalProgressSink = {
     toolName: string;
     input?: Record<string, unknown>;
     originAgentId?: string;
+    parentToolCallId?: string;
     startedAt?: number;
     kind?: 'tool' | 'task';
     depth?: number;
@@ -456,7 +457,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       return currentRun ? currentRun.depth + 1 : 1;
                     };
                     progressSink = {
-                      start: ({ toolCallId, toolName, input, originAgentId, startedAt, kind, depth }) => {
+                      start: ({ toolCallId, toolName, input, originAgentId, parentToolCallId, startedAt, kind, depth }) => {
                         app.pushToolCall({
                           messageId: `external_${toolCallId}`,
                           step: depth ?? getCurrentToolDepth(),
@@ -464,6 +465,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           toolName,
                           input: input ?? {},
                           originAgentId,
+                          parentToolCallId,
                           startedAt: startedAt ?? Date.now(),
                           kind: kind ?? 'task',
                           depth: depth ?? (getCurrentToolDepth() + 1),
@@ -601,6 +603,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           input: event.input,
                           startedAt: event.startedAt,
                           depth: getCurrentToolDepth(),
+                          originAgentId: event.originAgentId,
                         });
                       } else if (event.type === 'tool-result') {
                         if (event.toolName === 'handoff_to_agent') {

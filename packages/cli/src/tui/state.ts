@@ -21,7 +21,10 @@ export type ToolBlockKind = 'tool' | 'task';
 export interface ToolBlockState {
   toolCallId: string;
   toolName: string;
+  originAgentId?: string;
+  parentToolCallId?: string;
   kind: ToolBlockKind;
+  depth: number;
   status: ToolBlockStatus;
   input: Record<string, unknown>;
   output?: unknown;
@@ -38,6 +41,7 @@ export interface ToolBlockState {
 export interface ToolBlockGroup {
   messageId: string;
   step: number;
+  anchorUserMessageIndex: number | null;
   blocks: ToolBlockState[];
 }
 
@@ -88,6 +92,7 @@ export interface StreamingState {
   tokensPerSecond: number;
   lastError: string | null;
   sessionId: string | null;
+  anchorUserMessageIndex: number | null;
 }
 
 export interface SessionTelemetry {
@@ -245,6 +250,7 @@ export function createInitialTuiStateWithPlugins(
       tokensPerSecond: 0,
       lastError: null,
       sessionId: null,
+      anchorUserMessageIndex: null,
     },
     telemetry: {
       model: '--',
@@ -1104,6 +1110,21 @@ function getStreamRate(streamStartMs: number | null, outputTokenCount: number, n
   return (outputTokenCount * 1000) / elapsedMs;
 }
 
+function getStreamingAnchorUserMessageIndex(state: TuiState): number | null {
+  const sessionId = state.sessions.selectedId;
+  const messages = sessionId
+    ? (state.sessions.transcripts[sessionId]?.messages ?? [])
+    : state.transcript.messages;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      return index;
+    }
+  }
+
+  return null;
+}
+
 export function startStreaming(state: TuiState, nowMs = Date.now()): TuiState {
   const sessionId = state.sessions.selectedId;
   return {
@@ -1117,6 +1138,11 @@ export function startStreaming(state: TuiState, nowMs = Date.now()): TuiState {
       tokensPerSecond: 0,
       lastError: null,
       sessionId,
+      anchorUserMessageIndex: getStreamingAnchorUserMessageIndex(state),
+    },
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
     },
   };
 }
@@ -1245,6 +1271,73 @@ export function appendAssistant(
   return nextState;
 }
 
+export function ensureAssistantMessage(state: TuiState, nowMs = Date.now()): TuiState {
+  const sessionId = state.streaming.sessionId ?? state.sessions.selectedId;
+
+  if (!sessionId) {
+    const messages = [...state.transcript.messages];
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role === 'assistant') {
+      return state;
+    }
+
+    const transcript = updateTranscriptViewport({
+      ...state.transcript,
+      messages: [...messages, { role: 'assistant', content: '' }],
+    });
+
+    return {
+      ...state,
+      transcript,
+    };
+  }
+
+  const currentTranscript = state.sessions.transcripts[sessionId]
+    ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  const messages = [...currentTranscript.messages];
+  const lastMessage = messages[messages.length - 1];
+
+  if (lastMessage?.role === 'assistant') {
+    return state;
+  }
+
+  const nextTranscript = updateTranscriptViewport({
+    ...currentTranscript,
+    messages: [...messages, { role: 'assistant', content: '' }],
+  });
+
+  const updatedTranscripts = {
+    ...state.sessions.transcripts,
+    [sessionId]: nextTranscript,
+  };
+
+  const transcript = sessionId === state.sessions.selectedId
+    ? nextTranscript
+    : state.transcript;
+  const unread = sessionId !== state.sessions.selectedId || !nextTranscript.viewport.pinnedToBottom;
+  const nextState = updateSessionFromTranscript(
+    {
+      ...state,
+      transcript,
+      sessions: {
+        ...state.sessions,
+        transcripts: updatedTranscripts,
+      },
+    },
+    sessionId,
+    nextTranscript,
+    nowMs,
+    unread,
+  );
+
+  if (sessionId === nextState.sessions.selectedId && nextTranscript.viewport.pinnedToBottom) {
+    return updateSessionUnread(nextState, sessionId, false);
+  }
+
+  return nextState;
+}
+
 export function finishStreaming(state: TuiState, nowMs = Date.now()): TuiState {
   return {
     ...state,
@@ -1254,6 +1347,7 @@ export function finishStreaming(state: TuiState, nowMs = Date.now()): TuiState {
       waitingForFirstToken: false,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
     },
   };
 }
@@ -1268,8 +1362,67 @@ export function recordStreamingError(state: TuiState, error: string, nowMs = Dat
       lastError: error,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
     },
   };
+}
+
+export function clearStreamingAssistant(state: TuiState, nowMs = Date.now()): TuiState {
+  const sessionId = state.streaming.sessionId ?? state.sessions.selectedId;
+  const anchorIndex = state.streaming.anchorUserMessageIndex;
+
+  const filterMessages = (messages: SessionTranscript['messages']): SessionTranscript['messages'] => {
+    if (anchorIndex === null) {
+      return messages.filter((message) => message.role !== 'assistant');
+    }
+
+    return messages.filter((message, index) => !(message.role === 'assistant' && index > anchorIndex));
+  };
+
+  if (!sessionId) {
+    const transcript = updateTranscriptViewport({
+      ...state.transcript,
+      messages: filterMessages(state.transcript.messages),
+    }, { pinnedToBottom: true });
+
+    return {
+      ...state,
+      transcript,
+    };
+  }
+
+  const currentTranscript = state.sessions.transcripts[sessionId]
+    ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  const nextTranscript = updateTranscriptViewport({
+    ...currentTranscript,
+    messages: filterMessages(currentTranscript.messages),
+  }, { pinnedToBottom: true });
+
+  const updatedTranscripts = {
+    ...state.sessions.transcripts,
+    [sessionId]: nextTranscript,
+  };
+
+  const transcript = sessionId === state.sessions.selectedId
+    ? nextTranscript
+    : state.transcript;
+
+  const nextState = updateSessionFromTranscript(
+    {
+      ...state,
+      transcript,
+      sessions: {
+        ...state.sessions,
+        transcripts: updatedTranscripts,
+      },
+    },
+    sessionId,
+    nextTranscript,
+    nowMs,
+    false,
+  );
+
+  return nextState;
 }
 
 export function setSystemNotice(state: TuiState, notice: string | null): TuiState {
@@ -2006,14 +2159,20 @@ export function addToolCall(
     toolName: string;
     input: Record<string, unknown>;
     startedAt: number;
+    originAgentId?: string;
+    parentToolCallId?: string;
     kind?: ToolBlockKind;
+    depth?: number;
   },
 ): TuiState {
   const kind = event.kind ?? inferToolBlockKind(event.toolName);
   const block: ToolBlockState = {
     toolCallId: event.toolCallId,
     toolName: event.toolName,
+    originAgentId: event.originAgentId,
+    parentToolCallId: event.parentToolCallId,
     kind,
+    depth: event.depth ?? 0,
     status: 'in-progress',
     input: event.input,
     startedAt: event.startedAt,
@@ -2042,6 +2201,7 @@ export function addToolCall(
     } else {
       groups[existingGroupIndex] = {
         ...existing,
+        anchorUserMessageIndex: existing.anchorUserMessageIndex ?? state.streaming.anchorUserMessageIndex,
         blocks: [...existing.blocks, block],
       };
     }
@@ -2049,6 +2209,7 @@ export function addToolCall(
     groups.push({
       messageId: event.messageId,
       step: event.step,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
       blocks: [block],
     });
   }
@@ -2150,12 +2311,21 @@ export function toggleToolBlockExpand(state: TuiState, toolCallId: string): TuiS
 }
 
 /**
- * Get tool blocks for a given message step/group index.
- * The Nth group corresponds to tool blocks from the Nth tool-calling step.
+ * Get all tool blocks anchored beneath a specific user message index.
  */
-export function getToolBlocksForMessage(state: TuiState, groupIndex: number): ToolBlockState[] {
-  const group = state.toolBlocks.groups[groupIndex];
-  return group?.blocks ?? [];
+export function getToolBlocksForMessage(state: TuiState, anchorUserMessageIndex: number): ToolBlockState[] {
+  return state.toolBlocks.groups
+    .filter((group) => group.anchorUserMessageIndex === anchorUserMessageIndex)
+    .sort((left, right) => {
+      if (left.step !== right.step) {
+        return left.step - right.step;
+      }
+
+      const leftStartedAt = Math.min(...left.blocks.map((block) => block.startedAt));
+      const rightStartedAt = Math.min(...right.blocks.map((block) => block.startedAt));
+      return leftStartedAt - rightStartedAt;
+    })
+    .flatMap((group) => group.blocks);
 }
 
 /**
