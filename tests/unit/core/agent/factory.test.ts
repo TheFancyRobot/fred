@@ -367,6 +367,56 @@ describe('AgentFactory', () => {
       expect(agent).toBeDefined();
     });
 
+    test('processMessage normalizes legacy named toolChoice for provider requests', async () => {
+      toolRegistry.registerTool({
+        id: 'calculator',
+        description: 'Performs arithmetic',
+        execute: async () => 4,
+      } as any);
+
+      let callCount = 0;
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation((options: any) => {
+        callCount += 1;
+
+        if (callCount === 1) {
+          expect(options.toolChoice).toEqual({ tool: 'calculator' });
+          return Effect.succeed({
+            text: '',
+            toolCalls: [{ id: 'call_1', name: 'calculator', params: { expression: '2+2' } }],
+            toolResults: [{ id: 'call_1', result: 4, isFailure: false }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          } as any) as any;
+        }
+
+        return Effect.succeed({
+          text: 'The answer is 4.',
+          toolCalls: [],
+          toolResults: [],
+          usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+        } as any) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent({
+        id: 'legacy-toolchoice-agent',
+        systemMessage: 'Use the calculator tool.',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['calculator'],
+        toolChoice: { type: 'tool', toolName: 'calculator' },
+      }, testProvider as any));
+
+      const response = await Effect.runPromise(agent.processMessage('What is 2+2?', []));
+
+      expect(response.content).toBe('The answer is 4.');
+      expect(callCount).toBe(2);
+      generateSpy.mockRestore();
+    });
+
     test('processMessage continues after tool results and returns final text', async () => {
       toolRegistry.registerTool({
         id: 'lookup_pref',

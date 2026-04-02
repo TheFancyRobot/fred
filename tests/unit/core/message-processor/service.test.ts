@@ -128,7 +128,7 @@ describe('MessageProcessorService Error Types', () => {
 
 describe('MessageProcessorService Configuration', () => {
   // Create minimal mock services for testing configuration
-  const mockAgentService: AgentService = {
+  const mockAgentService = {
     createAgent: () => Effect.fail({ _tag: 'AgentCreationError' as const, message: 'Not implemented' }),
     getAgent: () => Effect.fail({ _tag: 'AgentNotFoundError' as const, agentId: 'test' }),
     getAgentOptional: () => Effect.succeed(undefined),
@@ -142,9 +142,9 @@ describe('MessageProcessorService Configuration', () => {
     matchAgentByUtterance: () => Effect.succeed(null),
     getMCPMetrics: () => Effect.succeed({}),
     registerShutdownHooks: () => Effect.void,
-  };
+  } as any;
 
-  const mockPipelineService: PipelineService = {
+  const mockPipelineService = {
     createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
     getPipelineOptional: () => Effect.succeed(undefined),
@@ -164,9 +164,9 @@ describe('MessageProcessorService Configuration', () => {
     executeGraph: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     executeGraphFromYaml: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     executeGraphFromBuilder: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-  } as PipelineService;
+  } as any;
 
-  const mockContextStorage: ContextStorageService = {
+  const mockContextStorage = {
     generateConversationId: () => Effect.succeed('test-conv-id'),
     getContext: () => Effect.fail({ _tag: 'ContextNotFoundError' as const, conversationId: 'test' }),
     getContextById: () => Effect.succeed(null),
@@ -179,7 +179,7 @@ describe('MessageProcessorService Configuration', () => {
     clearAll: () => Effect.void,
     setDefaultPolicy: () => Effect.void,
     setStorage: () => Effect.void,
-  };
+  } as any;
 
   const testLayer = Layer.mergeAll(
     Layer.succeed(AgentService, mockAgentService),
@@ -247,7 +247,7 @@ describe('MessageProcessorService Configuration', () => {
 
 describe('MessageProcessorService Routing', () => {
   // Create mock services that simulate no agent/pipeline/intent matches
-  const mockAgentService: AgentService = {
+  const mockAgentService = {
     createAgent: () => Effect.fail({ _tag: 'AgentCreationError' as const, message: 'Not implemented' }),
     getAgent: () => Effect.fail({ _tag: 'AgentNotFoundError' as const, agentId: 'test' }),
     getAgentOptional: () => Effect.succeed(undefined),
@@ -261,9 +261,9 @@ describe('MessageProcessorService Routing', () => {
     matchAgentByUtterance: () => Effect.succeed(null),
     getMCPMetrics: () => Effect.succeed({}),
     registerShutdownHooks: () => Effect.void,
-  };
+  } as any;
 
-  const mockPipelineService: PipelineService = {
+  const mockPipelineService = {
     createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
     getPipelineOptional: () => Effect.succeed(undefined),
@@ -283,9 +283,9 @@ describe('MessageProcessorService Routing', () => {
     executeGraph: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     executeGraphFromYaml: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     executeGraphFromBuilder: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-  } as PipelineService;
+  } as any;
 
-  const mockContextStorage: ContextStorageService = {
+  const mockContextStorage = {
     generateConversationId: () => Effect.succeed('test-conv-id'),
     getContext: () => Effect.fail({ _tag: 'ContextNotFoundError' as const, conversationId: 'test' }),
     getContextById: () => Effect.succeed(null),
@@ -298,7 +298,7 @@ describe('MessageProcessorService Routing', () => {
     clearAll: () => Effect.void,
     setDefaultPolicy: () => Effect.void,
     setStorage: () => Effect.void,
-  };
+  } as any;
 
   const testLayer = Layer.mergeAll(
     Layer.succeed(AgentService, mockAgentService),
@@ -350,7 +350,7 @@ describe('MessageProcessorService Routing', () => {
       ...mockAgentService,
       getAgentOptional: (id: string) =>
         Effect.succeed(id === 'intent-agent' ? routedAgent : undefined),
-    } as AgentService);
+    } as any);
 
     const intentMatcherLayer = Layer.succeed(IntentMatcherService, {
       registerIntents: () => Effect.void,
@@ -366,13 +366,13 @@ describe('MessageProcessorService Routing', () => {
           confidence: 1,
           matchType: 'exact',
         } as any),
-    } as IntentMatcherService);
+    } as any);
 
     const intentRouterLayer = Layer.succeed(IntentRouterService, {
       routeIntent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
       routeToDefaultAgent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
       setDefaultAgent: () => Effect.void,
-    } as IntentRouterService);
+    } as any);
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -970,6 +970,105 @@ describe('MessageProcessorService stream contracts', () => {
     // Note: The exact count depends on timing, but there should be at least one
     expect(collectedEvents.length).toBeGreaterThanOrEqual(0);
   });
+
+  test('streamMessage does not persist the user message when only synthetic stream events emit before failure', async () => {
+    const { Stream } = await import('effect');
+
+    const persistedMessages: Array<{ conversationId: string; message: { role: string; content: unknown } }> = [];
+
+    const mockAgent = {
+      id: 'synthetic-failure-agent',
+      config: {
+        id: 'synthetic-failure-agent',
+        platform: 'openai' as const,
+        model: 'gpt-4',
+        systemMessage: 'test',
+        persistHistory: true,
+      },
+      processMessage: () => Effect.succeed({ content: 'fallback' }),
+      streamMessage: (message: string, previousMessages: unknown[], opts?: { threadId?: string }) => {
+        const runId = `run_${Date.now()}`;
+        const threadId = opts?.threadId;
+        let seq = 0;
+
+        return Stream.fromIterable([
+          { type: 'run-start', sequence: ++seq, emittedAt: Date.now(), runId, threadId, startedAt: Date.now(), input: { message, previousMessages: [] } },
+          { type: 'message-start', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, role: 'assistant' as const },
+          { type: 'step-start', sequence: ++seq, emittedAt: Date.now(), runId, threadId, stepIndex: 0 },
+        ]).pipe(
+          Stream.concat(
+            Stream.fail(new RouteExecutionError({ routeType: 'agent', cause: new Error('Provider failed before first model event') }))
+          )
+        );
+      },
+    } as any;
+
+    const mockAgentService = {
+      createAgent: () => Effect.succeed({} as any),
+      getAgent: () => Effect.succeed({} as any),
+      getAgentOptional: (id: string) => Effect.succeed(id === 'synthetic-failure-agent' ? mockAgent : undefined),
+      hasAgent: () => Effect.succeed(false),
+      removeAgent: () => Effect.succeed(false),
+      getAllAgents: () => Effect.succeed([]),
+      clear: () => Effect.void,
+      setTracer: () => Effect.void,
+      setDefaultSystemMessage: () => Effect.void,
+      setGlobalVariablesResolver: () => Effect.void,
+      matchAgentByUtterance: () => Effect.succeed({ agentId: 'synthetic-failure-agent', confidence: 1, matchType: 'exact' }),
+      getMCPMetrics: () => Effect.succeed({}),
+      registerShutdownHooks: () => Effect.void,
+    } as any;
+
+    const mockPipelineService = {
+      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
+      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
+      getPipelineOptional: () => Effect.succeed(undefined),
+      hasPipeline: () => Effect.succeed(false),
+      removePipeline: () => Effect.succeed(false),
+      getAllPipelines: () => Effect.succeed([]),
+      clear: () => Effect.void,
+      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
+      matchPipelineByUtterance: () => Effect.succeed(null),
+    } as any;
+
+    const mockContextStorage = {
+      generateConversationId: () => Effect.succeed('conv-1'),
+      getContext: () => Effect.fail({ _tag: 'ContextNotFoundError' }),
+      getContextById: () => Effect.succeed(null),
+      addMessage: (conversationId: string, message: { role: string; content: unknown }) =>
+        Effect.sync(() => {
+          persistedMessages.push({ conversationId, message });
+        }),
+      addMessages: () => Effect.void,
+      getHistory: () => Effect.succeed([]),
+      updateMetadata: () => Effect.void,
+      clearContext: () => Effect.void,
+      resetContext: () => Effect.succeed(false),
+      clearAll: () => Effect.void,
+      setDefaultPolicy: () => Effect.void,
+      setStorage: () => Effect.void,
+    } as any;
+
+    const testLayer = Layer.mergeAll(
+      Layer.succeed(AgentService, mockAgentService),
+      Layer.succeed(PipelineService, mockPipelineService),
+      Layer.succeed(ContextStorageService, mockContextStorage)
+    );
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const service = yield* MessageProcessorService;
+        const stream = service.streamMessage('test message', { conversationId: 'conv-1' });
+        return yield* Stream.runDrain(stream);
+      }).pipe(
+        Effect.provide(MessageProcessorServiceLive),
+        Effect.provide(testLayer)
+      )
+    );
+
+    expect(exit._tag).toBe('Failure');
+    expect(persistedMessages.filter(({ message }) => message.role === 'user')).toHaveLength(0);
+  });
 });
 
 describe('MessageProcessorService policy context propagation', () => {
@@ -985,7 +1084,7 @@ describe('MessageProcessorService policy context propagation', () => {
       },
     } as any;
 
-    const mockAgentService: AgentService = {
+    const mockAgentService = {
       createAgent: () => Effect.fail({ _tag: 'AgentCreationError' as const, message: 'Not implemented' }),
       getAgent: () => Effect.fail({ _tag: 'AgentNotFoundError' as const, agentId: 'test' }),
       getAgentOptional: (id: string) => Effect.succeed(id === 'policy-agent' ? mockAgent : undefined),
@@ -999,9 +1098,9 @@ describe('MessageProcessorService policy context propagation', () => {
       matchAgentByUtterance: () => Effect.succeed(null),
       getMCPMetrics: () => Effect.succeed({}),
       registerShutdownHooks: () => Effect.void,
-    };
+    } as any;
 
-    const mockPipelineService: PipelineService = {
+    const mockPipelineService = {
       createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
       getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
       getPipelineOptional: () => Effect.succeed(undefined),
@@ -1021,9 +1120,9 @@ describe('MessageProcessorService policy context propagation', () => {
       executeGraph: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
       executeGraphFromYaml: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
       executeGraphFromBuilder: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-    } as PipelineService;
+    } as any;
 
-    const mockContextStorage: ContextStorageService = {
+    const mockContextStorage = {
       generateConversationId: () => Effect.succeed('conv-123'),
       getContext: () => Effect.fail({ _tag: 'ContextNotFoundError' as const, conversationId: 'test' }),
       getContextById: () => Effect.succeed(null),
@@ -1036,7 +1135,7 @@ describe('MessageProcessorService policy context propagation', () => {
       clearAll: () => Effect.void,
       setDefaultPolicy: () => Effect.void,
       setStorage: () => Effect.void,
-    };
+    } as any;
 
     const mockIntentMatcher: IntentMatcherService = {
       matchIntent: () =>
@@ -1054,11 +1153,11 @@ describe('MessageProcessorService policy context propagation', () => {
       clear: () => Effect.void,
     };
 
-    const mockIntentRouter: IntentRouterService = {
+    const mockIntentRouter = {
       routeIntent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
       routeToDefaultAgent: () => Effect.fail({ _tag: 'IntentRouteError' as const, message: 'unused' }),
       setDefaultAgent: () => Effect.void,
-    };
+    } as any;
 
     const testLayer = Layer.mergeAll(
       Layer.succeed(AgentService, mockAgentService),

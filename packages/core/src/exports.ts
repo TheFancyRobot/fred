@@ -257,3 +257,12 @@ export { sanitizeError } from './utils/validation';
 // ─── Stream Types ───────────────────────────────────────────────────────────
 export type { StreamEvent } from './stream/events';
 export { toOpenAIStream } from './stream/openai';
+
+// ─── Stream Utilities ───────────────────────────────────────────────────────
+export { createTextSmoother, smoothStream } from './stream/smooth-text';
+export type {
+  TextSmoother,
+  TextSmootherOptions,
+  ChunkingStrategy,
+  SmoothStreamOptions,
+} from './stream/smooth-text';

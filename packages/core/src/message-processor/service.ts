@@ -972,12 +972,32 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
         }
 
         // Agent has streaming - use it with handoff detection
-        if (shouldPersistHistory) {
-          yield* self.contextStorage.addMessage(conversationId, {
-            role: 'user',
-            content: currentMessage,
-          });
-        }
+        // Defer user message persistence until the first provider-originated event,
+        // preventing orphaned user messages when the stream fails before model output starts.
+        const userMessagePersistedRef = shouldPersistHistory ? yield* Ref.make(false) : undefined;
+        const shouldPersistUserMessageForEvent = (event: StreamEvent) =>
+          event.type === 'token'
+          || event.type === 'tool-call'
+          || event.type === 'tool-result'
+          || event.type === 'tool-error'
+          || event.type === 'usage'
+          || event.type === 'message-end'
+          || event.type === 'step-complete'
+          || event.type === 'run-end';
+        const persistUserMessageOnce = () =>
+          userMessagePersistedRef
+            ? Ref.modify(userMessagePersistedRef, (persisted) =>
+                persisted
+                  ? [Effect.void, true]
+                  : [
+                      self.contextStorage.addMessage(conversationId, {
+                        role: 'user',
+                        content: currentMessage,
+                      }),
+                      true,
+                    ]
+              )
+            : Effect.void;
 
         // Track per-step state for persistence
         // Per locked decision: Use separate ToolFailure record type (not isFailure flag)
@@ -1025,6 +1045,11 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
         // Process stream events, tracking state and detecting handoffs
         // Use Stream.tap for side effects - events flow through without buffering
         const processedStream = agentStream.pipe(
+          Stream.tap((event) =>
+            shouldPersistUserMessageForEvent(event)
+              ? persistUserMessageOnce()
+              : Effect.void
+          ),
           Stream.tap((event) => {
             if (event.type === 'token' && 'step' in event) {
               const state = getOrCreateStepState(event.step);

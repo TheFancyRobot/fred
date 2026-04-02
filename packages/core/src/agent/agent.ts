@@ -1,7 +1,22 @@
-import { Action } from '../intent/intent';
+import type { Action } from '../intent/intent';
 import type { Prompt } from '@effect/ai';
 import type { Effect, Stream } from 'effect';
 import type { StreamEvent } from '../stream/events';
+
+export type AgentToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { type: 'tool'; toolName: string }
+  | { tool: string }
+  | { mode?: 'auto' | 'required'; oneOf: ReadonlyArray<string> };
+
+export type ProviderToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { tool: string }
+  | { mode?: 'auto' | 'required'; oneOf: ReadonlyArray<string> };
 
 /**
  * Supported AI platforms
@@ -50,7 +65,7 @@ export interface AgentConfig {
   /** MCP server references (string[] of server IDs from global config) */
   mcpServers?: string[];
   maxSteps?: number; // Maximum number of steps in the agent loop (default: 20)
-  toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: string }; // Control tool usage
+  toolChoice?: AgentToolChoice; // Control tool usage
   toolTimeout?: number; // Timeout for tool execution in milliseconds (default: 300000 = 5 minutes)
   persistHistory?: boolean; // Whether to persist conversation history for this agent (default: true)
   toolRetry?: ToolRetryPolicy; // Retry policy for tool execution
@@ -103,6 +118,29 @@ export function hasRetryDiagnostics(error: unknown): error is ErrorWithRetryDiag
     typeof (error as any)._retryDiagnostics === 'object' &&
     (error as any)._retryDiagnostics !== null
   );
+}
+
+export function normalizeToolChoice(toolChoice: AgentToolChoice | undefined): ProviderToolChoice | undefined {
+  if (toolChoice === undefined) {
+    return undefined;
+  }
+
+  if (toolChoice === 'auto' || toolChoice === 'required' || toolChoice === 'none') {
+    return toolChoice;
+  }
+
+  if ('tool' in toolChoice) {
+    return { tool: toolChoice.tool };
+  }
+
+  if ('oneOf' in toolChoice) {
+    return {
+      mode: toolChoice.mode,
+      oneOf: toolChoice.oneOf,
+    };
+  }
+
+  return { tool: toolChoice.toolName };
 }
 
 /**

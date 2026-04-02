@@ -839,7 +839,7 @@ export function buildAssistantMessageRenderable(
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
     conceal: true,
-    drawUnstyledText: false,
+    drawUnstyledText: options.streaming ?? false,
   });
   md.selectable = true;
 

@@ -39,6 +39,7 @@
 
 import { Effect, Stream, pipe } from 'effect';
 import { LanguageModel, Prompt, Toolkit } from '@effect/ai';
+import { normalizeToolChoice, type AgentToolChoice } from './agent';
 import type {
   StreamEvent,
   TokenEvent,
@@ -65,7 +66,7 @@ export interface MultiStepConfig {
   toolHandlers?: Map<string, (args: Record<string, any>) => Promise<any> | any>;
   maxSteps: number;
   // Accept any tool choice format - internal handling casts appropriately
-  toolChoice?: 'auto' | 'required' | 'none' | { name: string } | { type: 'tool'; toolName: string };
+  toolChoice?: AgentToolChoice;
   temperature?: number;
 }
 
@@ -356,7 +357,7 @@ const streamSingleStep = (
         prompt,
         toolkit: config.toolkit,
         maxSteps: 1,
-        toolChoice: stepIndex === 0 ? (config.toolChoice as any) : undefined,
+        toolChoice: stepIndex === 0 ? normalizeToolChoice(config.toolChoice) : undefined,
         temperature: config.temperature,
       } as unknown as Parameters<typeof LanguageModel.streamText>[0];
       const modelStream = LanguageModel.streamText(streamOptions);
@@ -365,7 +366,7 @@ const streamSingleStep = (
       const eventStream = pipe(
         modelStream,
         Stream.map((part) => {
-          const { event, newState } = processStreamPart(part, state, runId, threadId, messageId, agentId);
+          const { event, newState } = processStreamPart(part, state, runId, threadId, messageId);
           state = newState;
           return event;
         }),
@@ -490,7 +491,7 @@ export const streamMultiStep = (
           prompt,
           toolkit: config.toolkit,
           maxSteps: 1, // One model call per step - @effect/ai handles tool execution
-          toolChoice: stepIndex === 0 ? (config.toolChoice as any) : undefined,
+          toolChoice: stepIndex === 0 ? normalizeToolChoice(config.toolChoice) : undefined,
           temperature: config.temperature,
         } as unknown as Parameters<typeof LanguageModel.streamText>[0];
         const modelStream = LanguageModel.streamText(streamOptions);

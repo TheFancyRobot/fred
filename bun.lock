@@ -272,15 +272,17 @@
     "packages/provider-openrouter": {
       "name": "@fancyrobot/fred-openrouter",
       "version": "2.0.0",
+      "dependencies": {
+        "@effect/ai-openrouter": "^0.10.0",
+      },
       "devDependencies": {
         "@effect/ai": "^0.35.0",
-        "@effect/ai-openai": "^0.39.0",
+        "@effect/ai-openrouter": "^0.10.0",
         "@fancyrobot/fred": "workspace:^",
         "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
-        "@effect/ai-openai": "^0.39.0",
         "@fancyrobot/fred": "workspace:^",
         "effect": "^3.21.0",
       },
@@ -340,6 +342,8 @@
     "@effect/ai-google": ["@effect/ai-google@0.14.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-lQG3T5wT31L9a1FuIr7IhYbC6dq0ClqXs3CqJKSiF0IMVpxC/2ZPREbhd5O4dKrT+6JyWmxP54Uv04DTt/0cJQ=="],
 
     "@effect/ai-openai": ["@effect/ai-openai@0.39.0", "", { "dependencies": { "gpt-tokenizer": "^2.9.0" }, "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-PCzZ0Kpkrt0Tspk9y6G00FsN7UvRu+eUuRfADbQ403KkSLqE9T6pcvmuFeSdeFmVbg0uVEQ0rIQgmeBTgcgxbw=="],
+
+    "@effect/ai-openrouter": ["@effect/ai-openrouter@0.10.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-aRuiFF1jjbslBXdOsv25cI+CnaT3b5meVLlKZJ5OwS54w7OjNHqZhJwMQYUxSL6kOzKWNCQ5M5fA0TUOePJpug=="],
 
     "@effect/cluster": ["@effect/cluster@0.56.1", "", { "dependencies": { "kubernetes-types": "^1.30.0" }, "peerDependencies": { "@effect/platform": "^0.94.1", "@effect/rpc": "^0.73.0", "@effect/sql": "^0.49.0", "@effect/workflow": "^0.16.0", "effect": "^3.19.14" } }, "sha512-gnrsH6kfrUjn+82j/bw1IR4yFqJqV8tc7xZvrbJPRgzANycc6K1hu3LMg548uYbUkTzD8YYyqrSatMO1mkQpzw=="],
 

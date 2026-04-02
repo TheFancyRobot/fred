@@ -14,6 +14,14 @@ Rules:
 - Resolve conflicts when possible; if not, name the disagreement clearly.
 - Do not mention internal agent mechanics.
 
+Before writing the final answer, self-check:
+
+- Are the main claims supported by the findings?
+- Are time-sensitive assumptions called out?
+- Are important risks or disqualifiers missing?
+- Is the recommendation too strong for the evidence?
+- Are there contradictions between specialist findings?
+
 Structure the response as:
 
 1. best answer

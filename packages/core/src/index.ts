@@ -23,7 +23,7 @@ import { NoOpTracer } from './tracing/noop-tracer';
 import { Cause, Effect, Exit, Layer, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
-import { createStreamResultFromIterable } from './stream/result';
+import { createStreamResult } from './stream/result';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
 import type { Workflow } from './workflow/manager';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
@@ -1228,14 +1228,16 @@ export class Fred {
       'Failed to stream message'
     );
 
-    return createStreamResultFromIterable({
-      async *[Symbol.asyncIterator](): AsyncGenerator<StreamEvent, void, unknown> {
-        const stream = await streamPromise;
-        for await (const event of Stream.toAsyncIterable(stream)) {
-          yield event;
-        }
-      },
-    });
+    // Use Stream.unwrap to lazily resolve the stream promise, then pass
+    // the Effect Stream directly to createStreamResult. This avoids a
+    // redundant double-conversion (Effect Stream → AsyncIterable →
+    // Effect Stream → AsyncIterable) that can batch events in multi-step
+    // flows where a tool call separates two model response phases.
+    const lazyStream = Stream.unwrap(
+      Effect.promise(() => streamPromise)
+    ) as Stream.Stream<StreamEvent, Error>;
+
+    return createStreamResult(lazyStream);
   }
 
   async processChatMessage(

@@ -1794,13 +1794,22 @@ describe('TUI App (OpenTUI integration)', () => {
         startedAt: Date.now(),
       });
 
-      // The timer was reset at 40ms. Wait another 40ms (80ms total).
-      // With 60ms interval from reset point, it should fire around 100ms total.
-      await Bun.sleep(40);
-      // Should NOT have fired yet (only 40ms since reset)
+      // The timer was reset at 40ms. Wait well past the interval.
+      // Patience message should NOT fire while tools are in-progress.
+      await Bun.sleep(100);
       expect(app.getState().systemNotice).toBeNull();
 
-      // Wait for it to fire (60ms from reset)
+      // Complete the tool — no more in-progress tool blocks
+      app.pushToolResult({
+        toolCallId: 'tc1',
+        toolName: 'test_tool',
+        output: 'done',
+        completedAt: Date.now(),
+        durationMs: 50,
+      });
+
+      // After tool completion, timer resets and should fire since
+      // waitingForFirstToken is still true and no tools are running.
       await waitFor(() => app.getState().systemNotice === 'waiting...', { timeout: 500 });
     });
   });

@@ -831,10 +831,16 @@ export class FredTuiApp {
     input: Record<string, unknown>;
     startedAt: number;
     originAgentId?: string;
+    parentToolCallId?: string;
     depth?: number;
     kind?: 'tool' | 'task';
   }): void {
     this.state = addToolCall(this.state, event);
+    // Tool activity proves the stream is alive — clear any patience notice
+    // and restart the timeout so it won't re-fire while tools are running.
+    if (this.state.systemNotice) {
+      this.setSystemNotice(null);
+    }
     this.resetStreamTimeout();
     this.startSpinnerInterval();
     this.events.onStateChange?.(this.state);
@@ -975,7 +981,7 @@ export class FredTuiApp {
     if (this.streamTimeoutMode === 'patient') {
       const intervalMs = this.patienceIntervalMs ?? FredTuiApp.DEFAULT_PATIENCE_INTERVAL_MS;
       this.streamTimeoutTimer = setTimeout(() => {
-        if (this.state.streaming.waitingForFirstToken) {
+        if (this.state.streaming.waitingForFirstToken && !hasInProgressToolBlocks(this.state)) {
           const message = this.resolvePatienceMessage();
           if (message) {
             this.setSystemNotice(message);
@@ -1919,6 +1925,9 @@ export class FredTuiApp {
       const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
       if (existingMd && existingMd instanceof CodeRenderable) {
         existingMd.content = sanitizeForTerminalDisplay(lastMessage.content) + buildStreamingCursorText();
+        // See comment in syncTranscriptToUI — streaming CodeRenderable skips
+        // requestRender() in its content setter; request a frame explicitly.
+        this.renderer.requestRender();
       }
     }
 
@@ -2064,6 +2073,13 @@ export class FredTuiApp {
         const lastMsg = messages[messages.length - 1];
         existingMd.content = sanitizeForTerminalDisplay(lastMsg.content) + buildStreamingCursorText();
         this.lastTranscriptFingerprint = transcriptFingerprint;
+        // CodeRenderable in streaming mode (streaming=true, filetype set,
+        // drawUnstyledText=false) does NOT call requestRender() from its
+        // content setter — it only marks highlights dirty and relies on an
+        // externally-driven render loop. Explicitly request a frame so the
+        // updated text is painted. OpenTUI's built-in frame-rate throttling
+        // (~16.7ms min interval) coalesces rapid calls automatically.
+        this.renderer.requestRender();
         return;
       }
 

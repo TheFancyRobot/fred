@@ -1,7 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
+  createAssistantSegmentRenderer,
   createNonInteractiveFallbackPayload,
   detectAvailableProvider,
   loadProviderPackage,
@@ -482,6 +484,72 @@ describe('Chat Command', () => {
       const deserialized = JSON.parse(serialized);
 
       expect(deserialized).toEqual(payload);
+    });
+  });
+
+  describe('assistant segment renderer', () => {
+    const renderChunks = async (chunks: string[]): Promise<string[]> => {
+      const pushed: string[] = [];
+      const renderer = createAssistantSegmentRenderer({
+        intervalMs: 1,
+        pushSegment: (segment) => {
+          pushed.push(segment);
+        },
+      });
+
+      for (const chunk of chunks) {
+        renderer.enqueueText(chunk);
+      }
+
+      await sleep(5);
+      renderer.flushAll();
+      renderer.stop();
+      return pushed;
+    };
+
+    test('drip-feeds large deltas as multiple visible pushes', async () => {
+      const pushed: Array<{ segment: string; tokenCount: number | undefined }> = [];
+      const renderer = createAssistantSegmentRenderer({
+        intervalMs: 1,
+        pushSegment: (segment, tokenCount) => {
+          pushed.push({ segment, tokenCount });
+        },
+      });
+
+      renderer.enqueueText('hello world');
+      await sleep(5);
+      renderer.flushAll();
+      renderer.stop();
+
+      expect(pushed.length).toBeGreaterThan(1);
+      expect(pushed.map((entry) => entry.segment).join('')).toBe('hello world');
+      expect(pushed[0]?.tokenCount).toBe(1);
+    });
+
+    test('flushAll drains remaining queued segments immediately', () => {
+      const pushed: string[] = [];
+      const renderer = createAssistantSegmentRenderer({
+        intervalMs: 50,
+        pushSegment: (segment) => {
+          pushed.push(segment);
+        },
+      });
+
+      renderer.enqueueText('stream this');
+      renderer.flushAll();
+      renderer.stop();
+
+      expect(pushed.join('')).toBe('stream this');
+      expect(pushed.length).toBeGreaterThan(1);
+    });
+
+    test('renders the same visible output for fine and coarse upstream chunking', async () => {
+      const fineGrained = await renderChunks(['Hello', ' ', 'world']);
+      const coarseGrained = await renderChunks(['Hello world']);
+
+      expect(fineGrained.join('')).toBe('Hello world');
+      expect(coarseGrained.join('')).toBe('Hello world');
+      expect(coarseGrained.length).toBeGreaterThan(1);
     });
   });
 });

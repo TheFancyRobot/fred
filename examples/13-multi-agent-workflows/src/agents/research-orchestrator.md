@@ -6,9 +6,7 @@ tools:
   - run_research_swarm
   - save_note
   - read_notes
-toolChoice:
-  type: tool
-  toolName: run_research_swarm
+toolChoice: auto
 utterances:
   - \bresearch .+\b
   - \bresearch this for me\b

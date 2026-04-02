@@ -50,6 +50,11 @@
       "types": "./src/tool/tool.ts",
       "import": "./src/tool/tool.ts",
       "default": "./src/tool/tool.ts"
+    },
+    "./stream": {
+      "types": "./src/stream/smooth-text.ts",
+      "import": "./src/stream/smooth-text.ts",
+      "default": "./src/stream/smooth-text.ts"
     }
   },
   "scripts": {

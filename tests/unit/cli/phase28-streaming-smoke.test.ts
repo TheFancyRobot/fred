@@ -35,6 +35,24 @@ const mockApp = {
   failAssistantStream: mock(() => {}),
 };
 
+/**
+ * Poll until `completeAssistantStream` or `failAssistantStream` has been called.
+ *
+ * The smoothStream async generator introduces real 12ms delays between word-level
+ * segments, so a fixed `Bun.sleep(40)` is not enough for streams with many segments.
+ * Polling decouples tests from the exact number of segments × delay timing.
+ */
+async function waitForStreamComplete(timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (
+    (mockApp.completeAssistantStream as ReturnType<typeof mock>).mock.calls.length === 0 &&
+    (mockApp.failAssistantStream as ReturnType<typeof mock>).mock.calls.length === 0 &&
+    Date.now() < deadline
+  ) {
+    await Bun.sleep(20);
+  }
+}
+
 const mockCreateFredTuiApp = mock(async () => mockApp);
 
 const mockContextManager = createMockContextManager({
@@ -350,7 +368,7 @@ describe('Phase 28 streaming smoke', () => {
       }
 
       events.onSubmit('test message');
-      await Bun.sleep(40);
+      await waitForStreamComplete();
 
       // XML filtering strips the </function> closing tag and display segmentation preserves content order
       const rendered = ((mockApp.pushAssistantToken as any).mock.calls as Array<Array<unknown>>)
@@ -433,7 +451,7 @@ describe('Phase 28 streaming smoke', () => {
       }
 
       events.onSubmit('what did trump say today');
-      await Bun.sleep(40);
+      await waitForStreamComplete();
 
       expect(mockApp.pushToolCall).toHaveBeenCalledTimes(1);
       expect(mockApp.pushToolResult).toHaveBeenCalledTimes(1);
@@ -519,7 +537,7 @@ describe('Phase 28 streaming smoke', () => {
       }
 
       events.onSubmit('research this');
-      await Bun.sleep(40);
+      await waitForStreamComplete();
 
       expect(mockApp.pushToolCall).toHaveBeenCalledTimes(1);
       const pushToolCallCalls = (mockApp.pushToolCall as any).mock.calls as Array<Array<unknown>>;
@@ -582,7 +600,7 @@ describe('Phase 28 streaming smoke', () => {
       }
 
       events.onSubmit('hello');
-      await Bun.sleep(40);
+      await waitForStreamComplete();
 
       expect(mockApp.pushAssistantToken.mock.calls.map((call: any[]) => call[0])).toEqual(['Hello', ' ', 'world', '.']);
 
@@ -676,7 +694,7 @@ describe('Phase 28 streaming smoke', () => {
       }
 
       events.onSubmit('research this');
-      await Bun.sleep(40);
+      await waitForStreamComplete();
 
       expect(mockApp.clearAssistantStreamContent).toHaveBeenCalledTimes(1);
       expect(mockApp.pushToolCall).not.toHaveBeenCalledWith(expect.objectContaining({ toolName: 'handoff_to_agent' }));

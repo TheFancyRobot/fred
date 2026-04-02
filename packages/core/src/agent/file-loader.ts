@@ -79,7 +79,17 @@ const isToolChoice = (value: unknown): value is AgentConfig['toolChoice'] => {
   }
 
   const asRecord = value as Record<string, unknown>;
-  return asRecord.type === 'tool' && typeof asRecord.toolName === 'string' && asRecord.toolName.length > 0;
+  if (asRecord.type === 'tool' && typeof asRecord.toolName === 'string' && asRecord.toolName.length > 0) {
+    return true;
+  }
+
+  if (typeof asRecord.tool === 'string' && asRecord.tool.length > 0) {
+    return true;
+  }
+
+  return Array.isArray(asRecord.oneOf)
+    && asRecord.oneOf.every((toolName) => typeof toolName === 'string' && toolName.length > 0)
+    && (asRecord.mode === undefined || asRecord.mode === 'auto' || asRecord.mode === 'required');
 };
 
 const isToolRetryPolicy = (value: unknown): value is ToolRetryPolicy => {
@@ -245,7 +255,7 @@ export const validateAgentFrontmatter = (frontmatter: Record<string, unknown>, f
   }
 
   if (frontmatter.toolChoice !== undefined && !isToolChoice(frontmatter.toolChoice)) {
-    throwParseError(filePath, 'toolChoice must be auto, required, none, or { type: "tool", toolName: string }');
+    throwParseError(filePath, 'toolChoice must be auto, required, none, { type: "tool", toolName: string }, { tool: string }, or { mode?: "auto" | "required", oneOf: string[] }');
   }
 
   if (frontmatter.toolRetry !== undefined && !isToolRetryPolicy(frontmatter.toolRetry)) {

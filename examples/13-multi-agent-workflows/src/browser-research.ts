@@ -1,7 +1,8 @@
 import type { Fred } from '@fancyrobot/fred';
 
 const AGENT_BROWSER = 'agent-browser';
-const DEFAULT_TIMEOUT = 60_000;
+const DEFAULT_TIMEOUT = 30_000;
+const SEARCH_FETCH_TIMEOUT = 12_000;
 let sessionCounter = 0;
 
 function makeSessionName(): string {
@@ -27,6 +28,37 @@ async function runAgentBrowser(
     maxOutputChars: 80_000,
   });
   return result.stdout.trim();
+}
+
+async function fetchSearchResultsHtml(searchUrl: string): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEARCH_FETCH_TIMEOUT);
+
+  try {
+    const response = await fetch(searchUrl, {
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': 'fred-example-13-research/1.0',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/html')) {
+      return undefined;
+    }
+
+    return await response.text();
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function stripContentBoundaries(text: string): string {
@@ -86,7 +118,7 @@ async function fetchPageExtractViaBrowser(
     command: AGENT_BROWSER,
     args: ['--session', session],
     env: {
-      AGENT_BROWSER_MAX_OUTPUT: '80000',
+      AGENT_BROWSER_MAX_OUTPUT: '30000',
       AGENT_BROWSER_CONTENT_BOUNDARIES: '1',
     },
     metadata: {
@@ -105,19 +137,19 @@ async function fetchPageExtractViaBrowser(
       fred,
       subagent.id,
       ['open', url],
-      { timeout: 30_000 },
+      { timeout: 15_000 },
     );
     await runAgentBrowser(
       fred,
       subagent.id,
       ['wait', '--load', 'networkidle'],
-      { timeout: 30_000 },
+      { timeout: 10_000 },
     );
     const text = await runAgentBrowser(
       fred,
       subagent.id,
       ['get', 'text', 'body'],
-      { timeout: 15_000 },
+      { timeout: 5_000 },
     );
     const cleaned = stripContentBoundaries(text);
     return cleaned ? cleaned.slice(0, maxChars) : undefined;
@@ -139,13 +171,43 @@ export async function runBrowserResearch(
 ): Promise<string> {
   const maxResults = Math.max(1, options.maxResults ?? 3);
   const readTopResults = Math.max(0, Math.min(maxResults, options.readTopResults ?? 1));
+  const prefetchedHtml = await fetchSearchResultsHtml(options.searchUrl);
+  const prefetchedResults = prefetchedHtml ? extractDuckDuckGoResults(prefetchedHtml, maxResults) : [];
+
+  if (prefetchedResults.length > 0) {
+    const enriched = await Promise.all(
+      prefetchedResults.map(async (entry, index) => ({
+        ...entry,
+        pageExtract:
+          index < readTopResults
+            ? await fetchPageExtractViaBrowser(fred, entry.url)
+            : undefined,
+      })),
+    );
+
+    return [
+      '# Browser Research',
+      `Query: ${query}`,
+      '',
+      ...enriched.flatMap((entry, index) => [
+        `${index + 1}. ${entry.title}`,
+        `   URL: ${entry.url}`,
+        `   Snippet: ${entry.snippet || 'No snippet available.'}`,
+        ...(entry.pageExtract
+          ? [`   Page extract: ${entry.pageExtract}`]
+          : []),
+        '',
+      ]),
+    ].join('\n').trim();
+  }
+
   const session = makeSessionName();
   const subagent = await fred.subagents.spawn({
     name: `agent-browser:${session}`,
     command: AGENT_BROWSER,
     args: ['--session', session],
     env: {
-      AGENT_BROWSER_MAX_OUTPUT: '80000',
+      AGENT_BROWSER_MAX_OUTPUT: '30000',
       AGENT_BROWSER_CONTENT_BOUNDARIES: '1',
     },
     metadata: {
@@ -160,12 +222,12 @@ export async function runBrowserResearch(
   });
 
   try {
-    await runAgentBrowser(fred, subagent.id, ['open', options.searchUrl], { timeout: 30_000 });
+    await runAgentBrowser(fred, subagent.id, ['open', options.searchUrl], { timeout: 15_000 });
     await runAgentBrowser(
       fred,
       subagent.id,
       ['wait', '--load', 'networkidle'],
-      { timeout: 30_000 },
+      { timeout: 10_000 },
     );
 
     const snapshot = await runAgentBrowser(fred, subagent.id, ['get', 'text', 'body']);

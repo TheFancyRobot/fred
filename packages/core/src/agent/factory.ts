@@ -6,7 +6,7 @@ import { BunContext } from '@effect/platform-bun';
 import { FetchHttpClient } from '@effect/platform';
 import type { StreamEvent } from '../stream/events';
 import type { AgentConfig, AgentMessage, AgentResponse, RetryDiagnostics, ToolRetryPolicy } from './agent';
-import { hasRetryDiagnostics } from './agent';
+import { hasRetryDiagnostics, normalizeToolChoice } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
 import type { Tool as FredTool } from '../tool/tool';
 import { createHandoffTool } from '../tool/handoff';
@@ -1095,7 +1095,7 @@ export class AgentFactory {
             const generateOptions = {
               prompt,
               toolkit: runtimeToolkit,
-              toolChoice: stepToolChoice,
+              toolChoice: normalizeToolChoice(stepToolChoice),
               temperature: config.temperature,
             } as unknown as Parameters<typeof LanguageModel.generateText>[0];
             const program = LanguageModel.generateText(generateOptions);

@@ -342,7 +342,7 @@ async function runParallelTrackResearch(
   plan: string,
   options: { parentToolCallId?: string; taskDepth: number; toolDepth: number },
 ): Promise<string> {
-  const angles = extractResearchAngles(plan);
+  const angles = extractResearchAngles(plan).slice(0, 3);
   const TASKS_TO_RUN = angles.length > 0 ? angles : [userRequest];
 
   const taskWithTimeout = async (
@@ -350,7 +350,7 @@ async function runParallelTrackResearch(
     index: number,
   ): Promise<{ angle: string; findings: string; timedOut: boolean }> => {
     const taskId = `${agentId}_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`;
-    const TASK_TIMEOUT_MS = 120_000;
+    const TASK_TIMEOUT_MS = 45_000;
 
     emitTuiTaskStart({
       toolCallId: taskId,
@@ -544,23 +544,6 @@ function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['bui
         };
       },
     })
-    .addNode('critiqueResearch', {
-      type: 'function',
-      fn: async (ctx) => ({
-        critique: await runAgentPrompt(
-          fred,
-          'research-critic',
-          [
-            buildCurrentDateContextLine(),
-            '',
-            `User request: ${ctx.input}`,
-            '',
-            'Draft answer:',
-            readOutputField(ctx.outputs.synthesizeResearch, 'synthesis'),
-          ].join('\n'),
-        ),
-      }),
-    })
     .addNode('finalizeResearch', {
       type: 'function',
       fn: (ctx) => {
@@ -579,7 +562,7 @@ function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['bui
         appendReportSection(lines, '## Market Findings', readOutputField(ctx.outputs.mergeResearch, 'marketFindings'));
         appendReportSection(lines, '## Risk Findings', readOutputField(ctx.outputs.mergeResearch, 'riskFindings'));
         appendReportSection(lines, '## Synthesis', readOutputField(ctx.outputs.synthesizeResearch, 'synthesis'));
-        lines.push('## Critique Checklist', readOutputField(ctx.outputs.critiqueResearch, 'critique'));
+        // Critique step removed — self-check is now part of the synthesizer prompt.
 
         return {
           finalReport: lines.join('\n'),
@@ -588,15 +571,13 @@ function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['bui
     })
     .addEdge('planResearch', 'fanOutResearch')
     .addEdge('mergeResearch', 'synthesizeResearch')
-    .addEdge('synthesizeResearch', 'critiqueResearch')
-    .addEdge('critiqueResearch', 'finalizeResearch')
+    .addEdge('synthesizeResearch', 'finalizeResearch')
     .setHooks(createWorkflowProgressHooks({
       planResearch: 'research-planner',
       webTrack: 'web-researcher',
       marketTrack: 'market-researcher',
       riskTrack: 'risk-analyst',
       synthesizeResearch: 'research-synthesizer',
-      critiqueResearch: 'research-critic',
       finalizeResearch: 'finalize-research',
     }, 3))
     .setEntry('planResearch')

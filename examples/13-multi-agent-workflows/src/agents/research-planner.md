@@ -2,8 +2,7 @@
 id: research-planner
 platform: openrouter
 model: <%= env.FRED_EXAMPLE_MODEL || 'openrouter/free' %>
-tools:
-  - agent_browser_research
+tools: []
 ---
 
 You are a research planning specialist.

@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { Fred } from '@fancyrobot/fred';
 import type { SubagentExecutionSummary, SubagentInfo } from '@fancyrobot/fred';
 import { SqliteContextStorage } from '@fancyrobot/fred/context/sqlite';
+import { smoothStream, createTextSmoother } from '@fancyrobot/fred/stream';
 import {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider as detectAvailableProviderFromDev,
@@ -184,6 +185,38 @@ export interface NonInteractiveFallbackPayload {
   help: string;
 }
 
+export interface AssistantSegmentRenderer {
+  enqueueText: (text: string) => void;
+  flushAll: () => void;
+  clear: () => void;
+  stop: () => void;
+}
+
+/**
+ * Create an assistant segment renderer that delegates to the shared
+ * {@link createTextSmoother} from `@fancyrobot/fred/stream`.
+ *
+ * This is a thin CLI adapter that preserves the existing interface while
+ * using the provider-agnostic smoothing implementation from core.
+ */
+export function createAssistantSegmentRenderer(options: {
+  pushSegment: (segment: string, tokenCount?: number) => void;
+  intervalMs?: number;
+}): AssistantSegmentRenderer {
+  const smoother = createTextSmoother({
+    onChunk: options.pushSegment,
+    delayMs: options.intervalMs ?? 12,
+    chunking: 'word',
+  });
+
+  return {
+    enqueueText: smoother.push,
+    flushAll: smoother.flushAll,
+    clear: smoother.clear,
+    stop: smoother.stop,
+  };
+}
+
 type GlobalProgressSink = {
   start: (event: {
     toolCallId: string;
@@ -218,6 +251,110 @@ export function createNonInteractiveFallbackPayload(reason: string): NonInteract
     suggestion: 'Run fred chat in a terminal for interactive mode',
     help: 'Use fred --help for other commands',
   };
+}
+
+// ---------------------------------------------------------------------------
+// XML tag filter — stream transform
+// ---------------------------------------------------------------------------
+
+const XML_TAG_PATTERN = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
+const MAX_XML_FILTER_PASSES = 8;
+const MAX_XML_BUFFER_CHARS = 8_192;
+
+/**
+ * Strip XML tags from token deltas in a streaming pipeline.
+ *
+ * Handles partial XML tags that span multiple token events by buffering
+ * text until a complete tag boundary is found. Non-token events pass
+ * through immediately (after flushing any safe buffered text).
+ *
+ * Returns a curried transform: `filterXmlTokenStream(source) => AsyncIterable<E>`.
+ */
+export function filterXmlTokenStream<
+  E extends { type: string; delta?: string },
+>(source: AsyncIterable<E>): AsyncIterable<E> {
+  async function* generate(): AsyncGenerator<E> {
+    let buffer = '';
+    let templateEvent: E | null = null;
+
+    const filterXml = (text: string): string => {
+      let filtered = text;
+      let previous = '';
+      let passes = 0;
+      while (filtered !== previous && passes < MAX_XML_FILTER_PASSES) {
+        previous = filtered;
+        filtered = filtered.replace(XML_TAG_PATTERN, '');
+        passes += 1;
+      }
+      return filtered;
+    };
+
+    const makeTokenEvent = (delta: string): E => {
+      return { ...templateEvent!, delta } as E;
+    };
+
+    for await (const event of source) {
+      if (event.type !== 'token' || !event.delta) {
+        // Flush buffer before non-token events
+        if (buffer.length > 0 && templateEvent) {
+          const filtered = filterXml(buffer);
+          buffer = '';
+          if (filtered) {
+            yield makeTokenEvent(filtered);
+          }
+        }
+        yield event;
+        continue;
+      }
+
+      templateEvent = event;
+      buffer += event.delta;
+
+      // Check for partial XML tag at end of buffer
+      const lastOpenBracket = buffer.lastIndexOf('<');
+      if (lastOpenBracket >= 0) {
+        const afterBracket = buffer.slice(lastOpenBracket);
+        if (/^<[a-z/]/i.test(afterBracket) && !afterBracket.includes('>')) {
+          // Partial tag detected — flush safe prefix, keep the rest
+          const safe = buffer.slice(0, lastOpenBracket);
+          if (safe) {
+            const filtered = filterXml(safe);
+            if (filtered) {
+              yield makeTokenEvent(filtered);
+            }
+          }
+          buffer = afterBracket;
+
+          // Safety cap
+          if (buffer.length > MAX_XML_BUFFER_CHARS) {
+            const filtered = filterXml(buffer);
+            buffer = '';
+            if (filtered) {
+              yield makeTokenEvent(filtered);
+            }
+          }
+          continue;
+        }
+      }
+
+      // No partial tags — filter and flush
+      const filtered = filterXml(buffer);
+      buffer = '';
+      if (filtered) {
+        yield makeTokenEvent(filtered);
+      }
+    }
+
+    // Flush any remaining buffer
+    if (buffer.length > 0 && templateEvent) {
+      const filtered = filterXml(buffer);
+      if (filtered) {
+        yield makeTokenEvent(filtered);
+      }
+    }
+  }
+
+  return generate();
 }
 
 /**
@@ -431,10 +568,16 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       signal: activeStreamAbort.signal,
                     });
 
-                    // Buffer for XML-aware token filtering.
-                    // XML tags may span multiple token deltas, so we accumulate
-                    // and only flush text that is safe (no partial opening tags).
-                    let tokenBuffer = '';
+                    // Two-stage display pipeline:
+                    // 1. filterXmlTokenStream: strips XML tags from token deltas
+                    //    (stateful across events to handle partial tags)
+                    // 2. smoothStream: splits filtered text into word-level
+                    //    segments with real async delays between them
+                    const smooth = smoothStream({ delayMs: 12, chunking: 'word' });
+                    const displayStream = smooth(
+                      filterXmlTokenStream(streamResult.fullStream),
+                    );
+
                     let renderedAssistantText = '';
                     const pendingHandoffs = new Map<number, {
                       toolCallId: string;
@@ -448,9 +591,6 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       handoffAgentId?: string;
                       suppressVisibleOutput?: boolean;
                     }> = [];
-                    const MAX_TOKEN_BUFFER_CHARS = 8_192;
-                    const MAX_XML_FILTER_PASSES = 8;
-                    const xmlTagPattern = /<\/?[a-z][a-z0-9_-]*(?:\s[^>]*)?\/?>/gi;
 
                     const getCurrentToolDepth = (): number => {
                       const currentRun = activeRuns[activeRuns.length - 1];
@@ -498,27 +638,20 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       let passes = 0;
                       while (filtered !== previous && passes < MAX_XML_FILTER_PASSES) {
                         previous = filtered;
-                        filtered = filtered.replace(xmlTagPattern, '');
+                        filtered = filtered.replace(XML_TAG_PATTERN, '');
                         passes += 1;
                       }
                       return filtered;
-                    };
-                    const splitDisplaySegments = (text: string): string[] => {
-                      const matches = text.match(/\s+|[A-Za-z0-9_]+|[^\sA-Za-z0-9_]/g);
-                      return matches ?? [text];
                     };
                     const pushVisibleText = (text: string): void => {
                       if (!text) {
                         return;
                       }
                       renderedAssistantText += text;
-                      const segments = splitDisplaySegments(text);
-                      for (let index = 0; index < segments.length; index += 1) {
-                        app.pushAssistantToken(segments[index], index === 0 ? 1 : 0);
-                      }
+                      app.pushAssistantToken(text, 1);
                     };
 
-                    for await (const event of streamResult.fullStream) {
+                    for await (const event of displayStream) {
                       if (activeStreamAbort?.signal.aborted) break;
                       if (event.type === 'run-start') {
                         const pendingDepths = Array.from(pendingHandoffs.keys()).sort((left, right) => right - left);
@@ -546,45 +679,13 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                           startedAt: event.emittedAt,
                         });
                       } else if (event.type === 'token' && event.delta) {
-                        tokenBuffer += event.delta;
-
-                        // Check if buffer might contain a partial opening XML tag
-                        const lastOpenBracket = tokenBuffer.lastIndexOf('<');
-                        if (lastOpenBracket >= 0) {
-                          const afterBracket = tokenBuffer.slice(lastOpenBracket);
-                          // Only buffer if '<' is followed by a likely tag start character
-                          if (/^<[a-z/]/i.test(afterBracket) && !afterBracket.includes('>')) {
-                            // Flush everything before the potential tag
-                            const safe = tokenBuffer.slice(0, lastOpenBracket);
-                            if (safe) {
-                              const visible = filterXmlTags(safe);
-                              const currentRun = activeRuns[activeRuns.length - 1];
-                              if (visible && !currentRun?.suppressVisibleOutput) {
-                                pushVisibleText(visible);
-                              }
-                            }
-                            tokenBuffer = afterBracket;
-
-                            // Safety: cap buffered partial tags to prevent unbounded growth
-                            if (tokenBuffer.length > MAX_TOKEN_BUFFER_CHARS) {
-                              const visible = filterXmlTags(tokenBuffer);
-                              const currentRun = activeRuns[activeRuns.length - 1];
-                              if (visible && !currentRun?.suppressVisibleOutput) {
-                                pushVisibleText(visible);
-                              }
-                              tokenBuffer = '';
-                            }
-                            continue;
-                          }
-                        }
-
-                        // No partial tags -- filter complete XML tags and flush
-                        const filtered = filterXmlTags(tokenBuffer);
+                        // Token events arrive pre-filtered (XML tags stripped)
+                        // and pre-split (word-level chunks with delays) from
+                        // the two-stage display pipeline.
                         const currentRun = activeRuns[activeRuns.length - 1];
-                        if (filtered && !currentRun?.suppressVisibleOutput) {
-                          pushVisibleText(filtered);
+                        if (!currentRun?.suppressVisibleOutput) {
+                          pushVisibleText(event.delta);
                         }
-                        tokenBuffer = '';
                       } else if (event.type === 'tool-call') {
                         if (event.toolName === 'handoff_to_agent') {
                           const currentRun = activeRuns[activeRuns.length - 1];
@@ -645,15 +746,8 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       }
                     }
 
-                    // Flush any remaining buffered tokens (partial tag never closed)
-                    if (tokenBuffer) {
-                      const finalFiltered = filterXmlTags(tokenBuffer);
-                      const currentRun = activeRuns[activeRuns.length - 1];
-                      if (finalFiltered && !currentRun?.suppressVisibleOutput) {
-                        pushVisibleText(finalFiltered);
-                      }
-                      tokenBuffer = '';
-                    }
+                    // No tokenBuffer flush needed — filterXmlTokenStream
+                    // handles buffer flushing when the source stream ends.
 
                     app.completeAssistantStream();
                     if (progressSink && globalWithProgress.__FRED_TUI_TOOL_PROGRESS__ === progressSink) {
