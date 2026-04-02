@@ -633,6 +633,32 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.streaming.isStreaming).toBe(false);
   });
 
+  test('renders streamed assistant text before stream completion', async () => {
+    await createTestApp();
+
+    app.startAssistantStream();
+    app.pushAssistantToken('hello');
+
+    await waitFor(() => app.getState().streaming.outputTokenCount === 1);
+    await testSetup.renderOnce();
+    let frame = testSetup.captureCharFrame();
+
+    expect(app.getState().streaming.isStreaming).toBe(true);
+    expect(frame).toContain('hello');
+    expect(frame).not.toContain('hello world');
+
+    app.pushAssistantToken(' world');
+    await waitFor(() => app.getState().streaming.outputTokenCount === 2);
+    await testSetup.renderOnce();
+    frame = testSetup.captureCharFrame();
+
+    expect(app.getState().streaming.isStreaming).toBe(true);
+    expect(frame).toContain('hello world');
+
+    app.completeAssistantStream();
+    await waitFor(() => !app.getState().streaming.isStreaming);
+  });
+
   test('renders tool-only activity as muted transcript metadata', async () => {
     await createTestApp();
 

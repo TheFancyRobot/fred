@@ -839,7 +839,9 @@ export function buildAssistantMessageRenderable(
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
     conceal: true,
-    drawUnstyledText: options.streaming ?? false,
+    // OpenTUI's streaming markdown path only updates the visible text buffer
+    // incrementally when unstyled text drawing stays enabled.
+    drawUnstyledText: options.streaming,
   });
   md.selectable = true;
 
