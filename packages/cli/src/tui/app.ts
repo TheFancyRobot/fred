@@ -1925,8 +1925,8 @@ export class FredTuiApp {
       const existingMd = this.transcriptContent.findDescendantById(this.activeStreamingMdId);
       if (existingMd && existingMd instanceof CodeRenderable) {
         existingMd.content = sanitizeForTerminalDisplay(lastMessage.content) + buildStreamingCursorText();
-        // See comment in syncTranscriptToUI — streaming CodeRenderable skips
-        // requestRender() in its content setter; request a frame explicitly.
+        // Keep render scheduling explicit so token updates paint promptly even
+        // when OpenTUI coalesces markdown highlight work asynchronously.
         this.renderer.requestRender();
       }
     }
@@ -2073,12 +2073,8 @@ export class FredTuiApp {
         const lastMsg = messages[messages.length - 1];
         existingMd.content = sanitizeForTerminalDisplay(lastMsg.content) + buildStreamingCursorText();
         this.lastTranscriptFingerprint = transcriptFingerprint;
-        // CodeRenderable in streaming mode (streaming=true, filetype set,
-        // drawUnstyledText=false) does NOT call requestRender() from its
-        // content setter — it only marks highlights dirty and relies on an
-        // externally-driven render loop. Explicitly request a frame so the
-        // updated text is painted. OpenTUI's built-in frame-rate throttling
-        // (~16.7ms min interval) coalesces rapid calls automatically.
+        // Request a frame explicitly so streamed markdown remains visibly
+        // incremental while OpenTUI's async highlight pipeline catches up.
         this.renderer.requestRender();
         return;
       }
