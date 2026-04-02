@@ -1371,22 +1371,27 @@ export class Fred {
       return null;
     }
 
-    return {
-      conversationId,
-      messageCount: context.messages.length,
+    const preview = (() => {
+      const content = context.messages.find((message) => message.role === 'user')?.content;
+      if (typeof content === 'string') {
+        return content;
+      }
+      return content ? JSON.stringify(content) : '';
+    })();
+
+    const summary: SessionSummary = {
+      id: conversationId,
+      preview,
       createdAt: context.metadata.createdAt,
       updatedAt: context.metadata.updatedAt,
-      preview: (() => {
-        const content = context.messages.find((message) => message.role === 'user')?.content;
-        if (typeof content === 'string') {
-          return content;
-        }
-        return content ? JSON.stringify(content) : '';
-      })(),
-      summary: '',
+      messageCount: context.messages.length,
+    };
+
+    return {
+      summary,
       messages: context.messages,
       metadata: context.metadata,
-    } as unknown as SessionDetails;
+    };
   }
 
   async exportSession(
@@ -1406,21 +1411,16 @@ export class Fred {
     }
 
     if (format === 'markdown') {
-      return {
-        conversationId,
-        id: conversationId,
-        content: context.messages
-          .map((message) => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`)
-          .join('\n\n'),
-      } as unknown as SessionExportMarkdown;
+      return context.messages
+        .map((message) => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`)
+        .join('\n\n');
     }
 
     return {
-      conversationId,
       id: conversationId,
-      metadata: context.metadata,
-      messages: context.messages,
-    } as unknown as SessionExportJson;
+      metadata: context.metadata as unknown as Record<string, unknown>,
+      messages: context.messages as unknown as Array<Record<string, unknown>>,
+    };
   }
 
   async deleteSession(conversationId: string): Promise<void> {
