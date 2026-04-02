@@ -931,6 +931,55 @@ describe('TUI App (OpenTUI integration)', () => {
     });
   });
 
+  test('renders resumed streaming text after a tool result even when the first token is whitespace', async () => {
+    await createTestApp({}, { streamingFlushStrategy: 'token' });
+
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'research-msg',
+      step: 0,
+      toolCallId: 'tool_research',
+      toolName: 'run_research_swarm',
+      input: { question: 'best laptop for programming' },
+      startedAt: Date.now(),
+      depth: 1,
+    });
+    app.pushToolResult({
+      toolCallId: 'tool_research',
+      toolName: 'run_research_swarm',
+      output: 'Research completed',
+      completedAt: Date.now(),
+      durationMs: 25,
+    });
+
+    // Some providers resume the assistant response with leading whitespace.
+    app.pushAssistantToken(' ');
+    await waitFor(() => app.getState().transcript.messages.some((message) => message.role === 'assistant'));
+    await testSetup.renderOnce();
+
+    app.pushAssistantToken('Final report');
+    await waitFor(() => app.getState().transcript.messages.some((message) => message.content.includes('Final report')));
+    await testSetup.renderOnce();
+
+    const state = app.getState();
+    expect(state.transcript.messages[state.transcript.messages.length - 1]).toEqual({
+      role: 'assistant',
+      content: ' Final report',
+    });
+
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain('Final report');
+  });
+
   test('renders compact sibling-aware tree prefixes for nested tool calls', async () => {
     await createTestApp();
 
