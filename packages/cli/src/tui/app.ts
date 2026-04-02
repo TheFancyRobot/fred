@@ -2110,7 +2110,8 @@ export class FredTuiApp {
       const msgId = String(i);
       const isLastMessage = i === messages.length - 1;
       const isStreamingThis = isLastMessage && this.state.streaming.isStreaming && msg.role === 'assistant';
-      const hasAssistantText = msg.role === 'assistant' && msg.content.trim().length > 0;
+      const hasAssistantText = msg.role === 'assistant'
+        && (msg.content.length > 0 || (isLastMessage && this.state.streaming.isStreaming));
 
       if (msg.role === 'user') {
         const showSpinner = isLastMessage && this.state.streaming.waitingForFirstToken && !hasInProgressToolBlocks(this.state);
