@@ -346,18 +346,13 @@ describe('phase 33 launch contract smoke', () => {
     setup.renderer.destroy();
   });
 
-  test('startup chooser appears with empty session list and Enter creates session', async () => {
+  test('empty session list skips chooser and auto-creates a session', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     const setup = await createTestRenderer({ width: 120, height: 40 });
     const app = FredTuiApp.createWithRenderer(setup.renderer, {}, fixture);
     await Bun.sleep(20);
 
-    expect(app.getState().startup.chooser.isOpen).toBe(true);
-    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
-
-    app.processKey(makeKey({ name: 'enter' }));
-    await Bun.sleep(20);
-
+    // With no existing sessions, chooser should not appear; a session is auto-created
     expect(app.getState().startup.chooser.isOpen).toBe(false);
     expect(app.getState().sessions.selectedId).toBe('s-new');
     expect(app.getState().focusedPane).toBe('input');

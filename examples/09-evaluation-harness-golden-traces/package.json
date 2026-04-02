@@ -1,0 +1,13 @@
+{
+  "name": "@fancyrobot/fred-example-09-evaluation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*"
+  }
+}

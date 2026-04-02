@@ -1,0 +1,13 @@
+{
+  "name": "@fancyrobot/fred-example-07-hooks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*"
+  }
+}

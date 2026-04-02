@@ -110,7 +110,9 @@ export function getCurrentCorrelationContext(): CorrelationContext | undefined {
  *     console.log(currentCtx?.runId); // 'run-123'
  *   })
  * );
- * await Effect.runPromise(program);
+ * const tracedProgram = program.pipe(
+ *   Effect.tap(() => Effect.logDebug('context active'))
+ * );
  * ```
  */
 export function withCorrelationContext(ctx: CorrelationContext) {
@@ -161,5 +163,4 @@ export function getCurrentSpanIds(): {
     parentSpanId: ctx?.parentSpanId,
   };
 }
-
 

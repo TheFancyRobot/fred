@@ -176,6 +176,21 @@ describe('ToolGateService', () => {
     });
   });
 
+  test('allows tools when no policies are configured', async () => {
+    const result = await runWithToolGate(
+      Effect.gen(function* () {
+        const toolGate = yield* ToolGateService;
+        return yield* toolGate.filterTools([
+          testTool('tool-a'),
+          testTool('tool-b'),
+        ], {});
+      })
+    );
+
+    expect(result.allowed.map((tool) => tool.id)).toEqual(['tool-a', 'tool-b']);
+    expect(result.denied).toEqual([]);
+  });
+
   test('filters tool lists using role-scoped conditions', async () => {
     const tools = [testTool('create-ticket', ['write']), testTool('delete-ticket', ['destructive'])];
 
@@ -328,7 +343,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -373,7 +388,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -403,7 +418,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -431,7 +446,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -468,7 +483,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -508,7 +523,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -537,7 +552,7 @@ describe('ToolGateService', () => {
 
     test('audit emission failure does not break gate decision', async () => {
       // Create a hook manager that throws
-      const throwingHookManager: HookManagerService = {
+      const throwingHookManager = {
         registerHook: () => Effect.succeed(undefined),
         unregisterHook: () => Effect.succeed(false),
         executeHooks: () => Effect.fail(new Error('Hook execution failed')),
@@ -546,12 +561,12 @@ describe('ToolGateService', () => {
         clearAllHooks: () => Effect.succeed(undefined),
         getRegisteredHookTypes: () => Effect.succeed([]),
         getHookCount: () => Effect.succeed(0),
-      };
+      } as any as HookManagerService;
 
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, throwingHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))
@@ -580,7 +595,7 @@ describe('ToolGateService', () => {
       const mockObservability = createMockObservability();
 
       const hookLayer = Layer.succeed(HookManagerServiceTag, mockHookManager);
-      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability);
+      const obsLayer = Layer.succeed(ObservabilityServiceTag, mockObservability as any);
 
       const testLayer = ToolGateServiceLive.pipe(
         Layer.provide(Layer.merge(ToolRegistryServiceLive, Layer.merge(hookLayer, obsLayer)))

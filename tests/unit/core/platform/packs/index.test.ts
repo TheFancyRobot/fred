@@ -27,8 +27,8 @@ describe('Built-in Pack Registry', () => {
     });
 
     test('includes all expected providers', () => {
-      // Note: 'gemini' is an alias for 'google' - both are registered
-      const expectedProviders = ['anthropic', 'gemini', 'google', 'groq', 'openai', 'openrouter'];
+      // ownKeys returns unique provider IDs only (aliases like 'gemini' are not enumerated)
+      const expectedProviders = ['anthropic', 'google', 'groq', 'openai', 'openrouter'];
       const actualProviders = Object.keys(BUILTIN_PACKS).sort();
 
       expect(actualProviders).toEqual(expectedProviders);

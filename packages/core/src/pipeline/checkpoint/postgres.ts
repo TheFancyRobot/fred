@@ -14,11 +14,11 @@ import { POSTGRES_CHECKPOINTS_DDL } from './schema';
 import { withFredSpan } from '../../observability/otel';
 
 /**
- * Fire-and-forget tracing helper.
- * Casts Effect to remove requirements channel for fire-and-forget observability.
+ * Tracing combinator.
+ * Casts Effect to remove requirements and ignores tracing failures.
  */
-function trace(effect: Effect.Effect<void, unknown, unknown>): void {
-  Effect.runFork(effect as Effect.Effect<void, never, never>);
+function trace(effect: Effect.Effect<void, unknown, unknown>): Effect.Effect<void> {
+  return (effect as Effect.Effect<void, never, never>).pipe(Effect.ignore);
 }
 
 /**
@@ -135,15 +135,17 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
     await this.ensureInitialized();
 
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.storage.postgres.save', {
-        runId: checkpoint.runId,
-        workflowId: checkpoint.pipelineId,
-        stepName: checkpoint.stepName,
-        'checkpoint.step': checkpoint.step,
-        'checkpoint.status': checkpoint.status,
-        'storage.type': 'postgres',
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.storage.postgres.save', {
+          runId: checkpoint.runId,
+          workflowId: checkpoint.pipelineId,
+          stepName: checkpoint.stepName,
+          'checkpoint.step': checkpoint.step,
+          'checkpoint.status': checkpoint.status,
+          'storage.type': 'postgres',
+        })(Effect.void)
+      )
     );
 
     const client = await this.pool.connect();
@@ -172,13 +174,15 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
         ]
       );
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.storage.postgres.save.error', {
-          runId: checkpoint.runId,
-          workflowId: checkpoint.pipelineId,
-          'error.message': error instanceof Error ? error.message : String(error),
-          'storage.type': 'postgres',
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.storage.postgres.save.error', {
+            runId: checkpoint.runId,
+            workflowId: checkpoint.pipelineId,
+            'error.message': error instanceof Error ? error.message : String(error),
+            'storage.type': 'postgres',
+          })(Effect.void)
+        )
       );
       throw error;
     } finally {
@@ -195,11 +199,13 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
     await this.ensureInitialized();
 
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.storage.postgres.get_latest', {
-        runId,
-        'storage.type': 'postgres',
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.storage.postgres.get_latest', {
+          runId,
+          'storage.type': 'postgres',
+        })(Effect.void)
+      )
     );
 
     const client = await this.pool.connect();
@@ -226,24 +232,28 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
           err instanceof Error ? err.message : String(err)
         );
 
-        trace(
-          withFredSpan('checkpoint.storage.postgres.get_latest.deserialize_error', {
-            runId,
-            'checkpoint.step': row.step,
-            'error.message': err instanceof Error ? err.message : String(err),
-            'storage.type': 'postgres',
-          })(Effect.void)
+        void Effect.runPromise(
+          trace(
+            withFredSpan('checkpoint.storage.postgres.get_latest.deserialize_error', {
+              runId,
+              'checkpoint.step': row.step,
+              'error.message': err instanceof Error ? err.message : String(err),
+              'storage.type': 'postgres',
+            })(Effect.void)
+          )
         );
 
         return null;
       }
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.storage.postgres.get_latest.error', {
-          runId,
-          'error.message': error instanceof Error ? error.message : String(error),
-          'storage.type': 'postgres',
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.storage.postgres.get_latest.error', {
+            runId,
+            'error.message': error instanceof Error ? error.message : String(error),
+            'storage.type': 'postgres',
+          })(Effect.void)
+        )
       );
       throw error;
     } finally {
@@ -373,6 +383,44 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
       }
 
       return checkpoints;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get the latest checkpoint for a pipeline (highest step, timestamp tie-break).
+   * Returns the checkpoint with the highest step number, using created_at as a tie-breaker.
+   * Excludes expired checkpoints.
+   */
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    await this.ensureInitialized();
+
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT run_id, pipeline_id, step, status, context, created_at, updated_at, expires_at, step_name, pause_metadata
+         FROM checkpoints
+         WHERE pipeline_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY step DESC, created_at DESC
+         LIMIT 1`,
+        [pipelineId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      try {
+        return this.rowToCheckpoint(row);
+      } catch (err) {
+        console.warn(
+          `[PostgresCheckpointStorage] Warning: Failed to deserialize checkpoint for pipeline ${pipelineId}:`,
+          err instanceof Error ? err.message : String(err)
+        );
+        return null;
+      }
     } finally {
       client.release();
     }

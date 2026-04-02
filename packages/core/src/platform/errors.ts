@@ -110,7 +110,16 @@ export class ProviderRuntimeError extends Data.TaggedError('ProviderRuntimeError
 export class ProviderRegistrationError extends Data.TaggedError('ProviderRegistrationError')<{
   readonly providerId: string;
   readonly cause: unknown;
-}> {}
+}> {
+  get message(): string {
+    const causeMessage = this.cause instanceof Error ? this.cause.message : String(this.cause);
+    return `Failed to register provider "${this.providerId}": ${causeMessage}`;
+  }
+
+  toString(): string {
+    return `ProviderRegistrationError: ${this.message}`;
+  }
+}
 
 /**
  * Error thrown when a provider model operation fails.

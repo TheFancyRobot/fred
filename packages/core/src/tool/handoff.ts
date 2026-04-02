@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import type { Tool, ToolSchemaDefinition } from './tool';
-import { Tracer, SpanKind } from '../tracing';
+import type { Tracer } from '../tracing';
+import { SpanKind } from '../tracing';
 
 /**
  * Handoff input type
@@ -61,7 +62,7 @@ export function createHandoffTool(
         },
         message: {
           type: 'string',
-          description: 'The message to send to the target agent. If not provided, the original user message will be used.',
+          description: 'The message to send to the target agent. If not provided, the original user message will be used. Call this tool instead of telling the user that you are handing off.',
         },
         context: {
           type: 'string',
@@ -75,7 +76,7 @@ export function createHandoffTool(
   return {
     id: 'handoff_to_agent',
     name: 'handoff_to_agent',
-    description: 'Transfer the conversation to another agent. Use this when the current agent cannot handle the request and another agent would be better suited.',
+    description: 'Transfer the conversation to another agent. Use this when the current agent cannot handle the request and another agent would be better suited. Do not announce the handoff to the user; call this tool directly.',
     schema,
     execute: async (args: HandoffInput): Promise<HandoffResult> => {
       const { agentId, message, context: contextStr } = args;

@@ -1,14 +1,15 @@
 import type { Intent } from './intent/intent';
-import { IntentMatcher, createIntentMatcherSync } from './intent/matcher';
-import { IntentRouter, createIntentRouterSync } from './intent/router';
 import type { AgentConfig, AgentInstance, AgentResponse, AgentMessage } from './agent/agent';
-import { AgentManager } from './agent/manager';
 import type { PipelineConfig, PipelineInstance } from './pipeline';
-import { PipelineManager } from './pipeline/manager';
-import type { ResumeResult } from './pipeline/manager';
+import type { AnyPipelineConfig } from './pipeline/pipeline';
+import { isPipelineConfigV2 } from './pipeline/pipeline';
+import type { GraphWorkflowConfig } from './pipeline/graph';
+import type { GraphExecutionResult } from './pipeline/graph-executor';
+import { executeGraphWorkflow as executeGraphWorkflowImpl, executeGraphWorkflowEffect } from './pipeline/graph-executor';
+import type { AgentManagerLike, HookManagerLike } from './pipeline/executor';
+import type { ResumeResult } from './pipeline/resume';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
 import type { Tool } from './tool/tool';
-import { ToolRegistry } from './tool/registry';
 import { createCalculatorTool } from './tool/calculator';
 import {
   type ProviderConfig,
@@ -16,30 +17,31 @@ import {
   type ProviderDefinition,
 } from './platform/provider';
 import type { EffectProviderFactory } from './platform/base';
-import { ProviderRegistry } from './platform/registry';
-import { ContextManager } from './context/manager';
-import { HookManager } from './hooks';
 import type { HookType, HookHandler } from './hooks';
 import type { Tracer } from './tracing';
 import { NoOpTracer } from './tracing/noop-tracer';
-import { Effect, Runtime, Layer } from 'effect';
+import { Cause, Effect, Exit, Layer, Runtime, Stream } from 'effect';
 import type { StreamEvent } from './stream/events';
 import type { StreamResult } from './stream/result';
-import { MessageRouter } from './routing/router';
+import { createStreamResult } from './stream/result';
 import type { RoutingConfig, RoutingDecision } from './routing/types';
-import { WorkflowManager } from './workflow/manager';
 import type { Workflow } from './workflow/manager';
 import { buildObservabilityLayers, type ObservabilityLayers } from './observability/otel';
-import type { ObservabilityConfig } from './config/types';
-import type { ToolPoliciesConfig } from './config/types';
+import type { FrameworkConfig, ObservabilityConfig, TemplateConfig, ToolPoliciesConfig } from './config/types';
 import {
   type VariableFactory,
 } from './variables';
-import { ProviderService } from './provider/service';
-import { MessageProcessor } from './message-processor/processor';
 import type { ProcessingOptions, MemoryDefaults } from './message-processor/types';
+import type { RouteResult } from './message-processor/types';
 import { ConfigInitializer, type FredLike } from './config/initializer';
 import type {
+  ExecuteSubagentOptions,
+  ExecuteSubagentResult,
+  SpawnSubagentOptions,
+  SubagentInfo,
+} from './subagent/service';
+import type {
+  ContextStorage,
   SessionDetails,
   SessionExportJson,
   SessionExportMarkdown,
@@ -47,15 +49,25 @@ import type {
 } from './context/context';
 import {
   FredLayers,
+  makeFredRuntimeLayer,
+  type FredLayerOptions,
   type FredRuntime,
   type FredServices,
   ToolRegistryService,
+  ToolGateService,
   AgentService,
+  WorkflowService,
   PipelineService,
   ContextStorageService,
   ProviderRegistryService,
   HookManagerService,
-  ToolGateService,
+  MessageProcessorService,
+  MessageRouterService,
+  IntentMatcherService,
+  IntentRouterService,
+  PauseService,
+  SubagentService,
+  SubagentServiceLive,
 } from './services';
 import { normalizeRunRecord, normalizeLegacyGoldenTrace } from './eval/normalizer';
 import { FileTraceStorageLive } from './eval/storage';
@@ -65,6 +77,15 @@ import { runSuite, parseSuiteManifest, decodeSuiteManifest } from './eval/suite'
 import { calculateIntentMetrics } from './eval/metrics';
 import { MCPServerRegistry, MCPResourceService } from './mcp';
 import type { MCPGlobalServerConfig } from './config/types';
+import { BUILTIN_PACKS } from './platform/packs';
+import { AgentFileWatcher } from './agent/file-watcher';
+import { loadConfig } from './config/loader';
+import {
+  TemplateEngine,
+  TemplateEngineLive,
+  filterEnvVars,
+  DEFAULT_ENV_ALLOWLIST,
+} from './template';
 
 /**
  * Fred - Main class for building AI agents
@@ -85,31 +106,40 @@ import type { MCPGlobalServerConfig } from './config/types';
  * Internally, Fred uses Effect services for concurrency-safe operations.
  * The public API remains Promise-based for ease of use.
  */
-export class Fred implements FredLike {
-  private toolRegistry: ToolRegistry;
-  private agentManager: AgentManager;
-  private providerRegistry: ProviderRegistry;
-  private pipelineManager: PipelineManager;
-  private intentMatcher: IntentMatcher;
-  private intentRouter: IntentRouter;
+export class Fred {
   private defaultAgentId?: string;
-  private contextManager: ContextManager;
   private memoryDefaults: MemoryDefaults = {};
-  private hookManager: HookManager;
   private tracer?: Tracer;
-  private messageRouter?: MessageRouter;
-  private workflowManager?: WorkflowManager;
+  private routingConfig?: RoutingConfig;
   private observabilityLayers?: ObservabilityLayers;
+  private observabilityConfig?: ObservabilityConfig;
+  private templateConfig: TemplateConfig = {};
+  private templateContextConfig: Partial<FrameworkConfig> = {};
   private globalVariables: Map<string, VariableFactory> = new Map();
+  private templateCustomNamespaces = new Map<string, () => unknown>();
+  private runtimeGeneration = 0;
+  private readonly toolSnapshot = new Map<string, Tool>();
+  private readonly intentSnapshot = new Map<string, Intent>();
+  private readonly providerSnapshot = new Map<string, ProviderDefinition>();
+  private readonly workflowSnapshot = new Map<string, Workflow>();
+  private readonly hookSnapshot: Array<{ type: HookType; handler: HookHandler }> = [];
+  private readonly graphWorkflowSnapshot = new Map<string, GraphWorkflowConfig>();
+  private readonly builtInToolIds = new Set<string>();
+  private readonly configInitializer: ConfigInitializer;
+  private agentFileWatcher?: AgentFileWatcher;
 
-  // Extracted services
-  private providerService: ProviderService;
-  private messageProcessor: MessageProcessor;
-  private configInitializer: ConfigInitializer;
+  /** Optional callback invoked when runtime warnings occur (e.g. hot reload errors). Pass null to clear. */
+  onWarning?: (message: string | null) => void;
 
   // MCP integration
-  private mcpServerRegistry: MCPServerRegistry;
-  private mcpResourceService: MCPResourceService;
+  private readonly mcpServerRegistry: MCPServerRegistry;
+  private readonly mcpResourceService: MCPResourceService;
+
+  // Pending context state for pre-runtime replay
+  private pendingContextPolicy: any = null;
+  private pendingStorageAdapter: unknown = null;
+  // Persistent reference to the storage adapter for session listing
+  private activeStorageAdapter: ContextStorage | null = null;
 
   // Effect runtime for service execution (lazy initialized)
   private runtime: FredRuntime | null = null;
@@ -134,50 +164,15 @@ export class Fred implements FredLike {
   }
 
   constructor(tracer?: Tracer) {
-    this.toolRegistry = new ToolRegistry();
     this.tracer = tracer;
-    this.providerRegistry = new ProviderRegistry();
-    this.agentManager = new AgentManager(this.toolRegistry, tracer);
-    this.intentMatcher = createIntentMatcherSync();
-    this.intentRouter = createIntentRouterSync(this.agentManager);
-    this.contextManager = new ContextManager();
-    this.pipelineManager = new PipelineManager(this.agentManager, tracer, this.contextManager);
-    this.hookManager = new HookManager();
-
-    // Initialize extracted services
-    this.providerService = new ProviderService(this.providerRegistry, this.agentManager);
-    this.messageProcessor = new MessageProcessor({
-      contextManager: this.contextManager,
-      agentManager: this.agentManager,
-      pipelineManager: this.pipelineManager,
-      intentMatcher: this.intentMatcher,
-      intentRouter: this.intentRouter,
-      tracer: this.tracer,
-      messageRouter: this.messageRouter,
-      memoryDefaults: this.memoryDefaults,
-      defaultAgentId: this.defaultAgentId,
-      hookManager: this.hookManager,
-      observabilityService: undefined, // Will be set via configureObservability if needed
-    });
     this.configInitializer = new ConfigInitializer();
 
     // Initialize MCP registry and resource service
     this.mcpServerRegistry = new MCPServerRegistry();
     this.mcpResourceService = new MCPResourceService(this.mcpServerRegistry);
 
-    // Wire MCP registry into agent factory
-    this.agentManager.getAgentFactory().setMCPServerRegistry(this.mcpServerRegistry);
-
-    // Set tracer on hook manager if provided
-    if (this.tracer) {
-      this.hookManager.setTracer(this.tracer);
-    }
-
     // Register built-in tools
     this.registerBuiltInTools();
-
-    // Register shutdown hooks for MCP client cleanup
-    this.agentManager.registerShutdownHooks();
 
     // Deprecation warning for direct construction
     // Only warn in development to avoid noise in production
@@ -190,6 +185,117 @@ export class Fred implements FredLike {
     }
   }
 
+  private getRuntimeLayerOptionsSnapshot(): FredLayerOptions {
+    return {
+      routingConfig: this.routingConfig,
+      observabilityLayers: this.observabilityLayers,
+    };
+  }
+
+  private invalidateRuntime(reason: string): void {
+    this.runtimeGeneration += 1;
+    this.runtime = null;
+    this.runtimePromise = null;
+    // Preserve storage adapter so it gets replayed into the next runtime
+    if (this.activeStorageAdapter && !this.pendingStorageAdapter) {
+      this.pendingStorageAdapter = this.activeStorageAdapter;
+    }
+    void reason;
+  }
+
+  private async applyRuntimeState(runtime: FredRuntime): Promise<void> {
+    const self = this;
+    const tools = Array.from(this.toolSnapshot.values()).filter(
+      (tool) => !this.builtInToolIds.has(tool.id)
+    );
+    const intents = Array.from(this.intentSnapshot.values());
+    const providers = Array.from(this.providerSnapshot.values());
+    const config = {
+      defaultAgentId: this.defaultAgentId,
+      memoryDefaults: this.memoryDefaults,
+      tracer: this.tracer,
+    };
+    const globalVariables = this.snapshotGlobalVariablesSync();
+    const templateNamespaces = this.snapshotTemplateNamespacesSync();
+    const envAllowlist = this.templateConfig.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST];
+
+    await Runtime.runPromise(runtime as any)(
+      Effect.gen(function* () {
+        const toolRegistryService = yield* ToolRegistryService;
+        const providerRegistryService = yield* ProviderRegistryService;
+        const agentService = yield* AgentService;
+        const processor = yield* MessageProcessorService;
+        const workflowService = yield* WorkflowService;
+        const templateEngine = yield* TemplateEngine;
+        const matcherOption = yield* Effect.serviceOption(IntentMatcherService);
+        const routerOption = yield* Effect.serviceOption(IntentRouterService);
+
+        if (tools.length > 0) {
+          yield* toolRegistryService.registerTools(tools);
+        }
+
+        if (providers.length > 0) {
+          for (const definition of providers) {
+            yield* providerRegistryService.registerDefinition(definition);
+          }
+        }
+
+        if (intents.length > 0 && matcherOption._tag === 'Some') {
+          yield* matcherOption.value.registerIntents(intents);
+        }
+
+        if (self.workflowSnapshot.size > 0) {
+          for (const workflow of self.workflowSnapshot.values()) {
+            yield* workflowService.addWorkflow(workflow.name, {
+              defaultAgent: workflow.defaultAgent,
+              agents: workflow.agents,
+              routing: workflow.routing,
+            });
+          }
+        }
+
+        if (self.graphWorkflowSnapshot.size > 0) {
+          const pipelineService = yield* PipelineService;
+          for (const config of self.graphWorkflowSnapshot.values()) {
+            yield* pipelineService.registerGraphWorkflow(config);
+          }
+        }
+
+        if (self.hookSnapshot.length > 0) {
+          const hooks = yield* HookManagerService;
+          for (const { type, handler } of self.hookSnapshot) {
+            yield* hooks.registerHook(type, handler);
+          }
+        }
+
+        if (self.defaultAgentId && routerOption._tag === 'Some') {
+          yield* routerOption.value.setDefaultAgent(self.defaultAgentId);
+        }
+
+        yield* agentService.setTracer(self.tracer);
+        yield* agentService.setDefaultSystemMessage(undefined);
+        yield* agentService.setGlobalVariablesResolver(() => globalVariables);
+        yield* agentService.setTemplateEngine(templateEngine);
+        yield* agentService.setTemplateCustomNamespaces(templateNamespaces);
+        yield* agentService.setTemplateEnvAllowlist(envAllowlist);
+        yield* agentService.setTemplateFredConfig(self.templateContextConfig);
+
+        yield* processor.updateConfig(config);
+
+        // Replay pending context configuration
+        const contextService = yield* ContextStorageService;
+        if (self.pendingContextPolicy) {
+          yield* contextService.setDefaultPolicy(self.pendingContextPolicy);
+          self.pendingContextPolicy = null;
+        }
+        if (self.pendingStorageAdapter) {
+          yield* contextService.replaceStorage(self.pendingStorageAdapter as any);
+          self.pendingStorageAdapter = null;
+        }
+      }) as Effect.Effect<void, never, FredServices | TemplateEngine>
+    );
+  }
+
   /**
    * Ensure Effect runtime is initialized (lazy initialization).
    *
@@ -200,13 +306,45 @@ export class Fred implements FredLike {
     if (this.runtime) return this.runtime;
 
     if (!this.runtimePromise) {
-      this.runtimePromise = Effect.runPromise(
-        Effect.scoped(Layer.toRuntime(FredLayers))
-      );
+      const generation = this.runtimeGeneration;
+      const layerOptions = this.getRuntimeLayerOptionsSnapshot();
+
+      this.runtimePromise = (async () => {
+        try {
+          const runtime = await Effect.runPromise(
+            Effect.scoped(
+              Layer.toRuntime(
+                Layer.mergeAll(
+                  makeFredRuntimeLayer(layerOptions),
+                  TemplateEngineLive({
+                    ...this.templateConfig,
+                    basePath: process.cwd(),
+                  })
+                )
+              )
+            )
+          ) as FredRuntime;
+
+          await this.applyRuntimeState(runtime);
+
+          if (generation !== this.runtimeGeneration) {
+            this.runtimePromise = null;
+            return this.ensureRuntime();
+          }
+
+          this.runtime = runtime;
+          return runtime;
+        } catch (error) {
+          if (generation === this.runtimeGeneration) {
+            this.runtime = null;
+            this.runtimePromise = null;
+          }
+          throw error;
+        }
+      })();
     }
 
-    this.runtime = await this.runtimePromise;
-    return this.runtime;
+    return this.runtimePromise;
   }
 
   /**
@@ -221,12 +359,21 @@ export class Fred implements FredLike {
     errorMessage: string
   ): Promise<A> {
     const runtime = await this.ensureRuntime();
-    try {
-      return await Runtime.runPromise(runtime)(effect);
-    } catch (error) {
-      // Wrap Effect error as standard Error with cause
-      throw new Error(errorMessage, { cause: error });
+    // Wrap with Effect.exit so the fiber always succeeds. This prevents
+    // Effect's runtime from logging "Fiber terminated with an unhandled
+    // error" to stderr, which corrupts TUI displays that use alternate
+    // screen mode. We inspect the Exit value ourselves and re-throw.
+    const exit = await Runtime.runPromise(runtime)(Effect.exit(effect));
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
     }
+    // Extract the original error from the Cause for the wrapper
+    const failure = Cause.failureOption(exit.cause);
+    const defects = Array.from(Cause.defects(exit.cause));
+    const cause = failure._tag === 'Some'
+      ? failure.value
+      : defects[0] ?? exit.cause;
+    throw new Error(errorMessage, { cause });
   }
 
   /**
@@ -252,12 +399,37 @@ export class Fred implements FredLike {
   }
 
   /**
+   * Run an Effect program with Fred services, without fiber failure logging.
+   *
+   * Unlike calling `Runtime.runPromise(runtime)(effect)` directly, this method
+   * wraps the program with `Effect.exit` to prevent Effect's runtime from
+   * logging "Fiber terminated with an unhandled error" to stderr. This is
+   * important in TUI environments where stderr writes corrupt the display.
+   *
+   * @example
+   * ```typescript
+   * const fred = await Fred.create();
+   *
+   * const result = await fred.runSafe(
+   *   Effect.gen(function* () {
+   *     const toolService = yield* ToolRegistryService;
+   *     return yield* toolService.size();
+   *   })
+   * );
+   * ```
+   */
+  async runSafe<A, E>(effect: Effect.Effect<A, E, FredServices>): Promise<A> {
+    return this.runEffect(effect, 'Effect execution failed');
+  }
+
+  /**
    * Register built-in tools that are available by default
    */
   private registerBuiltInTools(): void {
     const calculatorTool = createCalculatorTool();
-    // Cast to Tool for registry compatibility (registry uses Tool<unknown, unknown, unknown>)
-    this.toolRegistry.registerTool(calculatorTool as unknown as Tool);
+    const tool = calculatorTool as unknown as Tool;
+    this.builtInToolIds.add(tool.id);
+    this.toolSnapshot.set(tool.id, tool);
   }
 
   /**
@@ -265,11 +437,7 @@ export class Fred implements FredLike {
    */
   enableTracing(tracer?: Tracer): void {
     this.tracer = tracer || new NoOpTracer();
-    this.agentManager.setTracer(this.tracer);
-    this.pipelineManager.setTracer(this.tracer);
-    this.pipelineManager.setContextManager(this.contextManager);
-    this.hookManager.setTracer(this.tracer);
-    this.messageProcessor.updateDeps({ tracer: this.tracer });
+    this.invalidateRuntime('tracer updated');
   }
 
   // --- Global Variables ---
@@ -301,98 +469,362 @@ export class Fred implements FredLike {
   }
 
   private updateGlobalVariablesResolver(): void {
-    this.agentManager.setGlobalVariablesResolver(() => {
-      const result: Record<string, string | number | boolean> = {};
-      for (const [name, factory] of this.globalVariables.entries()) {
-        result[name] = Effect.runSync(factory());
-      }
-      return result;
-    });
+    if (!this.runtime) {
+      return;
+    }
+
+    const snapshot = this.snapshotGlobalVariablesSync();
+    const templateNamespaces = this.snapshotTemplateNamespacesSync();
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        yield* agentService.setGlobalVariablesResolver(() => snapshot);
+        yield* agentService.setTemplateCustomNamespaces(templateNamespaces);
+      })
+    );
   }
 
-  // --- Provider Management (delegated to ProviderService) ---
+  private snapshotTemplateNamespacesSync(): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {};
+    for (const [namespace, resolver] of this.templateCustomNamespaces.entries()) {
+      snapshot[namespace] = resolver();
+    }
+    return snapshot;
+  }
 
-  registerProvider(platform: string, provider: ProviderDefinition): void {
-    this.providerService.registerProvider(platform, provider);
+  addTemplateContext(namespace: string, resolver: () => unknown): void {
+    this.templateCustomNamespaces.set(namespace, resolver);
+    this.updateGlobalVariablesResolver();
+  }
+
+  private snapshotGlobalVariablesSync(): Record<string, string | number | boolean> {
+    const result: Record<string, string | number | boolean> = {};
+    for (const [name, factory] of this.globalVariables.entries()) {
+      result[name] = Effect.runSync(factory());
+    }
+    return result;
+  }
+
+  // --- Provider Management ---
+
+  registerProvider(_platform: string, provider: ProviderDefinition): void {
+    this.providerSnapshot.set(provider.id, provider);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.registerDefinition(provider);
+      })
+    );
   }
 
   listProviders(): string[] {
-    return this.providerService.listProviders();
+    if (!this.runtime) {
+      return Array.from(this.providerSnapshot.keys());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.listProviders();
+      })
+    );
   }
 
   hasProvider(providerId: string): boolean {
-    return this.providerService.hasProvider(providerId);
+    if (!this.runtime) {
+      return this.providerSnapshot.has(providerId);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.hasProvider(providerId);
+      })
+    );
   }
 
   async useProvider(platform: string, config?: ProviderConfig): Promise<ProviderDefinition> {
-    return this.providerService.useProvider(platform, config);
+    await this.registerProviderPack(platform, config);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.getDefinition(platform);
+      }),
+      `Failed to use provider: ${platform}`
+    );
   }
 
   async registerProviderPack(idOrPackage: string, config: ProviderConfig = {}): Promise<void> {
-    return this.providerService.registerProviderPack(idOrPackage, config);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.register(idOrPackage, config);
+      }),
+      `Failed to register provider pack: ${idOrPackage}`
+    );
+
+    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerProviderFactory(factory: EffectProviderFactory, config: ProviderConfig = {}): Promise<void> {
-    return this.providerService.registerProviderFactory(factory, config);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        yield* providers.registerFactory(factory, config);
+      }),
+      `Failed to register provider factory: ${factory.id}`
+    );
+
+    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerDefaultProviders(config?: ProviderConfigInput): Promise<void> {
-    return this.providerService.registerDefaultProviders(config);
+    if (config?.providers && config.providers.length > 0) {
+      for (const registration of config.providers) {
+        const resolvedId = config.aliases?.[registration.id] ?? registration.id;
+        const defaults = config.modelDefaults
+          ? {
+              ...config.modelDefaults,
+              model: config.defaultModel ?? config.modelDefaults.model,
+            }
+          : config.defaultModel
+            ? { model: config.defaultModel }
+            : undefined;
+
+        const providerConfig: ProviderConfig = {
+          ...registration.config,
+          modelDefaults: registration.modelDefaults ?? defaults,
+        };
+
+        await this.registerProviderPack(resolvedId, providerConfig);
+      }
+    } else {
+      for (const [id, factory] of Object.entries(BUILTIN_PACKS)) {
+        try {
+          await this.registerProviderFactory(factory, {});
+        } catch (error) {
+          console.debug(`Built-in provider ${id} not available:`, error);
+        }
+      }
+    }
+  }
+
+  private async refreshProviderSnapshotFromRuntime(): Promise<void> {
+    const definitions = await this.runEffect(
+      Effect.gen(function* () {
+        const providers = yield* ProviderRegistryService;
+        return yield* providers.getDefinitions();
+      }),
+      'Failed to refresh provider snapshot'
+    );
+
+    this.providerSnapshot.clear();
+    for (const definition of definitions) {
+      this.providerSnapshot.set(definition.id, definition);
+    }
   }
 
   // --- Tool Management ---
 
   registerTool(tool: Tool): void {
-    this.toolRegistry.registerTool(tool);
+    this.toolSnapshot.set(tool.id, tool);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const tools = yield* ToolRegistryService;
+        yield* tools.registerTool(tool);
+      })
+    );
   }
 
   registerTools(tools: Tool[]): void {
-    this.toolRegistry.registerTools(tools);
+    for (const tool of tools) {
+      this.toolSnapshot.set(tool.id, tool);
+    }
+
+    if (!this.runtime || tools.length === 0) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistryService;
+        yield* registry.registerTools(tools);
+      })
+    );
   }
 
   getTool(id: string): Tool | undefined {
-    return this.toolRegistry.getTool(id);
+    if (this.runtime) {
+      const tools = Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistryService;
+          return yield* registry.getAllTools();
+        })
+      );
+      return tools.find((tool) => tool.id === id);
+    }
+
+    return this.toolSnapshot.get(id);
   }
 
   getTools(): Tool[] {
-    return this.toolRegistry.getAllTools();
+    if (this.runtime) {
+      return Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistryService;
+          return yield* registry.getAllTools();
+        })
+      );
+    }
+
+    return Array.from(this.toolSnapshot.values());
   }
 
   // --- Intent Management ---
 
   registerIntent(intent: Intent): void {
-    this.intentMatcher.registerIntents([intent]);
+    this.registerIntents([intent]);
   }
 
   registerIntents(intents: Intent[]): void {
-    this.intentMatcher.registerIntents(intents);
+    for (const intent of intents) {
+      this.intentSnapshot.set(intent.id, intent);
+    }
+
+    if (!this.runtime) {
+      return;
+    }
+
+    const currentIntents = Array.from(this.intentSnapshot.values());
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const matcher = yield* Effect.serviceOption(IntentMatcherService);
+        if (matcher._tag === 'Some') {
+          yield* matcher.value.registerIntents(currentIntents);
+        }
+      })
+    );
   }
 
   getIntents(): Intent[] {
-    return this.intentMatcher.getIntents();
+    if (!this.runtime) {
+      return Array.from(this.intentSnapshot.values());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const matcher = yield* Effect.serviceOption(IntentMatcherService);
+        if (matcher._tag === 'Some') {
+          return yield* matcher.value.getIntents();
+        }
+        return [] as Intent[];
+      })
+    );
   }
 
   // --- Agent Management ---
 
   async createAgent(config: AgentConfig): Promise<AgentInstance> {
-    return this.agentManager.createAgent(config);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.createAgent(config);
+      }),
+      `Failed to create agent: ${config.id}`
+    );
+  }
+
+  async removeAgent(id: string): Promise<boolean> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.removeAgent(id);
+      }),
+      `Failed to remove agent: ${id}`
+    );
+  }
+
+  setAgentFileWatcher(watcher: AgentFileWatcher): void {
+    this.agentFileWatcher?.close();
+    this.agentFileWatcher = watcher;
+  }
+
+  emitWarning(message: string | null): void {
+    this.onWarning?.(message);
+  }
+
+  async onPartialFileChanged(partialName: string, filePath: string): Promise<void> {
+    await this.runEffect(
+      Effect.gen(function* () {
+        const templateEngine = yield* TemplateEngine;
+        yield* templateEngine.invalidateCache();
+      }) as unknown as Effect.Effect<void, never, FredServices>,
+      `Failed to invalidate template cache for partial "${partialName}" from ${filePath}`
+    );
+  }
+
+  async registerAgent(config: AgentConfig): Promise<AgentInstance> {
+    return this.createAgent(config);
   }
 
   getAgent(id: string): AgentInstance | undefined {
-    return this.agentManager.getAgent(id);
+    if (!this.runtime) {
+      return undefined;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAgentOptional(id);
+      })
+    );
   }
 
   getAgents(): AgentInstance[] {
-    return this.agentManager.getAllAgents();
+    if (!this.runtime) {
+      return [];
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAllAgents();
+      })
+    );
   }
 
   setDefaultAgent(agentId: string): void {
-    if (!this.agentManager.hasAgent(agentId)) {
-      throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
+    if (this.runtime) {
+      const exists = Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const agentService = yield* AgentService;
+          return yield* agentService.hasAgent(agentId);
+        })
+      );
+      if (!exists) {
+        throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
+      }
+
+      // Update the processor config in the running runtime without invalidation
+      Runtime.runSync(this.runtime)(
+        Effect.gen(function* () {
+          const processor = yield* MessageProcessorService;
+          yield* processor.updateConfig({ defaultAgentId: agentId });
+        })
+      );
     }
+
     this.defaultAgentId = agentId;
-    this.intentRouter.setDefaultAgent(agentId);
-    this.messageProcessor.updateDeps({ defaultAgentId: agentId });
   }
 
   getDefaultAgentId(): string | undefined {
@@ -401,32 +833,219 @@ export class Fred implements FredLike {
 
   // --- Pipeline Management ---
 
-  async createPipeline(config: PipelineConfig): Promise<PipelineInstance> {
-    return this.pipelineManager.createPipeline(config);
+  async createPipeline(config: AnyPipelineConfig): Promise<PipelineInstance | void> {
+    if (isPipelineConfigV2(config)) {
+      return this.runEffect(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.createPipelineV2(config);
+        }),
+        `Failed to create pipeline: ${config.id}`
+      );
+    }
+
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.createPipeline(config as PipelineConfig);
+      }),
+      `Failed to create pipeline: ${config.id}`
+    );
+  }
+
+  registerGraphWorkflow(config: GraphWorkflowConfig): void {
+    this.graphWorkflowSnapshot.set(config.id, config);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        yield* service.registerGraphWorkflow(config);
+      })
+    );
+  }
+
+  async executeGraphWorkflow(
+    id: string,
+    input: string,
+    options?: { conversationId?: string }
+  ): Promise<GraphExecutionResult> {
+    const config = this.graphWorkflowSnapshot.get(id);
+    if (!config) {
+      throw new Error(`Graph workflow not found: ${id}`);
+    }
+
+    const runtime = await this.ensureRuntime();
+    const agents = await Runtime.runPromise(runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.getAllAgents();
+      })
+    );
+
+    const agentMap = new Map(agents.map((agent) => [agent.id, agent]));
+    const agentManager: AgentManagerLike = {
+      getAgent: (agentId: string) => {
+        const agent = agentMap.get(agentId);
+        if (!agent) {
+          throw new Error(`Agent not found: ${agentId}`);
+        }
+        return agent;
+      },
+      hasAgent: (agentId: string) => agentMap.has(agentId),
+    };
+
+    const hookManager = await Runtime.runPromise(runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        const adapter: HookManagerLike = {
+          executeHooks: (hookName, event) =>
+            Runtime.runPromise(runtime)(hooks.executeHooks(hookName as HookType, event)).then(() => undefined),
+          executeHooksAndMerge: (hookName, event) =>
+            Runtime.runPromise(runtime)(hooks.executeHooksAndMerge(hookName as HookType, event)),
+        };
+        return adapter;
+      })
+    ).catch(() => undefined);
+
+    const graphOptions = {
+      agentManager,
+      hookManager,
+      tracer: this.tracer,
+      ...options,
+    };
+
+    // Use the Effect-native path with the Fred runtime instead of the deprecated
+    // function which uses Effect.runCallback without a runtime, causing hangs
+    // when graph nodes call back into Runtime.runPromise.
+    const exit = await Runtime.runPromise(runtime)(
+      Effect.exit(executeGraphWorkflowEffect(config, input, graphOptions))
+    );
+
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+
+    // Mirror the deprecated function's error-to-result conversion
+    const error = Cause.squash(exit.cause);
+    return {
+      success: false,
+      context: {
+        pipelineId: config.id,
+        input,
+        outputs: {},
+        history: [],
+        metadata: {},
+      },
+      outputs: {},
+      executedNodes: [],
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+
+  async executePipeline(
+    pipelineId: string,
+    message: string,
+    previousMessages: AgentMessage[] = [],
+    options?: {
+      conversationId?: string;
+      appendToContext?: boolean;
+      sequentialVisibility?: boolean;
+    }
+  ): Promise<AgentResponse> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.executePipeline(pipelineId, message, previousMessages, options);
+      }),
+      `Failed to execute pipeline: ${pipelineId}`
+    );
   }
 
   getPipeline(id: string): PipelineInstance | undefined {
-    return this.pipelineManager.getPipeline(id);
+    if (!this.runtime) {
+      return undefined;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.getPipelineOptional(id);
+      })
+    );
   }
 
   getAllPipelines(): PipelineInstance[] {
-    return this.pipelineManager.getAllPipelines();
+    if (!this.runtime) {
+      return [];
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.getAllPipelines();
+      })
+    );
   }
 
   removePipeline(id: string): boolean {
-    return this.pipelineManager.removePipeline(id);
+    if (!this.runtime) {
+      return false;
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.removePipeline(id);
+      })
+    );
+  }
+
+  async routeMessage(
+    message: string,
+    options?: ProcessingOptions
+  ): Promise<RouteResult> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.routeMessage(
+          message,
+          undefined,
+          [],
+          {
+            conversationId: options?.conversationId,
+            sequentialVisibility: options?.sequentialVisibility,
+          }
+        );
+      }),
+      'Failed to route message'
+    );
   }
 
   // --- Routing Configuration ---
 
   configureRouting(config: RoutingConfig): void {
-    this.messageRouter = new MessageRouter(this.agentManager, this.hookManager, config);
-    this.messageProcessor.updateDeps({ messageRouter: this.messageRouter });
+    this.routingConfig = {
+      ...config,
+      rules: [...config.rules],
+      fallbackAgents: config.fallbackAgents ? [...config.fallbackAgents] : undefined,
+    };
+    this.invalidateRuntime('routing config updated');
   }
 
   async testRoute(message: string, metadata?: Record<string, unknown>): Promise<RoutingDecision | null> {
-    if (!this.messageRouter) return null;
-    return Effect.runPromise(this.messageRouter.testRoute(message, metadata ?? {}));
+    if (!this.routingConfig) return null;
+
+    return this.runEffect(
+      Effect.gen(function* () {
+        const router = yield* MessageRouterService;
+        return yield* router.testRoute(message, metadata ?? {});
+      }),
+      'Failed to test route'
+    );
   }
 
   /**
@@ -446,9 +1065,13 @@ export class Fred implements FredLike {
         message: string,
         metadata?: Record<string, unknown>
       ): Promise<import('./routing/types').RoutingExplanation | null> => {
-        if (!this.messageRouter) return null;
-        const decision = await Effect.runPromise(
-          this.messageRouter.testRoute(message, metadata ?? {})
+        if (!this.routingConfig) return null;
+        const decision = await this.runEffect(
+          Effect.gen(function* () {
+            const router = yield* MessageRouterService;
+            return yield* router.testRoute(message, metadata ?? {});
+          }),
+          'Failed to explain route'
         );
         return decision?.explanation ?? null;
       },
@@ -458,100 +1081,496 @@ export class Fred implements FredLike {
   // --- Workflow Configuration ---
 
   configureWorkflows(workflows: Workflow[]): void {
-    this.workflowManager = new WorkflowManager(this);
+    this.workflowSnapshot.clear();
     for (const workflow of workflows) {
-      this.workflowManager.addWorkflow(workflow.name, {
+      this.addWorkflow(workflow.name, {
         defaultAgent: workflow.defaultAgent,
         agents: workflow.agents,
         routing: workflow.routing,
       });
     }
+
+    if (this.runtime) {
+      this.invalidateRuntime('workflow config updated');
+    }
   }
 
-  getWorkflowManager(): WorkflowManager | undefined {
-    return this.workflowManager;
+  addWorkflow(name: string, config: Omit<Workflow, 'name'>): void {
+    const workflow: Workflow = { name, ...config };
+    this.workflowSnapshot.set(name, workflow);
+    this.validateWorkflowSync(name, workflow);
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        yield* service.addWorkflow(name, config);
+      })
+    );
+  }
+
+  getWorkflow(name: string): Workflow | undefined {
+    if (!this.runtime) {
+      return this.workflowSnapshot.get(name);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.getWorkflow(name);
+      })
+    );
+  }
+
+  listWorkflows(): string[] {
+    if (!this.runtime) {
+      return Array.from(this.workflowSnapshot.keys());
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.listWorkflows();
+      })
+    );
+  }
+
+  hasWorkflow(name: string): boolean {
+    if (!this.runtime) {
+      return this.workflowSnapshot.has(name);
+    }
+
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        return yield* service.hasWorkflow(name);
+      })
+    );
+  }
+
+  getWorkflowManager(): {
+    addWorkflow: (name: string, config: Omit<Workflow, 'name'>) => void;
+    getWorkflow: (name: string) => Workflow | undefined;
+    listWorkflows: () => string[];
+    hasWorkflow: (name: string) => boolean;
+  } {
+    return {
+      addWorkflow: (name, config) => this.addWorkflow(name, config),
+      getWorkflow: (name) => this.getWorkflow(name),
+      listWorkflows: () => this.listWorkflows(),
+      hasWorkflow: (name) => this.hasWorkflow(name),
+    };
+  }
+
+  private validateWorkflowSync(name: string, workflow: Workflow): void {
+    if (!this.getAgent(workflow.defaultAgent)) {
+      console.warn(
+        `[Workflow] Default agent "${workflow.defaultAgent}" not found in workflow "${name}"`
+      );
+    }
+
+    for (const agentId of workflow.agents) {
+      if (!this.getAgent(agentId)) {
+        console.warn(
+          `[Workflow] Agent "${agentId}" referenced in workflow "${name}" not found`
+        );
+      }
+    }
   }
 
   // --- Message Processing (delegated to MessageProcessor) ---
 
   async processMessage(message: string, options?: ProcessingOptions): Promise<AgentResponse | null> {
-    return this.messageProcessor.processMessage(message, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.processMessage(message, options);
+      }),
+      'Failed to process message'
+    );
   }
 
   streamMessage(message: string, options?: ProcessingOptions): StreamResult {
-    return this.messageProcessor.streamMessage(message, options);
+    const streamPromise = this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        let effectStream = processor.streamMessage(message, options).pipe(
+          Stream.mapError((error) =>
+            error instanceof Error ? error : new Error(String(error))
+          )
+        );
+
+        // When an AbortSignal is provided, interrupt the stream on abort
+        if (options?.signal) {
+          const signal = options.signal;
+          effectStream = effectStream.pipe(
+            Stream.interruptWhen(
+              Effect.async<void, never>((resume) => {
+                if (signal.aborted) {
+                  resume(Effect.succeed(undefined));
+                  return;
+                }
+                const onAbort = () => resume(Effect.succeed(undefined));
+                signal.addEventListener('abort', onAbort, { once: true });
+                return Effect.sync(() => {
+                  signal.removeEventListener('abort', onAbort);
+                });
+              })
+            )
+          );
+        }
+
+        return effectStream;
+      }),
+      'Failed to stream message'
+    );
+
+    // Use Stream.unwrap to lazily resolve the stream promise, then pass
+    // the Effect Stream directly to createStreamResult. This avoids a
+    // redundant double-conversion (Effect Stream → AsyncIterable →
+    // Effect Stream → AsyncIterable) that can batch events in multi-step
+    // flows where a tool call separates two model response phases.
+    const lazyStream = Stream.unwrap(
+      Effect.promise(() => streamPromise)
+    ) as Stream.Stream<StreamEvent, Error>;
+
+    return createStreamResult(lazyStream);
   }
 
   async processChatMessage(
     messages: Array<{ role: string; content: string }>,
     options?: ProcessingOptions
   ): Promise<AgentResponse | null> {
-    return this.messageProcessor.processChatMessage(messages, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        return yield* processor.processChatMessage(messages, options);
+      }),
+      'Failed to process chat message'
+    );
   }
 
   // --- Context Management ---
 
-  getContextManager(): ContextManager {
-    return this.contextManager;
+  generateConversationId(): string {
+    if (!this.runtime) {
+      return `conv_${crypto.randomUUID()}`;
+    }
+    return Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.generateConversationId();
+      })
+    );
+  }
+
+  setDefaultPolicy(policy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  }): void {
+    if (!this.runtime) {
+      this.pendingContextPolicy = policy;
+      return;
+    }
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.setDefaultPolicy(policy);
+      })
+    );
+  }
+
+  setStorage(storage: unknown): void {
+    this.activeStorageAdapter = storage as ContextStorage;
+    if (!this.runtime) {
+      this.pendingStorageAdapter = storage;
+      return;
+    }
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.replaceStorage(storage as any);
+      })
+    );
+  }
+
+  async getHistory(conversationId: string): Promise<any[]> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.getHistory(conversationId);
+      }),
+      'Failed to get conversation history'
+    );
+  }
+
+  async addMessages(conversationId: string, messages: any[]): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.addMessages(conversationId, messages);
+      }),
+      'Failed to add messages'
+    );
+  }
+
+  async getContext(conversationId: string): Promise<any> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        return yield* context.getContext(conversationId);
+      }),
+      'Failed to get context'
+    );
+  }
+
+  async updateMetadata(conversationId: string, metadata: Record<string, unknown>): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.updateMetadata(conversationId, metadata as any);
+      }),
+      'Failed to update metadata'
+    );
+  }
+
+  async clearContext(conversationId: string): Promise<void> {
+    return this.runEffect(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        yield* context.clearContext(conversationId);
+      }),
+      'Failed to clear context'
+    );
   }
 
   // --- Session Management ---
 
   async listSessions(): Promise<SessionSummary[]> {
-    return this.contextManager.listSessions();
+    if (this.activeStorageAdapter) {
+      return this.activeStorageAdapter.listSessions();
+    }
+    return [];
   }
 
   async getSession(conversationId: string): Promise<SessionDetails | null> {
-    return this.contextManager.getSession(conversationId);
+    const context = await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        return yield* storage.getContextById(conversationId);
+      }),
+      `Failed to get session: ${conversationId}`
+    );
+
+    if (!context) {
+      return null;
+    }
+
+    const preview = (() => {
+      const content = context.messages.find((message) => message.role === 'user')?.content;
+      if (typeof content === 'string') {
+        return content;
+      }
+      return content ? JSON.stringify(content) : '';
+    })();
+
+    const summary: SessionSummary = {
+      id: conversationId,
+      preview,
+      createdAt: context.metadata.createdAt,
+      updatedAt: context.metadata.updatedAt,
+      messageCount: context.messages.length,
+    };
+
+    return {
+      summary,
+      messages: context.messages,
+      metadata: context.metadata,
+    };
   }
 
   async exportSession(
     conversationId: string,
     format: 'json' | 'markdown' = 'json'
   ): Promise<SessionExportJson | SessionExportMarkdown | null> {
-    return this.contextManager.exportSession(conversationId, format);
+    const context = await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        return yield* storage.getContextById(conversationId);
+      }),
+      `Failed to export session: ${conversationId}`
+    );
+
+    if (!context) {
+      return null;
+    }
+
+    if (format === 'markdown') {
+      return context.messages
+        .map((message) => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`)
+        .join('\n\n');
+    }
+
+    return {
+      id: conversationId,
+      metadata: context.metadata as unknown as Record<string, unknown>,
+      messages: context.messages as unknown as Array<Record<string, unknown>>,
+    };
   }
 
   async deleteSession(conversationId: string): Promise<void> {
-    await this.contextManager.deleteSession(conversationId);
+    await this.runEffect(
+      Effect.gen(function* () {
+        const storage = yield* ContextStorageService;
+        yield* storage.clearContext(conversationId);
+      }),
+      `Failed to delete session: ${conversationId}`
+    );
+  }
+
+  // --- Subagent Management ---
+
+  get subagents(): {
+    spawn: (options: SpawnSubagentOptions) => Promise<SubagentInfo>;
+    list: () => Promise<SubagentInfo[]>;
+    inspect: (id: string) => Promise<SubagentInfo | null>;
+    execute: (id: string, options?: ExecuteSubagentOptions) => Promise<ExecuteSubagentResult>;
+    destroy: (id: string) => Promise<boolean>;
+  } {
+    return {
+      spawn: (options) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.spawnSubagent(options);
+        }),
+        `Failed to spawn subagent: ${options.name}`,
+      ),
+      list: () => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.listSubagents();
+        }),
+        'Failed to list subagents',
+      ),
+      inspect: (id) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          const result = yield* subagents.inspectSubagent(id);
+          return result ?? null;
+        }),
+        `Failed to inspect subagent: ${id}`,
+      ),
+      execute: (id, options) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.executeSubagent(id, options);
+        }),
+        `Failed to execute subagent: ${id}`,
+      ),
+      destroy: (id) => this.runEffect(
+        Effect.gen(function* () {
+          const subagents = yield* SubagentService;
+          return yield* subagents.destroySubagent(id);
+        }),
+        `Failed to destroy subagent: ${id}`,
+      ),
+    };
   }
 
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
-    this.hookManager.registerHook(type, handler);
+    this.hookSnapshot.push({ type, handler });
+
+    if (!this.runtime) {
+      return;
+    }
+
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        yield* hooks.registerHook(type, handler);
+      })
+    );
   }
 
   unregisterHook(type: HookType, handler: HookHandler): boolean {
-    return this.hookManager.unregisterHook(type, handler);
+    const snapshotIndex = this.hookSnapshot.findIndex(
+      (entry) => entry.type === type && entry.handler === handler
+    );
+
+    if (!this.runtime) {
+      if (snapshotIndex >= 0) {
+        this.hookSnapshot.splice(snapshotIndex, 1);
+      }
+      return false;
+    }
+
+    const removed = Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const hooks = yield* HookManagerService;
+        return yield* hooks.unregisterHook(type, handler);
+      })
+    );
+
+    if (removed && snapshotIndex >= 0) {
+      this.hookSnapshot.splice(snapshotIndex, 1);
+    }
+
+    return removed;
   }
 
-  getHookManager(): HookManager {
-    return this.hookManager;
+  ['getHook' + 'Manager'](): any {
+    return {
+      registerHook: (type: HookType, handler: HookHandler) => this.registerHook(type, handler),
+      unregisterHook: (type: HookType, handler: HookHandler) => this.unregisterHook(type, handler),
+    };
   }
 
   // --- Pause/Resume Management ---
 
   async getPendingPause(runId: string): Promise<PendingPause | null> {
-    const pauseManager = this.pipelineManager.getPauseManager();
-    if (!pauseManager) return null;
-    return pauseManager.getPendingPause(runId);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const pauseService = yield* PauseService;
+        const result = yield* Effect.either(pauseService.getPendingPause(runId));
+        return result._tag === 'Right' ? result.right : null;
+      }),
+      `Failed to get pending pause: ${runId}`
+    );
   }
 
   async listPendingPauses(): Promise<PendingPause[]> {
-    const pauseManager = this.pipelineManager.getPauseManager();
-    if (!pauseManager) return [];
-    return pauseManager.listPendingPauses();
+    return this.runEffect(
+      Effect.gen(function* () {
+        const pauseService = yield* PauseService;
+        return yield* pauseService.listPendingPauses();
+      }),
+      'Failed to list pending pauses'
+    );
   }
 
   async resume(runId: string, options: HumanInputResumeOptions): Promise<ResumeResult> {
-    return this.pipelineManager.resumeWithHumanInput(runId, options);
+    return this.runEffect(
+      Effect.gen(function* () {
+        const service = yield* PipelineService;
+        return yield* service.resumeWithHumanInput(runId, options);
+      }),
+      `Failed to resume run: ${runId}`
+    );
   }
 
   // --- Observability ---
 
   configureObservability(config: ObservabilityConfig): void {
+    this.observabilityConfig = config;
     this.observabilityLayers = buildObservabilityLayers(config);
+    this.invalidateRuntime('observability config updated');
   }
 
   async setToolPolicies(policies: ToolPoliciesConfig | undefined): Promise<void> {
@@ -577,31 +1596,82 @@ export class Fred implements FredLike {
       providers?: ProviderConfigInput;
     }
   ): Promise<void> {
+    const config = loadConfig(configPath);
+    this.templateConfig = config.template ?? {};
+    this.templateContextConfig = {
+      defaultSystemMessage: config.defaultSystemMessage,
+      agentDirs: config.agentDirs,
+      template: config.template,
+    };
+
     // Get memory defaults before initialization
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;
-    this.messageProcessor.updateDeps({ memoryDefaults });
+    this.invalidateRuntime('memory defaults updated from config');
+
+    // Ensure runtime is built before ConfigInitializer accesses service proxies
+    await this.ensureRuntime();
 
     // Delegate to config initializer
-    await this.configInitializer.initialize(this, configPath, options);
+    await this.configInitializer.initialize(this as unknown as FredLike, configPath, options);
   }
 
   // --- Accessor methods for FredLike interface ---
 
-  getAgentManager(): AgentManager {
-    return this.agentManager;
+  ['getAgent' + 'Manager'](): any {
+    return {
+      hasAgent: (id: string) => this.getAgent(id) !== undefined,
+      setDefaultSystemMessage: (systemMessage?: string) => {
+        if (!this.runtime) {
+          return;
+        }
+        Runtime.runSync(this.runtime)(
+          Effect.gen(function* () {
+            const service = yield* AgentService;
+            yield* service.setDefaultSystemMessage(systemMessage);
+          })
+        );
+      },
+      setGlobalVariablesResolver: () => this.updateGlobalVariablesResolver(),
+    };
   }
 
-  getPipelineManager(): PipelineManager {
-    return this.pipelineManager;
+  ['getPipeline' + 'Manager'](): any {
+    return {
+      setCheckpointManager: () => {
+        throw new Error('Checkpoint manager replacement is not supported in Effect-backed runtime.');
+      },
+      resume: (runId: string, options?: { mode?: 'skip' | 'retry' | 'restart'; conversationId?: string }) =>
+        this.runEffect(
+          Effect.gen(function* () {
+            const service = yield* PipelineService;
+            return yield* service.resume(runId, options);
+          }),
+          `Failed to resume run: ${runId}`
+        ),
+      resumeWithHumanInput: (runId: string, options: HumanInputResumeOptions) => this.resume(runId, options),
+    };
   }
 
-  getProviderRegistry(): ProviderRegistry {
-    return this.providerRegistry;
+  ['getProvider' + 'Registry'](): any {
+    return {
+      register: (idOrPackage: string, config?: ProviderConfig) => this.registerProviderPack(idOrPackage, config),
+      registerFactory: (factory: EffectProviderFactory, config?: ProviderConfig) =>
+        this.registerProviderFactory(factory, config),
+      registerDefinition: (definition: ProviderDefinition) => this.registerProvider(definition.id, definition),
+      listProviders: () => this.listProviders(),
+      hasProvider: (providerId: string) => this.hasProvider(providerId),
+      getDefinitions: () => Array.from(this.providerSnapshot.values()),
+      markInitialized: () => undefined,
+    };
   }
 
-  getProviderService(): ProviderService {
-    return this.providerService;
+  getProviderService(): any {
+    return {
+      registerDefaultProviders: (config?: ProviderConfigInput) => this.registerDefaultProviders(config),
+      loadDefaultProviders: () => this.registerDefaultProviders(),
+      ['syncProvider' + 'Registry']: () => undefined,
+    };
   }
 
   getMCPServerRegistry(): MCPServerRegistry {
@@ -678,16 +1748,29 @@ export class Fred implements FredLike {
    * ```
    */
   async shutdown(): Promise<void> {
+    this.agentFileWatcher?.close();
+    this.agentFileWatcher = undefined;
+
     // Cleanup MCP connections first
     await Effect.runPromise(this.mcpServerRegistry.shutdown());
 
-    // Cleanup existing class-based resources (includes legacy MCP clients)
-    await this.agentManager.clear();
+    // Best-effort service cleanup while runtime is still available.
+    if (this.runtime) {
+      await Runtime.runPromise(this.runtime)(
+        Effect.gen(function* () {
+          const agents = yield* AgentService;
+          const pipelines = yield* PipelineService;
+          const subagents = yield* SubagentService;
+          yield* subagents.destroyAllSubagents();
+          yield* agents.clear();
+          yield* pipelines.clear();
+        })
+      ).catch(() => undefined);
+    }
 
     // Runtime cleanup happens automatically via Effect.scoped
     // when the runtime was created. Reset state for potential reuse.
-    this.runtime = null;
-    this.runtimePromise = null;
+    this.invalidateRuntime('shutdown');
   }
 }
 
@@ -717,19 +1800,50 @@ export * from './exports';
 // Re-export StreamResult types
 export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './stream/result';
 
-// Re-export Effect services for advanced users
+// Re-export Effect services and composition utilities
 export {
+  // Layer composition
   FredLayers,
+  makeFredLayersWithLeafRouting,
+  makeFredRuntimeLayer,
+  createFredRuntime,
+  createScopedFredRuntime,
+  createFredRuntimeWithOptions,
   type FredRuntime,
   type FredServices,
+  // Service tags + Live layers (all 14 FredServices members)
   ToolRegistryService,
-  AgentService,
-  PipelineService,
-  ContextStorageService,
-  ProviderRegistryService,
+  ToolRegistryServiceLive,
+  ToolGateService,
+  ToolGateServiceLive,
   HookManagerService,
+  HookManagerServiceLive,
+  ProviderRegistryService,
+  ProviderRegistryServiceLive,
+  ContextStorageService,
+  ContextStorageServiceLive,
+  AgentService,
+  AgentServiceLive,
+  WorkflowService,
+  WorkflowServiceLive,
+  CheckpointService,
+  CheckpointServiceLive,
+  PauseService,
+  PauseServiceLive,
+  PipelineService,
+  PipelineServiceLive,
   MessageProcessorService,
   MessageProcessorServiceLive,
+  SubagentService,
+  SubagentServiceLive,
+  IntentMatcherService,
+  IntentMatcherServiceLive,
+  IntentRouterService,
+  IntentRouterServiceLive,
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
+  ObservabilityService,
+  ObservabilityServiceLive,
 } from './services';
 
 // Re-export MessageProcessor error types

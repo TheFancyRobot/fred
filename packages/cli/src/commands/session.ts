@@ -185,8 +185,6 @@ const sessionCommandEffect = (
           ),
         );
 
-    const contextManager = fred.getContextManager();
-
     const subcommand = args[0];
     if (!subcommand) {
       return yield* Effect.fail(
@@ -194,10 +192,10 @@ const sessionCommandEffect = (
       );
     }
 
-    switch (subcommand) {
+      switch (subcommand) {
       case 'list': {
         const sessions = yield* Effect.tryPromise({
-          try: () => contextManager.listSessions(),
+          try: () => fred.listSessions(),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -225,14 +223,14 @@ const sessionCommandEffect = (
         }
 
         const rawDetails = yield* Effect.tryPromise({
-          try: () => contextManager.getSession(id),
+          try: () => fred.getSession(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const details = yield* getSessionDetailsOrFail(rawDetails, id);
 
         const exportResult = yield* Effect.tryPromise({
-          try: () => contextManager.exportSession(id, 'markdown'),
+          try: () => fred.exportSession(id, 'markdown'),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -257,14 +255,14 @@ const sessionCommandEffect = (
         const format = yield* parseFormat(options.format ?? (options.json === true ? 'json' : undefined));
 
         const rawSession = yield* Effect.tryPromise({
-          try: () => contextManager.getSession(id),
+          try: () => fred.getSession(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const session = yield* getSessionDetailsOrFail(rawSession, id);
 
         const exportResult = yield* Effect.tryPromise({
-          try: () => contextManager.exportSession(id, format),
+          try: () => fred.exportSession(id, format),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -307,7 +305,7 @@ const sessionCommandEffect = (
         const missing: string[] = [];
         for (const id of ids) {
           const session = yield* Effect.tryPromise({
-            try: () => contextManager.getSession(id),
+            try: () => fred.getSession(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });
@@ -340,7 +338,7 @@ const sessionCommandEffect = (
 
         for (const id of ids) {
           yield* Effect.tryPromise({
-            try: () => contextManager.deleteSession(id),
+            try: () => fred.deleteSession(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });

@@ -14,11 +14,11 @@ import { SQLITE_CHECKPOINTS_DDL } from './schema';
 import { withFredSpan } from '../../observability/otel';
 
 /**
- * Fire-and-forget tracing helper.
- * Casts Effect to remove requirements channel for fire-and-forget observability.
+ * Tracing combinator.
+ * Casts Effect to remove requirements and ignores tracing failures.
  */
-function trace(effect: Effect.Effect<void, unknown, unknown>): void {
-  Effect.runFork(effect as Effect.Effect<void, never, never>);
+function trace(effect: Effect.Effect<void, unknown, unknown>): Effect.Effect<void> {
+  return (effect as Effect.Effect<void, never, never>).pipe(Effect.ignore);
 }
 
 /**
@@ -127,15 +127,17 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
     this.ensureInitialized();
 
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.storage.sqlite.save', {
-        runId: checkpoint.runId,
-        workflowId: checkpoint.pipelineId,
-        stepName: checkpoint.stepName,
-        'checkpoint.step': checkpoint.step,
-        'checkpoint.status': checkpoint.status,
-        'storage.type': 'sqlite',
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.storage.sqlite.save', {
+          runId: checkpoint.runId,
+          workflowId: checkpoint.pipelineId,
+          stepName: checkpoint.stepName,
+          'checkpoint.step': checkpoint.step,
+          'checkpoint.status': checkpoint.status,
+          'storage.type': 'sqlite',
+        })(Effect.void)
+      )
     );
 
     const stmt = this.db.prepare(`
@@ -164,13 +166,15 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
         checkpoint.pauseMetadata ? serializePauseMetadata(checkpoint.pauseMetadata) : null
       );
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.storage.sqlite.save.error', {
-          runId: checkpoint.runId,
-          workflowId: checkpoint.pipelineId,
-          'error.message': error instanceof Error ? error.message : String(error),
-          'storage.type': 'sqlite',
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.storage.sqlite.save.error', {
+            runId: checkpoint.runId,
+            workflowId: checkpoint.pipelineId,
+            'error.message': error instanceof Error ? error.message : String(error),
+            'storage.type': 'sqlite',
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -184,11 +188,13 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
     this.ensureInitialized();
 
     // Fire-and-forget span annotation
-    trace(
-      withFredSpan('checkpoint.storage.sqlite.get_latest', {
-        runId,
-        'storage.type': 'sqlite',
-      })(Effect.void)
+    void Effect.runPromise(
+      trace(
+        withFredSpan('checkpoint.storage.sqlite.get_latest', {
+          runId,
+          'storage.type': 'sqlite',
+        })(Effect.void)
+      )
     );
 
     const stmt = this.db.prepare(`
@@ -214,24 +220,28 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
           err instanceof Error ? err.message : String(err)
         );
 
-        trace(
-          withFredSpan('checkpoint.storage.sqlite.get_latest.deserialize_error', {
-            runId,
-            'checkpoint.step': row.step,
-            'error.message': err instanceof Error ? err.message : String(err),
-            'storage.type': 'sqlite',
-          })(Effect.void)
+        void Effect.runPromise(
+          trace(
+            withFredSpan('checkpoint.storage.sqlite.get_latest.deserialize_error', {
+              runId,
+              'checkpoint.step': row.step,
+              'error.message': err instanceof Error ? err.message : String(err),
+              'storage.type': 'sqlite',
+            })(Effect.void)
+          )
         );
 
         return null;
       }
     } catch (error) {
-      trace(
-        withFredSpan('checkpoint.storage.sqlite.get_latest.error', {
-          runId,
-          'error.message': error instanceof Error ? error.message : String(error),
-          'storage.type': 'sqlite',
-        })(Effect.void)
+      void Effect.runPromise(
+        trace(
+          withFredSpan('checkpoint.storage.sqlite.get_latest.error', {
+            runId,
+            'error.message': error instanceof Error ? error.message : String(error),
+            'storage.type': 'sqlite',
+          })(Effect.void)
+        )
       );
       throw error;
     }
@@ -346,6 +356,40 @@ export class SqliteCheckpointStorage implements CheckpointStorage {
     }
 
     return checkpoints;
+  }
+
+  /**
+   * Get the latest checkpoint for a pipeline (highest step, timestamp tie-break).
+   * Returns the checkpoint with the highest step number, using created_at as a tie-breaker.
+   * Excludes expired checkpoints.
+   */
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    this.ensureInitialized();
+
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      SELECT run_id, pipeline_id, step, status, context, created_at, updated_at, expires_at, step_name, pause_metadata
+      FROM checkpoints
+      WHERE pipeline_id = ? AND (expires_at IS NULL OR expires_at > ?)
+      ORDER BY step DESC, created_at DESC
+      LIMIT 1
+    `);
+
+    const row = stmt.get(pipelineId, now) as CheckpointRow | null;
+
+    if (!row) {
+      return null;
+    }
+
+    try {
+      return this.rowToCheckpoint(row);
+    } catch (err) {
+      console.warn(
+        `[SqliteCheckpointStorage] Warning: Failed to deserialize checkpoint for pipeline ${pipelineId}:`,
+        err instanceof Error ? err.message : String(err)
+      );
+      return null;
+    }
   }
 
   /**

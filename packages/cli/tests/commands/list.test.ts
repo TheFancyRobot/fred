@@ -38,10 +38,7 @@ function createMockFred(entities: MockEntities = {}): Fred {
   (fred as any).getTools = () => entities.tools ?? [];
   (fred as any).getIntents = () => entities.intents ?? [];
   (fred as any).listProviders = () => entities.providers ?? [];
-  (fred as any).getWorkflowManager = () => {
-    if (entities.workflows === undefined) return undefined;
-    return { listWorkflows: () => entities.workflows };
-  };
+  (fred as any).listWorkflows = () => entities.workflows ?? [];
 
   return fred;
 }
@@ -317,7 +314,7 @@ describe('list command', () => {
       expect(payload.data[0].name).toBe('onboarding');
     });
 
-    test('shows empty-state when workflow manager is undefined', async () => {
+    test('shows empty-state when workflows are undefined', async () => {
       const fred = createMockFred({ workflows: undefined });
 
       const exitCode = await handleListCommand('workflows', [], {}, { fred, io: captured.io });

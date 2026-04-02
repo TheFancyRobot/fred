@@ -41,7 +41,7 @@ export function resolveProjectConfig(
         code: 'config-not-found',
         severity: 'error',
         message: 'No Fred config file found',
-        fix: 'Create a fred.config.ts or fred.config.json file in your project root. Run: fred init',
+        fix: 'Create a fred.config.ts, fred.config.json, or fred.config.yaml file in your project root. Run: fred init',
       });
 
       return {

@@ -10,6 +10,7 @@ import {
   TextRenderable,
   CodeRenderable,
   TextAttributes,
+  RGBA,
   type CliRenderer,
   type SyntaxStyle,
 } from '@opentui/core';
@@ -24,6 +25,7 @@ const DETAIL_CHAR_LIMIT = 200;
 const MAX_SERIALIZE_DEPTH = 4;
 const MAX_SERIALIZE_ITEMS = 20;
 const MAX_SERIALIZE_NODES = 120;
+const RUNNING_EXCERPT_CHAR_LIMIT = 100;
 
 /**
  * Strip terminal control sequences before rendering untrusted content.
@@ -399,14 +401,16 @@ export function renderInputContent(
         availableWidth,
       )
     : [`${INPUT_ACCENT_GLYPH} ${focused ? `${showCursor ? INPUT_CURSOR_INDICATOR : ' '}${placeholder}` : placeholder}`];
-  const slashHint = state.input.slashSearch.isActive
-    ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex]?.plugin
+  const slashSelectedAction = state.input.slashSearch.isActive
+    ? state.input.slashSearch.filteredActions[state.input.slashSearch.selectedIndex] ?? null
     : null;
-  const slashHintLine = slashHint
-    ? `  hint: ${slashHint.usageHint}${slashHint.hasCollision ? ` [collision with ${slashHint.collisionWith.join(', ')}]` : ''}`
-    : state.input.slashSearch.isActive
-      ? '  hint: no matching slash commands'
-      : null;
+  const slashHintLine = slashSelectedAction?.plugin
+    ? `  hint: ${slashSelectedAction.plugin.usageHint}${slashSelectedAction.plugin.hasCollision ? ` [collision with ${slashSelectedAction.plugin.collisionWith.join(', ')}]` : ''}`
+    : slashSelectedAction?.kind === 'builtin'
+      ? `  hint: /${slashSelectedAction.id}`
+      : state.input.slashSearch.isActive
+        ? '  hint: no matching slash commands'
+        : null;
   const lines = slashHintLine ? [...composerLines, slashHintLine] : composerLines;
 
   const desiredHeight = Math.max(
@@ -722,8 +726,10 @@ export function buildUserMessageRenderable(
   theme: TuiTheme,
   content: string,
   id: string,
+  options?: { spinner?: boolean; nowMs?: number },
 ): BoxRenderable {
   const safeContent = sanitizeForTerminalDisplay(content);
+
   const container = new BoxRenderable(renderer, {
     id: `msg-user-${id}`,
     flexDirection: 'column',
@@ -744,8 +750,63 @@ export function buildUserMessageRenderable(
     fg: theme.fg.primary,
   });
   text.selectable = true;
-
   container.add(text);
+
+  // Thinking spinner — absolutely positioned at top-right of message container.
+  // Uses a BoxRenderable wrapper because only BoxRenderable supports position: 'absolute'.
+  if (options?.spinner) {
+    const spinnerBox = new BoxRenderable(renderer, {
+      id: `${THINKING_SPINNER_ID_PREFIX}box-${id}`,
+      position: 'absolute',
+      top: 1,
+      right: 1,
+    });
+    const spinnerText = new TextRenderable(renderer, {
+      id: `${THINKING_SPINNER_ID_PREFIX}${id}`,
+      content: getSpinnerFrame(options.nowMs ?? Date.now()),
+      fg: theme.accent.primary,
+      attributes: TextAttributes.BOLD,
+    });
+    spinnerText.selectable = false;
+    spinnerBox.add(spinnerText);
+    container.add(spinnerBox);
+  }
+
+  return container;
+}
+
+/**
+ * Build a renderable for a transient system notice (e.g. hot reload warning).
+ */
+export function buildSystemNoticeRenderable(
+  renderer: CliRenderer,
+  theme: TuiTheme,
+  content: string,
+  id: string,
+): BoxRenderable {
+  const safeContent = sanitizeForTerminalDisplay(content);
+
+  const container = new BoxRenderable(renderer, {
+    id: `msg-notice-${id}`,
+    flexDirection: 'column',
+    border: ['left'],
+    borderStyle: 'single',
+    borderColor: theme.status.warn,
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 1,
+    paddingBottom: 1,
+    marginBottom: 1,
+  });
+
+  const text = new TextRenderable(renderer, {
+    id: `msg-notice-text-${id}`,
+    content: safeContent,
+    fg: theme.status.warn,
+  });
+  text.selectable = true;
+  container.add(text);
+
   return container;
 }
 
@@ -778,7 +839,9 @@ export function buildAssistantMessageRenderable(
     syntaxStyle: options.syntaxStyle,
     streaming: options.streaming,
     conceal: true,
-    drawUnstyledText: false,
+    // OpenTUI's streaming markdown path only updates the visible text buffer
+    // incrementally when unstyled text drawing stays enabled.
+    drawUnstyledText: options.streaming,
   });
   md.selectable = true;
 
@@ -818,12 +881,45 @@ export function buildThinkingRenderable(
 }
 
 // ---------------------------------------------------------------------------
-// Tool block rendering with tree connectors
+// Thinking indicator — braille spinner at top-right of user message
 // ---------------------------------------------------------------------------
 
-const TREE_INTERMEDIATE = '\u2502'; // | vertical line
-const TREE_LAST = '\u2514';        // corner
-const TREE_HORIZONTAL = '\u2500';   // horizontal
+/** ID prefix for the thinking spinner TextRenderable */
+export const THINKING_SPINNER_ID_PREFIX = 'thinking-spinner-';
+
+/** Full-cell braille spinner frames — 8 frames using 7/8 dots with one gap rotating */
+const SPINNER_FRAMES = ['\u28FE', '\u28FD', '\u28FB', '\u28BF', '\u287F', '\u28DF', '\u28EF', '\u28F7'];
+// Visually: ⣾ ⣽ ⣻ ⢿ ⡿ ⣟ ⣯ ⣷
+
+/**
+ * Get the current spinner frame character for the given timestamp.
+ * Cycles through 8 full-cell braille frames at 80ms per frame (640ms full cycle).
+ */
+export function getSpinnerFrame(nowMs: number): string {
+  const frameIndex = Math.floor(nowMs / 80) % SPINNER_FRAMES.length;
+  return SPINNER_FRAMES[frameIndex];
+}
+
+/**
+ * Linearly interpolate between two RGBA colors.
+ */
+export function lerpColor(a: RGBA, b: RGBA, t: number): RGBA {
+  return RGBA.fromValues(
+    a.r + (b.r - a.r) * t,
+    a.g + (b.g - a.g) * t,
+    a.b + (b.b - a.b) * t,
+    a.a + (b.a - a.a) * t,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tool block rendering
+// ---------------------------------------------------------------------------
+
+const TREE_INTERMEDIATE = '\u2502';
+const TREE_BRANCH = '\u251c';
+const TREE_LAST = '\u2514';
+const TREE_HORIZONTAL = '\u2500';
 
 const BRAILLE_SPINNER_FRAMES = [
   '\u2807', '\u280B', '\u2819', '\u2838',
@@ -842,7 +938,7 @@ export function getToolBlockSummary(output: unknown): string {
   if (typeof output === 'string') {
     const safe = sanitizeForTerminalDisplay(output);
     if (safe.length === 0) return 'done';
-    return truncateText(safe, SUMMARY_CHAR_LIMIT);
+    return truncateText(extractMeaningfulTextPreview(safe) ?? safe, SUMMARY_CHAR_LIMIT);
   }
 
   if (Array.isArray(output)) {
@@ -860,8 +956,61 @@ export function getToolBlockSummary(output: unknown): string {
   return truncateText(sanitizeForTerminalDisplay(String(output)), SUMMARY_CHAR_LIMIT);
 }
 
+function normalizePreviewLine(line: string): string {
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+function extractMeaningfulTextPreview(text: string): string | null {
+  const sanitized = sanitizeForTerminalDisplay(text);
+  const lines = sanitized
+    .split('\n')
+    .map(normalizePreviewLine)
+    .filter(Boolean);
+
+  const preferredPrefixes = ['query:', 'request:', 'question:', 'topic:', 'search:', 'search query:'];
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+    if (preferredPrefixes.some((prefix) => normalized.startsWith(prefix))) {
+      return line;
+    }
+  }
+
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+    if (normalized === '# browser research') continue;
+    if (normalized.startsWith('current date:')) continue;
+    return line;
+  }
+
+  return null;
+}
+
+function getToolBlockInputPreview(block: ToolBlockState): string | null {
+  const prioritizedKeys = ['query', 'request', 'question', 'topic', 'url'] as const;
+  for (const key of prioritizedKeys) {
+    const value = block.input[key];
+    if (typeof value === 'string' && value.trim()) {
+      return `${key}: ${normalizePreviewLine(value)}`;
+    }
+  }
+
+  if (typeof block.input.message === 'string' && block.input.message.trim()) {
+    return extractMeaningfulTextPreview(block.input.message);
+  }
+
+  return null;
+}
+
+function shouldPrioritizePreview(block: ToolBlockState): boolean {
+  return block.toolName === 'agent_browser_research';
+}
+
+function withOriginAgent(block: ToolBlockState, content: string): string {
+  return block.originAgentId ? `${block.originAgentId} - ${content}` : content;
+}
+
 /**
- * Build a renderable for a single tool block with tree connector.
+ * Build a renderable for a single tool block as muted transcript metadata.
  *
  * @param renderer - CLI renderer
  * @param theme - TUI theme
@@ -878,93 +1027,42 @@ export function buildToolBlockRenderable(
   id: string,
   nowMs: number,
 ): BoxRenderable {
-  // Determine connector color based on kind and status
-  let connectorColor: string;
-  if (block.status === 'errored') {
-    connectorColor = theme.message.errorAccent;
-  } else if (block.kind === 'task') {
-    connectorColor = theme.message.taskAccent;
-  } else {
-    connectorColor = theme.message.toolConnector;
-  }
-
-  const connectorChar = isLast
-    ? `${TREE_LAST}${TREE_HORIZONTAL} `
-    : `${TREE_INTERMEDIATE}${TREE_HORIZONTAL} `;
-
   const container = new BoxRenderable(renderer, {
     id: `tool-block-${id}`,
     flexDirection: 'column',
     paddingLeft: 2,
     paddingRight: 2,
   });
+  const summaryPresentation = getToolBlockSummaryPresentation(block, isLast, nowMs, theme);
 
-  // Row: connector + summary
-  const row = new BoxRenderable(renderer, {
-    id: `tool-block-row-${id}`,
-    flexDirection: 'row',
+  // Clip summary to a single line — overflow: hidden + maxHeight: 1 ensures
+  // the text never wraps regardless of terminal width (responsive clipping).
+  const summaryClip = new BoxRenderable(renderer, {
+    id: `tool-summary-clip-${id}`,
+    overflow: 'hidden',
+    maxHeight: 1,
   });
-
-  const connector = new TextRenderable(renderer, {
-    id: `tool-connector-${id}`,
-    content: connectorChar,
-    fg: connectorColor,
-  });
-  connector.selectable = false;
-  row.add(connector);
-
-  // Build summary text based on status
-  let summaryContent: string;
-  let summaryFg: string;
-  let summaryAttributes = 0;
-
-  if (block.status === 'in-progress') {
-    const frameIndex = Math.floor(nowMs / 80) % BRAILLE_SPINNER_FRAMES.length;
-    const spinner = BRAILLE_SPINNER_FRAMES[frameIndex];
-    summaryContent = `${spinner} ${block.toolName}...`;
-    summaryFg = theme.fg.secondary;
-  } else if (block.status === 'errored') {
-    summaryContent = `${block.toolName} — error`;
-    summaryFg = theme.message.errorAccent;
-  } else {
-    // Completed
-    const brief = getToolBlockSummary(block.output);
-    summaryContent = `${block.toolName} \u2014 ${brief}`;
-    summaryFg = theme.fg.dim;
-  }
-
   const summary = new TextRenderable(renderer, {
     id: `tool-summary-${id}`,
-    content: summaryContent,
-    fg: summaryFg,
-    attributes: summaryAttributes,
+    content: summaryPresentation.content,
+    fg: summaryPresentation.fg,
+    attributes: summaryPresentation.attributes,
   });
   summary.selectable = false;
-  row.add(summary);
-  container.add(row);
+  summaryClip.add(summary);
+  container.add(summaryClip);
 
-  // Expanded detail: show full output for non-in-progress blocks
   if (block.expanded && block.status !== 'in-progress') {
     const detailContent = block.status === 'errored'
       ? 'An error occurred while executing this tool.'
       : formatExpandedOutput(block.output);
 
     if (detailContent) {
-      // Indentation to align with content after connector
       const detailRow = new BoxRenderable(renderer, {
         id: `tool-detail-row-${id}`,
-        flexDirection: 'row',
-        paddingLeft: 2,
+        flexDirection: 'column',
+        paddingLeft: 4 + (block.depth * 2),
       });
-
-      // Spacing to align under the summary text (connector width)
-      const indent = new TextRenderable(renderer, {
-        id: `tool-detail-indent-${id}`,
-        content: isLast ? '   ' : `${TREE_INTERMEDIATE}  `,
-        fg: connectorColor,
-      });
-      indent.selectable = false;
-      detailRow.add(indent);
 
       const detail = new TextRenderable(renderer, {
         id: `tool-detail-${id}`,
@@ -981,6 +1079,99 @@ export function buildToolBlockRenderable(
   return container;
 }
 
+export function getToolBlockSummaryPresentation(
+  block: ToolBlockState,
+  isLast: boolean,
+  nowMs: number,
+  theme: TuiTheme,
+  treePrefix?: string,
+): { content: string; fg: string; attributes: number } {
+  const branchPrefix = `${isLast ? TREE_LAST : TREE_BRANCH}${TREE_HORIZONTAL} `;
+  const indentPrefix = treePrefix ?? (block.depth <= 0
+    ? ''
+    : `${'  '.repeat(Math.max(0, block.depth - 1))}${branchPrefix}`);
+
+  let summaryContent: string;
+  let summaryFg: string;
+  const summaryAttributes = TextAttributes.DIM;
+
+  if (block.status === 'errored') {
+    summaryContent = `x ${block.toolName} failed`;
+    summaryFg = theme.message.errorAccent;
+  } else if (block.status === 'in-progress') {
+    const frameIndex = Math.floor(nowMs / 80) % BRAILLE_SPINNER_FRAMES.length;
+    const spinner = BRAILLE_SPINNER_FRAMES[frameIndex];
+    const inputPreview = getToolBlockInputPreview(block);
+    if (inputPreview && shouldPrioritizePreview(block)) {
+      summaryContent = `${spinner} ${withOriginAgent(block, inputPreview)}`;
+    } else {
+      summaryContent = inputPreview
+        ? `${spinner} ${block.toolName} - ${truncateText(inputPreview, RUNNING_EXCERPT_CHAR_LIMIT)}`
+        : `${spinner} Running ${block.toolName}...`;
+    }
+    summaryFg = block.kind === 'task' ? theme.message.taskAccent : theme.fg.secondary;
+  } else {
+    const brief = getToolBlockSummary(block.output);
+    summaryContent = shouldPrioritizePreview(block)
+      ? `→ ${withOriginAgent(block, brief)}`
+      : `→ ${block.toolName} — ${brief}`;
+    summaryFg = block.kind === 'task' ? theme.message.taskAccent : theme.fg.dim;
+  }
+
+  return {
+    content: `${indentPrefix}${summaryContent}`,
+    fg: summaryFg,
+    attributes: summaryAttributes,
+  };
+}
+
+export function normalizeToolBlockDepths(blocks: ToolBlockState[]): ToolBlockState[] {
+  if (blocks.length === 0) {
+    return blocks;
+  }
+
+  const minDepth = Math.min(...blocks.map((block) => block.depth));
+  return blocks.map((block) => ({
+    ...block,
+    depth: Math.max(1, block.depth - minDepth + 1),
+  }));
+}
+
+function hasFutureSiblingAtDepth(blocks: ToolBlockState[], index: number, depth: number): boolean {
+  for (let cursor = index + 1; cursor < blocks.length; cursor += 1) {
+    const candidateDepth = blocks[cursor]?.depth ?? 0;
+    if (candidateDepth < depth) {
+      return false;
+    }
+    if (candidateDepth === depth) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isLastToolBlockSibling(blocks: ToolBlockState[], index: number): boolean {
+  const currentDepth = blocks[index]?.depth ?? 0;
+  return !hasFutureSiblingAtDepth(blocks, index, currentDepth);
+}
+
+export function buildToolBlockTreePrefix(blocks: ToolBlockState[], index: number): string {
+  const currentDepth = blocks[index]?.depth ?? 0;
+  if (currentDepth <= 0) {
+    return '';
+  }
+
+  let prefix = '';
+  for (let depth = 1; depth < currentDepth; depth += 1) {
+    prefix += hasFutureSiblingAtDepth(blocks, index, depth)
+      ? `${TREE_INTERMEDIATE}  `
+      : '   ';
+  }
+
+  return `${prefix}${isLastToolBlockSibling(blocks, index) ? TREE_LAST : TREE_BRANCH}${TREE_HORIZONTAL} `;
+}
+
 /**
  * Format expanded output for display (truncated JSON).
  */
@@ -994,10 +1185,120 @@ function formatExpandedOutput(output: unknown): string {
 }
 
 /**
+ * Sort tool blocks so that child blocks (higher depth with matching
+ * originAgentId) immediately follow their parent block.
+ *
+ * Without this, all child blocks (e.g. browser research at depth 4) appear
+ * after the last parent block (e.g. risk-analyst at depth 3), making them
+ * look like they all belong to that final parent.
+ *
+ * The algorithm groups children by matching `originAgentId` to a parent's
+ * `toolName`, then interleaves them so each parent is followed by its
+ * children before the next sibling parent.
+ */
+export function sortToolBlocksByParent(blocks: ToolBlockState[]): ToolBlockState[] {
+  if (blocks.length <= 1) return blocks;
+
+  const indexed = blocks.map((block, index) => ({ block, index }));
+  const byId = new Map(indexed.map((entry) => [entry.block.toolCallId, entry]));
+  const childrenByParent = new Map<string, Array<(typeof indexed)[number]>>();
+  const roots: Array<(typeof indexed)[number]> = [];
+
+  const resolveFallbackParentId = (entry: (typeof indexed)[number]): string | undefined => {
+    if (!entry.block.originAgentId) {
+      for (let cursor = entry.index - 1; cursor >= 0; cursor -= 1) {
+        const candidate = indexed[cursor]?.block;
+        if (!candidate) {
+          continue;
+        }
+        if (candidate.depth < entry.block.depth) {
+          return candidate.toolCallId;
+        }
+      }
+      return undefined;
+    }
+
+    for (let cursor = entry.index - 1; cursor >= 0; cursor -= 1) {
+      const candidate = indexed[cursor]?.block;
+      if (!candidate || candidate.depth >= entry.block.depth) {
+        continue;
+      }
+      if (candidate.toolName === entry.block.originAgentId) {
+        return candidate.toolCallId;
+      }
+    }
+
+    for (let cursor = entry.index - 1; cursor >= 0; cursor -= 1) {
+      const candidate = indexed[cursor]?.block;
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.depth < entry.block.depth) {
+        return candidate.toolCallId;
+      }
+    }
+
+    return undefined;
+  };
+
+  for (const entry of indexed) {
+    const explicitParentId = entry.block.parentToolCallId && byId.has(entry.block.parentToolCallId)
+      ? entry.block.parentToolCallId
+      : undefined;
+    const parentId = explicitParentId ?? resolveFallbackParentId(entry);
+
+    if (!parentId) {
+      roots.push(entry);
+      continue;
+    }
+
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push(entry);
+    childrenByParent.set(parentId, siblings);
+  }
+
+  const sortEntries = (entries: Array<(typeof indexed)[number]>): Array<(typeof indexed)[number]> => (
+    [...entries].sort((left, right) => {
+      if (left.block.startedAt !== right.block.startedAt) {
+        return left.block.startedAt - right.block.startedAt;
+      }
+      return left.index - right.index;
+    })
+  );
+
+  const visited = new Set<string>();
+  const ordered: ToolBlockState[] = [];
+
+  const visit = (entry: (typeof indexed)[number]): void => {
+    if (visited.has(entry.block.toolCallId)) {
+      return;
+    }
+
+    visited.add(entry.block.toolCallId);
+    ordered.push(entry.block);
+
+    const children = sortEntries(childrenByParent.get(entry.block.toolCallId) ?? []);
+    for (const child of children) {
+      visit(child);
+    }
+  };
+
+  for (const root of sortEntries(roots)) {
+    visit(root);
+  }
+
+  for (const entry of sortEntries(indexed.filter((candidate) => !visited.has(candidate.block.toolCallId)))) {
+    visit(entry);
+  }
+
+  return ordered;
+}
+
+/**
  * Build a renderable for a group of tool blocks from the same message turn.
  *
  * If all blocks are completed and collapsed, shows a summary count line.
- * Otherwise renders each block individually with tree connectors.
+ * Otherwise renders each block individually as transcript metadata lines.
  *
  * @param renderer - CLI renderer
  * @param theme - TUI theme
@@ -1023,21 +1324,29 @@ export function buildToolGroupRenderable(
 
   // Parallel tool calls from same turn: if all collapsed and completed, show summary
   const allCollapsed = blocks.every((b) => !b.expanded && b.status === 'completed');
-  if (blocks.length > 1 && allCollapsed) {
+  const shouldSummarizeGroup = blocks.length > 1
+    && allCollapsed
+    && blocks.every((block) => block.kind === 'tool' && block.depth <= 1);
+  if (shouldSummarizeGroup) {
     const countText = new TextRenderable(renderer, {
       id: `tool-group-count-${id}`,
-      content: `  ${blocks.length} tools`,
+      content: `→ Used ${blocks.length} tools`,
       fg: theme.fg.dim,
+      attributes: TextAttributes.DIM,
     });
     countText.selectable = false;
     container.add(countText);
     return container;
   }
 
+  // Sort blocks so child tool calls appear under their parent agent
+  const sorted = normalizeToolBlockDepths(sortToolBlocksByParent(blocks));
+
   // Render each block individually
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const isLast = i === blocks.length - 1;
+  for (let i = 0; i < sorted.length; i++) {
+    const block = sorted[i];
+    const isLast = isLastToolBlockSibling(sorted, i);
+    const treePrefix = buildToolBlockTreePrefix(sorted, i);
     const blockRenderable = buildToolBlockRenderable(
       renderer,
       theme,
@@ -1046,6 +1355,13 @@ export function buildToolGroupRenderable(
       `${id}-${i}`,
       nowMs,
     );
+    const summaryEl = blockRenderable.findDescendantById(`tool-summary-${id}-${i}`);
+    if (summaryEl instanceof TextRenderable) {
+      const presentation = getToolBlockSummaryPresentation(block, isLast, nowMs, theme, treePrefix);
+      summaryEl.content = presentation.content;
+      summaryEl.fg = presentation.fg;
+      summaryEl.attributes = presentation.attributes;
+    }
     container.add(blockRenderable);
   }
 

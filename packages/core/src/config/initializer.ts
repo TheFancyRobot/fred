@@ -1,4 +1,6 @@
 import { Context } from 'effect';
+import { existsSync, readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
 import type { Tool } from '../tool/tool';
 import type { ProviderConfigInput } from '../platform/provider';
 import {
@@ -6,6 +8,7 @@ import {
   validateConfig,
   extractIntents,
   extractAgents,
+  validateNoAmbiguousPromptFiles,
   extractPipelines,
   extractWorkflows,
   extractProviders,
@@ -14,7 +17,20 @@ import {
   extractMCPServers,
 } from './loader';
 import { loadPromptFile } from '../utils/prompt-loader';
+import {
+  discoverAgentFiles,
+  loadAgentFiles,
+  parseAgentFile,
+  type AgentFileTemplateOptions,
+} from '../agent/file-loader';
+import {
+  AgentFileWatcher,
+  type AgentFileChangeHandler,
+} from '../agent/file-watcher';
+import type { AgentConfig } from '../agent/agent';
 import type { ToolPoliciesConfig } from './types';
+import type { FrameworkConfig } from './types';
+import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import { PostgresContextStorage } from '../context/storage/postgres';
 import { SqliteContextStorage } from '../context/storage/sqlite';
 import {
@@ -28,21 +44,57 @@ import type { CheckpointStorage } from '../pipeline/checkpoint';
 /**
  * Interface for Fred instance (to avoid circular dependency)
  */
+interface AgentManagerLike {
+  setDefaultSystemMessage(systemMessage?: string): void;
+  hasAgent(id: string): boolean;
+}
+
+interface PipelineManagerLike {
+  setCheckpointManager(manager: import('../pipeline/checkpoint').CheckpointManager): void;
+}
+
+interface ProviderRegistryLike {
+  register(idOrPackage: string, config?: import('../platform/provider').ProviderConfig): Promise<void>;
+  markInitialized(): void;
+}
+
+interface ProviderServiceLike {
+  syncProviderRegistry(): void;
+  registerDefaultProviders(config?: ProviderConfigInput): Promise<void>;
+  loadDefaultProviders(): Promise<void>;
+}
+
 export interface FredLike {
-  getAgentManager(): import('../agent/manager').AgentManager;
-  getContextManager(): import('../context/manager').ContextManager;
-  getPipelineManager(): import('../pipeline/manager').PipelineManager;
-  getProviderRegistry(): import('../platform/registry').ProviderRegistry;
-  getProviderService(): import('../provider/service').ProviderService;
+  getAgentManager(): AgentManagerLike;
+  getPipelineManager(): PipelineManagerLike;
+  getProviderRegistry(): ProviderRegistryLike;
+  getProviderService(): ProviderServiceLike;
+  setDefaultPolicy(policy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  }): void;
+  setStorage(storage: unknown): void;
   registerTool(tool: Tool): void;
   registerIntents(intents: import('../intent/intent').Intent[]): void;
   createAgent(config: import('../agent/agent').AgentConfig): Promise<import('../agent/agent').AgentInstance>;
+  removeAgent(id: string): Promise<boolean>;
   createPipeline(config: import('../pipeline').PipelineConfig): Promise<import('../pipeline').PipelineInstance>;
   configureRouting(config: import('../routing/types').RoutingConfig): void;
-  configureWorkflows(workflows: import('../workflow/types').Workflow[]): void;
+  configureWorkflows(workflows: import('../workflow/manager').Workflow[]): void;
   configureObservability(config: import('./types').ObservabilityConfig): void;
   setToolPolicies?(policies: ToolPoliciesConfig | undefined): Promise<void> | void;
   configureMCPServers?(configs: Array<import('./types').MCPGlobalServerConfig & { id: string }>): Promise<void>;
+  setAgentFileWatcher?(watcher: AgentFileWatcher): void;
+  emitWarning?(message: string | null): void;
+  getGlobalVariables?(): Promise<Record<string, string | number | boolean>>;
+  onPartialFileChanged?(partialName: string, filePath: string): Promise<void> | void;
+}
+
+interface LoadedAgentFile {
+  readonly filePath: string;
+  readonly config: AgentConfig;
 }
 
 /**
@@ -67,7 +119,6 @@ export class ConfigInitializer {
     options?: InitializerOptions
   ): Promise<void> {
     const agentManager = fred.getAgentManager();
-    const contextManager = fred.getContextManager();
     const pipelineManager = fred.getPipelineManager();
     const providerRegistry = fred.getProviderRegistry();
     const providerService = fred.getProviderService();
@@ -85,14 +136,14 @@ export class ConfigInitializer {
     // Configure memory defaults
     const memoryDefaults = config.memory;
     if (memoryDefaults?.policy) {
-      contextManager.setDefaultPolicy(memoryDefaults.policy);
+      fred.setDefaultPolicy(memoryDefaults.policy);
     }
 
     // Configure persistence adapter
     if (config.persistence) {
       await this.configurePersistence(
         config.persistence,
-        contextManager,
+        fred,
         pipelineManager
       );
     }
@@ -148,16 +199,128 @@ export class ConfigInitializer {
       }
     }
 
+    // Configure routing before agent creation so runtime invalidation
+    // happens before agents are registered (routing config is baked into
+    // the Effect runtime layer, so configureRouting triggers a rebuild).
+    if (config.routing) {
+      fred.configureRouting(config.routing);
+    }
+
+    // Configure workflows before agent creation for the same reason.
+    const workflows = extractWorkflows(config);
+    if (workflows.length > 0) {
+      fred.configureWorkflows(workflows);
+    }
+
     // Register intents
     const intents = extractIntents(config);
     if (intents.length > 0) {
       fred.registerIntents(intents);
     }
 
-    // Create agents (resolve prompt files relative to config path)
-    const agents = extractAgents(config, configPath);
-    for (const agentConfig of agents) {
+    // Create agents (load order: .md files -> config agents)
+    const discoveredAgentDirs = config.agentDirs ?? (() => {
+      const srcAgentsDir = resolve(dirname(configPath), './src/agents');
+      if (existsSync(srcAgentsDir)) {
+        return ['./src/agents'];
+      }
+
+      const rootAgentsDir = resolve(dirname(configPath), './agents');
+      return existsSync(rootAgentsDir) ? ['./agents'] : [];
+    })();
+
+    const fileTemplateOptions = await this.buildAgentFileTemplateOptions(fred, config);
+    const discoveredFilePaths = discoveredAgentDirs.length > 0
+      ? discoverAgentFiles(discoveredAgentDirs, dirname(configPath))
+      : [];
+    const fileAgents = discoveredAgentDirs.length > 0
+      ? loadAgentFiles(discoveredAgentDirs, dirname(configPath), fileTemplateOptions)
+      : [];
+
+    let configCursor = 0;
+    const fileAgentEntries = discoveredFilePaths.flatMap((filePath) => {
+      const content = readFileSync(filePath, 'utf-8');
+      const parsed = parseAgentFile(content, filePath);
+      if (parsed === null) {
+        return [];
+      }
+
+      const config = fileAgents[configCursor];
+      configCursor += 1;
+      if (!config) {
+        return [];
+      }
+
+      return [{
+        filePath,
+        config,
+      } satisfies LoadedAgentFile];
+    });
+
+    validateNoAmbiguousPromptFiles(config.agents ?? [], configPath);
+    const configAgents = extractAgents(config, configPath);
+
+    const allAgentIds = new Set<string>();
+    for (const agentConfig of [...fileAgents, ...configAgents]) {
+      if (allAgentIds.has(agentConfig.id)) {
+        throw new Error(
+          `Duplicate agent ID "${agentConfig.id}" found across agent sources. Agent IDs must be unique across .md files, config agents, and programmatic registrations.`
+        );
+      }
+      allAgentIds.add(agentConfig.id);
+    }
+
+    for (const agentConfig of fileAgents) {
       await fred.createAgent(agentConfig);
+    }
+
+    for (const agentConfig of configAgents) {
+      await fred.createAgent(agentConfig);
+    }
+
+    if (discoveredAgentDirs.length > 0) {
+      const onFileChanged: AgentFileChangeHandler = async (event) => {
+        try {
+          if (event.previousId) {
+            await fred.removeAgent(event.previousId);
+          }
+
+          if (event.config) {
+            await fred.createAgent(event.config);
+            fred.emitWarning?.(null);
+            console.log(`[AgentFileWatcher] Reloaded agent "${event.config.id}" from ${event.filePath}`);
+          } else if (event.error) {
+            const shortPath = event.filePath.split('/').slice(-2).join('/');
+            fred.emitWarning?.(`Agent reload failed (${shortPath}): ${event.error}`);
+          } else if (event.previousId) {
+            console.log(`[AgentFileWatcher] Removed agent "${event.previousId}" (file deleted or invalid)`);
+          }
+        } catch (error) {
+          console.warn(
+            `[AgentFileWatcher] Failed to reload agent from "${event.filePath}": ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      };
+
+      const partialDirs = config.template?.partialDirs ?? ['./partials'];
+      const watcher = new AgentFileWatcher(discoveredAgentDirs, dirname(configPath), onFileChanged, {
+        partialDirs,
+        onPartialChanged: async (partialName, filePath) => {
+          try {
+            await fred.onPartialFileChanged?.(partialName, filePath);
+            console.log(`[TemplateEngine] Partial "${partialName}" changed, invalidated template cache`);
+          } catch (error) {
+            console.warn(
+              `[TemplateEngine] Failed to process partial change "${partialName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        },
+      });
+      for (const entry of fileAgentEntries) {
+        watcher.registerKnownAgent(entry.filePath, entry.config.id);
+      }
+      watcher.start();
+      fred.setAgentFileWatcher?.(watcher);
     }
 
     // Create pipelines (resolve prompt files in inline agents relative to config path)
@@ -166,22 +329,31 @@ export class ConfigInitializer {
       await fred.createPipeline(pipelineConfig);
     }
 
-    // Configure routing if specified in config
-    if (config.routing) {
-      // Warn if defaultAgent references unknown agent
-      if (config.routing.defaultAgent && !agentManager.hasAgent(config.routing.defaultAgent)) {
-        console.warn(
-          `[Config] Routing defaultAgent "${config.routing.defaultAgent}" not found among registered agents`
-        );
-      }
-      fred.configureRouting(config.routing);
+    // Validate routing defaultAgent now that agents are registered
+    if (config.routing?.defaultAgent && !agentManager.hasAgent(config.routing.defaultAgent)) {
+      console.warn(
+        `[Config] Routing defaultAgent "${config.routing.defaultAgent}" not found among registered agents`
+      );
     }
+  }
 
-    // Configure workflows if specified in config
-    const workflows = extractWorkflows(config);
-    if (workflows.length > 0) {
-      fred.configureWorkflows(workflows);
-    }
+  private async buildAgentFileTemplateOptions(
+    fred: FredLike,
+    config: FrameworkConfig
+  ): Promise<AgentFileTemplateOptions> {
+    const globalVars = fred.getGlobalVariables ? await fred.getGlobalVariables() : {};
+    const envAllowlist = config.template?.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST];
+    const filteredEnv = filterEnvVars(process.env as Record<string, string | undefined>, envAllowlist);
+
+    return {
+      globalVars,
+      filteredEnv,
+      fredConfig: {
+        defaultSystemMessage: config.defaultSystemMessage,
+        agentDirs: config.agentDirs,
+        template: config.template,
+      },
+    };
   }
 
   /**
@@ -192,8 +364,8 @@ export class ConfigInitializer {
       adapter: 'postgres' | 'sqlite';
       checkpoint?: { enabled?: boolean; ttlMs?: number; cleanupIntervalMs?: number };
     },
-    contextManager: import('../context/manager').ContextManager,
-    pipelineManager: import('../pipeline/manager').PipelineManager
+    fred: Pick<FredLike, 'setStorage'>,
+    pipelineManager: PipelineManagerLike
   ): Promise<void> {
     if (persistence.adapter === 'postgres') {
       const connectionString = process.env.FRED_POSTGRES_URL;
@@ -203,11 +375,11 @@ export class ConfigInitializer {
         );
       }
       const storage = new PostgresContextStorage({ connectionString });
-      contextManager.setStorage(storage);
+      fred.setStorage(storage);
     } else if (persistence.adapter === 'sqlite') {
       const path = process.env.FRED_SQLITE_PATH || './fred.db';
       const storage = new SqliteContextStorage({ path });
-      contextManager.setStorage(storage);
+      fred.setStorage(storage);
     }
 
     // Set up checkpoint storage if persistence enabled (default: true)

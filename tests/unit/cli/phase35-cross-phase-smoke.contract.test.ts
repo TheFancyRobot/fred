@@ -47,21 +47,29 @@ function createStaleContractError(missing: string[], cause?: unknown): Error & {
 function assertFredSmokeContract(components: {
   fredModule: Record<string, unknown>;
   fredInstance: Record<string, unknown>;
-  contextManager: Record<string, unknown>;
 }): void {
   const missing: string[] = [];
 
-  if (typeof components.fredInstance.getContextManager !== 'function') {
-    missing.push('getContextManager');
+  if (typeof components.fredInstance.setStorage !== 'function') {
+    missing.push('setStorage');
+  }
+  if (typeof components.fredInstance.generateConversationId !== 'function') {
+    missing.push('generateConversationId');
+  }
+  if (typeof components.fredInstance.getContext !== 'function') {
+    missing.push('getContext');
+  }
+  if (typeof components.fredInstance.updateMetadata !== 'function') {
+    missing.push('updateMetadata');
+  }
+  if (typeof components.fredInstance.getSession !== 'function') {
+    missing.push('getSession');
+  }
+  if (typeof components.fredInstance.deleteSession !== 'function') {
+    missing.push('deleteSession');
   }
   if (typeof components.fredModule.SqliteContextStorage !== 'function') {
     missing.push('SqliteContextStorage');
-  }
-  if (typeof components.contextManager.setStorage !== 'function') {
-    missing.push('setStorage');
-  }
-  if (typeof components.contextManager.generateConversationId !== 'function') {
-    missing.push('generateConversationId');
   }
 
   if (missing.length > 0) {
@@ -105,26 +113,25 @@ describe('phase 35 cross-phase smoke contract guard', () => {
     assertFredSmokeContract({
       fredModule: { SqliteContextStorage: MockSqliteContextStorage },
       fredInstance: fred,
-      contextManager: fred.getContextManager() as Record<string, unknown>,
     });
   });
 
   test('stale diagnostics are deterministic and remediation-focused', () => {
-    const error = createStaleContractError(['getContextManager', 'SqliteContextStorage']);
+    const error = createStaleContractError(['setStorage', 'SqliteContextStorage']);
 
     expect(error.message).toContain(STALE_CONTRACT);
-    expect(error.message).toContain('getContextManager');
+    expect(error.message).toContain('setStorage');
     expect(error.message).toContain('SqliteContextStorage');
     expect(error.message).toContain('tests/unit/cli/fixtures/fred-smoke-contract.ts');
     expect(error.diagnostic).toEqual({
       channel: STALE_CONTRACT,
-      missing: ['getContextManager', 'SqliteContextStorage'],
+      missing: ['setStorage', 'SqliteContextStorage'],
       hint: FIXTURE_HINT,
     });
   });
 
   test('handleChatCommand integration reports STALE_CONTRACT context for stale mocks', async () => {
-    // Create a deliberately incomplete mock Fred that lacks getContextManager
+    // Create a deliberately incomplete mock Fred that lacks setStorage
     class StaleMockFred {
       async initializeFromConfig() {}
       async setToolPolicies() {}
@@ -180,7 +187,7 @@ describe('phase 35 cross-phase smoke contract guard', () => {
         try {
           await handleChatCommand(staleDeps);
         } catch (cause) {
-          throw createStaleContractError(['getContextManager', 'SqliteContextStorage'], cause);
+          throw createStaleContractError(['setStorage', 'SqliteContextStorage'], cause);
         }
       };
 

@@ -78,6 +78,73 @@ export class GraphValidationError extends Data.TaggedError("GraphValidationError
   readonly message: string;
 }> {}
 
+// ==========================================
+// Resume Errors (PIPE-02, PIPE-03)
+// ==========================================
+
+/**
+ * Error thrown when resume fails due to checkpoint not found.
+ * Includes checkpoint metadata for diagnostics.
+ */
+export class ResumeCheckpointNotFoundError extends Data.TaggedError("ResumeCheckpointNotFoundError")<{
+  readonly runId: string;
+  readonly pipelineId?: string;
+}> {}
+
+/**
+ * Error thrown when resume fails due to checkpoint being expired.
+ * Includes checkpoint metadata for diagnostics.
+ */
+export class ResumeCheckpointExpiredError extends Data.TaggedError("ResumeCheckpointExpiredError")<{
+  readonly runId: string;
+  readonly pipelineId: string;
+  readonly expiresAt: Date;
+}> {}
+
+/**
+ * Error thrown when resume fails due to checkpoint being in invalid state.
+ * Includes checkpoint metadata for diagnostics.
+ */
+export class ResumeInvalidStateError extends Data.TaggedError("ResumeInvalidStateError")<{
+  readonly runId: string;
+  readonly pipelineId: string;
+  readonly step: number;
+  readonly status: string;
+  readonly expectedStatus: string;
+}> {}
+
+/**
+ * Error thrown when resume fails due to pipeline not found.
+ * Includes checkpoint metadata for diagnostics.
+ */
+export class ResumePipelineNotFoundError extends Data.TaggedError("ResumePipelineNotFoundError")<{
+  readonly runId: string;
+  readonly pipelineId: string;
+}> {}
+
+/**
+ * Error thrown when resume fails due to step no longer being resolvable.
+ * Includes checkpoint metadata and best-effort recovery information.
+ */
+export class ResumeStepNotResolvableError extends Data.TaggedError("ResumeStepNotResolvableError")<{
+  readonly runId: string;
+  readonly pipelineId: string;
+  readonly step: number;
+  readonly stepName?: string;
+  readonly availableSteps: string[];
+}> {}
+
+/**
+ * Error thrown when resumeWithHumanInput fails because checkpoint is not paused.
+ * Includes checkpoint metadata for diagnostics.
+ */
+export class ResumeNotPausedError extends Data.TaggedError("ResumeNotPausedError")<{
+  readonly runId: string;
+  readonly pipelineId: string;
+  readonly step: number;
+  readonly status: string;
+}> {}
+
 /**
  * Union type for all pipeline errors, enabling exhaustive catchTag handling.
  */
@@ -91,4 +158,21 @@ export type PipelineError =
   | PauseNotFoundError
   | PauseExpiredError
   | ConcurrencyError
-  | GraphValidationError;
+  | GraphValidationError
+  | ResumeCheckpointNotFoundError
+  | ResumeCheckpointExpiredError
+  | ResumeInvalidStateError
+  | ResumePipelineNotFoundError
+  | ResumeStepNotResolvableError
+  | ResumeNotPausedError;
+
+/**
+ * Union type for resume-specific errors.
+ */
+export type ResumeError =
+  | ResumeCheckpointNotFoundError
+  | ResumeCheckpointExpiredError
+  | ResumeInvalidStateError
+  | ResumePipelineNotFoundError
+  | ResumeStepNotResolvableError
+  | ResumeNotPausedError;

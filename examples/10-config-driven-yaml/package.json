@@ -1,0 +1,17 @@
+{
+  "name": "@fancyrobot/fred-example-10-config",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:config": "bun run src/config-driven.ts",
+    "start:programmatic": "bun run src/programmatic-equivalent.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -39,6 +39,28 @@ bun run --filter @fancyrobot/fred-dev dev
 bun run --filter @fancyrobot/fred-dev server
 ```
 
+## Server Mode
+
+Start the development server:
+
+```bash
+bun run server
+# Or with options:
+bun run server --config config.yaml --port 3000
+```
+
+The server exposes an OpenAI-compatible API:
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/chat/completions` | OpenAI-compatible chat (works with Chatbox, etc.) |
+| `POST /chat` | Simplified chat endpoint |
+| `POST /message` | Process with intent matching options |
+| `GET /agents` | List agents |
+| `GET /intents` | List intents |
+| `GET /tools` | List tools |
+| `GET /health` | Health check |
+
 ## What It Exports
 
 - `startDevChat` from `src/dev-chat.ts`
@@ -49,6 +71,11 @@ bun run --filter @fancyrobot/fred-dev server
 
 This package follows Fred's release process, but its API is primarily optimized
 for repository development workflows and may change as contributor tooling evolves.
+
+## Related
+
+- [@fancyrobot/fred core package](../core/README.md)
+- [Repository README hub](../../README.md)
 
 ## License
 

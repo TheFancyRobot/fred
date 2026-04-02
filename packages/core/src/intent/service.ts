@@ -1,17 +1,21 @@
 /**
  * Effect services for Intent matching and routing
- *
- * These services provide Effect-native interfaces wrapping the
- * IntentMatcher and IntentRouter classes.
  */
 
-import { Context, Effect, Layer } from 'effect';
-import type { Intent, IntentMatch } from './intent';
-import { IntentMatcher, createIntentMatcher } from './matcher';
-import { IntentRouter, createIntentRouter } from './router';
+import { Context, Effect, Layer, Ref } from 'effect';
+import type { Action, Intent, IntentMatch } from './intent';
 import type { AgentResponse, AgentMessage } from '../agent/agent';
 import { AgentService } from '../agent/service';
 import type { IntentMatchError, ActionHandlerNotFoundError, DefaultAgentNotConfiguredError, IntentRouteError } from './errors';
+import {
+  ActionHandlerNotFoundError as ActionHandlerNotFoundErrorType,
+  DefaultAgentNotConfiguredError as DefaultAgentNotConfiguredErrorType,
+  IntentMatchError as IntentMatchErrorType,
+  IntentRouteError as IntentRouteErrorType,
+  getActionHandlerNotFoundMessage,
+  getDefaultAgentNotConfiguredMessage,
+  getIntentRouteErrorMessage,
+} from './errors';
 
 /**
  * Semantic matcher function type
@@ -45,25 +49,145 @@ export const IntentMatcherService = Context.GenericTag<IntentMatcherService>(
  * IntentMatcherService implementation using IntentMatcher
  */
 class IntentMatcherServiceImpl implements IntentMatcherService {
-  constructor(private matcher: IntentMatcher) {}
+  constructor(private intents: Ref.Ref<Intent[]>) {}
 
   matchIntent(
     message: string,
     semanticMatcher?: SemanticMatcherFn
   ): Effect.Effect<IntentMatch | null, IntentMatchError> {
-    return this.matcher.matchIntent(message, semanticMatcher);
+    const self = this;
+
+    return Effect.gen(function* () {
+      const intents = yield* Ref.get(self.intents);
+      const normalizedMessage = message.toLowerCase().trim();
+
+      let candidateIndex = 0;
+      const allCandidates: Array<{
+        intentId: string;
+        intentName: string;
+        confidence: number;
+        matchType: 'exact' | 'regex' | 'semantic';
+        matchedUtterance?: string;
+        order: number;
+      }> = [];
+
+      for (const intent of intents) {
+        for (const utterance of intent.utterances) {
+          if (normalizedMessage === utterance.toLowerCase().trim()) {
+            allCandidates.push({
+              intentId: intent.id,
+              intentName: intent.description || intent.id,
+              confidence: 1,
+              matchType: 'exact',
+              matchedUtterance: utterance,
+              order: candidateIndex,
+            });
+          }
+          candidateIndex += 1;
+        }
+      }
+
+      for (const intent of intents) {
+        for (const utterance of intent.utterances) {
+          const regexMatch = yield* Effect.sync(() => {
+            try {
+              const regex = new RegExp(utterance, 'i');
+              return regex.test(message);
+            } catch {
+              return false;
+            }
+          });
+
+          if (regexMatch) {
+            allCandidates.push({
+              intentId: intent.id,
+              intentName: intent.description || intent.id,
+              confidence: 0.8,
+              matchType: 'regex',
+              matchedUtterance: utterance,
+              order: candidateIndex,
+            });
+          }
+          candidateIndex += 1;
+        }
+      }
+
+      if (semanticMatcher) {
+        for (const intent of intents) {
+          const result = yield* Effect.tryPromise({
+            try: () => semanticMatcher(message, intent.utterances),
+            catch: (cause) =>
+              new IntentMatchErrorType({
+                message: 'Semantic matching failed',
+                cause: cause instanceof Error ? cause : new Error(String(cause)),
+              }),
+          });
+
+          if (result.matched) {
+            allCandidates.push({
+              intentId: intent.id,
+              intentName: intent.description || intent.id,
+              confidence: result.confidence,
+              matchType: 'semantic',
+              matchedUtterance: result.utterance,
+              order: candidateIndex,
+            });
+          }
+          candidateIndex += 1;
+        }
+      }
+
+      if (allCandidates.length === 0) {
+        return null;
+      }
+
+      const matchTypePriority = {
+        exact: 3,
+        regex: 2,
+        semantic: 1,
+      } as const;
+
+      allCandidates.sort((a, b) => {
+        const priorityDiff = matchTypePriority[b.matchType] - matchTypePriority[a.matchType];
+        if (priorityDiff !== 0) {
+          return priorityDiff;
+        }
+
+        const confidenceDiff = b.confidence - a.confidence;
+        if (confidenceDiff !== 0) {
+          return confidenceDiff;
+        }
+
+        return a.order - b.order;
+      });
+
+      const best = allCandidates[0];
+      const bestIntent = intents.find((intent) => intent.id === best.intentId);
+
+      if (!bestIntent) {
+        return null;
+      }
+
+      return {
+        intent: bestIntent,
+        confidence: best.confidence,
+        matchType: best.matchType,
+        matchedUtterance: best.matchedUtterance,
+        allCandidates: allCandidates.map(({ matchedUtterance, order, ...candidate }) => candidate),
+      };
+    });
   }
 
   registerIntents(intents: Intent[]): Effect.Effect<void> {
-    return this.matcher.registerIntents(intents);
+    return Ref.set(this.intents, intents);
   }
 
   getIntents(): Effect.Effect<Intent[]> {
-    return this.matcher.getIntentsEffect();
+    return Ref.get(this.intents);
   }
 
   clear(): Effect.Effect<void> {
-    return this.matcher.clear();
+    return Ref.set(this.intents, []);
   }
 }
 
@@ -73,8 +197,8 @@ class IntentMatcherServiceImpl implements IntentMatcherService {
 export const IntentMatcherServiceLive = Layer.effect(
   IntentMatcherService,
   Effect.gen(function* () {
-    const matcher = yield* createIntentMatcher();
-    return new IntentMatcherServiceImpl(matcher);
+    const intentsRef = yield* Ref.make<Intent[]>([]);
+    return new IntentMatcherServiceImpl(intentsRef);
   })
 );
 
@@ -102,25 +226,140 @@ export const IntentRouterService = Context.GenericTag<IntentRouterService>(
 /**
  * IntentRouterService implementation using IntentRouter
  */
+type ActionHandler = (action: Action, payload: Record<string, unknown>) => Effect.Effect<AgentResponse, IntentRouteError>;
+
 class IntentRouterServiceImpl implements IntentRouterService {
-  constructor(private router: IntentRouter) {}
+  constructor(
+    private actionHandlers: Ref.Ref<Map<string, ActionHandler>>,
+    private defaultAgentId: Ref.Ref<string | undefined>,
+    private agentService: typeof AgentService.Service
+  ) {}
 
   routeIntent(
     match: IntentMatch,
     userMessage: string
   ): Effect.Effect<AgentResponse, ActionHandlerNotFoundError | IntentRouteError> {
-    return this.router.routeIntent(match, userMessage);
+    const self = this;
+
+    return Effect.gen(function* () {
+      const handlers = yield* Ref.get(self.actionHandlers);
+      const handler = handlers.get(match.intent.action.type);
+
+      if (!handler) {
+        return yield* Effect.fail(
+          new ActionHandlerNotFoundErrorType({
+            actionType: match.intent.action.type,
+            message: getActionHandlerNotFoundMessage(match.intent.action.type),
+          })
+        );
+      }
+
+      return yield* handler(match.intent.action, {
+        userMessage,
+        match,
+        ...(match.intent.action.payload ?? {}),
+      });
+    });
   }
 
   routeToDefaultAgent(
     userMessage: string,
     previousMessages?: AgentMessage[]
   ): Effect.Effect<AgentResponse, DefaultAgentNotConfiguredError | IntentRouteError> {
-    return this.router.routeToDefaultAgent(userMessage, previousMessages);
+    const self = this;
+
+    return Effect.gen(function* () {
+      const defaultAgentId = yield* Ref.get(self.defaultAgentId);
+
+      if (!defaultAgentId) {
+        return yield* Effect.fail(
+          new DefaultAgentNotConfiguredErrorType({
+            message: getDefaultAgentNotConfiguredMessage(),
+          })
+        );
+      }
+
+      return yield* self.executeAgentRoute(defaultAgentId, userMessage, previousMessages ?? [], 'default');
+    });
   }
 
   setDefaultAgent(agentId: string): Effect.Effect<void> {
-    return this.router.setDefaultAgent(agentId);
+    return Ref.set(this.defaultAgentId, agentId);
+  }
+
+  registerActionHandler(type: string, handler: ActionHandler): Effect.Effect<void> {
+    const self = this;
+
+    return Effect.gen(function* () {
+      const handlers = yield* Ref.get(self.actionHandlers);
+      const updated = new Map(handlers);
+      updated.set(type, handler);
+      yield* Ref.set(self.actionHandlers, updated);
+    });
+  }
+
+  initializeDefaultHandlers(): Effect.Effect<void> {
+    const self = this;
+    return Effect.gen(function* () {
+      yield* self.registerActionHandler('agent', (action, payload) =>
+        self.handleAgentAction(action, payload)
+      );
+      yield* self.registerActionHandler('function', (action, payload) =>
+        self.handleFunctionAction(action, payload)
+      );
+    });
+  }
+
+  private handleAgentAction(action: Action, payload: Record<string, unknown>): Effect.Effect<AgentResponse, IntentRouteError> {
+    const userMessage = typeof payload.userMessage === 'string' ? payload.userMessage : '';
+    const messages = Array.isArray(payload.previousMessages) ? (payload.previousMessages as AgentMessage[]) : [];
+    const match = payload.match as IntentMatch | undefined;
+    return this.executeAgentRoute(action.target, userMessage, messages, match?.intent.id ?? 'unknown');
+  }
+
+  private handleFunctionAction(action: Action, payload: Record<string, unknown>): Effect.Effect<AgentResponse, IntentRouteError> {
+    const match = payload.match as IntentMatch | undefined;
+
+    return Effect.fail(
+      new IntentRouteErrorType({
+        intentId: match?.intent.id ?? 'unknown',
+        message: getIntentRouteErrorMessage(match?.intent.id ?? 'unknown'),
+        cause: new Error(`Function action handler not implemented. Function: ${action.target}`),
+      })
+    );
+  }
+
+  private executeAgentRoute(
+    agentId: string,
+    userMessage: string,
+    previousMessages: AgentMessage[],
+    intentId: string
+  ): Effect.Effect<AgentResponse, IntentRouteError> {
+    const self = this;
+
+    return Effect.gen(function* () {
+      const agent = yield* self.agentService.getAgentOptional(agentId);
+
+      if (!agent) {
+        return yield* Effect.fail(
+          new IntentRouteErrorType({
+            intentId,
+            message: getIntentRouteErrorMessage(intentId),
+            cause: new Error(`Agent not found: ${agentId}`),
+          })
+        );
+      }
+
+      return yield* Effect.tryPromise({
+        try: () => agent.processMessage(userMessage, previousMessages),
+        catch: (cause) =>
+          new IntentRouteErrorType({
+            intentId,
+            message: getIntentRouteErrorMessage(intentId),
+            cause: cause instanceof Error ? cause : new Error(String(cause)),
+          }),
+      });
+    });
   }
 }
 
@@ -131,10 +370,13 @@ class IntentRouterServiceImpl implements IntentRouterService {
 export const IntentRouterServiceLive = Layer.effect(
   IntentRouterService,
   Effect.gen(function* () {
+    const actionHandlers = yield* Ref.make(new Map<string, ActionHandler>());
+    const defaultAgentId = yield* Ref.make<string | undefined>(undefined);
     const agentService = yield* AgentService;
-    const router = yield* createIntentRouter(agentService);
-    return new IntentRouterServiceImpl(router);
+    const service = new IntentRouterServiceImpl(actionHandlers, defaultAgentId, agentService);
+
+    yield* service.initializeDefaultHandlers();
+
+    return service;
   })
 );
-
-

@@ -15,16 +15,26 @@ import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import { ContextStorageService, ContextStorageServiceLive } from './context/service';
 import { AgentService, AgentServiceLive } from './agent/service';
+import { WorkflowService, WorkflowServiceLive } from './workflow/service';
 import { CheckpointService } from './pipeline/checkpoint/service';
 import { CheckpointNotFoundError } from './pipeline/errors';
 import { PauseService, PauseServiceLive } from './pipeline/pause/service';
 import { PipelineService, PipelineServiceLive } from './pipeline/service';
+import { ExecutorServiceLive } from './pipeline/executor';
+import { GraphExecutorServiceLive } from './pipeline/graph-executor';
 import { MessageProcessorService, MessageProcessorServiceLive } from './message-processor/service';
 import { IntentMatcherService, IntentMatcherServiceLive } from './intent/service';
 import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
-import { MessageRouterService } from './routing/service';
+import { SubagentService, SubagentServiceLive } from './subagent/service';
+import {
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
+} from './routing/service';
+import { NoAgentsAvailableError } from './routing/errors';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
+import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
+import type { RoutingConfig } from './routing/types';
 
 /**
  * Core Fred service types included in FredLayers.
@@ -36,10 +46,15 @@ export type FredServices =
   | ProviderRegistryService
   | ContextStorageService
   | AgentService
+  | WorkflowService
   | CheckpointService
   | PauseService
   | PipelineService
   | MessageProcessorService
+  | SubagentService
+  | IntentMatcherService
+  | IntentRouterService
+  | MessageRouterService
   | ObservabilityService;
 
 /**
@@ -73,6 +88,20 @@ class InMemoryCheckpointStorage implements CheckpointStorage {
     return checkpoints.reduce((latest, cp) =>
       cp.step > latest.step ? cp : latest
     );
+  }
+
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    let latest: Checkpoint | null = null;
+    for (const checkpoints of this.checkpoints.values()) {
+      for (const cp of checkpoints) {
+        if (cp.pipelineId === pipelineId) {
+          if (!latest || cp.updatedAt > latest.updatedAt) {
+            latest = cp;
+          }
+        }
+      }
+    }
+    return latest;
   }
 
   async updateStatus(runId: string, step: number, status: CheckpointStatus): Promise<void> {
@@ -192,6 +221,9 @@ const CheckpointServiceLive = Layer.effect(
 
       deleteExpired: () => Effect.promise(() => inMemoryStorage.deleteExpired()),
 
+      getLatestByPipelineId: (pipelineId) =>
+        Effect.promise(() => inMemoryStorage.getLatestByPipelineId(pipelineId)),
+
       getStorage: () => Effect.succeed(inMemoryStorage),
     };
     return service;
@@ -243,11 +275,20 @@ const agentLayer = AgentServiceLive.pipe(
 );
 
 /**
+ * Workflow layer depends on Agent service for validation warnings.
+ */
+const workflowLayer = WorkflowServiceLive.pipe(
+  Layer.provide(agentLayer)
+);
+
+/**
  * Pipeline layer depends on Agent, Hook, Checkpoint, Pause
  * Wave 4: PipelineService
  */
 const pipelineLayer = PipelineServiceLive.pipe(
   Layer.provide(agentLayer),
+  Layer.provide(ExecutorServiceLive),
+  Layer.provide(GraphExecutorServiceLive),
   Layer.provide(HookManagerServiceLive),
   Layer.provide(CheckpointServiceLive),
   Layer.provide(pauseLayer)
@@ -267,8 +308,31 @@ const messageProcessorLayer = MessageProcessorServiceLive.pipe(
   Layer.provide(ContextStorageServiceLive)
 );
 
+const subagentLayer = SubagentServiceLive;
+
 /**
- * Complete Fred layers - all services composed
+ * Standalone intent layers.
+ * Wave 6: IntentMatcherService, IntentRouterService
+ */
+const intentLayer = Layer.mergeAll(
+  IntentMatcherServiceLive,
+  IntentRouterServiceLive.pipe(Layer.provide(agentLayer))
+);
+
+/**
+ * Default no-op MessageRouterService for base FredLayers.
+ * Returns NoAgentsAvailableError since no routing rules are configured.
+ * Override with MessageRouterServiceLiveWithConfig when routing is needed.
+ */
+const defaultRouterLayer = Layer.succeed(MessageRouterService, {
+  route: (_message: string, _metadata?: Record<string, unknown>) =>
+    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
+  testRoute: (_message: string, _metadata?: Record<string, unknown>) =>
+    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
+});
+
+/**
+ * Complete Fred layers - all 14 services composed
  *
  * Dependency graph:
  * ```
@@ -292,6 +356,11 @@ const messageProcessorLayer = MessageProcessorServiceLive.pipe(
  *       |
  *       v
  * MessageProcessorService (Wave 5 - depends on Agent, Pipeline, Context)
+ *       |
+ *       v
+ * IntentMatcherService (Wave 6)
+ * IntentRouterService (Wave 6 - depends on Agent)
+ * MessageRouterService (Wave 6 - default no-op)
  * ```
  */
 export const FredLayers = Layer.mergeAll(
@@ -300,9 +369,59 @@ export const FredLayers = Layer.mergeAll(
   coreLayer,
   pauseLayer,
   agentLayer,
+  workflowLayer,
   pipelineLayer,
-  messageProcessorLayer
+  messageProcessorLayer,
+  subagentLayer,
+  intentLayer,
+  defaultRouterLayer
 );
+
+/**
+ * Build Fred layers with a config-driven MessageRouterService.
+ *
+ * Composes FredLayers (which includes a default no-op router) with the
+ * config-driven MessageRouterService. Layer.merge gives the second (right)
+ * layer priority, so the config-driven router replaces the no-op default.
+ */
+export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
+  Layer.merge(
+    FredLayers,
+    MessageRouterServiceLiveWithConfig(routerConfig)
+  );
+
+export interface FredLayerOptions {
+  routingConfig?: RoutingConfig;
+  observabilityLayers?: ObservabilityLayers;
+}
+
+/**
+ * Compose Fred layers from runtime options.
+ */
+export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Layer<FredServices> => {
+  const base = options.routingConfig
+    ? makeFredLayersWithLeafRouting(options.routingConfig)
+    : FredLayers;
+
+  if (!options.observabilityLayers) {
+    return base;
+  }
+
+  return Layer.mergeAll(
+    base,
+    options.observabilityLayers.tracerLayer,
+    options.observabilityLayers.loggerLayer
+  );
+};
+
+/**
+ * Create a Fred runtime from runtime composition options.
+ */
+export const createFredRuntimeWithOptions = (
+  options: FredLayerOptions = {}
+): Effect.Effect<FredRuntime, never, Scope.Scope> => {
+  return Layer.toRuntime(makeFredRuntimeLayer(options));
+};
 
 /**
  * Create a Fred runtime with all services.
@@ -321,7 +440,7 @@ export const FredLayers = Layer.mergeAll(
  * ```
  */
 export const createFredRuntime = (): Effect.Effect<FredRuntime, never, Scope.Scope> => {
-  return Layer.toRuntime(FredLayers);
+  return createFredRuntimeWithOptions();
 };
 
 /**
@@ -354,6 +473,8 @@ export {
   ContextStorageServiceLive,
   AgentService,
   AgentServiceLive,
+  WorkflowService,
+  WorkflowServiceLive,
   CheckpointService,
   CheckpointServiceLive,
   PauseService,
@@ -362,11 +483,14 @@ export {
   PipelineServiceLive,
   MessageProcessorService,
   MessageProcessorServiceLive,
+  SubagentService,
+  SubagentServiceLive,
   IntentMatcherService,
   IntentMatcherServiceLive,
   IntentRouterService,
   IntentRouterServiceLive,
   MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
   ObservabilityService,
   ObservabilityServiceLive,
 };

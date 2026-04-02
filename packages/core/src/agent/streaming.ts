@@ -39,6 +39,7 @@
 
 import { Effect, Stream, pipe } from 'effect';
 import { LanguageModel, Prompt, Toolkit } from '@effect/ai';
+import { normalizeToolChoice, type AgentToolChoice } from './agent';
 import type {
   StreamEvent,
   TokenEvent,
@@ -65,7 +66,7 @@ export interface MultiStepConfig {
   toolHandlers?: Map<string, (args: Record<string, any>) => Promise<any> | any>;
   maxSteps: number;
   // Accept any tool choice format - internal handling casts appropriately
-  toolChoice?: 'auto' | 'required' | 'none' | { name: string } | { type: 'tool'; toolName: string };
+  toolChoice?: AgentToolChoice;
   temperature?: number;
 }
 
@@ -183,7 +184,8 @@ const processStreamPart = (
   state: StreamState,
   runId: string,
   threadId: string | undefined,
-  messageId: string
+  messageId: string,
+  agentId?: string,
 ): { event: StreamEvent | null; newState: StreamState } => {
   const emittedAt = Date.now();
 
@@ -241,6 +243,7 @@ const processStreamPart = (
       toolName: part.name,
       input: part.params as Record<string, unknown>,
       startedAt,
+      ...(agentId ? { originAgentId: agentId } : {}),
     };
     const newToolStarts = new Map(state.toolStarts);
     newToolStarts.set(part.id, { toolName: part.name, startedAt });
@@ -354,7 +357,7 @@ const streamSingleStep = (
         prompt,
         toolkit: config.toolkit,
         maxSteps: 1,
-        toolChoice: stepIndex === 0 ? (config.toolChoice as any) : undefined,
+        toolChoice: stepIndex === 0 ? normalizeToolChoice(config.toolChoice) : undefined,
         temperature: config.temperature,
       } as unknown as Parameters<typeof LanguageModel.streamText>[0];
       const modelStream = LanguageModel.streamText(streamOptions);
@@ -434,9 +437,10 @@ export const streamMultiStep = (
     runId: string;
     threadId?: string;
     messageId: string;
+    agentId?: string;
   }
 ): Stream.Stream<StreamEvent, Error, any> => {
-  const { runId, threadId, messageId } = options;
+  const { runId, threadId, messageId, agentId } = options;
   const messages = normalizeMessages(initialMessages);
 
   // Track tool calls and results per step
@@ -487,7 +491,7 @@ export const streamMultiStep = (
           prompt,
           toolkit: config.toolkit,
           maxSteps: 1, // One model call per step - @effect/ai handles tool execution
-          toolChoice: stepIndex === 0 ? (config.toolChoice as any) : undefined,
+          toolChoice: stepIndex === 0 ? normalizeToolChoice(config.toolChoice) : undefined,
           temperature: config.temperature,
         } as unknown as Parameters<typeof LanguageModel.streamText>[0];
         const modelStream = LanguageModel.streamText(streamOptions);
@@ -513,7 +517,7 @@ export const streamMultiStep = (
               stepToolInfo.toolResults.set(typedPart.id!, typedPart.result);
             }
 
-            const { event, newState } = processStreamPart(part, state, runId, threadId, messageId);
+            const { event, newState } = processStreamPart(part, state, runId, threadId, messageId, agentId);
             state = newState;
             return event;
           }),

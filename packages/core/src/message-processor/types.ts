@@ -1,12 +1,9 @@
+import type { Effect } from 'effect';
 import type { AgentInstance, AgentMessage, AgentResponse } from '../agent/agent';
-import type { AgentManager } from '../agent/manager';
-import type { ContextManager } from '../context/manager';
 import type { IntentMatcher } from '../intent/matcher';
 import type { IntentRouter } from '../intent/router';
-import type { PipelineManager } from '../pipeline/manager';
-import type { MessageRouter } from '../routing/router';
+import type { RoutingDecision } from '../routing/types';
 import type { Tracer } from '../tracing';
-import type { HookManager } from '../hooks/manager';
 import type { ObservabilityService } from '../observability/service';
 
 /**
@@ -64,6 +61,8 @@ export interface ProcessingOptions {
   userId?: string;
   role?: string;
   policyMetadata?: Record<string, unknown>;
+  /** AbortSignal for user-initiated stream cancellation (e.g. /exit, Ctrl+C) */
+  signal?: AbortSignal;
 }
 
 /**
@@ -80,20 +79,61 @@ export interface MemoryDefaults {
   sequentialVisibility?: boolean;
 }
 
+interface ProcessorContextManager {
+  generateConversationId(): string;
+  getHistory(conversationId: string): Promise<AgentMessage[]>;
+  addMessage(conversationId: string, message: AgentMessage): Promise<void>;
+}
+
+interface ProcessorAgentMatch {
+  agentId: string;
+  confidence: number;
+  matchType: 'exact' | 'regex' | 'semantic';
+}
+
+interface ProcessorAgentManager {
+  getAgent(id: string): AgentInstance | undefined;
+  matchAgentByUtterance(message: string, semanticMatcher?: SemanticMatcherFn): Promise<ProcessorAgentMatch | null>;
+}
+
+interface ProcessorPipelineMatch {
+  pipelineId: string;
+  confidence: number;
+  matchType: 'exact' | 'regex' | 'semantic';
+}
+
+interface ProcessorPipelineManager {
+  matchPipelineByUtterance(message: string, semanticMatcher?: SemanticMatcherFn): Promise<ProcessorPipelineMatch | null>;
+  executePipeline(
+    id: string,
+    message: string,
+    previousMessages: AgentMessage[],
+    options?: { conversationId?: string; sequentialVisibility?: boolean }
+  ): Promise<AgentResponse>;
+}
+
+interface ProcessorHookManager {
+  executeHooks(hookName: string, event: unknown): Promise<void>;
+}
+
+interface ProcessorMessageRouter {
+  route(message: string, context: Record<string, unknown>): Effect.Effect<RoutingDecision, unknown, unknown>;
+}
+
 /**
  * Dependencies required by MessageProcessor
  */
 export interface MessageProcessorDeps {
-  contextManager: ContextManager;
-  agentManager: AgentManager;
-  pipelineManager: PipelineManager;
+  contextManager: ProcessorContextManager;
+  agentManager: ProcessorAgentManager;
+  pipelineManager: ProcessorPipelineManager;
   intentMatcher: IntentMatcher;
   intentRouter: IntentRouter;
   tracer?: Tracer;
-  messageRouter?: MessageRouter;
+  messageRouter?: ProcessorMessageRouter;
   memoryDefaults: MemoryDefaults;
   defaultAgentId?: string;
-  hookManager?: HookManager;
+  hookManager?: ProcessorHookManager;
   observabilityService?: ObservabilityService;
 }
 

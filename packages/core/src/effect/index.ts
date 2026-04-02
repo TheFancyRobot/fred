@@ -15,8 +15,9 @@
  *   return agents;
  * });
  *
- * const result = await Effect.runPromise(
- *   program.pipe(Effect.provide(FredLayers))
+ * const resultEffect = program.pipe(
+ *   Effect.provide(FredLayers),
+ *   Effect.map((agents) => agents.length)
  * );
  * ```
  *

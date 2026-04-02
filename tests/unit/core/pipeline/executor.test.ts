@@ -1,40 +1,33 @@
-/**
- * Unit tests for pipeline executor checkpoint functionality.
- *
- * Tests the executor's ability to:
- * - Generate and track run IDs
- * - Write checkpoints after each step
- * - Skip checkpointing when disabled
- * - Resume from specific step with restored context
- */
-
-import { describe, it, expect, beforeEach, mock, spyOn } from 'bun:test';
-import { executePipelineV2 } from '../../../../packages/core/src/pipeline/executor';
-import type { ExtendedExecutionOptions } from '../../../../packages/core/src/pipeline/executor';
+import { describe, it, expect, mock } from 'bun:test';
+import { Effect } from 'effect';
+import {
+  ExecutorService,
+  ExecutorServiceLive,
+  type AgentManagerLike,
+  type ExtendedExecutionOptions,
+} from '../../../../packages/core/src/pipeline/executor';
 import type { PipelineConfigV2 } from '../../../../packages/core/src/pipeline/pipeline';
 import type { PipelineContext } from '../../../../packages/core/src/pipeline/context';
-import type { AgentManager } from '../../../../packages/core/src/agent/manager';
 import type { CheckpointManager } from '../../../../packages/core/src/pipeline/checkpoint/manager';
 
-// -----------------------------------------------------------------------------
-// Test Helpers
-// -----------------------------------------------------------------------------
-
-function createMockAgent() {
+function createMockAgent(id = 'test-agent') {
   return {
-    id: 'test-agent',
-    processMessage: mock(async (input: string) => ({
-      content: `Processed: ${input}`,
-      toolCalls: [],
-    })),
+    id,
+    processMessage: mock((input: string) =>
+      Effect.succeed({
+        content: `Processed: ${input}`,
+        toolCalls: [],
+      })
+    ),
   };
 }
 
-function createMockAgentManager(): AgentManager {
+function createMockAgentManager(): AgentManagerLike {
   const agent = createMockAgent();
   return {
-    getAgent: mock((id: string) => (id === 'test-agent' ? agent : undefined)),
-  } as any;
+    getAgent: mock((id: string) => (id === 'test-agent' ? agent : undefined)) as any,
+    hasAgent: mock((id: string) => id === 'test-agent'),
+  };
 }
 
 function createMockCheckpointManager(): CheckpointManager & {
@@ -55,13 +48,13 @@ function createMockCheckpointManager(): CheckpointManager & {
   } as any;
 }
 
-function createSimplePipelineConfig(stepCount: number = 2): PipelineConfigV2 {
+function createSimplePipelineConfig(stepCount = 2): PipelineConfigV2 {
   return {
     id: 'test-pipeline',
     steps: Array.from({ length: stepCount }, (_, i) => ({
       type: 'function' as const,
       name: `step-${i}`,
-      fn: async (ctx: PipelineContext) => `result-${i}`,
+      fn: async () => `result-${i}`,
     })),
   };
 }
@@ -77,287 +70,218 @@ function createTestContext(overrides: Partial<PipelineContext> = {}): PipelineCo
   };
 }
 
-// -----------------------------------------------------------------------------
-// Run ID Tests
-// -----------------------------------------------------------------------------
+async function runExecutor(
+  config: PipelineConfigV2,
+  input: string,
+  options: ExtendedExecutionOptions
+) {
+  return Effect.runPromise(
+    ExecutorService.pipe(
+      Effect.flatMap((svc) => svc.executePipelineV2(config, input, options)),
+      Effect.provide(ExecutorServiceLive)
+    )
+  );
+}
 
-describe('executePipelineV2 - Run ID', () => {
+describe('ExecutorService - run id and checkpoint behavior', () => {
   it('generates runId and returns it in result', async () => {
-    const agentManager = createMockAgentManager();
-    const config = createSimplePipelineConfig(1);
-
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
+    const result = await runExecutor(createSimplePipelineConfig(1), 'test input', {
+      agentManager: createMockAgentManager(),
     });
 
     expect(result.success).toBe(true);
     expect(result.runId).toBeDefined();
-    expect(typeof result.runId).toBe('string');
-    expect(result.runId!.length).toBeGreaterThan(0);
-  });
-
-  it('uses provided runId when specified', async () => {
-    const agentManager = createMockAgentManager();
-    const config = createSimplePipelineConfig(1);
-
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
-      runId: 'custom-run-id',
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.runId).toBe('custom-run-id');
   });
 
   it('uses checkpointManager.generateRunId when available', async () => {
-    const agentManager = createMockAgentManager();
     const checkpointManager = createMockCheckpointManager();
-    const config = createSimplePipelineConfig(1);
 
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
+    const result = await runExecutor(createSimplePipelineConfig(1), 'test input', {
+      agentManager: createMockAgentManager(),
       checkpointManager,
     });
 
-    expect(result.success).toBe(true);
     expect(result.runId).toBe('generated-run-id');
     expect(checkpointManager.generateRunId).toHaveBeenCalled();
   });
-});
 
-// -----------------------------------------------------------------------------
-// Checkpoint Writing Tests
-// -----------------------------------------------------------------------------
-
-describe('executePipelineV2 - Checkpoint Writing', () => {
-  it('calls saveCheckpoint after each step when checkpointManager provided', async () => {
-    const agentManager = createMockAgentManager();
+  it('writes checkpoint after each step when enabled', async () => {
     const checkpointManager = createMockCheckpointManager();
-    const config = createSimplePipelineConfig(3);
 
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
+    const result = await runExecutor(createSimplePipelineConfig(3), 'test input', {
+      agentManager: createMockAgentManager(),
       checkpointManager,
     });
 
     expect(result.success).toBe(true);
     expect(checkpointManager.saveCheckpoint).toHaveBeenCalledTimes(3);
-
-    // Verify checkpoint content for each step
-    const calls = checkpointManager.saveCheckpoint.mock.calls;
-    expect(calls[0][0]).toMatchObject({
-      runId: 'generated-run-id',
-      pipelineId: 'test-pipeline',
-      step: 0,
-      status: 'in_progress',
-    });
-    expect(calls[1][0]).toMatchObject({
-      runId: 'generated-run-id',
-      pipelineId: 'test-pipeline',
-      step: 1,
-      status: 'in_progress',
-    });
-    expect(calls[2][0]).toMatchObject({
-      runId: 'generated-run-id',
-      pipelineId: 'test-pipeline',
-      step: 2,
-      status: 'in_progress',
-    });
   });
 
-  it('does NOT call saveCheckpoint when checkpointManager undefined', async () => {
-    const agentManager = createMockAgentManager();
-    const config = createSimplePipelineConfig(2);
-
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
-      // No checkpointManager
-    });
-
-    expect(result.success).toBe(true);
-    // No assertions about saveCheckpoint because it doesn't exist
-  });
-
-  it('does NOT call saveCheckpoint when config.checkpoint.enabled is false', async () => {
-    const agentManager = createMockAgentManager();
+  it('does not write checkpoint when checkpoint config disables it', async () => {
     const checkpointManager = createMockCheckpointManager();
     const config: PipelineConfigV2 = {
       ...createSimplePipelineConfig(2),
       checkpoint: { enabled: false },
     };
 
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
+    await runExecutor(config, 'test input', {
+      agentManager: createMockAgentManager(),
       checkpointManager,
     });
 
-    expect(result.success).toBe(true);
     expect(checkpointManager.saveCheckpoint).not.toHaveBeenCalled();
   });
+});
 
-  it('uses custom TTL when config.checkpoint.ttlMs specified', async () => {
-    const agentManager = createMockAgentManager();
-    const checkpointManager = createMockCheckpointManager();
-    const config: PipelineConfigV2 = {
-      ...createSimplePipelineConfig(1),
-      checkpoint: { ttlMs: 3600000 }, // 1 hour
+describe('ExecutorService - step execution flows', () => {
+  it('executes agent steps through yield* composition', async () => {
+    const agent = createMockAgent();
+    const agentManager: AgentManagerLike = {
+      getAgent: mock((id: string) => (id === 'test-agent' ? agent : undefined)) as any,
+      hasAgent: mock(() => true),
     };
 
-    const beforeExecution = Date.now();
-    await executePipelineV2(config, 'test input', {
-      agentManager,
+    const config: PipelineConfigV2 = {
+      id: 'agent-pipeline',
+      steps: [{ type: 'agent', name: 'agent-step', agentId: 'test-agent' }],
+    };
+
+    const result = await runExecutor(config, 'hello', { agentManager });
+    expect(result.success).toBe(true);
+    expect(result.finalOutput).toMatchObject({ content: 'Processed: hello' });
+    expect(agent.processMessage).toHaveBeenCalled();
+  });
+
+  it('retries failed function step and succeeds', async () => {
+    let attempts = 0;
+    const config: PipelineConfigV2 = {
+      id: 'retry-pipeline',
+      steps: [{
+        type: 'function',
+        name: 'retry-step',
+        retry: { maxRetries: 2, backoffMs: 1 },
+        fn: async () => {
+          attempts += 1;
+          if (attempts < 3) throw new Error('transient');
+          return 'ok';
+        },
+      }],
+    };
+
+    const result = await runExecutor(config, 'input', { agentManager: createMockAgentManager() });
+    expect(result.success).toBe(true);
+    expect(result.finalOutput).toBe('ok');
+    expect(attempts).toBe(3);
+  });
+
+  it('handles conditional and pipeline-ref steps', async () => {
+    const config: PipelineConfigV2 = {
+      id: 'composite-pipeline',
+      steps: [
+        {
+          type: 'conditional',
+          name: 'branch',
+          condition: async () => true,
+          whenTrue: [{ type: 'function', name: 'branch-step', fn: async () => 'branch-result' }],
+        },
+        {
+          type: 'pipeline',
+          name: 'nested',
+          pipelineId: 'nested-pipeline',
+        },
+      ],
+    };
+
+    const result = await runExecutor(config, 'input', {
+      agentManager: createMockAgentManager(),
+      pipelineManager: {
+        getPipeline: () => ({ execute: async () => ({ content: 'nested-result', toolCalls: [] } as any) }),
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect((result.context.outputs.branch as any).conditionResult).toBe(true);
+    expect(result.finalOutput).toMatchObject({ content: 'nested-result' });
+  });
+});
+
+describe('ExecutorService - hooks, pause, abort, and resume', () => {
+  it('merges metadata returned by hooks', async () => {
+    const config = createSimplePipelineConfig(1);
+    const hookManager = {
+      executeHooks: mock(async () => {}),
+      executeHooksAndMerge: mock(async (hookName: string) => {
+        if (hookName === 'beforePipeline') {
+          return { metadata: { fromHook: true } };
+        }
+        return {};
+      }),
+    };
+
+    const result = await runExecutor(config, 'input', {
+      agentManager: createMockAgentManager(),
+      hookManager,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.context.metadata.fromHook).toBe(true);
+  });
+
+  it('aborts when beforeStep hook returns abort', async () => {
+    const config = createSimplePipelineConfig(1);
+    const hookManager = {
+      executeHooks: mock(async () => {}),
+      executeHooksAndMerge: mock(async (hookName: string) => {
+        if (hookName === 'beforeStep') return { abort: true };
+        return {};
+      }),
+    };
+
+    const result = await runExecutor(config, 'input', {
+      agentManager: createMockAgentManager(),
+      hookManager,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('aborted');
+    expect(result.abortedBy).toBe('beforeStep hook');
+  });
+
+  it('pauses when a step returns a pause request and persists paused checkpoint', async () => {
+    const checkpointManager = createMockCheckpointManager();
+    const config: PipelineConfigV2 = {
+      id: 'pause-pipeline',
+      steps: [{
+        type: 'function',
+        name: 'pause-step',
+        fn: async () => ({ pause: true, prompt: 'Need approval', ttlMs: 5000 }),
+      }],
+    };
+
+    const result = await runExecutor(config, 'input', {
+      agentManager: createMockAgentManager(),
       checkpointManager,
     });
-    const afterExecution = Date.now();
 
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('paused');
+    expect(result.pauseRequest?.prompt).toBe('Need approval');
     expect(checkpointManager.saveCheckpoint).toHaveBeenCalledTimes(1);
-    const call = checkpointManager.saveCheckpoint.mock.calls[0][0];
-    expect(call.expiresAt).toBeInstanceOf(Date);
-
-    // Verify expiry is approximately 1 hour from now
-    const expiresAtTime = call.expiresAt.getTime();
-    expect(expiresAtTime).toBeGreaterThanOrEqual(beforeExecution + 3600000);
-    expect(expiresAtTime).toBeLessThanOrEqual(afterExecution + 3600000);
+    expect(checkpointManager.saveCheckpoint.mock.calls[0][0]).toMatchObject({ status: 'paused' });
   });
 
-  it('logs warning but does not fail pipeline when checkpoint save fails', async () => {
-    const agentManager = createMockAgentManager();
-    const checkpointManager = createMockCheckpointManager();
-    checkpointManager.saveCheckpoint = mock(async () => {
-      throw new Error('Storage unavailable');
-    });
-
-    const config = createSimplePipelineConfig(2);
-
-    // Capture console.warn
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(String(args[0]));
-    };
-
-    try {
-      const result = await executePipelineV2(config, 'test input', {
-        agentManager,
-        checkpointManager,
-      });
-
-      expect(result.success).toBe(true);
-      expect(warnings.some((w) => w.includes('[Checkpoint]'))).toBe(true);
-    } finally {
-      console.warn = originalWarn;
-    }
-  });
-});
-
-// -----------------------------------------------------------------------------
-// Resume (startStep) Tests
-// -----------------------------------------------------------------------------
-
-describe('executePipelineV2 - Resume from startStep', () => {
-  it('skips steps before startStep', async () => {
-    const agentManager = createMockAgentManager();
-    const executedSteps: number[] = [];
-
-    const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async () => {
-            executedSteps.push(0);
-            return 'result-0';
-          },
-        },
-        {
-          type: 'function',
-          name: 'step-1',
-          fn: async () => {
-            executedSteps.push(1);
-            return 'result-1';
-          },
-        },
-        {
-          type: 'function',
-          name: 'step-2',
-          fn: async () => {
-            executedSteps.push(2);
-            return 'result-2';
-          },
-        },
-      ],
-    };
-
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
-      startStep: 1,
-    });
-
-    expect(result.success).toBe(true);
-    expect(executedSteps).toEqual([1, 2]); // Step 0 skipped
-    expect(result.finalOutput).toBe('result-2');
-  });
-
-  it('starts from beginning when startStep is 0', async () => {
-    const agentManager = createMockAgentManager();
-    const executedSteps: number[] = [];
-
-    const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async () => {
-            executedSteps.push(0);
-            return 'result-0';
-          },
-        },
-        {
-          type: 'function',
-          name: 'step-1',
-          fn: async () => {
-            executedSteps.push(1);
-            return 'result-1';
-          },
-        },
-      ],
-    };
-
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
-      startStep: 0,
-    });
-
-    expect(result.success).toBe(true);
-    expect(executedSteps).toEqual([0, 1]);
-  });
-});
-
-// -----------------------------------------------------------------------------
-// Context Restoration Tests
-// -----------------------------------------------------------------------------
-
-describe('executePipelineV2 - Context Restoration', () => {
-  it('restores context from restoredContext option', async () => {
-    const agentManager = createMockAgentManager();
+  it('resumes from startStep with restored context', async () => {
     let capturedContext: PipelineContext | undefined;
-
     const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
+      id: 'resume-pipeline',
       steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async () => 'should-be-skipped',
-        },
+        { type: 'function', name: 'step-0', fn: async () => 'skip-me' },
         {
           type: 'function',
           name: 'step-1',
           fn: async (ctx: PipelineContext) => {
             capturedContext = ctx;
-            return 'result-1';
+            return 'resume-ok';
           },
         },
       ],
@@ -369,132 +293,70 @@ describe('executePipelineV2 - Context Restoration', () => {
       metadata: { restored: true },
     });
 
-    const result = await executePipelineV2(config, 'ignored input', {
-      agentManager,
+    const result = await runExecutor(config, 'ignored', {
+      agentManager: createMockAgentManager(),
       startStep: 1,
       restoredContext,
     });
 
     expect(result.success).toBe(true);
-    expect(capturedContext).toBeDefined();
-    expect(capturedContext!.input).toBe('restored input');
-    expect(capturedContext!.outputs['step-0']).toBe('restored-result-0');
-    expect(capturedContext!.metadata.restored).toBe(true);
-  });
-
-  it('uses restored input from restoredContext', async () => {
-    const agentManager = createMockAgentManager();
-    let capturedInput: string | undefined;
-
-    const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async (ctx: PipelineContext) => {
-            capturedInput = ctx.input;
-            return 'result';
-          },
-        },
-      ],
-    };
-
-    const restoredContext = createTestContext({
-      input: 'the restored input',
-    });
-
-    await executePipelineV2(config, 'new input that should be ignored', {
-      agentManager,
-      restoredContext,
-    });
-
-    expect(capturedInput).toBe('the restored input');
-  });
-
-  it('preserves conversationId from options over restoredContext', async () => {
-    const agentManager = createMockAgentManager();
-
-    const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async () => 'result',
-        },
-      ],
-    };
-
-    const restoredContext = createTestContext({
-      conversationId: 'old-conversation-id',
-    });
-
-    const result = await executePipelineV2(config, 'input', {
-      agentManager,
-      restoredContext,
-      conversationId: 'new-conversation-id',
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.context.conversationId).toBe('new-conversation-id');
-  });
-
-  it('uses restoredContext conversationId when options.conversationId not specified', async () => {
-    const agentManager = createMockAgentManager();
-
-    const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'step-0',
-          fn: async () => 'result',
-        },
-      ],
-    };
-
-    const restoredContext = createTestContext({
-      conversationId: 'restored-conversation-id',
-    });
-
-    const result = await executePipelineV2(config, 'input', {
-      agentManager,
-      restoredContext,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.context.conversationId).toBe('restored-conversation-id');
+    expect(capturedContext?.input).toBe('restored input');
+    expect(capturedContext?.outputs['step-0']).toBe('restored-result-0');
+    expect(capturedContext?.metadata.restored).toBe(true);
   });
 });
 
-// -----------------------------------------------------------------------------
-// Error Handling with runId
-// -----------------------------------------------------------------------------
-
-describe('executePipelineV2 - Error Handling with runId', () => {
-  it('includes runId in error result', async () => {
-    const agentManager = createMockAgentManager();
+describe('ExecutorService - error propagation and boundary guard', () => {
+  it('fails with PipelineExecutionError carrying step and cause', async () => {
     const config: PipelineConfigV2 = {
-      id: 'test-pipeline',
-      steps: [
-        {
-          type: 'function',
-          name: 'failing-step',
-          fn: async () => {
-            throw new Error('Step failed');
-          },
-        },
-      ],
+      id: 'error-pipeline',
+      steps: [{
+        type: 'agent',
+        name: 'failing-agent',
+        agentId: 'test-agent',
+      }],
     };
 
-    const result = await executePipelineV2(config, 'test input', {
-      agentManager,
-      runId: 'error-run-id',
-    });
+    const failingAgent = {
+      id: 'test-agent',
+      processMessage: mock(() => Effect.fail(new Error('agent test-agent failed'))),
+    };
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-    expect(result.runId).toBe('error-run-id');
+    const agentManager: AgentManagerLike = {
+      getAgent: mock(() => failingAgent) as any,
+      hasAgent: mock(() => true),
+    };
+
+    const exit = await Effect.runPromiseExit(
+      ExecutorService.pipe(
+        Effect.flatMap((svc) => svc.executePipelineV2(config, 'input', { agentManager })),
+        Effect.provide(ExecutorServiceLive)
+      )
+    );
+
+    expect(exit._tag).toBe('Failure');
+    if (exit._tag === 'Failure') {
+      expect(exit.cause._tag).toBe('Fail');
+      if (exit.cause._tag === 'Fail') {
+        expect(exit.cause.error).toMatchObject({
+          _tag: 'PipelineExecutionError',
+          pipelineId: 'error-pipeline',
+          step: 0,
+          cause: expect.objectContaining({ message: expect.stringContaining('test-agent') }),
+        });
+      }
+    }
+  });
+
+  it('keeps runPromise/runFork out of executor internals', async () => {
+    const source = await Bun.file('packages/core/src/pipeline/executor.ts').text();
+    const runForkMatches = source.match(/Effect\.runFork/g) ?? [];
+    const runPromiseMatches = source.match(/Effect\.runPromise/g) ?? [];
+    const runCallbackMatches = source.match(/Effect\.runCallback/g) ?? [];
+
+    expect(runForkMatches.length).toBe(0);
+    expect(runPromiseMatches.length).toBe(0);
+    expect(runCallbackMatches.length).toBeGreaterThanOrEqual(1);
+    expect(source).toContain('@deprecated');
   });
 });

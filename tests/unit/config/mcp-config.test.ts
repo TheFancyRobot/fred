@@ -13,6 +13,8 @@ describe('MCP Config - Server Extraction', () => {
           env: {
             GITHUB_TOKEN: 'test-token',
           },
+          allowedCommands: ['npx'],
+          envAllowlist: ['PATH', 'HOME'],
           timeout: 30000,
           enabled: true,
           lazy: false,
@@ -29,6 +31,8 @@ describe('MCP Config - Server Extraction', () => {
           headers: {
             Authorization: 'Bearer test-token',
           },
+          allowedHosts: ['api.example.com'],
+          allowedSchemes: ['https'],
           timeout: 60000,
           retry: {
             maxRetries: 3,
@@ -50,6 +54,8 @@ describe('MCP Config - Server Extraction', () => {
     expect(github?.command).toBe('npx');
     expect(github?.args).toEqual(['-y', '@modelcontextprotocol/server-github']);
     expect(github?.env).toEqual({ GITHUB_TOKEN: 'test-token' });
+    expect(github?.allowedCommands).toEqual(['npx']);
+    expect(github?.envAllowlist).toEqual(['PATH', 'HOME']);
     expect(github?.timeout).toBe(30000);
     expect(github?.enabled).toBe(true);
     expect(github?.lazy).toBe(false);
@@ -63,6 +69,8 @@ describe('MCP Config - Server Extraction', () => {
     expect(remoteApi?.transport).toBe('http');
     expect(remoteApi?.url).toBe('https://api.example.com/mcp');
     expect(remoteApi?.headers).toEqual({ Authorization: 'Bearer test-token' });
+    expect(remoteApi?.allowedHosts).toEqual(['api.example.com']);
+    expect(remoteApi?.allowedSchemes).toEqual(['https']);
     expect(remoteApi?.retry).toEqual({
       maxRetries: 3,
       backoffMs: 1000,

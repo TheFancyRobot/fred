@@ -106,12 +106,20 @@ export interface MCPGlobalServerConfig {
   args?: string[];
   /** Environment variables for subprocess (stdio transport only) */
   env?: Record<string, string>;
+  /** Allowlisted executables for stdio transport */
+  allowedCommands?: string[];
+  /** Allowlisted inherited environment variables for stdio transport */
+  envAllowlist?: string[];
 
   // http/sse transport fields
   /** Server URL (http/sse transport only) */
   url?: string;
   /** HTTP headers (http/sse transport only) */
   headers?: Record<string, string>;
+  /** Allowlisted hosts for http/sse transport */
+  allowedHosts?: string[];
+  /** Allowlisted URL schemes for http/sse transport */
+  allowedSchemes?: string[];
 
   // Common configuration
   /** Connection timeout in milliseconds (default: 30000) */
@@ -336,12 +344,23 @@ export interface ToolPoliciesConfig {
 // Framework Config
 // =============================================================================
 
+export interface TemplateConfig {
+  partialDirs?: string[];
+  envAllowlist?: string[];
+  strict?: boolean;
+  maxOutputSize?: number;
+}
+
 /**
  * Fred framework configuration structure for config files
  */
 export interface FrameworkConfig {
   intents?: Intent[];
   agents?: AgentConfig[];
+  /** Directories to scan for .md agent definition files.
+   *  Defaults to ['./agents'] if that directory exists.
+   *  Paths are relative to the config file or CWD. */
+  agentDirs?: string[];
   pipelines?: PipelineConfig[];
   /** Extended pipelines with step types (Phase 5+) */
   pipelinesV2?: Record<string, ExtendedPipelineConfig>;
@@ -368,6 +387,7 @@ export interface FrameworkConfig {
   toolPolicies?: ToolPoliciesConfig;
   /** MCP server declarations (global registry, agents reference by ID) */
   mcpServers?: Record<string, MCPGlobalServerConfig>;
+  template?: TemplateConfig;
 }
 
 export interface MemoryConfig {

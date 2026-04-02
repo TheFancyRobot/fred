@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-openai",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "OpenAI provider for Fred AI framework",
   "type": "module",
   "main": "./src/index.ts",
@@ -17,15 +17,15 @@
   },
   "peerDependencies": {
     "@fancyrobot/fred": "workspace:^",
-    "effect": "^3.19.0",
-    "@effect/ai": "^0.33.0",
-    "@effect/ai-openai": "^0.37.0"
+    "effect": "^3.21.0",
+    "@effect/ai": "^0.35.0",
+    "@effect/ai-openai": "^0.39.0"
   },
   "devDependencies": {
     "@fancyrobot/fred": "workspace:^",
-    "effect": "^3.19.15",
-    "@effect/ai": "^0.33.2",
-    "@effect/ai-openai": "^0.37.2"
+    "effect": "^3.21.0",
+    "@effect/ai": "^0.35.0",
+    "@effect/ai-openai": "^0.39.0"
   },
   "publishConfig": {
     "access": "public"

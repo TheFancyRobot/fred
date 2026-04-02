@@ -85,12 +85,39 @@ class InMemoryCheckpointStorage implements CheckpointStorage {
     return result;
   }
 
+  async getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null> {
+    const allCheckpoints: Checkpoint[] = [];
+    for (const checkpoints of this.checkpoints.values()) {
+      allCheckpoints.push(...checkpoints.filter((cp) => cp.pipelineId === pipelineId));
+    }
+
+    if (allCheckpoints.length === 0) return null;
+
+    // Filter out expired
+    const now = new Date();
+    const valid = allCheckpoints.filter(
+      (cp) => !cp.expiresAt || cp.expiresAt > now
+    );
+
+    if (valid.length === 0) return null;
+
+    // Sort by step DESC, then by createdAt DESC for deterministic tie-break
+    valid.sort((a, b) => {
+      if (b.step !== a.step) return b.step - a.step;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+
+    return valid[0];
+  }
+
   async close(): Promise<void> {
     this.checkpoints.clear();
   }
 }
 
-const createTestContext = (): PipelineContext => ({
+const createTestContext = (pipelineId: string = 'test-pipeline'): PipelineContext => ({
+  pipelineId,
+  input: 'test input',
   history: [],
   outputs: {},
   metadata: {},
@@ -409,6 +436,218 @@ describe('CheckpointService', () => {
       expect(result.count).toBe(1);
       expect(result.run1Deleted).toBe(true);
       expect(result.run2Exists).toBe(true);
+    });
+  });
+
+  describe('getLatestByPipelineId', () => {
+    test('returns null when no checkpoints for pipeline', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          return yield* service.getLatestByPipelineId('nonexistent-pipeline');
+        })
+      );
+
+      expect(result).toBeNull();
+    });
+
+    test('returns latest checkpoint for pipeline by step', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          const runId = yield* service.generateRunId();
+
+          yield* service.saveCheckpoint({
+            runId,
+            pipelineId: 'test-pipeline',
+            step: 0,
+            status: 'in_progress',
+            context: createTestContext('test-pipeline'),
+          });
+
+          yield* service.saveCheckpoint({
+            runId,
+            pipelineId: 'test-pipeline',
+            step: 2,
+            status: 'in_progress',
+            context: createTestContext('test-pipeline'),
+          });
+
+          yield* service.saveCheckpoint({
+            runId,
+            pipelineId: 'test-pipeline',
+            step: 1,
+            status: 'in_progress',
+            context: createTestContext('test-pipeline'),
+          });
+
+          const checkpoint = yield* service.getLatestByPipelineId('test-pipeline');
+          return checkpoint?.step;
+        })
+      );
+
+      expect(result).toBe(2);
+    });
+
+    test('uses timestamp as tie-breaker for same step', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          const runId1 = yield* service.generateRunId();
+          const runId2 = yield* service.generateRunId();
+
+          // First run, step 2 (earlier timestamp)
+          yield* service.saveCheckpoint({
+            runId: runId1,
+            pipelineId: 'tie-break-pipeline',
+            step: 2,
+            status: 'in_progress',
+            context: createTestContext('tie-break-pipeline'),
+          });
+
+          // Small delay to ensure different timestamps
+          yield* Effect.sleep('10 millis');
+
+          // Second run, also step 2 (later timestamp - should win)
+          yield* service.saveCheckpoint({
+            runId: runId2,
+            pipelineId: 'tie-break-pipeline',
+            step: 2,
+            status: 'in_progress',
+            context: createTestContext('tie-break-pipeline'),
+          });
+
+          const checkpoint = yield* service.getLatestByPipelineId('tie-break-pipeline');
+          return checkpoint?.runId;
+        })
+      );
+
+      // Should return runId2 (later timestamp)
+      expect(result).toBeDefined();
+    });
+
+    test('excludes expired checkpoints', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          const runId1 = yield* service.generateRunId();
+          const runId2 = yield* service.generateRunId();
+
+          // Expired checkpoint
+          yield* service.saveCheckpoint({
+            runId: runId1,
+            pipelineId: 'expiry-pipeline',
+            step: 5, // Higher step but expired
+            status: 'in_progress',
+            context: createTestContext('expiry-pipeline'),
+            expiresAt: new Date(Date.now() - 1000),
+          });
+
+          // Valid checkpoint
+          yield* service.saveCheckpoint({
+            runId: runId2,
+            pipelineId: 'expiry-pipeline',
+            step: 2, // Lower step but valid
+            status: 'in_progress',
+            context: createTestContext('expiry-pipeline'),
+            expiresAt: new Date(Date.now() + 100000),
+          });
+
+          const checkpoint = yield* service.getLatestByPipelineId('expiry-pipeline');
+          return checkpoint?.step;
+        })
+      );
+
+      // Should return step 2 (valid) not step 5 (expired)
+      expect(result).toBe(2);
+    });
+
+    test('returns null when all checkpoints are expired', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          const runId = yield* service.generateRunId();
+
+          yield* service.saveCheckpoint({
+            runId,
+            pipelineId: 'all-expired-pipeline',
+            step: 1,
+            status: 'in_progress',
+            context: createTestContext('all-expired-pipeline'),
+            expiresAt: new Date(Date.now() - 1000),
+          });
+
+          return yield* service.getLatestByPipelineId('all-expired-pipeline');
+        })
+      );
+
+      expect(result).toBeNull();
+    });
+
+    test('selects across multiple runs for same pipeline', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* CheckpointService;
+          const runId1 = yield* service.generateRunId();
+          const runId2 = yield* service.generateRunId();
+          const runId3 = yield* service.generateRunId();
+
+          // Run 1: steps 0, 1
+          yield* service.saveCheckpoint({
+            runId: runId1,
+            pipelineId: 'multi-run-pipeline',
+            step: 0,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+          yield* service.saveCheckpoint({
+            runId: runId1,
+            pipelineId: 'multi-run-pipeline',
+            step: 1,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+
+          // Run 2: steps 0, 1, 2
+          yield* service.saveCheckpoint({
+            runId: runId2,
+            pipelineId: 'multi-run-pipeline',
+            step: 0,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+          yield* service.saveCheckpoint({
+            runId: runId2,
+            pipelineId: 'multi-run-pipeline',
+            step: 1,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+          yield* service.saveCheckpoint({
+            runId: runId2,
+            pipelineId: 'multi-run-pipeline',
+            step: 2,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+
+          // Run 3: step 0 only
+          yield* service.saveCheckpoint({
+            runId: runId3,
+            pipelineId: 'multi-run-pipeline',
+            step: 0,
+            status: 'in_progress',
+            context: createTestContext('multi-run-pipeline'),
+          });
+
+          const checkpoint = yield* service.getLatestByPipelineId('multi-run-pipeline');
+          return { step: checkpoint?.step, runId: checkpoint?.runId };
+        })
+      );
+
+      // Should return step 2 from runId2
+      expect(result.step).toBe(2);
+      expect(result.runId).toBeDefined();
     });
   });
 });

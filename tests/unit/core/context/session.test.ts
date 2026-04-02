@@ -1,7 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect } from 'bun:test';
 import type { Prompt } from '@effect/ai';
-import { ContextManager } from '../../../../packages/core/src/context/manager';
-import { SqliteContextStorage } from '../../../../packages/core/src/context/storage/sqlite';
 import type { ConversationContext } from '../../../../packages/core/src/context/context';
 import {
   deriveSessionTitle,
@@ -141,34 +139,5 @@ describe('session helpers', () => {
     expect(markdown).toContain('Tool Call: weather');
     expect(markdown).toContain('Tool Result: weather');
     expect(markdown).toContain('"temp": 4');
-  });
-});
-
-describe('ContextManager session APIs', () => {
-  let storage: SqliteContextStorage;
-  let manager: ContextManager;
-
-  beforeEach(() => {
-    storage = new SqliteContextStorage({ path: ':memory:' });
-    manager = new ContextManager(storage);
-  });
-
-  afterEach(() => {
-    storage.close();
-  });
-
-  test('deleteSession removes messages and metadata', async () => {
-    await manager.addMessage('conv-1', { role: 'user', content: 'Hello' });
-
-    const sessionsBefore = await manager.listSessions();
-    expect(sessionsBefore).toHaveLength(1);
-
-    await manager.deleteSession('conv-1');
-
-    const sessionAfter = await manager.getSession('conv-1');
-    expect(sessionAfter).toBeNull();
-
-    const sessionsAfter = await manager.listSessions();
-    expect(sessionsAfter).toHaveLength(0);
   });
 });

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { Duration, Effect, Fiber, TestClock, TestContext } from 'effect';
+import { Cause, Duration, Effect, Exit, Fiber, TestClock, TestContext } from 'effect';
 import type { Tool } from '../tool/tool';
 import type { EvalCheckpointArtifact, EvalToolCallArtifact, EvaluationArtifact } from './artifact';
 import { toDeterministicValue } from './artifact';
@@ -57,7 +57,14 @@ export function runEffectWithTestClock<A, E>(
   effect: Effect.Effect<A, E>,
   adjustmentsMs: ReadonlyArray<number>
 ): Promise<A> {
-  const program = Effect.gen(function* () {
+  return Effect.runPromise(withTestClock(effect, adjustmentsMs));
+}
+
+export function withTestClock<A, E>(
+  effect: Effect.Effect<A, E>,
+  adjustmentsMs: ReadonlyArray<number>
+): Effect.Effect<A, E> {
+  return Effect.gen(function* () {
     const fiber = yield* Effect.fork(effect);
     for (const adjustmentMs of adjustmentsMs) {
       yield* TestClock.adjust(Duration.millis(Math.max(0, adjustmentMs)));
@@ -65,7 +72,6 @@ export function runEffectWithTestClock<A, E>(
     }
     return yield* Fiber.join(fiber);
   }).pipe(Effect.provide(TestContext.TestContext));
-  return Effect.runPromise(program);
 }
 
 export function deriveClockAdjustmentsFromOffsets(
@@ -250,66 +256,78 @@ function buildClockAdjustments(
   return deriveClockAdjustmentsFromOffsets(offsets);
 }
 
-async function loadArtifact(
+function loadArtifact(
   storage: Pick<TraceStorageApi, 'get'>,
   traceId: string
-): Promise<EvaluationArtifact | undefined> {
-  return Effect.runPromise(storage.get(traceId));
+): Effect.Effect<EvaluationArtifact | undefined, Error> {
+  return storage.get(traceId);
 }
 
 export function createReplayOrchestrator(deps: ReplayDependencies) {
   return {
     replay: async (traceId: string, options: ReplayOptions = {}): Promise<ReplayResult> => {
-      const artifact = await loadArtifact(deps.storage, traceId);
-      if (!artifact) {
-        throw new ReplayTraceNotFoundError(traceId);
-      }
+      const replayEffect = Effect.gen(function* () {
+        const artifact = yield* loadArtifact(deps.storage, traceId);
+        if (!artifact) {
+          return yield* Effect.fail(new ReplayTraceNotFoundError(traceId));
+        }
 
-      const checkpoint = selectCheckpoint(artifact.checkpoints, options.fromCheckpoint);
-      const mode = options.mode ?? 'skip';
-      const toolMocks = buildReplayToolMocks(artifact);
+        const checkpoint = selectCheckpoint(artifact.checkpoints, options.fromCheckpoint);
+        const mode = options.mode ?? 'skip';
+        const toolMocks = buildReplayToolMocks(artifact);
 
-      // Only initialize from config if configPath is provided
-      // For config-less replay, we rely on artifact data and checkpoint resumption
-      if (deps.configPath) {
-        await deps.runtime.initializeFromConfig(deps.configPath, {
-          toolExecutors: toolMocks.toolExecutors,
-        });
-      }
+        if (deps.configPath) {
+          yield* Effect.tryPromise({
+            try: () =>
+              deps.runtime.initializeFromConfig(deps.configPath!, {
+                toolExecutors: toolMocks.toolExecutors,
+              }),
+            catch: (cause) =>
+              cause instanceof Error ? cause : new Error(String(cause)),
+          });
+        }
 
-      const clockAdjustments = buildClockAdjustments(artifact, checkpoint.step);
-      const replayOutput = await runEffectWithTestClock(
-        toEffect(
-          deps.runtime.resumeFromCheckpoint({
-            runId: artifact.run.runId,
-            pipelineId: String(checkpoint.snapshot.pipelineId ?? ''),
-            mode,
-            checkpoint,
-            contextSnapshot: checkpoint.snapshot,
-            toolExecutors: toolMocks.toolExecutors,
-          })
-        ),
-        clockAdjustments
-      );
+        const clockAdjustments = buildClockAdjustments(artifact, checkpoint.step);
+        const replayOutput = yield* withTestClock(
+          toEffect(
+            deps.runtime.resumeFromCheckpoint({
+              runId: artifact.run.runId,
+              pipelineId: String(checkpoint.snapshot.pipelineId ?? ''),
+              mode,
+              checkpoint,
+              contextSnapshot: checkpoint.snapshot,
+              toolExecutors: toolMocks.toolExecutors,
+            })
+          ),
+          clockAdjustments
+        );
 
-      toolMocks.assertConsumed();
+        toolMocks.assertConsumed();
 
-      const result: ReplayResult = {
-        traceId: artifact.traceId,
-        runId: artifact.run.runId,
-        checkpointStep: checkpoint.step,
-        mode,
-        output: replayOutput,
-        outputHash: deterministicReplayHash({
+        const result: ReplayResult = {
           traceId: artifact.traceId,
           runId: artifact.run.runId,
           checkpointStep: checkpoint.step,
           mode,
           output: replayOutput,
-        }),
-      };
+          outputHash: deterministicReplayHash({
+            traceId: artifact.traceId,
+            runId: artifact.run.runId,
+            checkpointStep: checkpoint.step,
+            mode,
+            output: replayOutput,
+          }),
+        };
 
-      return result;
+        return result;
+      });
+
+      const exit = await Effect.runPromiseExit(replayEffect);
+      if (Exit.isSuccess(exit)) {
+        return exit.value;
+      }
+
+      throw Cause.squash(exit.cause);
     },
   };
 }

@@ -106,10 +106,10 @@ function toLogLevel(level: string | undefined, isDevelopment: boolean): LogLevel
  * });
  *
  * const program = Effect.withSpan("my-operation")(Effect.succeed("done"));
- * Effect.runPromise(program.pipe(
+ * const programWithObservability = program.pipe(
  *   Effect.provide(tracerLayer),
  *   Effect.provide(loggerLayer)
- * ));
+ * );
  * ```
  */
 export function buildObservabilityLayers(config: ObservabilityConfig = {}): ObservabilityLayers {

@@ -1,19 +1,23 @@
 import { Context, Effect, Layer, Ref } from 'effect';
 import type { AgentConfig, AgentInstance } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
-import type { ProviderRegistryService as ProviderRegistryServiceType } from '../platform/service';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
   AgentCreationError,
-  AgentExecutionError,
+  getAgentNotFoundMessage,
+  getAgentAlreadyExistsMessage,
+  getAgentCreationMessage,
   type AgentError
 } from './errors';
-import { AgentFactory } from './factory';
+import { AgentFactory, type ToolRegistryLike } from './factory';
+import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
 import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
+import type { TemplateEngine } from '../template/engine';
+import type { FrameworkConfig } from '../config/types';
 
 /**
  * AgentService interface for Effect-based agent lifecycle management
@@ -69,6 +73,14 @@ export interface AgentService {
    */
   setGlobalVariablesResolver(resolver: () => Record<string, string | number | boolean>): Effect.Effect<void>;
 
+  setTemplateEngine(engine: TemplateEngine): Effect.Effect<void>;
+
+  setTemplateCustomNamespaces(namespaces: Record<string, unknown>): Effect.Effect<void>;
+
+  setTemplateEnvAllowlist(envAllowlist: string[]): Effect.Effect<void>;
+
+  setTemplateFredConfig(config: Partial<FrameworkConfig>): Effect.Effect<void>;
+
   /**
    * Match agent by utterance
    */
@@ -106,35 +118,13 @@ class AgentServiceImpl implements AgentService {
     private toolGateService: typeof ToolGateService.Service,
     private tracer?: Tracer
   ) {
-    // AgentFactory is still used internally for actual agent creation logic
-    // Full conversion of AgentFactory would be a separate task
-    // For now, we need to create it with a ToolRegistry instance
-    // We'll use a promise-based wrapper to get tools from the service
-    const legacyToolRegistry = {
+    const emptyRegistry: ToolRegistryLike = {
+      getMissingToolIds: (ids) => ids,
+      getTools: () => [],
+      hasTool: () => false,
       registerTool: () => {},
-      getTool: (id: string) => undefined,
-      getTools: (ids: string[]) => [],
-      getAllTools: () => [],
-      hasTool: (id: string) => false,
-      removeTool: (id: string) => false,
-      clear: () => {},
-      get size() { return 0; },
-      normalizeTools: async (ids: string[]) => {
-        // Get tools from service synchronously for AgentFactory
-        const tools = await Effect.runPromise(
-          toolRegistryService.normalizeTools(ids)
-        );
-        return tools;
-      },
-      toAISDKTools: async (ids: string[]) => {
-        const tools = await Effect.runPromise(
-          toolRegistryService.toAISDKTools(ids)
-        );
-        return tools;
-      },
     };
-
-    this.factory = new AgentFactory(legacyToolRegistry as any, tracer);
+    this.factory = new AgentFactory(emptyRegistry, tracer);
     this.factory.setToolGateService(toolGateService);
   }
 
@@ -144,18 +134,20 @@ class AgentServiceImpl implements AgentService {
       const agents = yield* Ref.get(self.agents);
 
       if (agents.has(config.id)) {
-        return yield* Effect.fail(new AgentAlreadyExistsError({ id: config.id }));
+        return yield* Effect.fail(new AgentAlreadyExistsError({
+          id: config.id,
+          message: getAgentAlreadyExistsMessage(config.id),
+        }));
       }
 
-      // Get provider definition from registry
       const providerDef = yield* self.providerRegistryService.getDefinition(config.platform).pipe(
         Effect.mapError((error) => new AgentCreationError({
           id: config.id,
+          message: getAgentCreationMessage(config.id),
           cause: error
         }))
       );
 
-      // Resolve config with default system message
       let resolvedTools = config.tools;
       if (config.tools && config.tools.length > 0) {
         const assignedTools = yield* self.toolRegistryService.getTools(config.tools);
@@ -171,7 +163,9 @@ class AgentServiceImpl implements AgentService {
         systemMessage: config.systemMessage ?? self.defaultSystemMessage,
       };
 
-      // Create agent using factory - wrapped in Effect.async for proper fiber semantics
+      const allTools = yield* self.toolRegistryService.getAllTools();
+      yield* self.syncFactoryTools(allTools, config.id);
+
       const agentProcessor = yield* self.createAgentFromFactory(resolvedConfig, providerDef);
 
       const instance: AgentInstance = {
@@ -181,11 +175,61 @@ class AgentServiceImpl implements AgentService {
         streamMessage: agentProcessor.streamMessage,
       } as AgentInstance;
 
-      const newAgents = new Map(agents);
-      newAgents.set(config.id, instance);
-      yield* Ref.set(self.agents, newAgents);
+      const inserted = yield* self.registerIfAbsent(instance);
+      if (!inserted) {
+        return yield* Effect.fail(new AgentAlreadyExistsError({
+          id: config.id,
+          message: getAgentAlreadyExistsMessage(config.id),
+        }));
+      }
 
       return instance;
+    });
+  }
+
+  private registerIfAbsent(instance: AgentInstance): Effect.Effect<boolean> {
+    const self = this;
+    return Ref.modify(self.agents, (agents) => {
+      if (agents.has(instance.id)) {
+        return [false, agents] as const;
+      }
+
+      const updated = new Map(agents);
+      updated.set(instance.id, instance);
+      return [true, updated] as const;
+    });
+  }
+
+  private syncFactoryTools(tools: Tool[], agentId: string): Effect.Effect<void, AgentCreationError> {
+    const self = this;
+
+    return Effect.try({
+      try: () => {
+        const toolMap = new Map<string, Tool>();
+        for (const tool of tools) {
+          toolMap.set(tool.id, tool);
+        }
+
+        const registry: ToolRegistryLike = {
+          getMissingToolIds: (ids) => ids.filter((id) => !toolMap.has(id)),
+          getTools: (ids) =>
+            ids
+              .map((id) => toolMap.get(id))
+              .filter((tool): tool is Tool => !!tool),
+          hasTool: (id) => toolMap.has(id),
+          registerTool: (tool) => {
+            toolMap.set(tool.id, tool);
+          },
+        };
+
+        self.factory.setToolRegistry(registry);
+      },
+      catch: (cause) =>
+        new AgentCreationError({
+          id: agentId,
+          message: getAgentCreationMessage(agentId),
+          cause,
+        }),
     });
   }
 
@@ -196,18 +240,15 @@ class AgentServiceImpl implements AgentService {
     config: AgentConfig,
     providerDef: ProviderDefinition
   ): Effect.Effect<{ processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] }, AgentCreationError> {
-    const self = this;
-    return Effect.async<
-      { processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] },
-      AgentCreationError
-    >((resume) => {
-      self.factory.createAgent(config, providerDef)
-        .then((result) => resume(Effect.succeed(result)))
-        .catch((error) => resume(Effect.fail(new AgentCreationError({
+    return this.factory.createAgent(config, providerDef).pipe(
+      Effect.mapError((cause) =>
+        new AgentCreationError({
           id: config.id,
-          cause: error
-        }))));
-    });
+          message: getAgentCreationMessage(config.id),
+          cause,
+        })
+      )
+    );
   }
 
   getAgent(id: string): Effect.Effect<AgentInstance, AgentNotFoundError> {
@@ -216,7 +257,10 @@ class AgentServiceImpl implements AgentService {
       const agents = yield* Ref.get(self.agents);
       const agent = agents.get(id);
       if (!agent) {
-        return yield* Effect.fail(new AgentNotFoundError({ id }));
+        return yield* Effect.fail(new AgentNotFoundError({
+          id,
+          message: getAgentNotFoundMessage(id),
+        }));
       }
       return agent;
     });
@@ -258,11 +302,9 @@ class AgentServiceImpl implements AgentService {
    */
   private cleanupAgentMCPClients(agentId: string): Effect.Effect<void> {
     const self = this;
-    return Effect.async<void>((resume) => {
-      self.factory.cleanupMCPClients(agentId)
-        .then(() => resume(Effect.succeed(void 0)))
-        .catch(() => resume(Effect.succeed(void 0))); // Best-effort cleanup
-    });
+    return Effect.tryPromise(() => self.factory.cleanupMCPClients(agentId)).pipe(
+      Effect.catchAll(() => Effect.void)
+    );
   }
 
   getAllAgents(): Effect.Effect<AgentInstance[]> {
@@ -286,11 +328,9 @@ class AgentServiceImpl implements AgentService {
    */
   private cleanupAllMCPClientsEffect(): Effect.Effect<void> {
     const self = this;
-    return Effect.async<void>((resume) => {
-      self.factory.cleanupAllMCPClients()
-        .then(() => resume(Effect.succeed(void 0)))
-        .catch(() => resume(Effect.succeed(void 0))); // Best-effort cleanup
-    });
+    return Effect.tryPromise(() => self.factory.cleanupAllMCPClients()).pipe(
+      Effect.catchAll(() => Effect.void)
+    );
   }
 
   setTracer(tracer?: Tracer): Effect.Effect<void> {
@@ -313,6 +353,34 @@ class AgentServiceImpl implements AgentService {
     const self = this;
     return Effect.sync(() => {
       self.factory.setGlobalVariablesResolver(resolver);
+    });
+  }
+
+  setTemplateEngine(engine: TemplateEngine): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateEngine(engine);
+    });
+  }
+
+  setTemplateCustomNamespaces(namespaces: Record<string, unknown>): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateCustomNamespaces(namespaces);
+    });
+  }
+
+  setTemplateEnvAllowlist(envAllowlist: string[]): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setEnvAllowlist(envAllowlist);
+    });
+  }
+
+  setTemplateFredConfig(config: Partial<FrameworkConfig>): Effect.Effect<void> {
+    const self = this;
+    return Effect.sync(() => {
+      self.factory.setTemplateFredConfig(config);
     });
   }
 
@@ -391,11 +459,9 @@ class AgentServiceImpl implements AgentService {
     message: string,
     utterances: string[]
   ): Effect.Effect<{ matched: boolean; confidence: number; utterance?: string }> {
-    return Effect.async((resume) => {
-      matcher(message, utterances)
-        .then((result) => resume(Effect.succeed(result)))
-        .catch(() => resume(Effect.succeed({ matched: false, confidence: 0 }))); // Treat errors as no match
-    });
+    return Effect.tryPromise(() => matcher(message, utterances)).pipe(
+      Effect.catchAll(() => Effect.succeed({ matched: false, confidence: 0 }))
+    );
   }
 
   getMCPMetrics(): Effect.Effect<any> {

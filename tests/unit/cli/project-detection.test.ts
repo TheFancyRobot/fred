@@ -50,18 +50,42 @@ describe('project detection', () => {
       expect(candidates[0].format).toBe('json');
     });
 
-    it('returns ts before json when both exist (precedence)', () => {
-      const tsPath = join(testRoot, 'fred.config.ts');
-      const jsonPath = join(testRoot, 'fred.config.json');
-      writeFileSync(tsPath, 'export default {}');
-      writeFileSync(jsonPath, '{}');
+    it('finds fred.config.yaml', () => {
+      const configPath = join(testRoot, 'fred.config.yaml');
+      writeFileSync(configPath, 'providers: []');
 
       const candidates = findCandidateConfigs(testRoot);
-      expect(candidates).toHaveLength(2);
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].path).toBe(configPath);
+      expect(candidates[0].format).toBe('yaml');
+    });
+
+    it('finds fred.config.yml', () => {
+      const configPath = join(testRoot, 'fred.config.yml');
+      writeFileSync(configPath, 'providers: []');
+
+      const candidates = findCandidateConfigs(testRoot);
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].path).toBe(configPath);
+      expect(candidates[0].format).toBe('yml');
+    });
+
+    it('returns ts before json before yaml when all exist (precedence)', () => {
+      const tsPath = join(testRoot, 'fred.config.ts');
+      const jsonPath = join(testRoot, 'fred.config.json');
+      const yamlPath = join(testRoot, 'fred.config.yaml');
+      writeFileSync(tsPath, 'export default {}');
+      writeFileSync(jsonPath, '{}');
+      writeFileSync(yamlPath, 'providers: []');
+
+      const candidates = findCandidateConfigs(testRoot);
+      expect(candidates).toHaveLength(3);
       expect(candidates[0].format).toBe('ts');
       expect(candidates[0].path).toBe(tsPath);
       expect(candidates[1].format).toBe('json');
       expect(candidates[1].path).toBe(jsonPath);
+      expect(candidates[2].format).toBe('yaml');
+      expect(candidates[2].path).toBe(yamlPath);
     });
 
     it('ignores directories with config names', () => {
@@ -118,11 +142,23 @@ describe('project detection', () => {
       expect(result.format).toBe('ts');
     });
 
-    it('prefers ts over json in same directory', () => {
+    it('finds fred.config.yaml', () => {
+      const configPath = join(testRoot, 'fred.config.yaml');
+      writeFileSync(configPath, 'providers: []');
+
+      const result = detectProjectRoot(testRoot);
+      expect(result.found).toBe(true);
+      expect(result.configPath).toBe(configPath);
+      expect(result.format).toBe('yaml');
+    });
+
+    it('prefers ts over json over yaml in same directory', () => {
       const tsPath = join(testRoot, 'fred.config.ts');
       const jsonPath = join(testRoot, 'fred.config.json');
+      const yamlPath = join(testRoot, 'fred.config.yaml');
       writeFileSync(tsPath, 'export default {}');
       writeFileSync(jsonPath, '{}');
+      writeFileSync(yamlPath, 'providers: []');
 
       const result = detectProjectRoot(testRoot);
       expect(result.found).toBe(true);

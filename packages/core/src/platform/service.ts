@@ -24,7 +24,7 @@ export interface ProviderRegistryService {
   /**
    * Register a pre-built provider definition directly
    */
-  registerDefinition(definition: ProviderDefinition): Effect.Effect<void>;
+  registerDefinition(definition: ProviderDefinition): Effect.Effect<void, ProviderRegistrationError>;
 
   /**
    * Get a model from a registered provider
@@ -114,13 +114,37 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
     });
   }
 
-  registerDefinition(definition: ProviderDefinition): Effect.Effect<void> {
+  registerDefinition(definition: ProviderDefinition): Effect.Effect<void, ProviderRegistrationError> {
     const self = this;
     return Effect.gen(function* () {
       const providers = yield* Ref.get(self.providers);
+
+      const normalizedId = definition.id.toLowerCase();
+      const normalizedAliases = definition.aliases.map((alias) => alias.toLowerCase());
+      // Deduplicate: aliases matching the id are harmless
+      const keysToRegister = [...new Set([normalizedId, ...normalizedAliases])];
+
+      for (const key of keysToRegister) {
+
+        const existing = providers.get(key);
+        if (existing) {
+          // Idempotent: re-registering the same provider is a no-op
+          if (existing.id.toLowerCase() === normalizedId) {
+            return;
+          }
+          const conflictType = key === normalizedId ? 'id' : 'alias';
+          return yield* Effect.fail(new ProviderRegistrationError({
+            providerId: definition.id,
+            cause: new Error(
+              `Cannot register provider "${definition.id}": ${conflictType} "${key}" is already registered to provider "${existing.id}"`
+            )
+          }));
+        }
+      }
+
       const newProviders = new Map(providers);
       // Store with lowercase keys for case-insensitive lookup
-      newProviders.set(definition.id.toLowerCase(), definition);
+      newProviders.set(normalizedId, definition);
       for (const alias of definition.aliases) {
         newProviders.set(alias.toLowerCase(), definition);
       }

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'fs';
+import { dirname, isAbsolute, normalize, relative, resolve } from 'path';
 import type {
   FrameworkConfig,
   ConfigStep,
@@ -57,6 +59,12 @@ export function loadConfig(filePath: string): FrameworkConfig {
 export function validateConfig(config: FrameworkConfig): void {
   const hasDefaultSystemMessage = Boolean(config.defaultSystemMessage);
   const policies = getPolicyConfig(config);
+
+  if (config.agentDirs !== undefined) {
+    if (!Array.isArray(config.agentDirs) || config.agentDirs.some((dir) => typeof dir !== 'string')) {
+      throw new Error('agentDirs must be an array of directory paths');
+    }
+  }
 
   if (config.intents) {
     for (const intent of config.intents) {
@@ -267,6 +275,64 @@ export function extractAgents(config: FrameworkConfig, basePath?: string): Agent
     ...agent,
     systemMessage: agent.systemMessage ?? defaultSystemMessage ?? '',
   }));
+}
+
+function isPathWithinSandbox(filePath: string, sandboxDir: string): boolean {
+  const normalizedFilePath = normalize(resolve(filePath));
+  const normalizedSandbox = normalize(resolve(sandboxDir));
+  const relativePath = relative(normalizedSandbox, normalizedFilePath);
+
+  if (!relativePath || relativePath === '.' || relativePath === './') {
+    return true;
+  }
+
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validate that config-defined agents do not reference markdown files that also contain
+ * YAML frontmatter, which would be ambiguous with standalone agent definition files.
+ */
+export function validateNoAmbiguousPromptFiles(configAgents: AgentConfig[], basePath?: string): void {
+  for (const agent of configAgents) {
+    const systemMessage = agent.systemMessage;
+    if (!systemMessage || !systemMessage.toLowerCase().endsWith('.md')) {
+      continue;
+    }
+
+    const sandboxDir = basePath ? dirname(basePath) : process.cwd();
+    let filePath: string;
+
+    if (isAbsolute(systemMessage)) {
+      throw new Error(`Absolute paths are not allowed for security reasons. Use a relative path instead. Attempted path: ${systemMessage}`);
+    }
+
+    if (basePath) {
+      filePath = resolve(sandboxDir, systemMessage);
+    } else {
+      filePath = resolve(process.cwd(), systemMessage);
+    }
+
+    filePath = normalize(filePath);
+    if (!isPathWithinSandbox(filePath, sandboxDir)) {
+      throw new Error(`Path traversal detected. File path "${systemMessage}" resolves outside the allowed directory "${sandboxDir}"`);
+    }
+
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
+    const content = readFileSync(filePath, 'utf-8');
+    if (content.startsWith('---\n') || content.startsWith('---\r\n')) {
+      throw new Error(
+        `Agent "${agent.id}" references "${systemMessage}" as systemMessage, but that file contains YAML frontmatter. A .md file should be either a standalone agent definition (with frontmatter) or a plain prompt file (without frontmatter), not both.`
+      );
+    }
+  }
 }
 
 /**
@@ -816,8 +882,12 @@ export function extractMCPServers(
       command: serverConfig.command,
       args: serverConfig.args,
       env: resolvedEnv,
+      allowedCommands: serverConfig.allowedCommands,
+      envAllowlist: serverConfig.envAllowlist,
       url: resolvedUrl,
       headers: resolvedHeaders,
+      allowedHosts: serverConfig.allowedHosts,
+      allowedSchemes: serverConfig.allowedSchemes,
       timeout: serverConfig.timeout ?? 30000, // default 30s
       enabled: serverConfig.enabled ?? true, // default enabled
       lazy: serverConfig.lazy ?? false, // default auto-start

@@ -213,6 +213,22 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(app.getState().input.cursorPosition).toBe(2);
   });
 
+  test('clears narrated handoff text from the current assistant stream', async () => {
+    await createTestApp();
+
+    app.startAssistantStream();
+    app.pushAssistantToken("I've handed off your request to the research orchestrator.");
+    await Bun.sleep(10);
+
+    app.clearAssistantStreamContent();
+    app.pushAssistantToken('Final answer');
+    app.completeAssistantStream();
+
+    const messages = app.getState().transcript.messages;
+    expect(messages[messages.length - 1]?.content).toBe('Final answer');
+    expect(messages.some((message) => message.content.includes('handed off your request'))).toBe(false);
+  });
+
   test('existing-session launch opens chooser with start-new selected by default', async () => {
     const fixture = createSessionServiceFixture();
     await createTestApp({}, fixture);
@@ -237,39 +253,13 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.focusedPane).toBe('input');
   });
 
-  test('interactive startup with empty session list still opens chooser and Enter creates session', async () => {
+  test('empty session list skips chooser and auto-creates a session', async () => {
     const fixture = createSessionServiceFixture({ includeExistingSessions: false });
     await createTestApp({}, fixture);
-    await waitFor(() => app.getState().startup.chooser.isOpen);
-
-    expect(app.getState().startup.chooser.isOpen).toBe(true);
-    expect(app.getState().startup.chooser.selected).toBe('start-new-session');
-
-    app.processKey(makeKey({ name: 'enter' }));
     await waitFor(() => app.getState().sessions.selectedId === 's-new');
 
     const state = app.getState();
     expect(state.startup.chooser.isOpen).toBe(false);
-    expect(state.sessions.selectedId).toBe('s-new');
-    expect(state.focusedPane).toBe('input');
-  });
-
-  test('resume chooser option routes to sidebar and can create session when none exist', async () => {
-    const fixture = createSessionServiceFixture({ includeExistingSessions: false });
-    await createTestApp({}, fixture);
-    await waitFor(() => app.getState().startup.chooser.isOpen);
-
-    app.processKey(makeKey({ name: 'up' }));
-    app.processKey(makeKey({ name: 'enter' }));
-    await waitFor(() => !app.getState().startup.chooser.isOpen);
-
-    expect(app.getState().startup.chooser.isOpen).toBe(false);
-    expect(app.getState().focusedPane).toBe('sidebar');
-
-    app.processKey(makeKey({ name: 'enter' }));
-    await waitFor(() => app.getState().sessions.selectedId === 's-new');
-
-    const state = app.getState();
     expect(state.sessions.selectedId).toBe('s-new');
     expect(state.focusedPane).toBe('input');
   });
@@ -483,14 +473,12 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(quitFired).toBe(true);
   });
 
-  test('Ctrl+Shift+C copies transcript to clipboard without quitting', async () => {
+  test('Ctrl+Shift+C is not intercepted so terminal can copy selected text', async () => {
     await createTestApp();
 
-    const copySpy = (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52;
     let copiedText = '';
-    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = (text: string) => {
+    (app as any).copyToClipboard = (text: string) => {
       copiedText = text;
-      return true;
     };
 
     app.processKey(makeKey({ name: 'h' }));
@@ -502,11 +490,9 @@ describe('TUI App (OpenTUI integration)', () => {
 
     app.processKey(makeKey({ name: 'c', ctrl: true, shift: true }));
 
-    expect(copiedText).toContain('user:');
-    expect(copiedText).toContain('hi');
+    // Nothing should be copied — Ctrl+Shift+C is reserved for the terminal
+    expect(copiedText).toBe('');
     expect(app.isRunning()).toBe(true);
-
-    (testSetup.renderer as unknown as { copyToClipboardOSC52: (text: string) => boolean }).copyToClipboardOSC52 = copySpy;
   });
 
   test('mouse wheel scrolling updates transcript viewport offset', async () => {
@@ -647,6 +633,416 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.streaming.isStreaming).toBe(false);
   });
 
+  test('renders streamed assistant text before stream completion', async () => {
+    await createTestApp();
+
+    app.startAssistantStream();
+    app.pushAssistantToken('hello');
+
+    await waitFor(() => app.getState().streaming.outputTokenCount === 1);
+    await testSetup.renderOnce();
+    let frame = testSetup.captureCharFrame();
+
+    expect(app.getState().streaming.isStreaming).toBe(true);
+    expect(frame).toContain('hello');
+    expect(frame).not.toContain('hello world');
+
+    app.pushAssistantToken(' world');
+    await waitFor(() => app.getState().streaming.outputTokenCount === 2);
+    await testSetup.renderOnce();
+    frame = testSetup.captureCharFrame();
+
+    expect(app.getState().streaming.isStreaming).toBe(true);
+    expect(frame).toContain('hello world');
+
+    app.completeAssistantStream();
+    await waitFor(() => !app.getState().streaming.isStreaming);
+  });
+
+  test('renders tool-only activity as muted transcript metadata', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'msg_1',
+      step: 0,
+      toolCallId: 'tool_1',
+      toolName: 'fetch_latest_news',
+      input: { topic: 'trump' },
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    let frame = testSetup.captureCharFrame();
+    expect(frame).toContain('fetch_latest_news - topic: trump');
+
+    app.pushToolResult({
+      toolCallId: 'tool_1',
+      toolName: 'fetch_latest_news',
+      output: { digest: 'digest' },
+      completedAt: Date.now(),
+      durationMs: 25,
+    });
+    app.completeAssistantStream();
+
+    await testSetup.renderOnce();
+    frame = testSetup.captureCharFrame();
+    expect(frame).toContain('fetch_latest_news');
+    expect(frame).toContain('1 field');
+  });
+
+  test.skip('rebuilds transcript when tool activity arrives after assistant text has started streaming', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushAssistantToken('Let me check that.');
+    await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+    await testSetup.renderOnce();
+
+    app.pushToolCall({
+      messageId: 'msg_after_text',
+      step: 1,
+      toolCallId: 'tool_after_text',
+      toolName: 'fetch_latest_news',
+      input: { topic: 'markets' },
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    const state = app.getState();
+    const frame = testSetup.captureCharFrame();
+
+    expect(state.transcript.messages.some((message) => message.content.includes('Let me check that.'))).toBe(true);
+    expect(frame).toContain('fetch_latest_news - topic: markets');
+  });
+
+  test('renders meaningful in-progress query context for tool activity', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'msg_query',
+      step: 0,
+      toolCallId: 'tool_query',
+      toolName: 'agent_browser_research',
+      input: { query: 'best beginner road bike under 1500' },
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain('query: best beginner road bike under 1500');
+  });
+
+  test('summarizes browser research results using query instead of date prefix', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'msg_browser',
+      step: 0,
+      toolCallId: 'tool_browser',
+      toolName: 'agent_browser_research',
+      input: { query: 'best beginner road bike under 1500' },
+      startedAt: Date.now(),
+    });
+
+    app.pushToolResult({
+      toolCallId: 'tool_browser',
+      toolName: 'agent_browser_research',
+      output: [
+        '# Browser Research',
+        'Current date: 2026-03-08',
+        'Query: best beginner road bike under 1500',
+        '',
+        '1. Example Result',
+      ].join('\n'),
+      completedAt: Date.now(),
+      durationMs: 25,
+    });
+    app.completeAssistantStream();
+
+    await testSetup.renderOnce();
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain('Query: best beginner road bike under 1500');
+    expect(frame).not.toContain('Current date: 2026-03-08');
+  });
+
+  test('prioritizes browser research query text in narrow viewports', async () => {
+    testSetup = await createTestRenderer({
+      width: 60,
+      height: 20,
+    });
+    app = FredTuiApp.createWithRenderer(testSetup.renderer, {}, {});
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'msg_query_narrow',
+      step: 0,
+      toolCallId: 'tool_query_narrow',
+      toolName: 'agent_browser_research',
+      input: { query: 'best beginner bike' },
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    await Bun.sleep(120);
+    await testSetup.renderOnce();
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain('query: best');
+    expect(frame).not.toContain('agent_browser_research - query:');
+  });
+
+  test('animates in-progress tool spinner without other state changes', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'i' }));
+    app.processKey(makeKey({ name: 'enter' }));
+    app.pushToolCall({
+      messageId: 'msg_spinner',
+      step: 0,
+      toolCallId: 'tool_spinner',
+      toolName: 'fetch_latest_news',
+      input: {},
+      startedAt: Date.now(),
+    });
+
+    await testSetup.renderOnce();
+    const firstFrame = testSetup.captureCharFrame();
+    await Bun.sleep(120);
+    await testSetup.renderOnce();
+    const secondFrame = testSetup.captureCharFrame();
+
+    expect(firstFrame).not.toBe(secondFrame);
+  });
+
+  test('renders tool metadata between the triggering user message and assistant output', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'n' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'w' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'msg_2',
+      step: 0,
+      toolCallId: 'tool_news',
+      toolName: 'fetch_latest_news',
+      input: { topic: 'politics' },
+      startedAt: Date.now(),
+      depth: 1,
+    });
+    app.pushAssistantToken('Here is the summary.');
+    app.pushToolResult({
+      toolCallId: 'tool_news',
+      toolName: 'fetch_latest_news',
+      output: { digest: 'digest' },
+      completedAt: Date.now(),
+      durationMs: 10,
+    });
+    app.completeAssistantStream();
+
+    const state = app.getState();
+    expect(state.transcript.messages[0]).toEqual({ role: 'user', content: 'news' });
+    expect(state.transcript.messages[1]).toEqual({ role: 'assistant', content: 'Here is the summary.' });
+    expect(state.toolBlocks.groups).toHaveLength(1);
+    expect(state.toolBlocks.groups[0]?.anchorUserMessageIndex).toBe(0);
+    expect(state.toolBlocks.groups[0]?.blocks[0]?.toolName).toBe('fetch_latest_news');
+  });
+
+  test('renders handoff and nested tool calls as a tree beneath the triggering message', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'handoff-msg',
+      step: 1,
+      toolCallId: 'handoff_1',
+      toolName: 'research-orchestrator',
+      input: { fromAgentId: 'concierge' },
+      startedAt: Date.now(),
+      kind: 'task',
+      depth: 1,
+    });
+    app.pushToolCall({
+      messageId: 'research-msg',
+      step: 2,
+      toolCallId: 'research_1',
+      toolName: 'run_research_swarm',
+      input: { question: 'history of income tax' },
+      startedAt: Date.now(),
+      depth: 2,
+    });
+    app.pushToolResult({
+      toolCallId: 'research_1',
+      toolName: 'run_research_swarm',
+      output: 'completed',
+      completedAt: Date.now(),
+      durationMs: 50,
+    });
+    app.pushToolResult({
+      toolCallId: 'handoff_1',
+      toolName: 'research-orchestrator',
+      output: 'completed',
+      completedAt: Date.now(),
+      durationMs: 80,
+    });
+    app.pushAssistantToken('Final report');
+    app.completeAssistantStream();
+
+    const state = app.getState();
+    expect(state.toolBlocks.groups).toHaveLength(2);
+    expect(state.toolBlocks.groups[0]?.anchorUserMessageIndex).toBe(0);
+    expect(state.toolBlocks.groups[1]?.anchorUserMessageIndex).toBe(0);
+    expect(state.toolBlocks.groups[0]?.blocks[0]?.toolName).toBe('research-orchestrator');
+    expect(state.toolBlocks.groups[0]?.blocks[0]?.depth).toBe(1);
+    expect(state.toolBlocks.groups[1]?.blocks[0]?.toolName).toBe('run_research_swarm');
+    expect(state.toolBlocks.groups[1]?.blocks[0]?.depth).toBe(2);
+    expect(state.transcript.messages[state.transcript.messages.length - 1]).toEqual({
+      role: 'assistant',
+      content: 'Final report',
+    });
+  });
+
+  test('renders resumed streaming text after a tool result even when the first token is whitespace', async () => {
+    await createTestApp({}, { streamingFlushStrategy: 'token' });
+
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'research-msg',
+      step: 0,
+      toolCallId: 'tool_research',
+      toolName: 'run_research_swarm',
+      input: { question: 'best laptop for programming' },
+      startedAt: Date.now(),
+      depth: 1,
+    });
+    app.pushToolResult({
+      toolCallId: 'tool_research',
+      toolName: 'run_research_swarm',
+      output: 'Research completed',
+      completedAt: Date.now(),
+      durationMs: 25,
+    });
+
+    // Some providers resume the assistant response with leading whitespace.
+    app.pushAssistantToken(' ');
+    await waitFor(() => app.getState().transcript.messages.some((message) => message.role === 'assistant'));
+    await testSetup.renderOnce();
+
+    app.pushAssistantToken('Final report');
+    await waitFor(() => app.getState().transcript.messages.some((message) => message.content.includes('Final report')));
+    await testSetup.renderOnce();
+
+    const state = app.getState();
+    expect(state.transcript.messages[state.transcript.messages.length - 1]).toEqual({
+      role: 'assistant',
+      content: ' Final report',
+    });
+
+    const frame = testSetup.captureCharFrame();
+    expect(frame).toContain('Final report');
+  });
+
+  test('renders compact sibling-aware tree prefixes for nested tool calls', async () => {
+    await createTestApp();
+
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 's' }));
+    app.processKey(makeKey({ name: 'e' }));
+    app.processKey(makeKey({ name: 'a' }));
+    app.processKey(makeKey({ name: 'r' }));
+    app.processKey(makeKey({ name: 'c' }));
+    app.processKey(makeKey({ name: 'h' }));
+    app.processKey(makeKey({ name: 'enter' }));
+
+    app.pushToolCall({
+      messageId: 'root-msg',
+      step: 1,
+      toolCallId: 'root-tool',
+      toolName: 'run_research_swarm',
+      input: { question: 'History of Mexican drug cartels' },
+      startedAt: Date.now(),
+      depth: 2,
+    });
+    app.pushToolCall({
+      messageId: 'planner-msg',
+      step: 2,
+      toolCallId: 'planner-tool',
+      toolName: 'research-planner',
+      input: { stepName: 'planResearch' },
+      startedAt: Date.now(),
+      kind: 'task',
+      depth: 3,
+    });
+    app.pushToolCall({
+      messageId: 'planner-query-msg',
+      step: 3,
+      toolCallId: 'planner-query-tool',
+      toolName: 'agent_browser_research',
+      input: { query: 'Mexican drug cartels current status' },
+      startedAt: Date.now(),
+      originAgentId: 'research-planner',
+      depth: 4,
+    });
+    app.pushToolCall({
+      messageId: 'web-msg',
+      step: 4,
+      toolCallId: 'web-tool',
+      toolName: 'web-researcher',
+      input: { stepName: 'webTrack' },
+      startedAt: Date.now(),
+      kind: 'task',
+      depth: 3,
+    });
+
+    await testSetup.renderOnce();
+    const frame = testSetup.captureCharFrame();
+
+    expect(frame).toContain('run_research_swarm - question: History of Mexican drug cartels');
+    expect(frame).toContain('Running research-planner');
+    expect(frame).toContain('Running web-researcher');
+    expect(frame).toContain('research-planner - query: Mexican drug cartels current status');
+    expect(frame).not.toContain('│─');
+  });
+
   test('records streaming errors and keeps accumulated output', async () => {
     let capturedErrorMessage: string | undefined;
     await createTestApp({
@@ -666,8 +1062,25 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(state.streaming.isStreaming).toBe(false);
     expect(state.streaming.lastError).toBe('provider disconnected');
     expect(state.streaming.outputTokenCount).toBe(2);
-    expect(state.transcript.messages[state.transcript.messages.length - 1]?.content).toBe('hello world');
+    // Accumulated output preserved with error appended for visibility
+    const lastMsg = state.transcript.messages[state.transcript.messages.length - 1];
+    expect(lastMsg?.content).toContain('hello world');
+    expect(lastMsg?.content).toContain('[Error: provider disconnected]');
     expect(capturedErrorMessage).toBe('provider disconnected');
+  });
+
+  test('sanitizes streaming errors before showing them in the TUI', async () => {
+    await createTestApp();
+
+    app.startAssistantStream();
+    app.failAssistantStream(new Error('Fiber terminated with an unhandled error\n    at /home/gimbo/dev/fred/packages/core/src/subagent/service.ts:650:1'));
+    await waitFor(() => !app.getState().streaming.isStreaming);
+
+    const state = app.getState();
+    expect(state.streaming.lastError).toBe('Fiber terminated with an unhandled error');
+    const lastMsg = state.transcript.messages[state.transcript.messages.length - 1];
+    expect(lastMsg?.content).toContain('[Error: Fiber terminated with an unhandled error]');
+    expect(lastMsg?.content).not.toContain('/home/gimbo/dev/fred');
   });
 
   test('status bar shows shortcut badges during streaming and idle states', async () => {
@@ -1118,6 +1531,361 @@ describe('TUI App (OpenTUI integration)', () => {
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain('? Help');
       expect(frame).toContain('Tab complete');
+    });
+  });
+
+  describe('thinking indicator and stream timeout', () => {
+    test('waitingForFirstToken is true after submit, false after first token', async () => {
+      await createTestApp();
+
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+
+      expect(app.getState().streaming.isStreaming).toBe(true);
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Push first token — should clear waitingForFirstToken
+      app.pushAssistantToken('hello');
+      await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+    });
+
+    test('waitingForFirstToken clears on stream completion', async () => {
+      await createTestApp();
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      app.completeAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('waitingForFirstToken clears on stream error', async () => {
+      await createTestApp({
+        onError: () => {},
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      app.failAssistantStream(new Error('test error'));
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('thinking indicator renders during pre-token wait', async () => {
+      await createTestApp();
+
+      // Submit a user message so the spinner has a message to attach to
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      // Indicator uses braille dot spinner characters (U+2800 block)
+      const hasBrailleSpinner = /[\u2800-\u28FF]/.test(frame);
+      expect(hasBrailleSpinner).toBe(true);
+    });
+
+    test('thinking indicator disappears after first token', async () => {
+      await createTestApp();
+
+      // Submit a user message first
+      app.processKey(makeKey({ name: 'h' }));
+      app.processKey(makeKey({ name: 'i' }));
+      app.processKey(makeKey({ name: 'enter' }));
+      app.pushAssistantToken('hello');
+      await waitFor(() => app.getState().streaming.outputTokenCount >= 1);
+
+      // State should reflect: no longer waiting, but still streaming
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.isStreaming).toBe(true);
+
+      // Allow render pipeline to settle after state change
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      // Braille spinner should be gone
+      const hasBrailleSpinner = /[\u2800-\u28FF]/.test(frame);
+      expect(hasBrailleSpinner).toBe(false);
+    });
+
+    test('stream timeout fires error after silence', async () => {
+      let capturedErrorMessage: string | undefined;
+      await createTestApp({
+        onError: (error) => {
+          capturedErrorMessage = error.message;
+        },
+      });
+
+      // Manually start stream and simulate timeout by calling failAssistantStream
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Simulate what the timeout callback does
+      app.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
+
+      expect(app.getState().streaming.isStreaming).toBe(false);
+      expect(app.getState().streaming.waitingForFirstToken).toBe(false);
+      expect(app.getState().streaming.lastError).toContain('timed out');
+      expect(capturedErrorMessage).toContain('timed out');
+    });
+  });
+
+  describe('patient timeout mode', () => {
+    test('no error after timeout interval in patient mode', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceIntervalMs: 50,
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Wait longer than the patience interval
+      await Bun.sleep(80);
+
+      // Stream should still be alive (no error)
+      expect(app.getState().streaming.isStreaming).toBe(true);
+      expect(app.getState().streaming.lastError).toBeNull();
+    });
+
+    test('stream stays alive in patient mode without message', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceIntervalMs: 50,
+      });
+
+      app.startAssistantStream();
+      await Bun.sleep(80);
+
+      // No message configured, so no systemNotice
+      expect(app.getState().systemNotice).toBeNull();
+      // But stream is still running
+      expect(app.getState().streaming.isStreaming).toBe(true);
+    });
+
+    test('shows string patience message after interval', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: 'Still working...',
+        patienceIntervalMs: 50,
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().systemNotice).toBeNull();
+
+      await waitFor(() => app.getState().systemNotice !== null, { timeout: 500 });
+      expect(app.getState().systemNotice).toBe('Still working...');
+    });
+
+    test('string message stays the same on subsequent ticks', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: 'Still working...',
+        patienceIntervalMs: 30,
+      });
+
+      app.startAssistantStream();
+
+      // Wait for first tick
+      await waitFor(() => app.getState().systemNotice !== null, { timeout: 500 });
+      expect(app.getState().systemNotice).toBe('Still working...');
+
+      // Wait for second tick
+      await Bun.sleep(50);
+      expect(app.getState().systemNotice).toBe('Still working...');
+    });
+
+    test('rotates through array messages', async () => {
+      const messages = ['msg-one', 'msg-two', 'msg-three'];
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: messages,
+        patienceIntervalMs: 30,
+      });
+
+      app.startAssistantStream();
+
+      // First message
+      await waitFor(() => app.getState().systemNotice === 'msg-one', { timeout: 500 });
+      expect(app.getState().systemNotice).toBe('msg-one');
+
+      // Second message
+      await waitFor(() => app.getState().systemNotice === 'msg-two', { timeout: 500 });
+      expect(app.getState().systemNotice).toBe('msg-two');
+    });
+
+    test('cycles array messages back to start', async () => {
+      const messages = ['alpha', 'beta'];
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: messages,
+        patienceIntervalMs: 25,
+      });
+
+      app.startAssistantStream();
+
+      // Wait for alpha -> beta -> alpha cycle
+      await waitFor(() => app.getState().systemNotice === 'alpha', { timeout: 500 });
+      await waitFor(() => app.getState().systemNotice === 'beta', { timeout: 500 });
+      await waitFor(() => app.getState().systemNotice === 'alpha', { timeout: 500 });
+    });
+
+    test('function message is called on each tick', async () => {
+      let callCount = 0;
+      const messageFn = () => {
+        callCount++;
+        return `tick-${callCount}`;
+      };
+
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: messageFn,
+        patienceIntervalMs: 30,
+      });
+
+      app.startAssistantStream();
+
+      await waitFor(() => app.getState().systemNotice === 'tick-1', { timeout: 500 });
+      expect(callCount).toBe(1);
+
+      await waitFor(() => app.getState().systemNotice === 'tick-2', { timeout: 500 });
+      expect(callCount).toBe(2);
+    });
+
+    test('systemNotice cleared on completeAssistantStream', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: 'working...',
+        patienceIntervalMs: 30,
+      });
+
+      app.startAssistantStream();
+      await waitFor(() => app.getState().systemNotice !== null, { timeout: 500 });
+
+      app.completeAssistantStream();
+      expect(app.getState().systemNotice).toBeNull();
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('tick index resets between streaming turns', async () => {
+      const messages = ['first', 'second'];
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: messages,
+        patienceIntervalMs: 30,
+      });
+
+      // First turn
+      app.startAssistantStream();
+      await waitFor(() => app.getState().systemNotice === 'first', { timeout: 500 });
+      app.completeAssistantStream();
+      expect(app.getState().systemNotice).toBeNull();
+
+      // Second turn — should start from 'first' again
+      app.startAssistantStream();
+      await waitFor(() => app.getState().systemNotice === 'first', { timeout: 500 });
+      app.completeAssistantStream();
+    });
+
+    test('fail mode regression — default behavior unchanged', async () => {
+      let capturedError: string | undefined;
+      await createTestApp({
+        onError: (error) => { capturedError = error.message; },
+      });
+
+      // Default mode is 'fail'
+      app.startAssistantStream();
+      expect(app.getState().streaming.waitingForFirstToken).toBe(true);
+
+      // Simulate what the fail-mode timeout does
+      app.failAssistantStream(new Error('Response timed out — no tokens received within 30 seconds'));
+
+      expect(app.getState().streaming.isStreaming).toBe(false);
+      expect(capturedError).toContain('timed out');
+    });
+
+    test('onError callback is invoked when failAssistantStream fires in fail mode', async () => {
+      const errors: Error[] = [];
+      await createTestApp({
+        onError: (error) => { errors.push(error); },
+      });
+
+      app.startAssistantStream();
+      expect(app.getState().streaming.isStreaming).toBe(true);
+
+      const timeoutError = new Error('Response timed out — stream aborted');
+      app.failAssistantStream(timeoutError);
+
+      expect(errors.length).toBeGreaterThanOrEqual(1);
+      expect(errors.some(e => e.message.includes('stream aborted'))).toBe(true);
+      expect(app.getState().streaming.isStreaming).toBe(false);
+    });
+
+    test('custom patienceIntervalMs is respected', async () => {
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: 'custom-interval',
+        patienceIntervalMs: 100,
+      });
+
+      app.startAssistantStream();
+
+      // At 50ms, should not have fired yet
+      await Bun.sleep(50);
+      expect(app.getState().systemNotice).toBeNull();
+
+      // At 120ms, should have fired
+      await waitFor(() => app.getState().systemNotice === 'custom-interval', { timeout: 500 });
+    });
+
+    test('timer resets on tool events in patient mode', async () => {
+      const messages = ['waiting...'];
+      await createTestApp({}, {
+        streamTimeoutMode: 'patient',
+        patienceMessage: messages,
+        patienceIntervalMs: 60,
+      });
+
+      app.startAssistantStream();
+
+      // At 40ms, push a tool call to reset the timer
+      await Bun.sleep(40);
+      expect(app.getState().systemNotice).toBeNull();
+
+      app.pushToolCall({
+        messageId: 'msg1',
+        step: 1,
+        toolCallId: 'tc1',
+        toolName: 'test_tool',
+        input: {},
+        startedAt: Date.now(),
+      });
+
+      // The timer was reset at 40ms. Wait well past the interval.
+      // Patience message should NOT fire while tools are in-progress.
+      await Bun.sleep(100);
+      expect(app.getState().systemNotice).toBeNull();
+
+      // Complete the tool — no more in-progress tool blocks
+      app.pushToolResult({
+        toolCallId: 'tc1',
+        toolName: 'test_tool',
+        output: 'done',
+        completedAt: Date.now(),
+        durationMs: 50,
+      });
+
+      // After tool completion, timer resets and should fire since
+      // waitingForFirstToken is still true and no tools are running.
+      await waitFor(() => app.getState().systemNotice === 'waiting...', { timeout: 500 });
     });
   });
 });

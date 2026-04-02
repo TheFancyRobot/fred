@@ -2,24 +2,32 @@ import { Effect, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
-/**
- * OpenRouter provider pack factory.
- * Uses OpenAI-compatible API via @effect/ai-openai with OpenRouter's baseUrl.
- *
- * Implements EffectProviderFactory interface for use as both built-in
- * and external pack pattern. Uses dynamic import to avoid hard dependency.
- */
+function getOpenRouterAttribution(config: ProviderConfig): {
+  referrer?: string;
+  title?: string;
+} {
+  return {
+    referrer:
+      (typeof config.headers?.['HTTP-Referer'] === 'string' ? config.headers['HTTP-Referer'] : undefined)
+      ?? (typeof config.headers?.['http-referer'] === 'string' ? config.headers['http-referer'] : undefined)
+      ?? (typeof config.headers?.['HTTP-Referrer'] === 'string' ? config.headers['HTTP-Referrer'] : undefined)
+      ?? (typeof config.headers?.['http-referrer'] === 'string' ? config.headers['http-referrer'] : undefined),
+    title:
+      (typeof config.headers?.['X-Title'] === 'string' ? config.headers['X-Title'] : undefined)
+      ?? (typeof config.headers?.['x-title'] === 'string' ? config.headers['x-title'] : undefined),
+  };
+}
+
 export const OpenRouterProviderFactory: EffectProviderFactory = {
   id: 'openrouter',
   aliases: ['openrouter'],
   load: async (config: ProviderConfig) => {
-    // Dynamic import to avoid hard dependency (uses OpenAI-compatible API)
-    let module: typeof import('@effect/ai-openai');
+    let module: typeof import('@effect/ai-openrouter');
     try {
-      module = await import('@effect/ai-openai');
+      module = await import('@effect/ai-openrouter');
     } catch (error) {
       throw new Error(
-        `Failed to load @effect/ai-openai. Install it with: bun add @effect/ai-openai`
+        `Failed to load @effect/ai-openrouter. Install it with: bun add @effect/ai-openrouter`
       );
     }
 
@@ -27,11 +35,13 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
     const apiKeyString = process.env[apiKeyEnvVar];
     const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
     const apiUrl = config.baseUrl ?? 'https://openrouter.ai/api/v1';
+    const { referrer, title } = getOpenRouterAttribution(config);
 
-    // Use OpenAiClient.layer for client initialization
-    const layer = module.OpenAiClient?.layer?.({
+    const layer = module.OpenRouterClient?.layer?.({
       apiKey,
       apiUrl,
+      referrer,
+      title,
     });
 
     if (!layer) {
@@ -41,13 +51,13 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
     return {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
-        if (!module.OpenAiLanguageModel?.model) {
+        if (!module.OpenRouterLanguageModel?.model) {
           return Effect.fail(new Error('OpenRouter LanguageModel not available in provider pack'));
         }
         return Effect.succeed(
-          module.OpenAiLanguageModel.model(modelId, {
+          module.OpenRouterLanguageModel.model(modelId, {
             temperature: overrides?.temperature,
-            max_output_tokens: overrides?.maxTokens,
+            max_tokens: overrides?.maxTokens,
           })
         );
       },
@@ -55,7 +65,6 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
   },
 };
 
-// Auto-register when imported
 registerBuiltinPack(OpenRouterProviderFactory);
 
 export { OpenRouterProviderFactory as openrouterPack };

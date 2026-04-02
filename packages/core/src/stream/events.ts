@@ -71,6 +71,7 @@ export interface ToolCallEvent extends StreamEventBase {
   toolName: string;
   input: Record<string, unknown>;
   startedAt: number;
+  originAgentId?: string;
 }
 
 /**
@@ -309,6 +310,7 @@ export const makeToolCallEvent = ({
   startedAt,
   sequence,
   emittedAt,
+  originAgentId,
 }: {
   runId: string;
   threadId?: string;
@@ -320,6 +322,7 @@ export const makeToolCallEvent = ({
   startedAt: number;
   sequence: number;
   emittedAt: number;
+  originAgentId?: string;
 }): ToolCallEvent => ({
   type: 'tool-call',
   runId,
@@ -332,6 +335,7 @@ export const makeToolCallEvent = ({
   startedAt,
   sequence,
   emittedAt,
+  ...(originAgentId ? { originAgentId } : {}),
 });
 
 export const makeToolResultEvent = ({

@@ -78,7 +78,7 @@ export const BUILTIN_PACKS: Record<string, EffectProviderFactory> = new Proxy(
   {
     get: (_target, prop: string) => packRegistry.get(prop.toLowerCase()),
     has: (_target, prop: string) => packRegistry.has((prop as string).toLowerCase()),
-    ownKeys: () => [...packRegistry.keys()],
+    ownKeys: () => [...new Set([...packRegistry.values()].map(p => p.id.toLowerCase()))],
     getOwnPropertyDescriptor: (_target, prop: string) => {
       if (packRegistry.has((prop as string).toLowerCase())) {
         return { enumerable: true, configurable: true };

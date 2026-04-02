@@ -1,10 +1,18 @@
-import type { SessionSummary } from '@fancyrobot/fred';
-import { ContextManager } from '@fancyrobot/fred';
+import type { SessionDetails, SessionSummary } from '@fancyrobot/fred';
 import type { SessionListItem, TuiState } from './state.js';
 import { addSession, applySessionDeletion, createTranscriptState } from './state.js';
 
+export interface SessionContextService {
+  listSessions(): Promise<SessionSummary[]>;
+  generateConversationId(): string;
+  getContext(id: string): Promise<unknown>;
+  updateMetadata(id: string, metadata: Record<string, unknown>): Promise<void>;
+  getSession(id: string): Promise<SessionDetails | null>;
+  deleteSession(id: string): Promise<void>;
+}
+
 export interface SessionServiceDependencies {
-  contextManager: ContextManager;
+  contextManager: SessionContextService;
 }
 
 const titleFallback = (summary: SessionSummary): string | null => summary.title ?? null;

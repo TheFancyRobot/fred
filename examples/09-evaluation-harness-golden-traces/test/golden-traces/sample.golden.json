@@ -1,0 +1,97 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "timestamp": 1772323200000,
+    "fredVersion": "0.3.0",
+    "gitCommit": "example",
+    "config": {
+      "useSemanticMatching": true,
+      "semanticThreshold": 0.75,
+      "conversationId": "conv_billing_refund"
+    },
+    "environment": {
+      "nodeVersion": "v22.13.1",
+      "platform": "linux"
+    }
+  },
+  "trace": {
+    "message": "I need a refund for my subscription",
+    "spans": [
+      {
+        "name": "routing",
+        "startTime": 1772323201000,
+        "endTime": 1772323201035,
+        "duration": 35,
+        "attributes": {
+          "step": 1,
+          "status": "ok",
+          "intent": "billing.refund"
+        },
+        "events": [
+          {
+            "name": "route.selected",
+            "time": 1772323201030,
+            "attributes": {
+              "agentId": "billing",
+              "method": "intent.matching"
+            }
+          }
+        ],
+        "status": {
+          "code": "ok"
+        },
+        "kind": "internal"
+      },
+      {
+        "name": "response.generate",
+        "startTime": 1772323201040,
+        "endTime": 1772323201260,
+        "duration": 220,
+        "attributes": {
+          "step": 2,
+          "status": "ok",
+          "agentId": "billing"
+        },
+        "events": [],
+        "status": {
+          "code": "ok"
+        },
+        "kind": "internal"
+      }
+    ],
+    "response": {
+      "content": "I can process your refund request right away.",
+      "metadata": {
+        "agentId": "billing",
+        "confidence": 0.99
+      }
+    },
+    "toolCalls": [
+      {
+        "toolId": "lookup-subscription",
+        "args": {
+          "customerId": "cust_123",
+          "plan": "pro"
+        },
+        "result": {
+          "eligible": true,
+          "daysRemaining": 11
+        },
+        "timing": {
+          "startTime": 1772323201060,
+          "endTime": 1772323201110,
+          "duration": 50
+        },
+        "status": "success"
+      }
+    ],
+    "handoffs": [],
+    "routing": {
+      "method": "intent.matching",
+      "agentId": "billing",
+      "intentId": "billing.refund",
+      "confidence": 0.99,
+      "matchType": "exact"
+    }
+  }
+}

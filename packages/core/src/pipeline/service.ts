@@ -9,13 +9,22 @@ import type { GraphWorkflowConfig } from './graph';
 import type { GraphExecutionResult } from './graph-executor';
 import type { GraphWorkflowBuilder } from './graph-builder';
 import type { AgentMessage, AgentResponse } from '../agent/agent';
-import type { ResumeOptions, ResumeResult } from './manager';
+import type { ResumeOptions, ResumeResult } from './resume';
 import type { HumanInputResumeOptions } from './pause/types';
+import type { CheckpointStatus } from './checkpoint/types';
+import type { PipelineContext } from './context';
 import {
   PipelineNotFoundError,
   PipelineAlreadyExistsError,
   PipelineExecutionError,
-  GraphValidationError
+  GraphValidationError,
+  ResumeCheckpointNotFoundError,
+  ResumeCheckpointExpiredError,
+  ResumeInvalidStateError,
+  ResumePipelineNotFoundError,
+  ResumeStepNotResolvableError,
+  ResumeNotPausedError,
+  type ResumeError
 } from './errors';
 import { AgentService } from '../agent/service';
 import { HookManagerService } from '../hooks/service';
@@ -23,6 +32,16 @@ import { CheckpointService } from './checkpoint/service';
 import { PauseService } from './pause/service';
 import { validateGraphWorkflow } from './graph-validator';
 import { validateId, validatePipelineAgentCount } from '../utils/validation';
+import {
+  type AgentManagerLike,
+  ExecutorService,
+  type ExecutorService as ExecutorServiceApi,
+  type ExtendedExecutionOptions,
+} from './executor';
+import {
+  GraphExecutorService,
+  type GraphExecutorService as GraphExecutorServiceApi,
+} from './graph-executor';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -138,17 +157,19 @@ export interface PipelineService {
   // ==========================================
 
   /**
-   * Resume a V2 pipeline from a checkpoint
+   * Resume a V2 pipeline from a checkpoint.
+   * Restores checkpoint state as source of truth and continues execution.
    */
-  resume(runId: string, options?: ResumeOptions): Effect.Effect<ResumeResult, PipelineExecutionError>;
+  resume(runId: string, options?: ResumeOptions): Effect.Effect<ResumeResult, ResumeError | PipelineExecutionError>;
 
   /**
-   * Resume a paused V2 pipeline with human input
+   * Resume a paused V2 pipeline with human input.
+   * Only unblocks paused checkpoints and preserves non-input checkpoint state.
    */
   resumeWithHumanInput(
     runId: string,
     options: HumanInputResumeOptions
-  ): Effect.Effect<ResumeResult, PipelineExecutionError>;
+  ): Effect.Effect<ResumeResult, ResumeError | PipelineExecutionError>;
 
   // ==========================================
   // Graph Workflow Methods
@@ -210,6 +231,8 @@ class PipelineServiceImpl implements PipelineService {
     private pipelinesV2: Ref.Ref<Map<string, PipelineConfigV2>>,
     private graphWorkflows: Ref.Ref<Map<string, GraphWorkflowConfig>>,
     private agentService: AgentService,
+    private executorService: ExecutorServiceApi,
+    private graphExecutorService: GraphExecutorServiceApi,
     private hookService: HookManagerService,
     private checkpointService: CheckpointService,
     private pauseService: PauseService
@@ -405,21 +428,19 @@ class PipelineServiceImpl implements PipelineService {
    * Effect-wrapped agent message processing
    */
   private processAgentMessage(
-    agent: { processMessage: (message: string, history?: AgentMessage[]) => Promise<AgentResponse> },
+    agent: { processMessage: (message: string, history?: AgentMessage[]) => Effect.Effect<AgentResponse, Error> },
     message: string,
     history: AgentMessage[],
     pipelineId: string,
     step: number
   ): Effect.Effect<AgentResponse, PipelineExecutionError> {
-    return Effect.async<AgentResponse, PipelineExecutionError>((resume) => {
-      agent.processMessage(message, history)
-        .then((response) => resume(Effect.succeed(response)))
-        .catch((error) => resume(Effect.fail(new PipelineExecutionError({
-          pipelineId,
-          step,
-          cause: error
-        }))));
-    });
+    return agent.processMessage(message, history).pipe(
+      Effect.mapError((error) => new PipelineExecutionError({
+        pipelineId,
+        step,
+        cause: error,
+      }))
+    );
   }
 
   matchPipelineByUtterance(
@@ -556,29 +577,351 @@ class PipelineServiceImpl implements PipelineService {
     input: string,
     options?: { conversationId?: string; history?: Array<{ role: string; content: string }> }
   ): Effect.Effect<PipelineResult, PipelineExecutionError> {
-    // Delegate to existing executor - full conversion would be a larger task
-    return Effect.fail(new PipelineExecutionError({
-      pipelineId,
-      step: 0,
-      cause: new Error('V2 pipeline execution not yet migrated to Effect')
-    }));
+    const self = this;
+    return Effect.gen(function* () {
+      // Get V2 pipeline config from service state
+      const config = yield* self.getPipelineV2(pipelineId).pipe(
+        Effect.mapError(() => new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: new Error(`V2 Pipeline not found: ${pipelineId}`)
+        }))
+      );
+
+      const executorOptions: ExtendedExecutionOptions = {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options?.conversationId,
+        history: options?.history,
+      };
+
+      const result = yield* self.executorService.executePipelineV2(config, input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: error.cause,
+        }))
+      );
+
+      // If executor returned a failed result, fail the Effect
+      if (!result.success && result.status === 'failed') {
+        return yield* Effect.fail(new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: result.error ?? new Error('Pipeline execution failed')
+        }));
+      }
+
+      return result;
+    });
   }
 
-  // Resume methods - simplified, full implementation reuses existing logic
-  resume(runId: string, options?: ResumeOptions): Effect.Effect<ResumeResult, PipelineExecutionError> {
-    return Effect.fail(new PipelineExecutionError({
-      pipelineId: 'unknown',
-      step: 0,
-      cause: new Error('Resume not yet migrated to Effect')
-    }));
+  private createExecutorAgentManager(): AgentManagerLike {
+    const self = this;
+    return {
+      getAgent: (id: string) => {
+        // Create a lazy agent wrapper that resolves the real agent on demand
+        // processMessage returns Effect, bridged to Promise via Effect.runPromise in executor
+        return {
+          id,
+          config: { id } as any,
+          processMessage: (message: string, history?: AgentMessage[]) => {
+            return Effect.gen(function* () {
+              const agent = yield* self.agentService.getAgent(id);
+              return yield* agent.processMessage(message, history);
+            });
+          },
+        } as any;
+      },
+      hasAgent: (id: string) => {
+        // Synchronous check - run Effect synchronously
+        try {
+          return Effect.runSync(self.agentService.hasAgent(id));
+        } catch {
+          return false;
+        }
+      },
+    };
   }
 
-  resumeWithHumanInput(runId: string, options: HumanInputResumeOptions): Effect.Effect<ResumeResult, PipelineExecutionError> {
-    return Effect.fail(new PipelineExecutionError({
-      pipelineId: 'unknown',
-      step: 0,
-      cause: new Error('Resume with human input not yet migrated to Effect')
-    }));
+  // ==========================================
+  // Resume Methods - Standalone Effect State Machine
+  // ==========================================
+
+  /**
+   * Resume a V2 pipeline from a checkpoint.
+   *
+   * State machine flow:
+   * 1. Load checkpoint by runId
+   * 2. Validate checkpoint state (not expired, resumable status)
+   * 3. Load pipeline config
+   * 4. Compute start step based on resume mode
+   * 5. Execute from computed step with restored context
+   * 6. Return typed ResumeResult
+   */
+  resume(runId: string, options?: ResumeOptions): Effect.Effect<ResumeResult, ResumeError | PipelineExecutionError> {
+    const self = this;
+    const mode = options?.mode ?? 'skip';
+
+    return Effect.gen(function* () {
+      // Step 1: Load checkpoint
+      const checkpointResult = yield* Effect.either(
+        self.checkpointService.getLatestCheckpoint(runId)
+      );
+
+      if (checkpointResult._tag === 'Left') {
+        return yield* Effect.fail(new ResumeCheckpointNotFoundError({ runId }));
+      }
+
+      const checkpoint = checkpointResult.right;
+
+      // Step 2: Validate checkpoint state
+      // Check expiry
+      const now = new Date();
+      if (checkpoint.expiresAt && checkpoint.expiresAt < now) {
+        return yield* Effect.fail(new ResumeCheckpointExpiredError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+          expiresAt: checkpoint.expiresAt,
+        }));
+      }
+
+      // Check status is resumable (not completed, not failed for normal resume)
+      const resumableStatuses: CheckpointStatus[] = ['in_progress', 'paused', 'pending'];
+      if (!resumableStatuses.includes(checkpoint.status)) {
+        return yield* Effect.fail(new ResumeInvalidStateError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+          step: checkpoint.step,
+          status: checkpoint.status,
+          expectedStatus: 'in_progress, paused, or pending',
+        }));
+      }
+
+      // Step 3: Load pipeline config
+      const configResult = yield* Effect.either(
+        self.getPipelineV2(checkpoint.pipelineId)
+      );
+
+      if (configResult._tag === 'Left') {
+        return yield* Effect.fail(new ResumePipelineNotFoundError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+        }));
+      }
+
+      const config = configResult.right;
+
+      // Step 4: Compute start step based on mode
+      let startStep: number;
+      switch (mode) {
+        case 'skip':
+          // Start from step after checkpoint
+          startStep = checkpoint.step + 1;
+          break;
+        case 'retry':
+          // Re-execute checkpointed step
+          startStep = checkpoint.step;
+          break;
+        case 'restart':
+          // Start from beginning with restored context
+          startStep = 0;
+          break;
+        default:
+          startStep = checkpoint.step + 1;
+      }
+
+      // Best-effort step validation: if startStep exceeds pipeline length, try to find step by name
+      if (startStep >= config.steps.length && checkpoint.stepName) {
+        const stepIndex = config.steps.findIndex(s => s.name === checkpoint.stepName);
+        if (stepIndex >= 0) {
+          // Found step by name, adjust startStep
+          startStep = mode === 'skip' ? stepIndex + 1 : stepIndex;
+        }
+      }
+
+      // Special case: if mode is 'skip' and startStep equals pipeline length,
+      // the pipeline has completed all steps - return completed result
+      if (mode === 'skip' && startStep === config.steps.length) {
+        return {
+          success: true,
+          status: 'completed',
+          context: checkpoint.context,
+          finalOutput: checkpoint.context.outputs,
+          runId,
+          resumedFromStep: checkpoint.step,
+        } as ResumeResult;
+      }
+
+      // If still out of bounds, fail with resolvable error
+      if (startStep >= config.steps.length) {
+        return yield* Effect.fail(new ResumeStepNotResolvableError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+          step: checkpoint.step,
+          stepName: checkpoint.stepName,
+          availableSteps: config.steps.map(s => s.name),
+        }));
+      }
+
+      // Step 5: Execute from computed step with restored context
+      const executorOptions: ExtendedExecutionOptions = {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options?.conversationId ?? checkpoint.context.conversationId,
+        history: checkpoint.context.history as Array<{ role: string; content: string }>,
+        runId,
+        startStep,
+        restoredContext: checkpoint.context,
+      };
+
+      const result = yield* self.executorService.executePipelineV2(config, checkpoint.context.input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
+          pipelineId: checkpoint.pipelineId,
+          step: startStep,
+          cause: error.cause,
+        }))
+      );
+
+      // If executor returned a failed result, fail the Effect
+      if (!result.success && result.status === 'failed') {
+        return yield* Effect.fail(new PipelineExecutionError({
+          pipelineId: checkpoint.pipelineId,
+          step: startStep,
+          cause: result.error ?? new Error('Pipeline execution failed'),
+        }));
+      }
+
+      // Step 6: Return typed ResumeResult
+      return {
+        ...result,
+        runId,
+        resumedFromStep: checkpoint.step,
+      } as ResumeResult;
+    });
+  }
+
+  /**
+   * Resume a paused V2 pipeline with human input.
+   *
+   * Only unblocks paused checkpoints. Validates:
+   * 1. Checkpoint exists
+   * 2. Checkpoint is in 'paused' status
+   * 3. Checkpoint is not expired
+   *
+   * Preserves all non-input checkpoint state (outputs, metadata, history).
+   */
+  resumeWithHumanInput(
+    runId: string,
+    options: HumanInputResumeOptions
+  ): Effect.Effect<ResumeResult, ResumeError | PipelineExecutionError> {
+    const self = this;
+
+    return Effect.gen(function* () {
+      // Step 1: Load checkpoint
+      const checkpointResult = yield* Effect.either(
+        self.checkpointService.getLatestCheckpoint(runId)
+      );
+
+      if (checkpointResult._tag === 'Left') {
+        return yield* Effect.fail(new ResumeCheckpointNotFoundError({ runId }));
+      }
+
+      const checkpoint = checkpointResult.right;
+
+      // Step 2: Validate checkpoint is paused (strict check for human input resume)
+      if (checkpoint.status !== 'paused') {
+        return yield* Effect.fail(new ResumeNotPausedError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+          step: checkpoint.step,
+          status: checkpoint.status,
+        }));
+      }
+
+      // Step 3: Check expiry
+      const now = new Date();
+      if (checkpoint.expiresAt && checkpoint.expiresAt < now) {
+        return yield* Effect.fail(new ResumeCheckpointExpiredError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+          expiresAt: checkpoint.expiresAt,
+        }));
+      }
+
+      // Step 4: Load pipeline config
+      const configResult = yield* Effect.either(
+        self.getPipelineV2(checkpoint.pipelineId)
+      );
+
+      if (configResult._tag === 'Left') {
+        return yield* Effect.fail(new ResumePipelineNotFoundError({
+          runId,
+          pipelineId: checkpoint.pipelineId,
+        }));
+      }
+
+      const config = configResult.right;
+
+      // Step 5: Determine resume behavior
+      const resumeBehavior = options.resumeBehavior ??
+        checkpoint.pauseMetadata?.resumeBehavior ??
+        'continue';
+
+      // Compute start step based on resume behavior
+      let startStep: number;
+      if (resumeBehavior === 'rerun') {
+        // Re-execute the paused step with human input
+        startStep = checkpoint.step;
+      } else {
+        // Continue to next step after pause point
+        startStep = checkpoint.step + 1;
+      }
+
+      // Step 6: Inject human input into context
+      const enrichedContext: PipelineContext = {
+        ...checkpoint.context,
+        metadata: {
+          ...checkpoint.context.metadata,
+          humanInput: options.humanInput,
+        },
+      };
+
+      // Step 7: Update checkpoint status to in_progress before resuming
+      yield* self.checkpointService.updateStatus(runId, checkpoint.step, 'in_progress');
+
+      // Step 8: Execute from computed step with enriched context
+      const executorOptions: ExtendedExecutionOptions = {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options.conversationId ?? checkpoint.context.conversationId,
+        history: enrichedContext.history as Array<{ role: string; content: string }>,
+        runId,
+        startStep,
+        restoredContext: enrichedContext,
+      };
+
+      const result = yield* self.executorService.executePipelineV2(config, enrichedContext.input, executorOptions).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
+          pipelineId: checkpoint.pipelineId,
+          step: startStep,
+          cause: error.cause,
+        }))
+      );
+
+      // If executor returned a failed result, fail the Effect
+      if (!result.success && result.status === 'failed') {
+        return yield* Effect.fail(new PipelineExecutionError({
+          pipelineId: checkpoint.pipelineId,
+          step: startStep,
+          cause: result.error ?? new Error('Pipeline execution failed'),
+        }));
+      }
+
+      // Return typed ResumeResult
+      return {
+        ...result,
+        runId,
+        resumedFromStep: checkpoint.step,
+      } as ResumeResult;
+    });
   }
 
   // ==========================================
@@ -651,9 +994,6 @@ class PipelineServiceImpl implements PipelineService {
     input: string,
     options?: { conversationId?: string }
   ): Effect.Effect<GraphExecutionResult, PipelineExecutionError> {
-    // Graph execution with structured concurrency
-    // Fork nodes create parallel fibers that are automatically cancelled
-    // if parent is interrupted (parent-child cancellation cascade)
     const self = this;
     return Effect.gen(function* () {
       const config = yield* self.getGraphWorkflow(id).pipe(
@@ -664,13 +1004,16 @@ class PipelineServiceImpl implements PipelineService {
         }))
       );
 
-      // For now, delegate to existing executor
-      // Full Effect-native graph execution would use Effect.fork for parallelism
-      return yield* Effect.fail(new PipelineExecutionError({
-        pipelineId: id,
-        step: 0,
-        cause: new Error('Graph execution not yet migrated to Effect fibers')
-      }));
+      return yield* self.graphExecutorService.executeGraphWorkflow(config, input, {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options?.conversationId,
+      }).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
+          pipelineId: id,
+          step: 0,
+          cause: error,
+        }))
+      );
     });
   }
 
@@ -696,6 +1039,8 @@ export const PipelineServiceLive = Layer.effect(
   PipelineService,
   Effect.gen(function* () {
     const agentService = yield* AgentService;
+    const executorService = yield* ExecutorService;
+    const graphExecutorService = yield* GraphExecutorService;
     const hookService = yield* HookManagerService;
     const checkpointService = yield* CheckpointService;
     const pauseService = yield* PauseService;
@@ -709,6 +1054,8 @@ export const PipelineServiceLive = Layer.effect(
       pipelinesV2,
       graphWorkflows,
       agentService,
+      executorService,
+      graphExecutorService,
       hookService,
       checkpointService,
       pauseService

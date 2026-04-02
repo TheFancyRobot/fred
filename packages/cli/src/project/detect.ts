@@ -2,7 +2,7 @@
  * Project root and config detection
  *
  * Implements nearest-config-wins by walking upward from cwd to filesystem root,
- * checking each directory for fred.config.ts (preferred) or fred.config.json.
+ * checking each directory for fred.config.ts (preferred), fred.config.json, or fred.config.yaml.
  */
 
 import { existsSync, statSync } from 'fs';
@@ -15,6 +15,8 @@ import type { ConfigCandidate, ProjectDetectionResult } from './types';
 const CONFIG_FILENAMES = [
   { name: 'fred.config.ts', format: 'ts' as const },
   { name: 'fred.config.json', format: 'json' as const },
+  { name: 'fred.config.yaml', format: 'yaml' as const },
+  { name: 'fred.config.yml', format: 'yml' as const },
 ];
 
 /**
@@ -68,7 +70,7 @@ function isFilesystemRoot(dir: string): boolean {
  *
  * Precedence rules:
  * - Nearest directory wins (closer to startDir)
- * - Within a directory: fred.config.ts > fred.config.json
+ * - Within a directory: fred.config.ts > fred.config.json > fred.config.yaml > fred.config.yml
  *
  * Supports monorepo workspaces: package-local config takes precedence over
  * workspace root config when both exist.

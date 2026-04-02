@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Duration, Effect, Either } from 'effect';
 import type { MCPServerRegistry } from './registry';
 
 /**
@@ -112,68 +112,102 @@ export class MCPHealthManager {
     serverId: string,
     maxRetries: number
   ): Promise<boolean> {
-    const client = registry.getClient(serverId);
-    if (!client) {
-      console.warn(`Cannot reconnect - server '${serverId}' not found`);
-      return false;
-    }
+    return Effect.runPromise(
+      this.reconnectServerEffect(registry, serverId, maxRetries)
+    );
+  }
 
-    // Initialize retry state if not exists
-    if (!this.retryState.has(serverId)) {
-      this.retryState.set(serverId, { attempts: 0, maxRetries });
-    }
+  private reconnectServerEffect(
+    registry: MCPServerRegistry,
+    serverId: string,
+    maxRetries: number
+  ): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      const client = registry.getClient(serverId);
+      if (!client) {
+        yield* Effect.sync(() => {
+          console.warn(`Cannot reconnect - server '${serverId}' not found`);
+        });
+        return false;
+      }
 
-    const state = this.retryState.get(serverId)!;
+      if (!this.retryState.has(serverId)) {
+        this.retryState.set(serverId, { attempts: 0, maxRetries });
+      }
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      state.attempts = attempt + 1;
+      const state = this.retryState.get(serverId)!;
 
-      try {
-        // Try to reconnect (re-initialize client)
-        await client.initialize();
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        state.attempts = attempt + 1;
 
-        // Success - update status and re-discover tools
-        registry.updateServerStatus(serverId, 'connected');
-
-        // Re-discover tools after reconnection
-        try {
-          await Effect.runPromise(registry.discoverTools(serverId));
-        } catch (error) {
-          console.warn(
-            `Failed to re-discover tools after reconnect for '${serverId}':`,
-            error instanceof Error ? error.message : String(error)
-          );
-        }
-
-        // Reset retry state on success
-        this.retryState.delete(serverId);
-
-        console.log(`Server '${serverId}' reconnected successfully`);
-        return true;
-      } catch (error) {
-        const attemptNum = attempt + 1;
-        console.warn(
-          `Reconnect attempt ${attemptNum}/${maxRetries} failed for '${serverId}':`,
-          error instanceof Error ? error.message : String(error)
+        const initializeResult = yield* Effect.either(
+          Effect.tryPromise({
+            try: () => client.initialize(),
+            catch: (error) => error,
+          })
         );
 
-        // If not last attempt, wait with exponential backoff
+        if (Either.isRight(initializeResult)) {
+          registry.updateServerStatus(serverId, 'connected');
+
+          yield* registry.discoverTools(serverId).pipe(
+            Effect.catchAll((error) =>
+              Effect.sync(() => {
+                console.warn(
+                  `Failed to re-discover tools after reconnect for '${serverId}':`,
+                  error instanceof Error ? error.message : String(error)
+                );
+              })
+            )
+          );
+
+          this.retryState.delete(serverId);
+
+          if (process.env.NODE_ENV !== 'test') {
+            yield* Effect.sync(() => {
+              console.log(`Server '${serverId}' reconnected successfully`);
+            });
+          }
+
+          return true;
+        }
+
+        const error = initializeResult.left;
+        const attemptNum = attempt + 1;
+
+        if (process.env.NODE_ENV !== 'test') {
+          yield* Effect.sync(() => {
+            console.warn(
+              `Reconnect attempt ${attemptNum}/${maxRetries} failed for '${serverId}':`,
+              error instanceof Error ? error.message : String(error)
+            );
+          });
+        }
+
         if (attempt < maxRetries - 1) {
-          const backoffMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-          console.log(`Waiting ${backoffMs}ms before retry...`);
-          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          const backoffMs = 1000 * Math.pow(2, attempt);
+          if (process.env.NODE_ENV !== 'test') {
+            yield* Effect.sync(() => {
+              console.log(`Waiting ${backoffMs}ms before retry...`);
+            });
+          }
+          yield* Effect.sleep(Duration.millis(backoffMs));
         }
       }
-    }
 
-    // All retries exhausted - mark as error and stop health check
-    registry.updateServerStatus(serverId, 'error');
-    this.stopHealthCheck(serverId);
-    this.retryState.delete(serverId);
+      registry.updateServerStatus(serverId, 'error');
+      this.stopHealthCheck(serverId);
+      this.retryState.delete(serverId);
 
-    console.error(
-      `Server '${serverId}' failed to reconnect after ${maxRetries} attempts`
-    );
-    return false;
+      if (process.env.NODE_ENV !== 'test') {
+        yield* Effect.sync(() => {
+          console.error(
+            `Server '${serverId}' failed to reconnect after ${maxRetries} attempts`
+          );
+        });
+      }
+
+      return false;
+    });
   }
 }

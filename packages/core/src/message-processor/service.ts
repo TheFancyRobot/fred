@@ -516,25 +516,24 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           }
 
           try {
-            response = yield* Effect.tryPromise({
-              try: () =>
-                (route.agent!.processMessage as any)(
-                  message,
-                  sequentialVisibility ? previousMessages : [],
-                  {
-                    policyContext: {
-                      intentId: route.intentId,
-                      agentId: route.agentId,
-                      conversationId,
-                      userId: options?.userId,
-                      role: options?.role,
-                      metadata: options?.policyMetadata,
-                    },
-                  }
-                ) as Promise<AgentResponse>,
-              catch: (error) =>
-                new RouteExecutionError({ routeType: 'agent', cause: error instanceof Error ? error : new Error(String(error)) }),
-            });
+            response = yield* ((route.agent!.processMessage as any)(
+              message,
+              sequentialVisibility ? previousMessages : [],
+              {
+                policyContext: {
+                  intentId: route.intentId,
+                  agentId: route.agentId,
+                  conversationId,
+                  userId: options?.userId,
+                  role: options?.role,
+                  metadata: options?.policyMetadata,
+                },
+              }
+            ) as Effect.Effect<AgentResponse, Error>).pipe(
+              Effect.mapError((error: unknown) =>
+                new RouteExecutionError({ routeType: 'agent', cause: error instanceof Error ? error : new Error(String(error)) })
+              )
+            );
             if (agentSpan) {
               agentSpan.setAttribute('response.length', response.content.length);
               agentSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
@@ -603,11 +602,11 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           const messageWithContext = handoffMessage + handoffContext;
 
           // Process message with target agent
-          const handoffResult = yield* Effect.tryPromise({
-            try: () => targetAgent.processMessage(messageWithContext, previousMessages),
-            catch: (error) =>
-              new HandoffError({ fromAgentId: usedAgentId || 'unknown', toAgentId: handoff.agentId, cause: error instanceof Error ? error : new Error(String(error)) }),
-          });
+          const handoffResult = yield* targetAgent.processMessage(messageWithContext, previousMessages).pipe(
+            Effect.mapError((error) =>
+              new HandoffError({ fromAgentId: usedAgentId || 'unknown', toAgentId: handoff.agentId, cause: error instanceof Error ? error : new Error(String(error)) })
+            )
+          );
           currentResponse = handoffResult;
           usedAgentId = handoff.agentId;
 
@@ -908,9 +907,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
             });
           }
 
-          const response = yield* Effect.promise(() =>
-            agent.processMessage(currentMessage, sequentialVisibility ? previousMessages : [])
-          );
+          const response = yield* agent.processMessage(currentMessage, sequentialVisibility ? previousMessages : []);
 
           if (response.content && shouldPersistHistory) {
             yield* self.contextStorage.addMessage(conversationId, {
@@ -975,12 +972,32 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
         }
 
         // Agent has streaming - use it with handoff detection
-        if (shouldPersistHistory) {
-          yield* self.contextStorage.addMessage(conversationId, {
-            role: 'user',
-            content: currentMessage,
-          });
-        }
+        // Defer user message persistence until the first provider-originated event,
+        // preventing orphaned user messages when the stream fails before model output starts.
+        const userMessagePersistedRef = shouldPersistHistory ? yield* Ref.make(false) : undefined;
+        const shouldPersistUserMessageForEvent = (event: StreamEvent) =>
+          event.type === 'token'
+          || event.type === 'tool-call'
+          || event.type === 'tool-result'
+          || event.type === 'tool-error'
+          || event.type === 'usage'
+          || event.type === 'message-end'
+          || event.type === 'step-complete'
+          || event.type === 'run-end';
+        const persistUserMessageOnce = () =>
+          userMessagePersistedRef
+            ? Ref.modify(userMessagePersistedRef, (persisted) =>
+                persisted
+                  ? [Effect.void, true]
+                  : [
+                      self.contextStorage.addMessage(conversationId, {
+                        role: 'user',
+                        content: currentMessage,
+                      }),
+                      true,
+                    ]
+              )
+            : Effect.void;
 
         // Track per-step state for persistence
         // Per locked decision: Use separate ToolFailure record type (not isFailure flag)
@@ -1015,8 +1032,9 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           return stepStates.get(stepIndex)!;
         };
 
-        let detectedHandoff: RunEndEvent['result']['handoff'] | undefined;
-        let lastRunEndEvent: RunEndEvent | undefined;
+        // Use Ref for mutable state that needs to survive across stream operations
+        const detectedHandoffRef = yield* Ref.make<RunEndEvent['result']['handoff'] | undefined>(undefined);
+        const lastRunEndEventRef = yield* Ref.make<RunEndEvent | undefined>(undefined);
 
         const agentStream = agent.streamMessage(
           currentMessage,
@@ -1025,7 +1043,13 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
         );
 
         // Process stream events, tracking state and detecting handoffs
+        // Use Stream.tap for side effects - events flow through without buffering
         const processedStream = agentStream.pipe(
+          Stream.tap((event) =>
+            shouldPersistUserMessageForEvent(event)
+              ? persistUserMessageOnce()
+              : Effect.void
+          ),
           Stream.tap((event) => {
             if (event.type === 'token' && 'step' in event) {
               const state = getOrCreateStepState(event.step);
@@ -1073,7 +1097,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
             if (event.type === 'step-complete' && shouldPersistHistory) {
               const state = stepStates.get(event.stepIndex);
               if (state && state.toolCalls.length > 0) {
-                return Effect.promise(async () => {
+                return Effect.gen(function* () {
                   const assistantParts: Array<Prompt.AssistantMessagePartEncoded> = [];
                   if (state.text) {
                     assistantParts.push(Prompt.makePart('text', { text: state.text }));
@@ -1089,12 +1113,10 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
                     );
                   });
 
-                  await Effect.runPromise(
-                    self.contextStorage.addMessage(conversationId, {
-                      role: 'assistant',
-                      content: assistantParts,
-                    })
-                  );
+                  yield* self.contextStorage.addMessage(conversationId, {
+                    role: 'assistant',
+                    content: assistantParts,
+                  });
 
                   // Persist tool results and failures as separate record types
                   // Per locked decision: ToolFailure is distinct from ToolResult
@@ -1102,42 +1124,36 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
                     if (tc.result !== undefined) {
                       if (tc.error) {
                         // Persist as ToolFailure record - distinct type with error code + message
-                        // The error field in the result indicates this is a failure record
-                        await Effect.runPromise(
-                          self.contextStorage.addMessage(conversationId, {
-                            role: 'tool',
-                            content: [
-                              Prompt.makePart('tool-result', {
-                                id: tc.id,
-                                name: tc.toolName,
-                                // Result contains error message for model to see
-                                result: {
-                                  __type: 'ToolFailure',
-                                  error: tc.error,
-                                  output: tc.result,
-                                },
-                                isFailure: true,
-                                providerExecuted: false,
-                              }),
-                            ],
-                          })
-                        );
+                        yield* self.contextStorage.addMessage(conversationId, {
+                          role: 'tool',
+                          content: [
+                            Prompt.makePart('tool-result', {
+                              id: tc.id,
+                              name: tc.toolName,
+                              result: {
+                                __type: 'ToolFailure',
+                                error: tc.error,
+                                output: tc.result,
+                              },
+                              isFailure: true,
+                              providerExecuted: false,
+                            }),
+                          ],
+                        });
                       } else {
                         // Persist as ToolResult record - success case (clean)
-                        await Effect.runPromise(
-                          self.contextStorage.addMessage(conversationId, {
-                            role: 'tool',
-                            content: [
-                              Prompt.makePart('tool-result', {
-                                id: tc.id,
-                                name: tc.toolName,
-                                result: tc.result,
-                                isFailure: false,
-                                providerExecuted: false,
-                              }),
-                            ],
-                          })
-                        );
+                        yield* self.contextStorage.addMessage(conversationId, {
+                          role: 'tool',
+                          content: [
+                            Prompt.makePart('tool-result', {
+                              id: tc.id,
+                              name: tc.toolName,
+                              result: tc.result,
+                              isFailure: false,
+                              providerExecuted: false,
+                            }),
+                          ],
+                        });
                       }
                     }
                   }
@@ -1149,47 +1165,47 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
 
             // On run-end, check for handoff and persist remaining text
             if (event.type === 'run-end') {
-              lastRunEndEvent = event;
-              if (event.result.handoff) {
-                detectedHandoff = event.result.handoff;
-              }
+              return Effect.gen(function* () {
+                yield* Ref.set(lastRunEndEventRef, event as RunEndEvent);
 
-              if (shouldPersistHistory) {
-                const remainingText = Array.from(stepStates.values())
-                  .filter(state => state.text && state.toolCalls.length === 0)
-                  .map(state => state.text)
-                  .join('');
-
-                if (remainingText) {
-                  return Effect.promise(async () => {
-                    await Effect.runPromise(
-                      self.contextStorage.addMessage(conversationId, {
-                        role: 'assistant',
-                        content: remainingText,
-                      })
-                    );
-                    stepStates.clear();
-                  });
+                if (event.result.handoff) {
+                  yield* Ref.set(detectedHandoffRef, event.result.handoff);
                 }
-              }
+
+                if (shouldPersistHistory) {
+                  const remainingText = Array.from(stepStates.values())
+                    .filter(state => state.text && state.toolCalls.length === 0)
+                    .map(state => state.text)
+                    .join('');
+
+                  if (remainingText) {
+                    yield* self.contextStorage.addMessage(conversationId, {
+                      role: 'assistant',
+                      content: remainingText,
+                    });
+                    stepStates.clear();
+                  }
+                }
+              });
             }
 
             return Effect.void;
           })
         );
 
-        // After the stream completes, check if we need to continue with a handoff
-        const streamWithHandoffContinuation = Stream.unwrap(
+        // Create handoff continuation stream - lazily evaluated after main stream completes
+        // This preserves event ordering and allows interruption to halt processing immediately
+        const handoffContinuation = Stream.unwrap(
           Effect.gen(function* () {
-            const allEvents = yield* Stream.runCollect(processedStream);
-            const eventsArray = Array.from(allEvents);
+            const detectedHandoff = yield* Ref.get(detectedHandoffRef);
+            const lastRunEndEvent = yield* Ref.get(lastRunEndEventRef);
 
-            // If no handoff or max depth reached, just return collected events
+            // If no handoff or max depth reached, return empty stream
             if (!detectedHandoff || handoffDepth >= MAX_HANDOFF_DEPTH) {
               if (handoffDepth >= MAX_HANDOFF_DEPTH && detectedHandoff) {
                 console.warn('Maximum handoff depth reached. Stopping handoff chain.');
               }
-              return Stream.fromIterable(eventsArray);
+              return Stream.empty;
             }
 
             // Handoff detected - create handoff event and continue with target agent
@@ -1201,7 +1217,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
               message: detectedHandoff.message || currentMessage,
               context: detectedHandoff.context,
               handoffDepth: handoffDepth + 1,
-              sequence: lastRunEndEvent ? lastRunEndEvent.sequence + 1 : eventsArray.length,
+              sequence: lastRunEndEvent ? lastRunEndEvent.sequence + 1 : 0,
               emittedAt: Date.now(),
             });
 
@@ -1216,8 +1232,8 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
               ? `\n\nContext: ${JSON.stringify(detectedHandoff.context)}`
               : '';
 
-            return Stream.fromIterable(eventsArray).pipe(
-              Stream.concat(Stream.make(handoffEvent)),
+            // Return handoff event followed by target agent stream
+            return Stream.make(handoffEvent).pipe(
               Stream.concat(
                 self.createAgentStreamWithHandoff(
                   detectedHandoff.agentId,
@@ -1233,7 +1249,9 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           })
         );
 
-        return streamWithHandoffContinuation as Stream.Stream<StreamEvent, MessageProcessorError, never>;
+        // Concat main stream with handoff continuation
+        // Events flow through processedStream without buffering, then handoff is appended
+        return Stream.concat(processedStream, handoffContinuation) as Stream.Stream<StreamEvent, MessageProcessorError, never>;
       })
     ) as Stream.Stream<StreamEvent, MessageProcessorError>;
   }

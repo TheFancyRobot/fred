@@ -22,19 +22,16 @@ import type {
   JoinNode,
 } from './graph';
 import type { PipelineContext } from './context';
-import type { ExecutorOptions } from './executor';
-import type { HookManager } from '../hooks/manager';
+import type { AgentManagerLike, ExecutorOptions, HookManagerLike } from './executor';
 import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { HookEvent, StepHookEventData, PipelineHookEventData } from '../hooks/types';
-import type { AgentManager } from '../agent/manager';
 import { isHandoffSignal, type HandoffSignal } from './handoff-tool';
 import { prepareHandoffContext } from './handoff';
 import type { AgentResponse } from '../agent/agent';
-import { Effect } from 'effect';
+import { Cause, Context, Effect, Exit, Layer } from 'effect';
 import { annotateSpan } from '../observability/otel';
-import { getCurrentCorrelationContext, getCurrentSpanIds, getCorrelationContext } from '../observability/context';
-import { ObservabilityService } from '../observability/service';
+import { getCurrentCorrelationContext, getCurrentSpanIds } from '../observability/context';
 
 /**
  * Graph execution result
@@ -54,12 +51,36 @@ export interface GraphExecutionResult {
   abortedBy?: string;
 }
 
+export type GraphExecutionError = Error;
+
+export interface GraphExecutorService {
+  executeGraphWorkflow(
+    config: GraphWorkflowConfig,
+    input: string,
+    options: GraphExecutorOptions
+  ): Effect.Effect<GraphExecutionResult, GraphExecutionError>;
+}
+
+export const GraphExecutorService = Context.GenericTag<GraphExecutorService>('GraphExecutorService');
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function runAsync<A>(thunk: () => PromiseLike<A> | A): Effect.Effect<A, Error> {
+  return Effect.tryPromise({
+    try: () => Promise.resolve(thunk()),
+    catch: toError,
+  });
+}
+
 /**
  * Graph executor options (extends ExecutorOptions)
  */
 export interface GraphExecutorOptions extends ExecutorOptions {
-  agentManager: AgentManager;
-  hookManager?: HookManager;
+  conversationId?: string;
+  agentManager: AgentManagerLike;
+  hookManager?: HookManagerLike;
   tracer?: Tracer;
   pipelineManager?: {
     getPipeline: (id: string) => { execute: (msg: string) => Promise<any> } | undefined;
@@ -155,11 +176,11 @@ export function selectNextNodes(
  * @param options - Executor options
  * @returns Graph execution result
  */
-export async function executeGraphWorkflow(
+export function executeGraphWorkflowEffect(
   config: GraphWorkflowConfig,
   input: string,
   options: GraphExecutorOptions
-): Promise<GraphExecutionResult> {
+): Effect.Effect<GraphExecutionResult, GraphExecutionError> {
   const { agentManager, hookManager, tracer, pipelineManager } = options;
 
   // Build graphology graph for topological ordering
@@ -207,10 +228,9 @@ export async function executeGraphWorkflow(
     workflowId: config.id,
   });
 
-  // Run annotation effect (fire and forget - best effort)
-  Effect.runPromise(graphAnnotation).catch(() => {
-    // Annotation failed, continue execution
-  });
+  return Effect.gen(function* () {
+    // Run annotation effect (fire and forget - best effort)
+    yield* Effect.fork(graphAnnotation.pipe(Effect.ignore));
 
   const pipelineData: PipelineHookEventData = {
     pipelineId: config.id,
@@ -218,7 +238,7 @@ export async function executeGraphWorkflow(
     context,
   };
 
-  try {
+    try {
     // Execute beforePipeline hooks with correlation context
     if (hookManager) {
       const correlationCtx = getCurrentCorrelationContext();
@@ -236,7 +256,7 @@ export async function executeGraphWorkflow(
         parentSpanId: spanIds.parentSpanId || correlationCtx?.parentSpanId,
         pipelineId: config.id,
       };
-      const beforeResult = await hookManager.executeHooksAndMerge('beforePipeline', beforeEvent);
+      const beforeResult = yield* runAsync(() => hookManager.executeHooksAndMerge('beforePipeline', beforeEvent));
 
       if (beforeResult.metadata) {
         context.metadata = { ...context.metadata, ...beforeResult.metadata };
@@ -258,7 +278,7 @@ export async function executeGraphWorkflow(
     // Fire config-specific beforePipeline hooks
     if (config.hooks?.beforePipeline) {
       for (const handler of config.hooks.beforePipeline) {
-        const result = await handler({ type: 'beforePipeline', data: pipelineData });
+        const result = yield* runAsync(() => handler({ type: 'beforePipeline', data: pipelineData }));
         if ((result as any)?.abort) {
           graphSpan?.setStatus('ok');
           graphSpan?.end();
@@ -312,30 +332,10 @@ export async function executeGraphWorkflow(
           ...(runId ? { 'fred.runId': runId } : {}),
         });
 
-        // Record fork via ObservabilityService (best-effort)
-        if (runId) {
-          const recordForkEffect = Effect.gen(function* () {
-            const service = yield* ObservabilityService;
-            const ctx = yield* getCorrelationContext;
-            yield* service.logStructured({
-              level: 'debug',
-              message: 'Graph fork execution',
-              metadata: {
-                graphId: config.id,
-                forkNodeId: nodeId,
-                branches: forkNode.branches,
-                ...ctx,
-              },
-            });
-          });
-
-          Effect.runPromise(recordForkEffect).catch(() => {
-            // Best-effort: ignore failures
-          });
-        }
+        void runId;
 
         // Execute all branches in parallel
-        const branchPromises = forkNode.branches.map(async (branchId) => {
+        const branchEffects = forkNode.branches.map((branchId) => Effect.gen(function* () {
           // Create isolated context for each branch
           const branchContext: PipelineContext = {
             ...context,
@@ -354,7 +354,7 @@ export async function executeGraphWorkflow(
           }
 
           // Execute branch node
-          const branchResult = await executeNode(
+          const branchResult = yield* executeNode(
             branchNode as GraphNode,
             branchContext,
             options,
@@ -363,9 +363,9 @@ export async function executeGraphWorkflow(
           );
 
           return { branchId, result: branchResult, context: branchContext };
-        });
+        }));
 
-        const branchResults = await Promise.all(branchPromises);
+        const branchResults = yield* Effect.all(branchEffects, { concurrency: 'unbounded' });
 
         // Record branch outputs
         for (const { branchId, result, context: branchCtx } of branchResults) {
@@ -412,28 +412,7 @@ export async function executeGraphWorkflow(
           ...(runId ? { 'fred.runId': runId } : {}),
         });
 
-        // Record join via ObservabilityService (best-effort)
-        if (runId) {
-          const recordJoinEffect = Effect.gen(function* () {
-            const service = yield* ObservabilityService;
-            const ctx = yield* getCorrelationContext;
-            yield* service.logStructured({
-              level: 'debug',
-              message: 'Graph join execution',
-              metadata: {
-                graphId: config.id,
-                joinNodeId: nodeId,
-                sources: joinNode.sources,
-                strategy: joinNode.mergeStrategy,
-                ...ctx,
-              },
-            });
-          });
-
-          Effect.runPromise(recordJoinEffect).catch(() => {
-            // Best-effort: ignore failures
-          });
-        }
+        void runId;
 
         // Merge outputs from source nodes
         const sourceOutputs = joinNode.sources.map(srcId => nodeOutputs[srcId]);
@@ -490,10 +469,10 @@ export async function executeGraphWorkflow(
         stepName: nodeId,
       });
 
-      Effect.runPromise(nodeAnnotation).catch(() => {});
+      yield* Effect.fork(nodeAnnotation.pipe(Effect.ignore));
 
       try {
-        const result = await executeNode(
+        const result = yield* executeNode(
           node as GraphNode,
           context,
           options,
@@ -551,29 +530,7 @@ export async function executeGraphWorkflow(
             });
           }
 
-          // Record branch via ObservabilityService (best-effort)
-          const runId = context.metadata.runId as string | undefined;
-          if (runId) {
-            const recordBranchEffect = Effect.gen(function* () {
-              const service = yield* ObservabilityService;
-              const ctx = yield* getCorrelationContext;
-              yield* service.logStructured({
-                level: 'debug',
-                message: 'Graph branch decision',
-                metadata: {
-                  graphId: config.id,
-                  nodeId,
-                  takenNodes: nextNodes,
-                  notTakenNodes: notTakenEdges.map(e => e.to),
-                  ...ctx,
-                },
-              });
-            });
-
-            Effect.runPromise(recordBranchEffect).catch(() => {
-              // Best-effort: ignore failures
-            });
-          }
+          void (context.metadata.runId as string | undefined);
         }
 
         for (const nextId of nextNodes) {
@@ -623,16 +580,16 @@ export async function executeGraphWorkflow(
         parentSpanId: afterSpanIds.parentSpanId || afterCorrelationCtx?.parentSpanId,
         pipelineId: config.id,
       };
-      await hookManager.executeHooksAndMerge('afterPipeline', afterEvent);
+      yield* runAsync(() => hookManager.executeHooksAndMerge('afterPipeline', afterEvent));
     }
 
     // Fire config-specific afterPipeline hooks
     if (config.hooks?.afterPipeline) {
       for (const handler of config.hooks.afterPipeline) {
-        await handler({
+        yield* runAsync(() => handler({
           type: 'afterPipeline',
           data: { ...pipelineData, context },
-        });
+        }));
       }
     }
 
@@ -654,7 +611,7 @@ export async function executeGraphWorkflow(
         type: 'onPipelineError',
         data: { ...pipelineData, error: err },
       };
-      await hookManager.executeHooks('onPipelineError', errorEvent);
+      yield* runAsync(() => hookManager.executeHooks('onPipelineError', errorEvent)).pipe(Effect.ignore);
     }
 
     graphSpan?.setStatus('error', err.message);
@@ -667,205 +624,216 @@ export async function executeGraphWorkflow(
       executedNodes,
       error: err,
     };
-  }
+    }
+  });
+}
+
+export const GraphExecutorServiceLive = Layer.succeed(GraphExecutorService, {
+  executeGraphWorkflow: (config, input, options) => executeGraphWorkflowEffect(config, input, options),
+});
+
+/**
+ * @deprecated Use `GraphExecutorService.executeGraphWorkflow` for Effect-native composition.
+ */
+export async function executeGraphWorkflow(
+  config: GraphWorkflowConfig,
+  input: string,
+  options: GraphExecutorOptions
+): Promise<GraphExecutionResult> {
+  return new Promise((resolve) => {
+    Effect.runCallback(executeGraphWorkflowEffect(config, input, options), {
+      onExit: (exit) => {
+        if (Exit.isSuccess(exit)) {
+          resolve(exit.value);
+          return;
+        }
+        const error = Cause.squash(exit.cause);
+        resolve({
+          success: false,
+          context: {
+            pipelineId: config.id,
+            input,
+            outputs: {},
+            history: [],
+            metadata: {},
+          },
+          outputs: {},
+          executedNodes: [],
+          error: toError(error),
+        });
+      },
+    });
+  });
 }
 
 /**
  * Execute a single graph node.
  * Helper function that delegates to appropriate executor based on node type.
  */
-async function executeNode(
+function executeNode(
   node: GraphNode,
   context: PipelineContext,
   options: GraphExecutorOptions,
   config: GraphWorkflowConfig,
-  hookManager?: HookManager
-): Promise<unknown> {
+  hookManager?: HookManagerLike
+): Effect.Effect<unknown, Error> {
   const { agentManager, pipelineManager, tracer } = options;
-
-  // Create step event data for hooks
-  const stepData: StepHookEventData = {
-    pipelineId: config.id,
-    input: context.input,
-    context,
-    step: {
-      name: node.name || node.id,
-      type: node.type,
-      index: 0, // Not meaningful in graph context
-    },
-  };
-
-  // Execute beforeStep hooks with correlation context
-  if (hookManager) {
-    const correlationCtx = getCurrentCorrelationContext();
-    const spanIds = getCurrentSpanIds();
-    const beforeEvent: HookEvent = {
-      type: 'beforeStep',
-      data: stepData,
-      // Populate correlation fields
-      runId: context.metadata.runId as string | undefined || correlationCtx?.runId,
-      conversationId: context.conversationId || correlationCtx?.conversationId,
-      intentId: correlationCtx?.intentId,
-      agentId: (node.type === 'agent' ? node.agentId : undefined) || correlationCtx?.agentId,
-      timestamp: new Date().toISOString(),
-      traceId: spanIds.traceId || correlationCtx?.traceId,
-      spanId: spanIds.spanId || correlationCtx?.spanId,
-      parentSpanId: spanIds.parentSpanId || correlationCtx?.parentSpanId,
+  return Effect.gen(function* () {
+    // Create step event data for hooks
+    const stepData: StepHookEventData = {
       pipelineId: config.id,
-      stepName: node.name || node.id,
+      input: context.input,
+      context,
+      step: {
+        name: node.name || node.id,
+        type: node.type,
+        index: 0,
+      },
     };
-    const beforeResult = await hookManager.executeHooksAndMerge('beforeStep', beforeEvent);
 
-    if (beforeResult.metadata) {
-      context.metadata = { ...context.metadata, ...beforeResult.metadata };
-    }
+    if (hookManager) {
+      const correlationCtx = getCurrentCorrelationContext();
+      const spanIds = getCurrentSpanIds();
+      const beforeEvent: HookEvent = {
+        type: 'beforeStep',
+        data: stepData,
+        runId: context.metadata.runId as string | undefined || correlationCtx?.runId,
+        conversationId: context.conversationId || correlationCtx?.conversationId,
+        intentId: correlationCtx?.intentId,
+        agentId: (node.type === 'agent' ? node.agentId : undefined) || correlationCtx?.agentId,
+        timestamp: new Date().toISOString(),
+        traceId: spanIds.traceId || correlationCtx?.traceId,
+        spanId: spanIds.spanId || correlationCtx?.spanId,
+        parentSpanId: spanIds.parentSpanId || correlationCtx?.parentSpanId,
+        pipelineId: config.id,
+        stepName: node.name || node.id,
+      };
+      const beforeResult = yield* runAsync(() => hookManager.executeHooksAndMerge('beforeStep', beforeEvent));
 
-    if (beforeResult.skip) {
-      return undefined;
-    }
+      if (beforeResult.metadata) {
+        context.metadata = { ...context.metadata, ...beforeResult.metadata };
+      }
 
-    if ((beforeResult as any).abort) {
-      throw new Error('Execution aborted by beforeStep hook');
-    }
-  }
-
-  // Fire config-specific beforeStep hooks
-  if (config.hooks?.beforeStep) {
-    for (const handler of config.hooks.beforeStep) {
-      const hookResult = await handler({ type: 'beforeStep', data: stepData });
-      if (hookResult?.skip) {
+      if (beforeResult.skip) {
         return undefined;
       }
-      if (hookResult && 'abort' in hookResult && (hookResult as any).abort) {
-        throw new Error('Execution aborted by graph beforeStep hook');
+
+      if ((beforeResult as any).abort) {
+        return yield* Effect.fail(new Error('Execution aborted by beforeStep hook'));
       }
     }
-  }
 
-  // Execute node based on type
-  let result: unknown;
-
-  switch (node.type) {
-    case 'agent': {
-      const agent = agentManager.getAgent(node.agentId);
-      if (!agent) {
-        throw new Error(`Agent "${node.agentId}" not found`);
+    if (config.hooks?.beforeStep) {
+      for (const handler of config.hooks.beforeStep) {
+        const hookResult = yield* runAsync(() => handler({ type: 'beforeStep', data: stepData }));
+        if (hookResult?.skip) {
+          return undefined;
+        }
+        if (hookResult && 'abort' in hookResult && (hookResult as any).abort) {
+          return yield* Effect.fail(new Error('Execution aborted by graph beforeStep hook'));
+        }
       }
-      const agentResult = await agent.processMessage(context.input, context.history);
+    }
 
-      // Check if agent returned a handoff request
-      if (isHandoffSignal(agentResult)) {
-        result = await handleHandoff(
-          agentResult,
-          node.agentId,
-          context,
-          config,
-          options,
-          hookManager
+    let result: unknown;
+
+    switch (node.type) {
+      case 'agent': {
+        const agent = agentManager.getAgent(node.agentId);
+        if (!agent) {
+          return yield* Effect.fail(new Error(`Agent "${node.agentId}" not found`));
+        }
+        const agentResult = yield* agent.processMessage(context.input, context.history).pipe(
+          Effect.mapError(toError)
         );
-      } else {
-        result = agentResult;
+
+        if (isHandoffSignal(agentResult)) {
+          result = yield* handleHandoff(
+            agentResult,
+            node.agentId,
+            context,
+            config,
+            options,
+            hookManager
+          );
+        } else {
+          result = agentResult;
+        }
+        break;
       }
-      break;
-    }
 
-    case 'function': {
-      result = await node.fn(context);
-      break;
-    }
-
-    case 'conditional': {
-      const conditionResult = await node.condition(context);
-      result = { conditionResult };
-      break;
-    }
-
-    case 'pipeline': {
-      if (!pipelineManager) {
-        throw new Error('Pipeline manager required for pipeline nodes');
+      case 'function': {
+        result = yield* runAsync(() => node.fn(context));
+        break;
       }
-      const nestedPipeline = pipelineManager.getPipeline(node.pipelineId);
-      if (!nestedPipeline) {
-        throw new Error(`Nested pipeline "${node.pipelineId}" not found`);
+
+      case 'conditional': {
+        const conditionResult = yield* runAsync(() => node.condition(context));
+        result = { conditionResult };
+        break;
       }
-      result = await nestedPipeline.execute(context.input);
-      break;
+
+      case 'pipeline': {
+        if (!pipelineManager) {
+          return yield* Effect.fail(new Error('Pipeline manager required for pipeline nodes'));
+        }
+        const nestedPipeline = pipelineManager.getPipeline(node.pipelineId);
+        if (!nestedPipeline) {
+          return yield* Effect.fail(new Error(`Nested pipeline "${node.pipelineId}" not found`));
+        }
+        result = yield* runAsync(() => nestedPipeline.execute(context.input));
+        break;
+      }
+
+      default:
+        return yield* Effect.fail(new Error(`Unknown node type: ${(node as any).type}`));
     }
 
-    default:
-      throw new Error(`Unknown node type: ${(node as any).type}`);
-  }
+    void (context.metadata.runId as string | undefined);
 
-  // Record node execution via ObservabilityService (best-effort)
-  const runId = context.metadata.runId as string | undefined;
-  if (runId) {
-    const recordNodeEffect = Effect.gen(function* () {
-      const service = yield* ObservabilityService;
-      const ctx = yield* getCorrelationContext;
-      yield* service.recordRunStepSpan(runId, {
-        stepName: node.name || node.id,
-        startTime: Date.now(), // Approximate - actual start was earlier
-        endTime: Date.now(),
-        status: 'success',
-        metadata: {
-          graphId: config.id,
-          nodeType: node.type,
-          nodeId: node.id,
-          ...ctx,
-        },
-      });
-    });
-
-    Effect.runPromise(recordNodeEffect).catch(() => {
-      // Best-effort: ignore failures
-    });
-  }
-
-  // Execute afterStep hooks with correlation context
-  if (hookManager) {
-    const afterData: StepHookEventData = { ...stepData, result };
-    const afterCorrelationCtx = getCurrentCorrelationContext();
-    const afterSpanIds = getCurrentSpanIds();
-    const afterEvent: HookEvent = {
-      type: 'afterStep',
-      data: afterData,
-      // Populate correlation fields
-      runId: context.metadata.runId as string | undefined || afterCorrelationCtx?.runId,
-      conversationId: context.conversationId || afterCorrelationCtx?.conversationId,
-      intentId: afterCorrelationCtx?.intentId,
-      agentId: (node.type === 'agent' ? node.agentId : undefined) || afterCorrelationCtx?.agentId,
-      timestamp: new Date().toISOString(),
-      traceId: afterSpanIds.traceId || afterCorrelationCtx?.traceId,
-      spanId: afterSpanIds.spanId || afterCorrelationCtx?.spanId,
-      parentSpanId: afterSpanIds.parentSpanId || afterCorrelationCtx?.parentSpanId,
-      pipelineId: config.id,
-      stepName: node.name || node.id,
-    };
-    const afterResult = await hookManager.executeHooksAndMerge('afterStep', afterEvent);
-
-    if (afterResult.metadata) {
-      context.metadata = { ...context.metadata, ...afterResult.metadata };
-    }
-
-    if ((afterResult as any).abort) {
-      throw new Error('Execution aborted by afterStep hook');
-    }
-  }
-
-  // Fire config-specific afterStep hooks
-  if (config.hooks?.afterStep) {
-    for (const handler of config.hooks.afterStep) {
-      const handlerResult = await handler({
+    if (hookManager) {
+      const afterData: StepHookEventData = { ...stepData, result };
+      const afterCorrelationCtx = getCurrentCorrelationContext();
+      const afterSpanIds = getCurrentSpanIds();
+      const afterEvent: HookEvent = {
         type: 'afterStep',
-        data: { ...stepData, result },
-      });
-      if ((handlerResult as any)?.abort) {
-        throw new Error('Execution aborted by graph afterStep hook');
+        data: afterData,
+        runId: context.metadata.runId as string | undefined || afterCorrelationCtx?.runId,
+        conversationId: context.conversationId || afterCorrelationCtx?.conversationId,
+        intentId: afterCorrelationCtx?.intentId,
+        agentId: (node.type === 'agent' ? node.agentId : undefined) || afterCorrelationCtx?.agentId,
+        timestamp: new Date().toISOString(),
+        traceId: afterSpanIds.traceId || afterCorrelationCtx?.traceId,
+        spanId: afterSpanIds.spanId || afterCorrelationCtx?.spanId,
+        parentSpanId: afterSpanIds.parentSpanId || afterCorrelationCtx?.parentSpanId,
+        pipelineId: config.id,
+        stepName: node.name || node.id,
+      };
+      const afterResult = yield* runAsync(() => hookManager.executeHooksAndMerge('afterStep', afterEvent));
+
+      if (afterResult.metadata) {
+        context.metadata = { ...context.metadata, ...afterResult.metadata };
+      }
+
+      if ((afterResult as any).abort) {
+        return yield* Effect.fail(new Error('Execution aborted by afterStep hook'));
       }
     }
-  }
 
-  return result;
+    if (config.hooks?.afterStep) {
+      for (const handler of config.hooks.afterStep) {
+        const handlerResult = yield* runAsync(() => handler({
+          type: 'afterStep',
+          data: { ...stepData, result },
+        }));
+        if ((handlerResult as any)?.abort) {
+          return yield* Effect.fail(new Error('Execution aborted by graph afterStep hook'));
+        }
+      }
+    }
+
+    return result;
+  });
 }
 
 /**
@@ -882,109 +850,100 @@ async function executeNode(
  * @param hookManager - Optional hook manager
  * @returns Result from target agent (or handoff chain)
  */
-async function handleHandoff(
+function handleHandoff(
   handoffRequest: HandoffSignal,
   sourceAgentId: string,
   context: PipelineContext,
   config: GraphWorkflowConfig,
   options: GraphExecutorOptions,
-  hookManager?: HookManager
-): Promise<unknown> {
+  hookManager?: HookManagerLike
+): Effect.Effect<unknown, Error> {
   const { agentManager, tracer } = options;
   const { targetAgent, reason } = handoffRequest;
+  return Effect.gen(function* () {
+    if (!config.handoffs?.[sourceAgentId]?.includes(targetAgent)) {
+      const availableTargets = config.handoffs?.[sourceAgentId] || [];
+      const error = `Handoff to '${targetAgent}' not allowed. Available: ${availableTargets.join(', ')}`;
 
-  // Validate against workflow handoff config
-  if (!config.handoffs?.[sourceAgentId]?.includes(targetAgent)) {
-    // Invalid handoff target - return error to source agent
-    const availableTargets = config.handoffs?.[sourceAgentId] || [];
-    const error = `Handoff to '${targetAgent}' not allowed. Available: ${availableTargets.join(', ')}`;
-
-    return {
-      type: 'handoff_error',
-      error,
-      availableTargets,
-    };
-  }
-
-  // Prepare handoff context with full thread history
-  const handoffContext = prepareHandoffContext(
-    { targetAgent, reason },
-    context,
-    {
-      sourceAgent: sourceAgentId,
-      allowedTargets: config.handoffs[sourceAgentId],
+      return {
+        type: 'handoff_error',
+        error,
+        availableTargets,
+      };
     }
-  );
 
-  // Fire afterStep hook with handoff metadata
-  if (hookManager) {
-    const handoffStepData: StepHookEventData = {
-      pipelineId: config.id,
-      input: context.input,
+    const handoffContext = prepareHandoffContext(
+      { targetAgent, reason },
       context,
-      step: {
-        name: `handoff-${sourceAgentId}-to-${targetAgent}`,
-        type: 'agent',
-        index: 0,
-      },
-      result: {
-        type: 'handoff',
-        handoffFrom: sourceAgentId,
-        handoffTo: targetAgent,
-        handoffReason: reason,
-      },
-    };
-
-    const afterEvent: HookEvent = {
-      type: 'afterStep',
-      data: handoffStepData,
-    };
-
-    await hookManager.executeHooksAndMerge('afterStep', afterEvent);
-  }
-
-  // Update context with handoff context (includes history transfer)
-  context.history = handoffContext.history;
-  context.outputs = { ...context.outputs, ...handoffContext.outputs };
-
-  // Update context metadata with handoff chain
-  // Add source agent to chain (target will be added if it also hands off)
-  const handoffChain = (context.metadata.handoffChain as string[] | undefined) || [];
-  const updatedChain = [...handoffChain, sourceAgentId];
-
-  context.metadata = {
-    ...context.metadata,
-    ...handoffContext.metadata,
-    handoffFrom: sourceAgentId,
-    handoffTo: targetAgent,
-    handoffReason: reason,
-    handoffChain: updatedChain,
-  };
-
-  // Create span for handoff execution
-  const handoffSpan = tracer?.startSpan(`graph.handoff.${sourceAgentId}-to-${targetAgent}`, {
-    kind: SpanKind.INTERNAL,
-    attributes: {
-      'handoff.from': sourceAgentId,
-      'handoff.to': targetAgent,
-      'handoff.reason': reason || '',
-      'handoff.chainDepth': handoffChain.length,
-    },
-  });
-
-  try {
-    // Execute target agent with transferred context
-    const targetAgentInstance = agentManager.getAgent(targetAgent);
-    if (!targetAgentInstance) {
-      throw new Error(`Target agent "${targetAgent}" not found for handoff`);
-    }
-
-    const targetResult = await targetAgentInstance.processMessage(
-      context.input,
-      context.history
+      {
+        sourceAgent: sourceAgentId,
+        allowedTargets: config.handoffs[sourceAgentId],
+      }
     );
 
-    // Check if target agent also requested a handoff (chaining)
+    if (hookManager) {
+      const handoffStepData: StepHookEventData = {
+        pipelineId: config.id,
+        input: context.input,
+        context,
+        step: {
+          name: `handoff-${sourceAgentId}-to-${targetAgent}`,
+          type: 'agent',
+          index: 0,
+        },
+        result: {
+          type: 'handoff',
+          handoffFrom: sourceAgentId,
+          handoffTo: targetAgent,
+          handoffReason: reason,
+        },
+      };
+
+      const afterEvent: HookEvent = {
+        type: 'afterStep',
+        data: handoffStepData,
+      };
+
+      yield* runAsync(() => hookManager.executeHooksAndMerge('afterStep', afterEvent));
+    }
+
+    context.history = handoffContext.history;
+    context.outputs = { ...context.outputs, ...handoffContext.outputs };
+
+    const handoffChain = (context.metadata.handoffChain as string[] | undefined) || [];
+    const updatedChain = [...handoffChain, sourceAgentId];
+
+    context.metadata = {
+      ...context.metadata,
+      ...handoffContext.metadata,
+      handoffFrom: sourceAgentId,
+      handoffTo: targetAgent,
+      handoffReason: reason,
+      handoffChain: updatedChain,
+    };
+
+    const handoffSpan = tracer?.startSpan(`graph.handoff.${sourceAgentId}-to-${targetAgent}`, {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'handoff.from': sourceAgentId,
+        'handoff.to': targetAgent,
+        'handoff.reason': reason || '',
+        'handoff.chainDepth': handoffChain.length,
+      },
+    });
+
+    const targetAgentInstance = agentManager.getAgent(targetAgent);
+    if (!targetAgentInstance) {
+      handoffSpan?.setStatus('error', `Target agent "${targetAgent}" not found for handoff`);
+      handoffSpan?.end();
+      return yield* Effect.fail(new Error(`Target agent "${targetAgent}" not found for handoff`));
+    }
+
+    const targetResult = yield* targetAgentInstance.processMessage(
+      context.input,
+      context.history
+    ).pipe(Effect.mapError(toError));
+
     if (isHandoffSignal(targetResult)) {
       handoffSpan?.setAttributes({
         'handoff.chained': true,
@@ -992,8 +951,7 @@ async function handleHandoff(
       });
       handoffSpan?.end();
 
-      // Recursive handoff - no depth limit
-      return await handleHandoff(
+      return yield* handleHandoff(
         targetResult,
         targetAgent,
         context,
@@ -1005,15 +963,11 @@ async function handleHandoff(
 
     handoffSpan?.setStatus('ok');
     handoffSpan?.end();
-
-    // Target agent completed successfully
     return targetResult;
-  } catch (error) {
-    if (handoffSpan && error instanceof Error) {
-      handoffSpan.recordException(error);
-      handoffSpan.setStatus('error', error.message);
-    }
-    handoffSpan?.end();
-    throw error;
-  }
+  }).pipe(
+    Effect.catchAll((error) => {
+      const err = toError(error);
+      return Effect.fail(err);
+    })
+  );
 }

@@ -76,24 +76,33 @@ Desktop.ini
 # TypeScript
 *.tsbuildinfo
 
-# Config files (user-specific)
-config.local.json
-fred.config.local.json
-.env.example.local
+# Config files (user-specific, repo root only)
+/fred.config.yaml
+/fred.config.json
+/config.local.json
+/fred.config.local.json
+/.env.example.local
+
+# Local agent markdown files (for dev testing, repo root only)
+/agents/
 
 # Flox local state
 .flox/
 
 # Planning documents (local only)
-.planning/
+/.planning/
+/.agent-vault/
 
 # Claude
-.claude/
+/.claude/
 
 # Fred local runtime/eval artifacts
-.fred/
+/.fred/
 
 # SQLite runtime files
-fred.db
-fred.db-shm
-fred.db-wal
+/fred.db
+/fred.db-shm
+/fred.db-wal
+
+# Example runtime data
+examples/*/data/notebook.md

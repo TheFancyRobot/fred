@@ -1,0 +1,8 @@
+providers:
+  - id: openrouter
+    modelDefaults:
+      model: openrouter/free
+
+routing:
+  defaultAgent: billing
+  rules: []

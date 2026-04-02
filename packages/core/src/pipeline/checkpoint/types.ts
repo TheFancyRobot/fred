@@ -106,6 +106,15 @@ export interface CheckpointStorage {
   listByStatus(status: CheckpointStatus): Promise<Checkpoint[]>;
 
   /**
+   * Get the latest checkpoint for a pipeline (highest step, timestamp tie-break).
+   * Used by resume to find the most recent resumable checkpoint for a pipeline.
+   *
+   * @param pipelineId - The pipeline identifier
+   * @returns The latest checkpoint or null if none exists
+   */
+  getLatestByPipelineId(pipelineId: string): Promise<Checkpoint | null>;
+
+  /**
    * Close connection pool/database.
    * Call this when shutting down to release resources.
    */

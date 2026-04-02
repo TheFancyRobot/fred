@@ -1,0 +1,17 @@
+providers:
+  - id: openrouter
+    modelDefaults:
+      model: openrouter/free
+
+mcpServers:
+  filesystem:
+    transport: stdio
+    command: npx
+    args:
+      - -y
+      - '@modelcontextprotocol/server-filesystem'
+      - /tmp/mcp-demo
+
+routing:
+  defaultAgent: file-assistant
+  rules: []

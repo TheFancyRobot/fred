@@ -5,9 +5,12 @@ import {
   renderTranscriptContent,
   renderStatusContent,
   buildStatusBadges,
+  getToolBlockSummaryPresentation,
+  sortToolBlocksByParent,
   DEFAULT_LAYOUT,
 } from '../../../packages/cli/src/tui/layout.js';
-import { createInitialTuiState } from '../../../packages/cli/src/tui/state.js';
+import { createInitialTuiState, type ToolBlockState } from '../../../packages/cli/src/tui/state.js';
+import { DEFAULT_TUI_THEME } from '../../../packages/cli/src/tui/theme.js';
 
 describe('TUI Layout', () => {
   describe('Default layout config', () => {
@@ -201,6 +204,22 @@ describe('TUI Layout', () => {
       expect(sidebarBadge?.priority).toBe(100);
     });
 
+    test('browser research summaries include the originating agent when provided', () => {
+      const summary = getToolBlockSummaryPresentation({
+        toolCallId: 'tool-1',
+        toolName: 'agent_browser_research',
+        originAgentId: 'web-researcher',
+        kind: 'tool',
+        depth: 4,
+        status: 'in-progress',
+        input: { query: 'gold standard history' },
+        startedAt: 1,
+        expanded: true,
+      }, true, 0, DEFAULT_TUI_THEME);
+
+      expect(summary.content).toContain('web-researcher - query: gold standard history');
+    });
+
     test('sidebar focused shows j/k nav and session actions', () => {
       const state = createInitialTuiState();
       state.focusedPane = 'sidebar';
@@ -373,7 +392,7 @@ describe('TUI Layout', () => {
       const content = renderSidebarContent(state, true);
       expect(content.lines[0]).toBe('[Command Palette]');
       expect(content.lines[1]).toContain('focus');
-      expect(content.lines.join('\n')).toContain('Focus Next Pane');
+      expect(content.lines.join('\n')).toContain('focus next pane');
     });
 
     test('degrades status output for compact widths', () => {
@@ -450,6 +469,105 @@ describe('TUI Layout', () => {
       const content = renderTranscriptContent(state, false);
 
       expect(content.lines.length).toBeLessThanOrEqual(state.transcript.viewport.visibleLines);
+    });
+  });
+
+  describe('sortToolBlocksByParent', () => {
+    function makeBlock(overrides: Partial<ToolBlockState> & { toolName: string }): ToolBlockState {
+      return {
+        toolCallId: `tc-${overrides.toolName}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'task',
+        depth: 0,
+        status: 'in-progress',
+        input: {},
+        startedAt: Date.now(),
+        expanded: true,
+        ...overrides,
+      };
+    }
+
+    test('returns empty array unchanged', () => {
+      expect(sortToolBlocksByParent([])).toEqual([]);
+    });
+
+    test('returns single block unchanged', () => {
+      const block = makeBlock({ toolName: 'a' });
+      expect(sortToolBlocksByParent([block])).toEqual([block]);
+    });
+
+    test('returns flat list unchanged when no parent-child relationships', () => {
+      const a = makeBlock({ toolName: 'a', depth: 3 });
+      const b = makeBlock({ toolName: 'b', depth: 3 });
+      const c = makeBlock({ toolName: 'c', depth: 3 });
+      expect(sortToolBlocksByParent([a, b, c])).toEqual([a, b, c]);
+    });
+
+    test('groups children under their parent agent', () => {
+      const official = makeBlock({ toolName: 'web-researcher', depth: 3, startedAt: 100 });
+      const market = makeBlock({ toolName: 'market-researcher', depth: 3, startedAt: 200 });
+      const risk = makeBlock({ toolName: 'risk-analyst', depth: 3, startedAt: 300 });
+      const child1 = makeBlock({ toolName: 'browser_research', depth: 4, originAgentId: 'web-researcher' });
+      const child2 = makeBlock({ toolName: 'browser_research', depth: 4, originAgentId: 'market-researcher' });
+      const child3 = makeBlock({ toolName: 'browser_research', depth: 4, originAgentId: 'risk-analyst' });
+
+      // Input: parents first, then all children (the bug scenario)
+      const input = [official, market, risk, child1, child2, child3];
+      const sorted = sortToolBlocksByParent(input);
+
+      // Expected: each parent followed by its children, parents sorted by startedAt
+      expect(sorted).toEqual([official, child1, market, child2, risk, child3]);
+    });
+
+    test('sorts parents by startedAt for deterministic parallel task ordering', () => {
+      // Simulate nondeterministic arrival: risk arrives before web-researcher
+      const risk = makeBlock({ toolName: 'risk-analyst', depth: 3, startedAt: 100 });
+      const web = makeBlock({ toolName: 'web-researcher', depth: 3, startedAt: 300 });
+      const market = makeBlock({ toolName: 'market-researcher', depth: 3, startedAt: 200 });
+      const child1 = makeBlock({ toolName: 'browser_research', depth: 4, originAgentId: 'web-researcher' });
+
+      // Input: blocks in arrival order (risk first, then web, then market, then child)
+      const input = [risk, web, market, child1];
+      const sorted = sortToolBlocksByParent(input);
+
+      // Expected: parents sorted by startedAt, children interleaved under their parent
+      expect(sorted).toEqual([risk, market, web, child1]);
+    });
+
+    test('handles multiple children per parent', () => {
+      const parent = makeBlock({ toolName: 'research-agent', depth: 3 });
+      const child1 = makeBlock({ toolName: 'browser', depth: 4, originAgentId: 'research-agent' });
+      const child2 = makeBlock({ toolName: 'fetch', depth: 4, originAgentId: 'research-agent' });
+
+      const sorted = sortToolBlocksByParent([parent, child1, child2]);
+      expect(sorted).toEqual([parent, child1, child2]);
+    });
+
+    test('uses parentToolCallId to keep duplicate agent branches separated', () => {
+      const parent1 = makeBlock({ toolCallId: 'web-1', toolName: 'web-researcher', depth: 4, startedAt: 100 });
+      const parent2 = makeBlock({ toolCallId: 'web-2', toolName: 'web-researcher', depth: 4, startedAt: 200 });
+      const child1 = makeBlock({ toolName: 'browser', depth: 5, originAgentId: 'web-researcher', parentToolCallId: 'web-1', startedAt: 110 });
+      const child2 = makeBlock({ toolName: 'browser', depth: 5, originAgentId: 'web-researcher', parentToolCallId: 'web-2', startedAt: 210 });
+
+      const sorted = sortToolBlocksByParent([parent1, parent2, child1, child2]);
+      expect(sorted).toEqual([parent1, child1, parent2, child2]);
+    });
+
+    test('preserves blocks without originAgentId in original order', () => {
+      const a = makeBlock({ toolName: 'step-a', depth: 3 });
+      const b = makeBlock({ toolName: 'step-b', depth: 3 });
+      const orphan = makeBlock({ toolName: 'standalone-tool', depth: 4 });
+
+      const sorted = sortToolBlocksByParent([a, b, orphan]);
+      expect(sorted).toEqual([a, b, orphan]);
+    });
+
+    test('handles children whose originAgentId does not match any parent toolName', () => {
+      const parent = makeBlock({ toolName: 'agent-a', depth: 3 });
+      const orphanChild = makeBlock({ toolName: 'tool', depth: 4, originAgentId: 'nonexistent-agent' });
+
+      const sorted = sortToolBlocksByParent([parent, orphanChild]);
+      // orphanChild's originAgentId doesn't match any parent, so it stays as-is
+      expect(sorted).toEqual([parent, orphanChild]);
     });
   });
 });

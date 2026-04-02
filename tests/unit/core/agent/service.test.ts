@@ -1,29 +1,51 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { Effect, Layer, Ref } from 'effect';
+import { describe, it, expect } from 'bun:test';
+import { Effect, Layer } from 'effect';
 import { AgentService, AgentServiceLive } from '../../../../packages/core/src/agent/service';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
-import { AgentNotFoundError, AgentAlreadyExistsError, AgentCreationError } from '../../../../packages/core/src/agent/errors';
+import {
+  AgentNotFoundError,
+  AgentAlreadyExistsError,
+  AgentCreationError,
+  getAgentAlreadyExistsMessage,
+  getAgentCreationMessage,
+  getAgentNotFoundMessage,
+} from '../../../../packages/core/src/agent/errors';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
+import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 
-/**
- * Unit tests for AgentService
- *
- * Note: Full agent creation tests require mocking AgentFactory behavior, which is complex.
- * These tests verify the service interface and error handling.
- * Integration tests would verify full agent creation with real providers.
- */
 describe('AgentService', () => {
-  // Create test runtime with all dependencies
-  const TestLayer = AgentServiceLive.pipe(
-    Layer.provide(ToolRegistryServiceLive),
-    Layer.provide(ProviderRegistryServiceLive),
-    Layer.provide(ToolGateServiceLive.pipe(Layer.provide(ToolRegistryServiceLive)))
+  const ToolLayer = ToolRegistryServiceLive;
+  const ProviderLayer = ProviderRegistryServiceLive;
+  const ToolGateLayer = ToolGateServiceLive.pipe(Layer.provide(ToolLayer));
+  const AgentLayer = AgentServiceLive.pipe(
+    Layer.provide(ToolLayer),
+    Layer.provide(ProviderLayer),
+    Layer.provide(ToolGateLayer)
   );
+  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ToolLayer);
 
   const runTest = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
     Effect.runPromise(effect.pipe(Effect.provide(TestLayer)) as Effect.Effect<A, E, never>);
+
+  const createMockProviderDefinition = (id: string): ProviderDefinition => ({
+    id,
+    aliases: [],
+    config: {
+      modelDefaults: { model: 'test-model' },
+    },
+    getModel: () => Effect.succeed({} as any),
+    layer: Layer.empty as any,
+  });
+
+  const createAgentConfig = (id: string, overrides?: Partial<AgentConfig>): AgentConfig => ({
+    id,
+    platform: 'openai',
+    model: 'test-model',
+    systemMessage: 'You are a test agent',
+    ...overrides,
+  });
 
   describe('hasAgent', () => {
     it('should return false for non-existent agent', async () => {
@@ -53,7 +75,120 @@ describe('AgentService', () => {
       if (result._tag === 'Left') {
         expect(result.left).toBeInstanceOf(AgentNotFoundError);
         expect(result.left.id).toBe('non-existent');
+        expect(result.left.message).toBe(getAgentNotFoundMessage('non-existent'));
       }
+    });
+  });
+
+  describe('createAgent', () => {
+    it('creates an agent when provider exists', async () => {
+      const createdId = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const service = yield* AgentService;
+          const created = yield* service.createAgent(createAgentConfig('writer'));
+          return created.id;
+        })
+      );
+
+      expect(createdId).toBe('writer');
+    });
+
+    it('fails with AgentAlreadyExistsError for duplicate id', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const service = yield* AgentService;
+          yield* service.createAgent(createAgentConfig('duplicate'));
+
+          return yield* service.createAgent(createAgentConfig('duplicate')).pipe(Effect.either);
+        })
+      );
+
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Left') {
+        expect(result.left).toBeInstanceOf(AgentAlreadyExistsError);
+        expect(result.left.id).toBe('duplicate');
+        expect(result.left.message).toBe(getAgentAlreadyExistsMessage('duplicate'));
+      }
+    });
+
+    it('maps missing provider to AgentCreationError', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const service = yield* AgentService;
+          return yield* service.createAgent(createAgentConfig('missing-provider')).pipe(Effect.either);
+        })
+      );
+
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Left') {
+        expect(result.left).toBeInstanceOf(AgentCreationError);
+        expect(result.left.id).toBe('missing-provider');
+        expect(result.left.message).toBe(getAgentCreationMessage('missing-provider'));
+        expect(result.left.cause).toBeDefined();
+      }
+    });
+
+    it('does not partially register agent when creation fails', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          const service = yield* AgentService;
+
+          const failed = yield* service.createAgent(createAgentConfig('flaky')).pipe(Effect.either);
+          const hasAfterFailure = yield* service.hasAgent('flaky');
+
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+          const created = yield* service.createAgent(createAgentConfig('flaky'));
+          const hasAfterSuccess = yield* service.hasAgent('flaky');
+
+          return {
+            failed,
+            hasAfterFailure,
+            createdId: created.id,
+            hasAfterSuccess,
+          };
+        })
+      );
+
+      expect(result.failed._tag).toBe('Left');
+      if (result.failed._tag === 'Left') {
+        expect(result.failed.left).toBeInstanceOf(AgentCreationError);
+      }
+      expect(result.hasAfterFailure).toBe(false);
+      expect(result.createdId).toBe('flaky');
+      expect(result.hasAfterSuccess).toBe(true);
+    });
+
+    it('preserves configured tools when no tool policies are set', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const tools = yield* ToolRegistryService;
+          yield* tools.registerTool({
+            id: 'save-note',
+            name: 'save-note',
+            description: 'Save a note',
+            execute: () => 'saved',
+          });
+
+          const service = yield* AgentService;
+          const created = yield* service.createAgent(createAgentConfig('tool-user', {
+            tools: ['save-note'],
+          }));
+
+          return created.config.tools;
+        })
+      );
+
+      expect(result).toEqual(['save-note']);
     });
   });
 
@@ -96,7 +231,6 @@ describe('AgentService', () => {
         })
       );
 
-      // No error means success
       expect(true).toBe(true);
     });
   });
@@ -110,7 +244,6 @@ describe('AgentService', () => {
         })
       );
 
-      // No error means success
       expect(true).toBe(true);
     });
   });
@@ -126,7 +259,6 @@ describe('AgentService', () => {
         })
       );
 
-      // No error means success
       expect(true).toBe(true);
     });
   });
@@ -137,6 +269,78 @@ describe('AgentService', () => {
         Effect.gen(function* () {
           const service = yield* AgentService;
           return yield* service.matchAgentByUtterance('hello');
+        })
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('prioritizes exact over regex matches', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const service = yield* AgentService;
+
+          yield* service.createAgent(createAgentConfig('regex-agent', { utterances: ['^hello.*'] }));
+          yield* service.createAgent(createAgentConfig('exact-agent', { utterances: ['hello world'] }));
+
+          return yield* service.matchAgentByUtterance('hello world');
+        })
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.agentId).toBe('exact-agent');
+      expect(result?.matchType).toBe('exact');
+      expect(result?.confidence).toBe(1);
+    });
+
+    it('prioritizes regex over semantic matches', async () => {
+      let semanticCallCount = 0;
+
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const service = yield* AgentService;
+
+          yield* service.createAgent(createAgentConfig('regex-agent', { utterances: ['^support.*'] }));
+          yield* service.createAgent(createAgentConfig('semantic-agent', { utterances: ['help with billing'] }));
+
+          return yield* service.matchAgentByUtterance(
+            'support needed',
+            async () => {
+              semanticCallCount += 1;
+              return { matched: true, confidence: 0.99, utterance: 'help with billing' };
+            }
+          );
+        })
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.agentId).toBe('regex-agent');
+      expect(result?.matchType).toBe('regex');
+      expect(result?.confidence).toBe(0.8);
+      expect(semanticCallCount).toBe(0);
+    });
+
+    it('treats semantic matcher failures as no match', async () => {
+      const result = await runTest(
+        Effect.gen(function* () {
+          const providerRegistry = yield* ProviderRegistryService;
+          yield* providerRegistry.registerDefinition(createMockProviderDefinition('openai'));
+
+          const service = yield* AgentService;
+          yield* service.createAgent(createAgentConfig('semantic-agent', { utterances: ['help with billing'] }));
+
+          return yield* service.matchAgentByUtterance(
+            'unrelated text',
+            async () => {
+              throw new Error('semantic backend unavailable');
+            }
+          );
         })
       );
 
@@ -153,7 +357,6 @@ describe('AgentService', () => {
         })
       );
 
-      // Should return metrics object (structure verified by AgentFactory tests)
       expect(result).toBeDefined();
     });
   });
@@ -167,7 +370,6 @@ describe('AgentService', () => {
         })
       );
 
-      // No error means success
       expect(true).toBe(true);
     });
   });
@@ -183,7 +385,6 @@ describe('AgentService', () => {
         })
       );
 
-      // Cleared successfully (no error)
       expect(true).toBe(true);
     });
   });

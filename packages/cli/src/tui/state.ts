@@ -21,7 +21,10 @@ export type ToolBlockKind = 'tool' | 'task';
 export interface ToolBlockState {
   toolCallId: string;
   toolName: string;
+  originAgentId?: string;
+  parentToolCallId?: string;
   kind: ToolBlockKind;
+  depth: number;
   status: ToolBlockStatus;
   input: Record<string, unknown>;
   output?: unknown;
@@ -38,6 +41,7 @@ export interface ToolBlockState {
 export interface ToolBlockGroup {
   messageId: string;
   step: number;
+  anchorUserMessageIndex: number | null;
   blocks: ToolBlockState[];
 }
 
@@ -81,12 +85,14 @@ export interface SessionTranscript {
 
 export interface StreamingState {
   isStreaming: boolean;
+  waitingForFirstToken: boolean;
   streamStartMs: number | null;
   firstTokenLatencyMs: number | null;
   outputTokenCount: number;
   tokensPerSecond: number;
   lastError: string | null;
   sessionId: string | null;
+  anchorUserMessageIndex: number | null;
 }
 
 export interface SessionTelemetry {
@@ -215,6 +221,8 @@ export interface TuiState {
   helpModal: {
     isOpen: boolean;
   };
+  /** Transient system notice (e.g. hot reload error). Cleared on resolution. */
+  systemNotice: string | null;
 }
 
 /**
@@ -235,12 +243,14 @@ export function createInitialTuiStateWithPlugins(
     transcript,
     streaming: {
       isStreaming: false,
+      waitingForFirstToken: false,
       streamStartMs: null,
       firstTokenLatencyMs: null,
       outputTokenCount: 0,
       tokensPerSecond: 0,
       lastError: null,
       sessionId: null,
+      anchorUserMessageIndex: null,
     },
     telemetry: {
       model: '--',
@@ -306,6 +316,7 @@ export function createInitialTuiStateWithPlugins(
     helpModal: {
       isOpen: false,
     },
+    systemNotice: null,
   };
 }
 
@@ -318,7 +329,8 @@ export function shouldOpenStartupChooser(
   items: ReadonlyArray<SessionListItem>,
   initialSessionId: string | null | undefined,
 ): boolean {
-  return !initialSessionId;
+  if (initialSessionId) return false;
+  return items.length > 0;
 }
 
 export function openStartupChooser(state: TuiState): TuiState {
@@ -390,7 +402,7 @@ export function setStartupWarning(state: TuiState, warning: string | null): TuiS
 const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   {
     id: 'focus-next-pane',
-    label: 'Focus Next Pane',
+    label: 'focus next pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['tab', 'focus', 'pane', 'next'],
@@ -398,7 +410,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'focus-previous-pane',
-    label: 'Focus Previous Pane',
+    label: 'focus previous pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['shift', 'tab', 'focus', 'pane', 'prev'],
@@ -406,7 +418,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-input-pane',
-    label: 'Jump to Input Pane',
+    label: 'jump to input pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['input', 'composer', 'focus'],
@@ -414,7 +426,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-sidebar-pane',
-    label: 'Jump to Sidebar Pane',
+    label: 'jump to sidebar pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['sidebar', 'sessions', 'focus'],
@@ -422,7 +434,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'jump-transcript-pane',
-    label: 'Jump to Transcript Pane',
+    label: 'jump to transcript pane',
     group: 'global',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['transcript', 'chat', 'focus'],
@@ -430,7 +442,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'clear-input',
-    label: 'Clear Input',
+    label: 'clear input',
     group: 'input',
     scopes: ['input'],
     keywords: ['clear', 'reset', 'composer'],
@@ -438,7 +450,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'scroll-transcript-down',
-    label: 'Scroll Transcript Down',
+    label: 'scroll transcript down',
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'down', 'transcript'],
@@ -446,7 +458,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'scroll-transcript-up',
-    label: 'Scroll Transcript Up',
+    label: 'scroll transcript up',
     group: 'transcript',
     scopes: ['transcript'],
     keywords: ['scroll', 'up', 'transcript'],
@@ -454,7 +466,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'select-next-session',
-    label: 'Select Next Session',
+    label: 'select next session',
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'next', 'sidebar'],
@@ -462,7 +474,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'select-previous-session',
-    label: 'Select Previous Session',
+    label: 'select previous session',
     group: 'sidebar',
     scopes: ['sidebar'],
     keywords: ['session', 'previous', 'sidebar'],
@@ -470,7 +482,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'create-session',
-    label: 'New Session',
+    label: 'new session',
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'new', 'create'],
@@ -478,7 +490,7 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'delete-session',
-    label: 'Delete Session',
+    label: 'delete session',
     group: 'sidebar',
     scopes: ['sidebar', 'transcript', 'input'],
     keywords: ['session', 'delete', 'remove'],
@@ -486,10 +498,18 @@ const DEFAULT_COMMAND_PALETTE_ACTIONS: ReadonlyArray<CommandPaletteAction> = [
   },
   {
     id: 'submit-input',
-    label: 'Submit Input',
+    label: 'submit input',
     group: 'input',
     scopes: ['input'],
     keywords: ['submit', 'send', 'input'],
+    kind: 'builtin',
+  },
+  {
+    id: 'exit',
+    label: 'exit',
+    group: 'global',
+    scopes: ['sidebar', 'transcript', 'input'],
+    keywords: ['exit', 'quit', 'close', 'bye'],
     kind: 'builtin',
   },
 ];
@@ -606,8 +626,7 @@ function getSlashSearchState(state: TuiState, text: string): TuiState['input']['
   }
 
   const normalizedQuery = trimmedStart.slice(1);
-  const pluginActions = state.commandPalette.actions.filter((action) => action.kind === 'plugin-slash');
-  const filteredActions = getFilteredPaletteActions(pluginActions, normalizedQuery, 'input');
+  const filteredActions = getFilteredPaletteActions(state.commandPalette.actions, normalizedQuery, 'input');
   return {
     isActive: true,
     query: normalizedQuery,
@@ -1091,18 +1110,39 @@ function getStreamRate(streamStartMs: number | null, outputTokenCount: number, n
   return (outputTokenCount * 1000) / elapsedMs;
 }
 
+function getStreamingAnchorUserMessageIndex(state: TuiState): number | null {
+  const sessionId = state.sessions.selectedId;
+  const messages = sessionId
+    ? (state.sessions.transcripts[sessionId]?.messages ?? [])
+    : state.transcript.messages;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      return index;
+    }
+  }
+
+  return null;
+}
+
 export function startStreaming(state: TuiState, nowMs = Date.now()): TuiState {
   const sessionId = state.sessions.selectedId;
   return {
     ...state,
     streaming: {
       isStreaming: true,
+      waitingForFirstToken: true,
       streamStartMs: nowMs,
       firstTokenLatencyMs: null,
       outputTokenCount: 0,
       tokensPerSecond: 0,
       lastError: null,
       sessionId,
+      anchorUserMessageIndex: getStreamingAnchorUserMessageIndex(state),
+    },
+    toolBlocks: {
+      groups: [],
+      expandOverrides: {},
     },
   };
 }
@@ -1142,6 +1182,7 @@ export function appendAssistant(
       streaming: state.streaming.isStreaming
         ? {
             ...state.streaming,
+            waitingForFirstToken: false,
             firstTokenLatencyMs: state.streaming.firstTokenLatencyMs ?? (
               state.streaming.streamStartMs !== null
                 ? Math.max(0, nowMs - state.streaming.streamStartMs)
@@ -1206,6 +1247,7 @@ export function appendAssistant(
         ? {
             ...state.streaming,
             isStreaming: true,
+            waitingForFirstToken: false,
             firstTokenLatencyMs,
             outputTokenCount: nextOutputTokenCount,
             tokensPerSecond: getStreamRate(state.streaming.streamStartMs, nextOutputTokenCount, nowMs),
@@ -1229,14 +1271,83 @@ export function appendAssistant(
   return nextState;
 }
 
+export function ensureAssistantMessage(state: TuiState, nowMs = Date.now()): TuiState {
+  const sessionId = state.streaming.sessionId ?? state.sessions.selectedId;
+
+  if (!sessionId) {
+    const messages = [...state.transcript.messages];
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role === 'assistant') {
+      return state;
+    }
+
+    const transcript = updateTranscriptViewport({
+      ...state.transcript,
+      messages: [...messages, { role: 'assistant', content: '' }],
+    });
+
+    return {
+      ...state,
+      transcript,
+    };
+  }
+
+  const currentTranscript = state.sessions.transcripts[sessionId]
+    ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  const messages = [...currentTranscript.messages];
+  const lastMessage = messages[messages.length - 1];
+
+  if (lastMessage?.role === 'assistant') {
+    return state;
+  }
+
+  const nextTranscript = updateTranscriptViewport({
+    ...currentTranscript,
+    messages: [...messages, { role: 'assistant', content: '' }],
+  });
+
+  const updatedTranscripts = {
+    ...state.sessions.transcripts,
+    [sessionId]: nextTranscript,
+  };
+
+  const transcript = sessionId === state.sessions.selectedId
+    ? nextTranscript
+    : state.transcript;
+  const unread = sessionId !== state.sessions.selectedId || !nextTranscript.viewport.pinnedToBottom;
+  const nextState = updateSessionFromTranscript(
+    {
+      ...state,
+      transcript,
+      sessions: {
+        ...state.sessions,
+        transcripts: updatedTranscripts,
+      },
+    },
+    sessionId,
+    nextTranscript,
+    nowMs,
+    unread,
+  );
+
+  if (sessionId === nextState.sessions.selectedId && nextTranscript.viewport.pinnedToBottom) {
+    return updateSessionUnread(nextState, sessionId, false);
+  }
+
+  return nextState;
+}
+
 export function finishStreaming(state: TuiState, nowMs = Date.now()): TuiState {
   return {
     ...state,
     streaming: {
       ...state.streaming,
       isStreaming: false,
+      waitingForFirstToken: false,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
     },
   };
 }
@@ -1247,11 +1358,75 @@ export function recordStreamingError(state: TuiState, error: string, nowMs = Dat
     streaming: {
       ...state.streaming,
       isStreaming: false,
+      waitingForFirstToken: false,
       lastError: error,
       tokensPerSecond: getStreamRate(state.streaming.streamStartMs, state.streaming.outputTokenCount, nowMs),
       sessionId: state.streaming.sessionId,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
     },
   };
+}
+
+export function clearStreamingAssistant(state: TuiState, nowMs = Date.now()): TuiState {
+  const sessionId = state.streaming.sessionId ?? state.sessions.selectedId;
+  const anchorIndex = state.streaming.anchorUserMessageIndex;
+
+  const filterMessages = (messages: SessionTranscript['messages']): SessionTranscript['messages'] => {
+    if (anchorIndex === null) {
+      return messages.filter((message) => message.role !== 'assistant');
+    }
+
+    return messages.filter((message, index) => !(message.role === 'assistant' && index > anchorIndex));
+  };
+
+  if (!sessionId) {
+    const transcript = updateTranscriptViewport({
+      ...state.transcript,
+      messages: filterMessages(state.transcript.messages),
+    }, { pinnedToBottom: true });
+
+    return {
+      ...state,
+      transcript,
+    };
+  }
+
+  const currentTranscript = state.sessions.transcripts[sessionId]
+    ?? createTranscriptState([], state.transcript.viewport.visibleLines, true);
+  const nextTranscript = updateTranscriptViewport({
+    ...currentTranscript,
+    messages: filterMessages(currentTranscript.messages),
+  }, { pinnedToBottom: true });
+
+  const updatedTranscripts = {
+    ...state.sessions.transcripts,
+    [sessionId]: nextTranscript,
+  };
+
+  const transcript = sessionId === state.sessions.selectedId
+    ? nextTranscript
+    : state.transcript;
+
+  const nextState = updateSessionFromTranscript(
+    {
+      ...state,
+      transcript,
+      sessions: {
+        ...state.sessions,
+        transcripts: updatedTranscripts,
+      },
+    },
+    sessionId,
+    nextTranscript,
+    nowMs,
+    false,
+  );
+
+  return nextState;
+}
+
+export function setSystemNotice(state: TuiState, notice: string | null): TuiState {
+  return { ...state, systemNotice: notice?.trim() || null };
 }
 
 export function appendUserMessage(state: TuiState, content: string, nowMs = Date.now()): TuiState {
@@ -1984,14 +2159,20 @@ export function addToolCall(
     toolName: string;
     input: Record<string, unknown>;
     startedAt: number;
+    originAgentId?: string;
+    parentToolCallId?: string;
     kind?: ToolBlockKind;
+    depth?: number;
   },
 ): TuiState {
   const kind = event.kind ?? inferToolBlockKind(event.toolName);
   const block: ToolBlockState = {
     toolCallId: event.toolCallId,
     toolName: event.toolName,
+    originAgentId: event.originAgentId,
+    parentToolCallId: event.parentToolCallId,
     kind,
+    depth: event.depth ?? 0,
     status: 'in-progress',
     input: event.input,
     startedAt: event.startedAt,
@@ -2020,6 +2201,7 @@ export function addToolCall(
     } else {
       groups[existingGroupIndex] = {
         ...existing,
+        anchorUserMessageIndex: existing.anchorUserMessageIndex ?? state.streaming.anchorUserMessageIndex,
         blocks: [...existing.blocks, block],
       };
     }
@@ -2027,6 +2209,7 @@ export function addToolCall(
     groups.push({
       messageId: event.messageId,
       step: event.step,
+      anchorUserMessageIndex: state.streaming.anchorUserMessageIndex,
       blocks: [block],
     });
   }
@@ -2128,12 +2311,21 @@ export function toggleToolBlockExpand(state: TuiState, toolCallId: string): TuiS
 }
 
 /**
- * Get tool blocks for a given message step/group index.
- * The Nth group corresponds to tool blocks from the Nth tool-calling step.
+ * Get all tool blocks anchored beneath a specific user message index.
  */
-export function getToolBlocksForMessage(state: TuiState, groupIndex: number): ToolBlockState[] {
-  const group = state.toolBlocks.groups[groupIndex];
-  return group?.blocks ?? [];
+export function getToolBlocksForMessage(state: TuiState, anchorUserMessageIndex: number): ToolBlockState[] {
+  return state.toolBlocks.groups
+    .filter((group) => group.anchorUserMessageIndex === anchorUserMessageIndex)
+    .sort((left, right) => {
+      if (left.step !== right.step) {
+        return left.step - right.step;
+      }
+
+      const leftStartedAt = Math.min(...left.blocks.map((block) => block.startedAt));
+      const rightStartedAt = Math.min(...right.blocks.map((block) => block.startedAt));
+      return leftStartedAt - rightStartedAt;
+    })
+    .flatMap((group) => group.blocks);
 }
 
 /**

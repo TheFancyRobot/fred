@@ -179,9 +179,9 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'quit' };
   }
 
-  if (ctrl && shift && name === 'c') {
-    return { type: 'copy-transcript' };
-  }
+  // Note: Ctrl+Shift+C is NOT intercepted — it's the standard terminal
+  // shortcut for copying selected text and must be left to the terminal.
+  // Use /copy-transcript slash command or Ctrl+Y for copy features.
 
   if (ctrl && name === 'y') {
     return { type: 'copy-last-message' };
@@ -191,7 +191,7 @@ export function mapKeyToAction(event: KeyEvent, state: TuiState): KeyAction {
     return { type: 'toggle-sidebar' };
   }
 
-  if (ctrl && name === 'c') {
+  if (ctrl && !shift && name === 'c') {
     return { type: 'quit' };
   }
 

@@ -1,0 +1,12 @@
+providers:
+  - id: openrouter
+    modelDefaults:
+      model: openrouter/free
+      temperature: 0.7
+
+routing:
+  defaultAgent: assistant
+  rules: []
+
+template:
+  partialsDir: ./partials

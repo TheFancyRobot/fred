@@ -1,18 +1,19 @@
 import { describe, test, expect, beforeEach, spyOn } from 'bun:test';
+import { Effect } from 'effect';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import { createMockProvider } from '../../helpers/mock-provider';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 import { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 import { ErrorClass, classifyError } from '../../../../packages/core/src/observability/errors';
 
 describe('Tool Retry Policy', () => {
   let factory: AgentFactory;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockProvider: ProviderDefinition;
 
   beforeEach(() => {
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     factory = new AgentFactory(toolRegistry);
     mockProvider = createMockProvider();
   });
@@ -74,7 +75,7 @@ describe('Tool Retry Policy', () => {
         // No toolRetry specified - should use defaults
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -102,7 +103,7 @@ describe('Tool Retry Policy', () => {
         },
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -128,7 +129,7 @@ describe('Tool Retry Policy', () => {
         },
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -160,7 +161,7 @@ describe('Tool Retry Policy', () => {
         },
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
       // The agent is created - execution would be tested via actual model invocation
       // which we can't do without mocking the entire AI layer
@@ -187,7 +188,7 @@ describe('Tool Retry Policy', () => {
         },
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -231,7 +232,7 @@ describe('Tool Retry Policy', () => {
         },
       };
 
-      const agent = await factoryWithTracer.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factoryWithTracer.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });

@@ -1,7 +1,22 @@
-import { Action } from '../intent/intent';
+import type { Action } from '../intent/intent';
 import type { Prompt } from '@effect/ai';
-import type { Stream } from 'effect';
+import type { Effect, Stream } from 'effect';
 import type { StreamEvent } from '../stream/events';
+
+export type AgentToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { type: 'tool'; toolName: string }
+  | { tool: string }
+  | { mode?: 'auto' | 'required'; oneOf: ReadonlyArray<string> };
+
+export type ProviderToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { tool: string }
+  | { mode?: 'auto' | 'required'; oneOf: ReadonlyArray<string> };
 
 /**
  * Supported AI platforms
@@ -50,7 +65,7 @@ export interface AgentConfig {
   /** MCP server references (string[] of server IDs from global config) */
   mcpServers?: string[];
   maxSteps?: number; // Maximum number of steps in the agent loop (default: 20)
-  toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: string }; // Control tool usage
+  toolChoice?: AgentToolChoice; // Control tool usage
   toolTimeout?: number; // Timeout for tool execution in milliseconds (default: 300000 = 5 minutes)
   persistHistory?: boolean; // Whether to persist conversation history for this agent (default: true)
   toolRetry?: ToolRetryPolicy; // Retry policy for tool execution
@@ -65,6 +80,7 @@ export interface ToolRetryPolicy {
   backoffMs?: number; // Initial backoff delay in ms (default: 1000)
   maxBackoffMs?: number; // Maximum backoff delay in ms (default: 10000)
   jitterMs?: number; // Random jitter added to backoff in ms (default: 200)
+  timeoutBackoffMs?: number; // Base delay for timeout retries in ms (default: 15000)
 }
 
 /**
@@ -104,13 +120,36 @@ export function hasRetryDiagnostics(error: unknown): error is ErrorWithRetryDiag
   );
 }
 
+export function normalizeToolChoice(toolChoice: AgentToolChoice | undefined): ProviderToolChoice | undefined {
+  if (toolChoice === undefined) {
+    return undefined;
+  }
+
+  if (toolChoice === 'auto' || toolChoice === 'required' || toolChoice === 'none') {
+    return toolChoice;
+  }
+
+  if ('tool' in toolChoice) {
+    return { tool: toolChoice.tool };
+  }
+
+  if ('oneOf' in toolChoice) {
+    return {
+      mode: toolChoice.mode,
+      oneOf: toolChoice.oneOf,
+    };
+  }
+
+  return { tool: toolChoice.toolName };
+}
+
 /**
  * Agent instance (created from config)
  */
 export interface AgentInstance {
   id: string;
   config: AgentConfig;
-  processMessage: (message: string, messages?: AgentMessage[]) => Promise<AgentResponse>;
+  processMessage: (message: string, messages?: AgentMessage[]) => Effect.Effect<AgentResponse, Error>;
   // Stream has error and requirements channels - actual types vary by implementation
   streamMessage?: (
     message: string,

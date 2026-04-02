@@ -3,7 +3,11 @@ import {
   addToolCall,
   completeToolCall,
   createInitialTuiState,
+  ensureAssistantMessage,
   failToolCall,
+  getToolBlocksForMessage,
+  startStreaming,
+  appendUserMessage,
   toggleToolBlockExpand,
 } from '../../../packages/cli/src/tui/state.js';
 
@@ -81,5 +85,67 @@ describe('TUI tool block state', () => {
 
     expect(state.toolBlocks.groups[0]?.blocks[0]?.expanded).toBe(false);
     expect(state.toolBlocks.groups[0]?.blocks[0]?.status).toBe('errored');
+  });
+
+  test('ensureAssistantMessage creates a placeholder turn once', () => {
+    let state = createInitialTuiState();
+
+    state = ensureAssistantMessage(state);
+    state = ensureAssistantMessage(state);
+
+    expect(state.transcript.messages).toHaveLength(1);
+    expect(state.transcript.messages[0]).toEqual({ role: 'assistant', content: '' });
+  });
+
+  test('startStreaming clears previous tool blocks and anchors to the latest user message', () => {
+    let state = createInitialTuiState();
+    state = appendUserMessage(state, 'first');
+    state = startStreaming(state);
+    state = addToolCall(state, {
+      messageId: 'm1',
+      step: 0,
+      toolCallId: 'tool-1',
+      toolName: 'calculator',
+      input: { expression: '1+1' },
+      startedAt: 1,
+    });
+
+    state = appendUserMessage(state, 'second');
+    state = startStreaming(state);
+
+    expect(state.toolBlocks.groups).toHaveLength(0);
+    expect(state.streaming.anchorUserMessageIndex).toBe(1);
+  });
+
+  test('getToolBlocksForMessage orders nested groups by step before flattening', () => {
+    let state = createInitialTuiState();
+    state = appendUserMessage(state, 'research prompt');
+    state = startStreaming(state);
+
+    state = addToolCall(state, {
+      messageId: 'planner-msg',
+      step: 3,
+      toolCallId: 'planner-1',
+      toolName: 'research-planner',
+      input: {},
+      startedAt: 20,
+      depth: 3,
+    });
+
+    state = addToolCall(state, {
+      messageId: 'swarm-msg',
+      step: 2,
+      toolCallId: 'swarm-1',
+      toolName: 'run_research_swarm',
+      input: {},
+      startedAt: 10,
+      depth: 2,
+    });
+
+    const blocks = getToolBlocksForMessage(state, 0);
+    expect(blocks.map((block) => block.toolName)).toEqual([
+      'run_research_swarm',
+      'research-planner',
+    ]);
   });
 });

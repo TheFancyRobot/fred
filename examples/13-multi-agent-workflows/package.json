@@ -1,0 +1,15 @@
+{
+  "name": "@fancyrobot/fred-example-13-multi-agent-workflows",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "smoke": "bun run src/index.ts --smoke",
+    "e2e": "bun run src/e2e.ts"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*",
+    "effect": "^3.21.0"
+  }
+}

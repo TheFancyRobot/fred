@@ -1,0 +1,62 @@
+providers:
+  - id: openrouter
+    modelDefaults:
+      model: openrouter/free
+
+agentDirs:
+  - ./src/agents
+
+routing:
+  defaultAgent: concierge
+  rules:
+    - id: daily-brief
+      agent: daily-brief-agent
+      patterns:
+        - '\bgive me (?:a|my) daily brief\b'
+        - '\bgive me (?:a|my) morning brief\b'
+        - '\bcatch me up on (?:the )?day\b'
+        - '\bcombine my notes and (?:the )?news\b'
+      priority: 100
+    - id: note-memory
+      agent: note-taker
+      patterns:
+        - '\bsave a note\b'
+        - '\bremember this preference\b'
+        - '\bread my saved notes\b'
+        - '\bwhat have you saved about me\b'
+        - '\bwhat do you know about my .*preferences\b'
+      priority: 95
+    - id: latest-news
+      agent: news-briefer
+      patterns:
+        - '\bwhat happened in the news\b'
+        - '\bnews from the last 24 hours\b'
+        - '\bgive me the latest headlines\b'
+        - '\bcurrent events summary\b'
+        - '\bwhat did .* do today\b'
+        - '\bwhat did .* say today\b'
+        - '\bwhat happened with .* today\b'
+      priority: 90
+    - id: research-requests
+      agent: research-orchestrator
+      patterns:
+        - '\bresearch .+\b'
+        - '\bresearch this for me\b'
+        - '\bresearch whether\b'
+        - '\bcompare these options\b'
+        - '\bcompare .* and .*\b'
+        - '\bhelp me choose (?:between|among)\b'
+        - '\bwhich .* (?:is|are) better for .*\b'
+        - '\bwhat .* are good for .*\b'
+        - '\b(?:best|good) .* first-time .*\b'
+        - '\b(?:best|good) .* apartment .*\b'
+        - '\bhelp me investigate\b'
+        - '\bgive me a recommendation\b'
+        - '\bwhat is the best option\b'
+        - '\b(?:write|wrote|draft) .*\b(?:essay|report|summary|analysis)\b'
+        - '\bwrite .* essay on .* from .* to .*\b'
+        - '\bwrite .* report on .* from .* to .*\b'
+        - '\bperformance of .* from .* to .*\b'
+        - '\bhow did .* perform (?:from|between) .*\b'
+        - '\banalyze .* from .* to .*\b'
+      priority: 80

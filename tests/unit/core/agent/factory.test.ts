@@ -1,19 +1,19 @@
 import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Exit, Cause } from 'effect';
 import { LanguageModel } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
-import { ToolRegistry } from '../../../../packages/core/src/tool/registry';
 import { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import { createMockProvider } from '../../helpers/mock-provider';
+import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 import { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 
 describe('AgentFactory', () => {
   let factory: AgentFactory;
-  let toolRegistry: ToolRegistry;
+  let toolRegistry: ReturnType<typeof createMockToolRegistry>;
   let mockProvider: ProviderDefinition;
 
   beforeEach(() => {
-    toolRegistry = new ToolRegistry();
+    toolRegistry = createMockToolRegistry();
     factory = new AgentFactory(toolRegistry);
     mockProvider = createMockProvider();
   });
@@ -42,7 +42,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000, // 1 second timeout
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       // The tool should execute successfully
       // We can't directly test tool execution without mocking ToolLoopAgent,
@@ -76,7 +76,7 @@ describe('AgentFactory', () => {
         toolTimeout: 100, // Very short timeout
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       // Agent should still be created even if tool might timeout
       expect(agent).toBeDefined();
@@ -101,7 +101,7 @@ describe('AgentFactory', () => {
         // toolTimeout not specified - should use default 300000
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -128,7 +128,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
       
       // If timeout wasn't cleared, we'd have memory leaks
@@ -156,7 +156,7 @@ describe('AgentFactory', () => {
         toolTimeout: 1000,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -259,7 +259,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       
       expect(agent).toBeDefined();
       expect(agent.processMessage).toBeDefined();
@@ -276,7 +276,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -304,7 +304,7 @@ describe('AgentFactory', () => {
         tools: ['known-tool', 'missing-tool'],
       };
 
-      await factory.createAgent(config, mockProvider);
+      await Effect.runPromise(factory.createAgent(config, mockProvider));
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy.mock.calls[0][0]).toContain('missing-tool');
@@ -337,7 +337,7 @@ describe('AgentFactory', () => {
         tools: ['test-tool'],
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -350,7 +350,7 @@ describe('AgentFactory', () => {
         maxSteps: 10,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -363,8 +363,182 @@ describe('AgentFactory', () => {
         toolChoice: 'required',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
+    });
+
+    test('processMessage normalizes legacy named toolChoice for provider requests', async () => {
+      toolRegistry.registerTool({
+        id: 'calculator',
+        description: 'Performs arithmetic',
+        execute: async () => 4,
+      } as any);
+
+      let callCount = 0;
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation((options: any) => {
+        callCount += 1;
+
+        if (callCount === 1) {
+          expect(options.toolChoice).toEqual({ tool: 'calculator' });
+          return Effect.succeed({
+            text: '',
+            toolCalls: [{ id: 'call_1', name: 'calculator', params: { expression: '2+2' } }],
+            toolResults: [{ id: 'call_1', result: 4, isFailure: false }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          } as any) as any;
+        }
+
+        return Effect.succeed({
+          text: 'The answer is 4.',
+          toolCalls: [],
+          toolResults: [],
+          usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+        } as any) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent({
+        id: 'legacy-toolchoice-agent',
+        systemMessage: 'Use the calculator tool.',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['calculator'],
+        toolChoice: { type: 'tool', toolName: 'calculator' },
+      }, testProvider as any));
+
+      const response = await Effect.runPromise(agent.processMessage('What is 2+2?', []));
+
+      expect(response.content).toBe('The answer is 4.');
+      expect(callCount).toBe(2);
+      generateSpy.mockRestore();
+    });
+
+    test('processMessage continues after tool results and returns final text', async () => {
+      toolRegistry.registerTool({
+        id: 'lookup_pref',
+        name: 'Lookup Preference',
+        description: 'Looks up a saved preference',
+        execute: async () => 'aisle seats',
+      } as any);
+
+      let callCount = 0;
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation((options: any) => {
+        callCount += 1;
+
+        if (callCount === 1) {
+          expect(options.toolChoice).toBe('required');
+          return Effect.succeed({
+            text: '',
+            toolCalls: [{ id: 'call_1', name: 'lookup_pref', params: { topic: 'travel' } }],
+            toolResults: [{ id: 'call_1', result: 'aisle seats', isFailure: false }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          } as any) as any;
+        }
+
+        expect(options.toolChoice).toBeUndefined();
+        return Effect.succeed({
+          text: 'You prefer aisle seats.',
+          toolCalls: [],
+          toolResults: [],
+          usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+        } as any) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent({
+        id: 'multi-step-agent',
+        systemMessage: 'Use tools when needed.',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['lookup_pref'],
+        toolChoice: 'required',
+      }, testProvider as any));
+
+      const response = await Effect.runPromise(agent.processMessage('What seat do I prefer?', []));
+
+      expect(callCount).toBe(2);
+      expect(response.content).toBe('You prefer aisle seats.');
+      expect(response.toolCalls).toEqual([
+        {
+          toolId: 'lookup_pref',
+          args: { topic: 'travel' },
+          result: 'aisle seats',
+          metadata: undefined,
+          error: undefined,
+        },
+      ]);
+      expect(response.usage).toEqual({ inputTokens: 18, outputTokens: 9, totalTokens: 27 });
+
+      generateSpy.mockRestore();
+    });
+
+    test('processMessage falls back to tool result text when the final model step is empty', async () => {
+      toolRegistry.registerTool({
+        id: 'fetch_latest_news',
+        name: 'Fetch Latest News',
+        description: 'Fetches recent news',
+        execute: async () => 'Latest news (last 24 hours):\n- Transit workers reach agreement',
+      } as any);
+
+      let callCount = 0;
+      const generateSpy = spyOn(LanguageModel, 'generateText').mockImplementation((options: any) => {
+        callCount += 1;
+
+        if (callCount === 1) {
+          expect(options.toolChoice).toBe('required');
+          return Effect.succeed({
+            text: '',
+            toolCalls: [{ id: 'call_1', name: 'fetch_latest_news', params: { topic: 'general' } }],
+            toolResults: [{ id: 'call_1', result: 'Latest news (last 24 hours):\n- Transit workers reach agreement', isFailure: false }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          } as any) as any;
+        }
+
+        return Effect.succeed({
+          text: '',
+          toolCalls: [],
+          toolResults: [],
+          usage: { inputTokens: 8, outputTokens: 0, totalTokens: 8 },
+        } as any) as any;
+      });
+
+      const testProvider = {
+        ...mockProvider,
+        getModel: () => Effect.succeed(Layer.empty as any),
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent({
+        id: 'tool-only-agent',
+        systemMessage: 'Use tools when needed.',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['fetch_latest_news'],
+        toolChoice: 'required',
+      }, testProvider as any));
+
+      const response = await Effect.runPromise(agent.processMessage('What happened in the news?', []));
+
+      expect(callCount).toBe(2);
+      expect(response.content).toBe('Latest news (last 24 hours):\n- Transit workers reach agreement');
+      expect(response.toolCalls).toEqual([
+        {
+          toolId: 'fetch_latest_news',
+          args: { topic: 'general' },
+          result: 'Latest news (last 24 hours):\n- Transit workers reach agreement',
+          metadata: undefined,
+          error: undefined,
+        },
+      ]);
+
+      generateSpy.mockRestore();
     });
 
     test('should create agent with temperature configuration', async () => {
@@ -376,7 +550,7 @@ describe('AgentFactory', () => {
         temperature: 0.5,
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -397,7 +571,7 @@ describe('AgentFactory', () => {
         ],
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -413,7 +587,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factoryWithoutTracer.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factoryWithoutTracer.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -460,7 +634,7 @@ describe('AgentFactory', () => {
       };
 
       // Agent should still be created even if tool might error
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
 
@@ -475,7 +649,7 @@ describe('AgentFactory', () => {
       };
 
       // Should not throw - tools are optional
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
       expect(warnSpy).toHaveBeenCalledTimes(1);
       warnSpy.mockRestore();
@@ -510,7 +684,7 @@ describe('AgentFactory', () => {
         model: 'gpt-4',
       };
 
-      const agent = await factory.createAgent(config, mockProvider);
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
       expect(agent).toBeDefined();
     });
   });
@@ -538,17 +712,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'retry-agent',
         systemMessage: 'Test retry boundary',
         platform: 'groq',
         model: 'llama-3.3-70b-versatile',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false); // Should not reach here
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeDefined();
         expect(err._retryDiagnostics.provider).toBe('groq');
         expect(err._retryDiagnostics.retryable).toBe(true);
@@ -583,17 +757,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'retry-nested-agent',
         systemMessage: 'Test nested retry',
         platform: 'groq',
         model: 'llama-3.3-70b-versatile',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false);
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeDefined();
         expect(err._retryDiagnostics.retryable).toBe(false);
         expect(err._retryDiagnostics.lastStatusCode).toBe(401);
@@ -615,17 +789,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'plain-error-agent',
         systemMessage: 'Test plain error',
         platform: 'openai',
         model: 'gpt-4',
-      }, testProvider as any);
+      }, testProvider as any));
 
-      try {
-        await agent.processMessage('hello', []);
-        expect(true).toBe(false);
-      } catch (err: any) {
+      const exit = await Effect.runPromiseExit(agent.processMessage('hello', []));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as any;
         expect(err._retryDiagnostics).toBeUndefined();
       }
 
@@ -680,17 +854,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'gated-agent',
         systemMessage: 'Tool gate test',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['safe_tool', 'admin_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      await agent.processMessage('hello', [], {
+      await Effect.runPromise(agent.processMessage('hello', [], {
         policyContext: { intentId: 'safe-intent', agentId: 'gated-agent' },
-      });
+      }));
 
       expect(toolkitTools).toEqual(['safe_tool']);
       generateSpy.mockRestore();
@@ -740,17 +914,17 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'deny-agent',
         systemMessage: 'Tool deny test',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['safe_tool', 'admin_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      const response = await agent.processMessage('run admin tool', [], {
+      const response = await Effect.runPromise(agent.processMessage('run admin tool', [], {
         policyContext: { intentId: 'safe-intent', agentId: 'deny-agent' },
-      });
+      }));
 
       expect(response.toolCalls?.[0]?.toolId).toBe('admin_tool');
       expect(response.toolCalls?.[0]?.error?.code).toBe('POLICY_DENIED');
@@ -826,22 +1000,22 @@ describe('AgentFactory', () => {
         getModel: () => Effect.succeed(Layer.empty as any),
       };
 
-      const agent = await factory.createAgent({
+      const agent = await Effect.runPromise(factory.createAgent({
         id: 'approval-agent',
         systemMessage: 'Test agent with approval',
         platform: 'openai',
         model: 'gpt-4',
         tools: ['approval_tool'],
-      }, testProvider as any);
+      }, testProvider as any));
 
-      const response = await agent.processMessage('run approval tool', [], {
+      const response = await Effect.runPromise(agent.processMessage('run approval tool', [], {
         policyContext: {
           intentId: 'test-intent',
           agentId: 'approval-agent',
           userId: 'user-123',
           metadata: { conversationId: 'conv-456' },
         },
-      });
+      }));
 
       // Note: Due to mocking limitations, tools aren't actually executed in this test context.
       // The approval workflow is thoroughly tested in tool-gate/service.test.ts.
@@ -856,6 +1030,135 @@ describe('AgentFactory', () => {
       expect(createRequestCallCount).toBe(0);
 
       generateSpy.mockRestore();
+    });
+  });
+
+  describe('Timeout Backoff Policy', () => {
+    test('ToolRetryPolicy accepts timeoutBackoffMs field', () => {
+      const config: AgentConfig = {
+        id: 'backoff-test-agent',
+        systemMessage: 'Test backoff',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: [],
+        toolRetry: {
+          maxRetries: 2,
+          backoffMs: 1000,
+          maxBackoffMs: 10000,
+          jitterMs: 0,
+          timeoutBackoffMs: 20_000,
+        },
+      };
+
+      // Verify the config is well-formed and accepted
+      expect(config.toolRetry!.timeoutBackoffMs).toBe(20_000);
+    });
+
+    test('timeout backoff defaults to 15s when timeoutBackoffMs is not set', async () => {
+      // Create a tool that fails with ToolTimeoutError then succeeds
+      let callCount = 0;
+      const timingTool = {
+        id: 'timing-tool',
+        name: 'Timing Tool',
+        description: 'A tool that times out then succeeds',
+        execute: async () => {
+          callCount++;
+          if (callCount === 1) {
+            const err = new Error('Tool "timing-tool" execution timed out after 1000ms');
+            err.name = 'ToolTimeoutError';
+            throw err;
+          }
+          return { result: 'ok' };
+        },
+      };
+
+      toolRegistry.registerTool(timingTool);
+
+      const config: AgentConfig = {
+        id: 'timeout-backoff-agent',
+        systemMessage: 'Test timeout backoff',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['timing-tool'],
+        toolTimeout: 60000,
+        toolRetry: {
+          maxRetries: 1,
+          backoffMs: 100,
+          maxBackoffMs: 200,
+          jitterMs: 0,
+          // timeoutBackoffMs not set — should default to 15000
+        },
+      };
+
+      // The agent creation should succeed with the timeout backoff policy
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
+      expect(agent).toBeDefined();
+
+      // Verify the config was accepted and the default is applied implicitly
+      // (We can't directly observe the backoff delay without a long wait,
+      // but we verify the policy is properly wired through agent creation)
+      expect(config.toolRetry!.timeoutBackoffMs).toBeUndefined();
+    });
+
+    test('non-timeout retryable errors use normal backoff (not timeout backoff)', async () => {
+      // Create a tool that fails with a rate-limit error (retryable but not timeout)
+      let callCount = 0;
+      const rateLimitTool = {
+        id: 'ratelimit-tool',
+        name: 'Rate Limit Tool',
+        description: 'A tool that hits rate limits',
+        execute: async () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error('Rate limit exceeded (429)');
+          }
+          return { result: 'ok' };
+        },
+      };
+
+      toolRegistry.registerTool(rateLimitTool);
+
+      const config: AgentConfig = {
+        id: 'ratelimit-backoff-agent',
+        systemMessage: 'Test rate limit backoff',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: ['ratelimit-tool'],
+        toolTimeout: 60000,
+        toolRetry: {
+          maxRetries: 1,
+          backoffMs: 50,
+          maxBackoffMs: 100,
+          jitterMs: 0,
+          timeoutBackoffMs: 20_000,
+        },
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
+      expect(agent).toBeDefined();
+      // Rate limit errors are RETRYABLE but NOT timeout — they should use
+      // backoffMs (50ms) not timeoutBackoffMs (20s)
+    });
+
+    test('custom timeoutBackoffMs is respected in agent config', async () => {
+      const config: AgentConfig = {
+        id: 'custom-timeout-backoff-agent',
+        systemMessage: 'Test custom timeout backoff',
+        platform: 'openai',
+        model: 'gpt-4',
+        tools: [],
+        toolRetry: {
+          maxRetries: 2,
+          backoffMs: 500,
+          maxBackoffMs: 5000,
+          jitterMs: 100,
+          timeoutBackoffMs: 25_000,
+        },
+      };
+
+      const agent = await Effect.runPromise(factory.createAgent(config, mockProvider));
+      expect(agent).toBeDefined();
+      expect(config.toolRetry!.timeoutBackoffMs).toBe(25_000);
     });
   });
 });

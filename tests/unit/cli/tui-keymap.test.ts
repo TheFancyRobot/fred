@@ -644,7 +644,7 @@ describe('TUI Keymap', () => {
 
       expect(state.commandPalette.query).toBe('ScRoLl');
       expect(state.commandPalette.filteredActions.length).toBeGreaterThan(0);
-      expect(state.commandPalette.filteredActions[0]?.label).toContain('Scroll');
+      expect(state.commandPalette.filteredActions[0]?.label).toContain('scroll');
 
       const labels = state.commandPalette.filteredActions.map((action) => action.label);
       const sorted = [...labels].sort((a, b) => a.localeCompare(b));
@@ -721,11 +721,11 @@ describe('TUI Keymap', () => {
   });
 
   describe('Quit handling', () => {
-    test('Ctrl+Shift+C triggers transcript copy action', () => {
+    test('Ctrl+Shift+C is not intercepted (reserved for terminal copy)', () => {
       const state = createInitialTuiState();
       const event = makeKey({ name: 'c', ctrl: true, shift: true });
       const action = mapKeyToAction(event, state);
-      expect(action.type).toBe('copy-transcript');
+      expect(action.type).not.toBe('copy-transcript');
     });
 
     test('Esc triggers quit action', () => {

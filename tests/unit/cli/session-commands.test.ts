@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Fred } from '../../../packages/core/src';
-import { ContextManager } from '../../../packages/core/src/context/manager';
 import type { SessionDetails } from '../../../packages/core/src/context/context';
 import { handleSessionCommand } from '../../../packages/cli/src/commands/session';
 
@@ -26,11 +25,10 @@ class InMemoryContextStorage {
 
 function createFred(storage: InMemoryContextStorage): Fred {
   const fred = new Fred();
-  const manager = new ContextManager();
 
-  (manager as any).listSessions = () => storage.listSessions();
-  (manager as any).getSession = (id: string) => storage.get(id);
-  (manager as any).exportSession = async (id: string, format: 'json' | 'markdown') => {
+  (fred as any).listSessions = () => storage.listSessions();
+  (fred as any).getSession = (id: string) => storage.get(id);
+  (fred as any).exportSession = async (id: string, format: 'json' | 'markdown') => {
     const session = await storage.get(id);
     if (!session) return null;
     if (format === 'markdown') {
@@ -47,9 +45,8 @@ function createFred(storage: InMemoryContextStorage): Fred {
       messages: session.messages.map((message) => ({ role: message.role, content: message.content })),
     };
   };
-  (manager as any).deleteSession = (id: string) => storage.delete(id);
+  (fred as any).deleteSession = (id: string) => storage.delete(id);
 
-  (fred as any).getContextManager = () => manager;
   return fred;
 }
 
