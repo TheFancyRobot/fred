@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-dev",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Fred AI framework development tools",
   "type": "module",
   "main": "./src/index.ts",
