@@ -1,5 +1,12 @@
 # @fred/provider-groq
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`61f61fd`](https://github.com/TheFancyRobot/fred/commit/61f61fdc4b5f365a2f03d078a8521d192905b103), [`61f61fd`](https://github.com/TheFancyRobot/fred/commit/61f61fdc4b5f365a2f03d078a8521d192905b103)]:
+  - @fancyrobot/fred@1.0.0
+
 ## 2.0.1
 
 ### Patch Changes
