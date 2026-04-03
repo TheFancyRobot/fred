@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-anthropic",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Anthropic provider for Fred AI framework",
   "type": "module",
   "main": "./src/index.ts",
