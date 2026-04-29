@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..');
 const CLI_ENTRY = join(REPO_ROOT, 'packages/cli/src/index.ts');
+const CLI_PACKAGE_JSON = JSON.parse(
+  readFileSync(join(REPO_ROOT, 'packages/cli/package.json'), 'utf-8'),
+) as { version: string };
+const TEST_PLUGIN_REQUIRES_FRED_CLI = `^${CLI_PACKAGE_JSON.version}`;
 
 const createdTempDirs: string[] = [];
 
@@ -47,7 +51,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0 || ^0.3.0 || ^0.4.0'
+        requiresFredCli: '${TEST_PLUGIN_REQUIRES_FRED_CLI}'
       }
     },
     commands: [
@@ -73,7 +77,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0 || ^0.3.0 || ^0.4.0'
+        requiresFredCli: '${TEST_PLUGIN_REQUIRES_FRED_CLI}'
       }
     },
     commands: [
@@ -99,7 +103,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0 || ^0.3.0 || ^0.4.0'
+        requiresFredCli: '${TEST_PLUGIN_REQUIRES_FRED_CLI}'
       }
     },
     commands: [
@@ -167,7 +171,7 @@ module.exports = {
       version: '1.0.0',
       compatibility: {
         apiVersion: '^1.0.0',
-        requiresFredCli: '^0.2.0 || ^0.3.0 || ^0.4.0',
+        requiresFredCli: '${TEST_PLUGIN_REQUIRES_FRED_CLI}',
         deprecated: {
           since: '0.1.0',
           message: 'legacy API usage',
