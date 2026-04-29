@@ -5,8 +5,8 @@ contract_version: 1
 title: 'Plan step: baml plugin boundary and package model'
 step_id: STEP-55-01
 phase: '[[02_Phases/Phase_55_implement_baml_plugin/Phase|Phase 55 implement baml plugin]]'
-status: planned
-owner: ''
+status: completed
+owner: implement-team
 created: '2026-04-29'
 updated: '2026-04-29'
 depends_on: []
@@ -54,10 +54,10 @@ Use this note as a thin index for one executable step. Keep detail in companion 
 
 ## Success Conditions
 
-- [ ] Step defines a stable package boundary and rejected alternatives (CLI plugin-first, per-project CLI flags) with rationale.
-- [ ] Step confirms research consensus that `fred-baml` is a core-adjacent extension/library package, not primary CLI plugin runtime wiring.
-- [ ] Step defines whether `fred-baml` requires a pre-generated/checked-in `baml_client/` policy.
-- [ ] Step identifies what “BAML function -> Fred tool” means and what stays unchanged.
+- [x] Step defines a stable package boundary and rejected alternatives (CLI plugin-first, per-project CLI flags) with rationale. **Verified**: Implementation_Notes.md documents 4 rejected alternatives with rationale (CLI plugin-first, replacing markdown, hidden generation, watched-dir generation).
+- [x] Step confirms research consensus that `fred-baml` is a core-adjacent extension/library package, not primary CLI plugin runtime wiring.
+- [x] Step defines that runtime expects an explicit pre-generated client; no hidden runtime generation; no generated artifacts in watched agent dirs; fixture/check-in policy finalized in STEP-55-03.
+- [x] Step identifies what "BAML function -> Fred tool" means and what stays unchanged (BAML functions become Fred tools ONLY through explicit mapping; duplicate-ID/name boundaries established).
 
 ## Companion Notes
 
@@ -69,10 +69,10 @@ Use this note as a thin index for one executable step. Keep detail in companion 
 ## Agent-Managed Snapshot
 
 <!-- AGENT-START:step-agent-managed-snapshot -->
-- Status: planned
-- Current owner: 
+- Status: completed
+- Current owner: implement-team
 - Last touched: 2026-04-29
-- Next action: Read [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_01_plan-step-baml-plugin-boundary-and-package-model/Execution_Brief|Execution Brief]] and [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_01_plan-step-baml-plugin-boundary-and-package-model/Validation_Plan|Validation Plan]].
+- Next action: Proceed to STEP-55-02 package scaffold and publishing contract.
 <!-- AGENT-END:step-agent-managed-snapshot -->
 
 ## Human Notes
