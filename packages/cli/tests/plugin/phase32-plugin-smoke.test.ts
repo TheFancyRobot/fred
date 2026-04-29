@@ -8,7 +8,10 @@ const REPO_ROOT = resolve(import.meta.dir, '../../../..');
 const CLI_ENTRY = join(REPO_ROOT, 'packages/cli/src/index.ts');
 const CLI_PACKAGE_JSON = JSON.parse(
   readFileSync(join(REPO_ROOT, 'packages/cli/package.json'), 'utf-8'),
-) as { version: string };
+) as { version?: unknown };
+if (typeof CLI_PACKAGE_JSON.version !== 'string' || !CLI_PACKAGE_JSON.version) {
+  throw new Error('packages/cli/package.json is missing a valid "version" field');
+}
 const TEST_PLUGIN_REQUIRES_FRED_CLI = `^${CLI_PACKAGE_JSON.version}`;
 
 const createdTempDirs: string[] = [];
