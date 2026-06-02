@@ -74,8 +74,7 @@ async function dispatchConvexCall(
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   try {
-    const method = client[functionType];
-    return await method(functionReference, args);
+    return await client[functionType](functionReference, args);
   } catch (cause) {
     if (
       cause instanceof MissingConvexClientError ||
