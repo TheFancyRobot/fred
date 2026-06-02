@@ -6,6 +6,8 @@ import '../../../../../packages/provider-anthropic/src/index';
 import '../../../../../packages/provider-google/src/index';
 import '../../../../../packages/provider-groq/src/index';
 import '../../../../../packages/provider-openrouter/src/index';
+// STEP-58-01: MiniMax provider will auto-register once implemented
+// import '../../../../../packages/provider-minimax/src/index';
 
 import {
   BUILTIN_PACKS,
@@ -32,6 +34,14 @@ describe('Built-in Pack Registry', () => {
       const actualProviders = Object.keys(BUILTIN_PACKS).sort();
 
       expect(actualProviders).toEqual(expectedProviders);
+    });
+
+    // STEP-58-01: This test will FAIL until provider-minimax is implemented
+    test.todo('includes minimax provider once imported', () => {
+      // Uncomment the minimax import at the top of this file to make this test pass
+      // import '../../../../../packages/provider-minimax/src/index';
+      expect(BUILTIN_PACKS.minimax).toBeDefined();
+      expect(BUILTIN_PACKS.minimax.id).toBe('minimax');
     });
 
     test('all providers have required factory properties', () => {
