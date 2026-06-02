@@ -5,9 +5,8 @@ Example showing how to use Fred with AI chat tools like Misty, Chatbox, etc., in
 ## Complete Example with Built-in Tools
 
 ```typescript
-import { Fred } from 'fred';
-import { createCalculatorTool } from 'fred';
-import { ServerApp } from 'fred/server';
+import { Fred, createCalculatorTool } from '@fancyrobot/fred';
+import { ServerApp } from '@fancyrobot/fred-http';
 
 async function main() {
   const fred = new Fred();
@@ -24,7 +23,7 @@ async function main() {
     systemMessage: 'You are a helpful assistant with calculator capabilities.',
     platform: 'openai',
     model: 'gpt-3.5-turbo',
-    tools: ['calculator'], // Assign built-in calculator
+    tools: ['calculator'],
   });
   fred.setDefaultAgent('default-agent');
 
@@ -34,7 +33,7 @@ async function main() {
     systemMessage: 'You are a math expert. Use the calculator for all mathematical operations.',
     platform: 'openai',
     model: 'gpt-4',
-    tools: ['calculator'], // Math agent also gets calculator
+    tools: ['calculator'],
   });
 
   // Register intents
@@ -44,7 +43,6 @@ async function main() {
     action: { type: 'agent', target: 'math-agent' },
   });
 
-  // Start server
   const app = new ServerApp(fred);
   await app.start(3000);
 
@@ -57,18 +55,15 @@ async function main() {
 ## Example with Custom and Built-in Tools
 
 ```typescript
-import { Fred } from 'fred';
-import { createCalculatorTool } from 'fred';
-import { ServerApp } from 'fred/server';
+import { Fred, createCalculatorTool } from '@fancyrobot/fred';
+import { ServerApp } from '@fancyrobot/fred-http';
 
 async function main() {
   const fred = new Fred();
   fred.registerDefaultProviders();
 
-  // Register built-in calculator
   fred.registerTool(createCalculatorTool());
 
-  // Register a custom weather tool
   fred.registerTool({
     id: 'weather',
     name: 'weather',
@@ -81,22 +76,19 @@ async function main() {
       required: ['location'],
     },
     execute: async (args) => {
-      // Simulated weather data
       return `Weather in ${args.location}: 72°F, partly cloudy`;
     },
   });
 
-  // Create agent with both tools
   await fred.createAgent({
     id: 'assistant',
     systemMessage: 'You are a helpful assistant with calculator and weather capabilities.',
     platform: 'openai',
     model: 'gpt-4',
-    tools: ['calculator', 'weather'], // Both built-in and custom tools
+    tools: ['calculator', 'weather'],
   });
   fred.setDefaultAgent('assistant');
 
-  // Start server
   const app = new ServerApp(fred);
   await app.start(3000);
 
@@ -108,16 +100,13 @@ async function main() {
 ## Basic Example
 
 ```typescript
-import { Fred } from 'fred';
-import { ServerApp } from 'fred/server';
+import { Fred } from '@fancyrobot/fred';
+import { ServerApp } from '@fancyrobot/fred-http';
 
 async function main() {
   const fred = new Fred();
-
-  // Register providers
   fred.registerDefaultProviders();
 
-  // Create a default agent
   await fred.createAgent({
     id: 'default-agent',
     systemMessage: 'You are a helpful assistant.',
@@ -126,7 +115,6 @@ async function main() {
   });
   fred.setDefaultAgent('default-agent');
 
-  // Create specialized agents
   await fred.createAgent({
     id: 'math-agent',
     systemMessage: 'You are a math expert.',
@@ -134,14 +122,12 @@ async function main() {
     model: 'gpt-4',
   });
 
-  // Register intents
   fred.registerIntent({
     id: 'math',
     utterances: ['calculate', 'math', 'solve'],
     action: { type: 'agent', target: 'math-agent' },
   });
 
-  // Start server
   const app = new ServerApp(fred);
   await app.start(3000);
 
@@ -175,4 +161,3 @@ curl -X POST http://localhost:3000/v1/chat/completions \
     ]
   }'
 ```
-

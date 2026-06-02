@@ -5,8 +5,8 @@ Example showing how to run Fred as an HTTP server.
 ## Basic Server
 
 ```typescript
-import { Fred } from 'fred';
-import { ServerApp } from 'fred/server';
+import { Fred } from '@fancyrobot/fred';
+import { ServerApp } from '@fancyrobot/fred-http';
 
 async function main() {
   const fred = new Fred();
@@ -28,13 +28,13 @@ async function main() {
 ## Server with Config
 
 ```typescript
-import { Fred } from 'fred';
-import { ServerApp } from 'fred/server';
+import { Fred } from '@fancyrobot/fred';
+import { ServerApp } from '@fancyrobot/fred-http';
 
 async function main() {
   const fred = new Fred();
   await fred.initializeFromConfig('config.json');
-  
+
   const app = new ServerApp(fred);
   await app.start(3000);
 }
@@ -49,4 +49,3 @@ async function main() {
 - `GET /intents` - List intents
 - `GET /tools` - List tools
 - `GET /health` - Health check
-
