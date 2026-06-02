@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import type { Tool, ToolSchemaMetadata } from '@fancyrobot/fred';
-import type { FredConvexRuntime, ConvexClient } from './runtime';
+import type { FredConvexRuntime, ConvexClient, ConvexFunctionReference } from './runtime';
 import {
   MissingConvexClientError,
   ConvexRuntimeLoadError,
@@ -20,9 +20,9 @@ import {
  * @param args - Arguments to pass to the query
  * @returns Query result
  */
-export async function callConvexQuery(
-  runtime: FredConvexRuntime,
-  functionReference: string,
+export async function callConvexQuery<FunctionReference = ConvexFunctionReference>(
+  runtime: FredConvexRuntime<FunctionReference>,
+  functionReference: FunctionReference,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   const client = await runtime.loadClient();
@@ -37,9 +37,9 @@ export async function callConvexQuery(
  * @param args - Arguments to pass to the mutation
  * @returns Mutation result
  */
-export async function callConvexMutation(
-  runtime: FredConvexRuntime,
-  functionReference: string,
+export async function callConvexMutation<FunctionReference = ConvexFunctionReference>(
+  runtime: FredConvexRuntime<FunctionReference>,
+  functionReference: FunctionReference,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   const client = await runtime.loadClient();
@@ -54,9 +54,9 @@ export async function callConvexMutation(
  * @param args - Arguments to pass to the action
  * @returns Action result
  */
-export async function callConvexAction(
-  runtime: FredConvexRuntime,
-  functionReference: string,
+export async function callConvexAction<FunctionReference = ConvexFunctionReference>(
+  runtime: FredConvexRuntime<FunctionReference>,
+  functionReference: FunctionReference,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   const client = await runtime.loadClient();
@@ -67,10 +67,10 @@ export async function callConvexAction(
  * Internal dispatcher shared by all call helpers.
  * Wraps client method calls with typed error handling.
  */
-async function dispatchConvexCall(
-  client: ConvexClient,
+async function dispatchConvexCall<FunctionReference>(
+  client: ConvexClient<FunctionReference>,
   functionType: 'query' | 'mutation' | 'action',
-  functionReference: string,
+  functionReference: FunctionReference,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   try {
@@ -85,10 +85,14 @@ async function dispatchConvexCall(
       throw cause;
     }
 
+    const functionName =
+      typeof functionReference === 'string'
+        ? functionReference
+        : '[convex function reference]';
     const message = cause instanceof Error ? cause.message : 'Unknown Convex function call failure';
     throw new ConvexFunctionCallError({
-      message: `Convex ${functionType} \`${functionReference}\` failed: ${message}`,
-      functionName: functionReference,
+      message: `Convex ${functionType} \`${functionName}\` failed: ${message}`,
+      functionName,
       functionType,
       cause,
     });
@@ -102,7 +106,7 @@ async function dispatchConvexCall(
 /**
  * Options for creating a Convex-backed Fred tool.
  */
-export interface CreateConvexToolOptions<Input, Output> {
+export interface CreateConvexToolOptions<Input, Output, FunctionReference = ConvexFunctionReference> {
   /** Unique tool identifier */
   id: string;
   /** Human-readable tool name (defaults to id) */
@@ -110,7 +114,7 @@ export interface CreateConvexToolOptions<Input, Output> {
   /** Human-readable description of what the tool does */
   description: string;
   /** Convex function reference (app-owned, e.g. `api.tasks.create`) */
-  functionReference: string;
+  functionReference: FunctionReference;
   /** Function type: query, mutation, or action */
   functionType: 'query' | 'mutation' | 'action';
   /** Effect Schema for the tool's input */
@@ -122,40 +126,16 @@ export interface CreateConvexToolOptions<Input, Output> {
   /** Whether strict mode is enabled (default true) */
   strict?: boolean;
   /** Convex runtime handle */
-  runtime: FredConvexRuntime;
+  runtime: FredConvexRuntime<FunctionReference>;
   /** Optional input mapper: reshape Fred-facing input into Convex args */
   mapInput?: (input: Input) => Record<string, unknown>;
 }
 
 /**
  * Create a Fred-compatible `Tool` backed by a Convex function.
- *
- * Returns a standard Fred `Tool` with Effect Schema input/success,
- * which can be registered on a Fred agent and invoked through the tool registry.
- *
- * @param options - Tool definition and runtime configuration
- * @returns A Fred `Tool` object
- *
- * @example
- * ```ts
- * import { Schema } from 'effect';
- * import { createConvexTool, initFredConvexRuntime } from '@fancyrobot/fred-convex';
- *
- * const runtime = initFredConvexRuntime({ config: { url: process.env.CONVEX_URL! }, loadClient: ... });
- *
- * const createTaskTool = createConvexTool({
- *   id: 'convex.createTask',
- *   description: 'Create a new task in Convex',
- *   functionReference: 'api/tasks:create',
- *   functionType: 'mutation',
- *   inputSchema: Schema.Struct({ title: Schema.String }),
- *   successSchema: Schema.Struct({ _id: Schema.String }),
- *   runtime,
- * });
- * ```
  */
-export function createConvexTool<Input, Output>(
-  options: CreateConvexToolOptions<Input, Output>,
+export function createConvexTool<Input, Output, FunctionReference = ConvexFunctionReference>(
+  options: CreateConvexToolOptions<Input, Output, FunctionReference>,
 ): Tool<Input, Output, never> {
   return {
     id: options.id,
@@ -180,7 +160,6 @@ export function createConvexTool<Input, Output>(
         );
         return result as Output;
       } catch (cause) {
-        // Infrastructure errors (no client, client load failure) pass through as-is
         if (
           cause instanceof MissingConvexClientError ||
           cause instanceof ConvexRuntimeLoadError
@@ -188,7 +167,6 @@ export function createConvexTool<Input, Output>(
           throw cause;
         }
 
-        // Function-call and unknown errors are wrapped as tool-level errors
         const message =
           cause instanceof ConvexFunctionCallError
             ? cause.message
