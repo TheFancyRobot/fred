@@ -33,6 +33,15 @@ export type {
   ProviderRegistration, ProviderModelDefaults, ProviderAlias,
 } from './platform/provider';
 
+// Provider capability types
+export type { ProviderCapabilityKey } from './platform/provider-capabilities';
+export {
+  ProviderCapabilityKeys,
+  UnsupportedProviderCapabilityError,
+  hasCapability,
+  getCapability,
+} from './platform/provider-capabilities';
+
 // Provider pack registry
 export {
   registerBuiltinPack,

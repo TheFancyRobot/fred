@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
+import type { ProviderCapabilityKey } from './provider-capabilities';
 
 export type ProviderAlias = string;
 
@@ -33,6 +34,16 @@ export interface ProviderDefinition {
   getModel: (modelId: string, options?: ProviderModelDefaults) => Effect.Effect<AiModel.Model<any, any, any>, Error>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   layer: Layer.Layer<any, any, any>;
+  /**
+   * Optional set of capability keys this provider supports.
+   *
+   * When omitted, the provider is treated as language-only for
+   * backward compatibility with existing providers.
+   *
+   * Multi-modality providers (e.g. MiniMax) declare all supported
+   * capabilities here so callers can discover and route to them.
+   */
+  capabilities?: Set<ProviderCapabilityKey>;
 }
 
 export interface ProviderConfigInput {
