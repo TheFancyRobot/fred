@@ -25,7 +25,7 @@ This is the main integration layer. It determines type-safety, error semantics, 
 ## Implementation Constraints
 
 - `createBamlTool` should accept an explicit generated function reference and metadata; do not depend on fragile introspection unless BAML exposes stable metadata.
-- Use deterministic tool IDs, preferably caller-provided or `baml:<FunctionName>`; reject duplicates through existing Fred tool registration.
+- Use deterministic tool IDs, preferably caller-provided or `baml.<functionName>` via the adapter helper; reject duplicates through existing Fred tool registration.
 - Prefer Effect Schema for `schema.input`/`schema.success`; if automatic schema conversion is not possible, require explicit schemas from the caller in the first slice.
 - Wrap Promise-returning generated client calls in Effect at adapter boundaries or return Promise from `Tool.execute` only where Fred already accepts it.
 - Preserve structured outputs; do not stringify JSON unless the selected Fred API requires string output.

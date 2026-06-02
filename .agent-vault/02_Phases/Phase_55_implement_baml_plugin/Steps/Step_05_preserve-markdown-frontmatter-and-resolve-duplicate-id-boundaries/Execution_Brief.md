@@ -40,7 +40,7 @@ Current users rely on markdown agent loading, ETA templates, hot reload, and dup
 
 ## Edge Cases and Recovery
 
-- If a user has markdown agent `receipt-agent` and BAML function `ReceiptAgent`, allow it only if the BAML function is a tool ID such as `baml:ReceiptAgent`; do not infer an agent.
+- If a user has markdown agent `receipt-agent` and BAML function `ReceiptAgent`, allow it only if the BAML function is a tool ID such as `baml.receiptAgent`; do not infer an agent.
 - If duplicate BAML functions normalize to the same tool ID, fail during tool creation with both original names in the error.
 
 ## Junior Readiness Verdict

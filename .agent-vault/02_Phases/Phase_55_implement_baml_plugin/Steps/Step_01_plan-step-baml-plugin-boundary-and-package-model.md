@@ -57,7 +57,7 @@ Use this note as a thin index for one executable step. Keep detail in companion 
 - [x] Step defines a stable package boundary and rejected alternatives (CLI plugin-first, per-project CLI flags) with rationale. **Verified**: Implementation_Notes.md documents 4 rejected alternatives with rationale (CLI plugin-first, replacing markdown, hidden generation, watched-dir generation).
 - [x] Step confirms research consensus that `fred-baml` is a core-adjacent extension/library package, not primary CLI plugin runtime wiring.
 - [x] Step defines that runtime expects an explicit pre-generated client; no hidden runtime generation; no generated artifacts in watched agent dirs; fixture/check-in policy finalized in STEP-55-03.
-- [x] Step identifies what "BAML function -> Fred tool" means and what stays unchanged (BAML functions become Fred tools ONLY through explicit mapping; duplicate-ID/name boundaries established).
+- [x] Step identifies what "BAML function -> Fred tool" means and what stays unchanged (BAML functions become Fred tools only through explicit mapping, with deterministic `baml.<functionName>`-style tool ids owned by the adapter layer).
 
 ## Companion Notes
 

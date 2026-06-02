@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import type { Tool, ToolSchemaMetadata } from '@fancyrobot/fred';
-import { BamlToolExecutionError } from './errors';
+import { BamlRuntimeLoadError, BamlToolExecutionError, MissingBamlClientError } from './errors';
 import { initFredBamlRuntime, type FredBamlRuntime } from './runtime';
 
 export interface CreateBamlToolOptions<Input, Output> {
@@ -34,7 +34,11 @@ export function createBamlTool<Input, Output>(
       try {
         return await options.execute(input, runtime);
       } catch (cause) {
-        if (cause instanceof BamlToolExecutionError) {
+        if (
+          cause instanceof BamlToolExecutionError ||
+          cause instanceof MissingBamlClientError ||
+          cause instanceof BamlRuntimeLoadError
+        ) {
           throw cause;
         }
 

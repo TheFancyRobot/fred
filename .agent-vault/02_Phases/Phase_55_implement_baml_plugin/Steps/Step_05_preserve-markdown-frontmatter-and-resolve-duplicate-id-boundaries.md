@@ -47,7 +47,7 @@ tags:
 
 ## Success Conditions
 
-- [ ] Clear namespace policy for BAML-generated tool names vs markdown-defined agent IDs.
+- [ ] Clear namespace policy for BAML-generated `baml.<functionName>` tool names vs markdown-defined agent IDs.
 - [ ] No regressions in `ConfigInitializer` duplicate ID validation behavior.
 - [ ] Markdown frontmatter remains valid for config-first and file-first agent workflows.
 - [ ] Explicitly document handling when Markdown and BAML try to claim same semantic identifier.
@@ -71,7 +71,7 @@ tags:
 ## Human Notes
 
 - Refinement verdict: ready for first-day junior execution after STEP-55-04. Existing markdown/frontmatter behavior is protected by regression tests.
-- Key caution: BAML functions become tools by explicit mapping; they do not become Fred agent IDs automatically.
+- Key caution: BAML functions become `baml.<functionName>` tools by explicit mapping; they do not become Fred agent IDs automatically.
 
 ## Session History
 

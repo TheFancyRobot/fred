@@ -34,7 +34,7 @@ tags:
   - function -> `Tool` conversion helper (`createBamlTool`),
   - agent factory or registration wrapper (`BamlAgent`),
   - safe execution and error propagation into Effect-compatible flow.
-- Duplicate tool/function conflict policy, deterministic naming, and diagnostics for ambiguous generation metadata.
+- Duplicate tool/function conflict policy, deterministic `baml.<functionName>` naming, and diagnostics for ambiguous generation metadata.
 - Explicit handling of helper outputs from test/eval tooling if exported.
 
 ## Required Reading
@@ -56,7 +56,7 @@ tags:
 
 ## Success Conditions
 
-- [ ] Tool registration path is reproducible and deterministic (`createBamlTool` output names and argument schemas).
+- [ ] Tool registration path is reproducible and deterministic (`createBamlTool` output ids use `baml.<functionName>` by default, with stable argument schemas).
 - [ ] Non-tool outputs and structured outputs preserve BAML class/union typing.
 - [ ] Error path maps to Fred tool-call/tool-result semantics for consistency.
 - [ ] Adapter supports sync and async call paths with explicit branching (`b.func.*` vs async wrappers).

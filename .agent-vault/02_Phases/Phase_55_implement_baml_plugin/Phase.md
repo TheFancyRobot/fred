@@ -128,7 +128,7 @@ Use this note for a bounded phase. Keep it focused, link outward, and avoid dupl
 ## Steps
 
 <!-- AGENT-START:phase-steps -->
-- [ ] [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_01_plan-step-baml-plugin-boundary-and-package-model|STEP-55-01 Plan step: baml plugin boundary and package model]]
+- [x] [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_01_plan-step-baml-plugin-boundary-and-package-model|STEP-55-01 Plan step: baml plugin boundary and package model]]
 - [ ] [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_02_define-fred-baml-package-scaffold-and-publishing-contract|STEP-55-02 Define fred-baml package scaffold and publishing contract]]
 - [ ] [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_03_define-baml-source-build-lifecycle-and-generation-verification|STEP-55-03 Define baml source/build lifecycle and generation verification]]
 - [ ] [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_04_implement-baml-client-adapter-agent-tool-mapping-and-typing|STEP-55-04 Implement baml client adapter: agent/tool mapping and typing]]
