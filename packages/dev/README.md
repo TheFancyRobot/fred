@@ -1,12 +1,13 @@
 # @fancyrobot/fred-dev
 
-Development tooling package for the Fred monorepo.
+Development-only tooling package for the Fred monorepo.
 
 ## Scope
 
 `@fancyrobot/fred-dev` is for local development workflows (contributors and maintainers).
-It provides helper entrypoints like dev chat and the local server used while building Fred.
+It provides helper entrypoints like dev chat and a thin local server command bridge used while building Fred.
 
+Reusable HTTP server APIs now live in `@fancyrobot/fred-http`.
 This package is not intended as a production runtime dependency for application deployments.
 
 ## Prerequisites
@@ -41,7 +42,7 @@ bun run --filter @fancyrobot/fred-dev server
 
 ## Server Mode
 
-Start the development server:
+Start the development server bridge:
 
 ```bash
 bun run server
@@ -49,7 +50,7 @@ bun run server
 bun run server --config config.yaml --port 3000
 ```
 
-The server exposes an OpenAI-compatible API:
+The underlying `@fancyrobot/fred-http` server exposes an OpenAI-compatible API:
 
 | Endpoint | Description |
 |----------|-------------|
@@ -64,8 +65,9 @@ The server exposes an OpenAI-compatible API:
 ## What It Exports
 
 - `startDevChat` from `src/dev-chat.ts`
-- `startServer` / `ServerApp` from `src/server.ts`
 - chat default/provider helpers from `src/chat-defaults.ts`
+
+For reusable HTTP APIs, import from `@fancyrobot/fred-http` instead.
 
 ## Stability
 

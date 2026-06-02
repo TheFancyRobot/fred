@@ -1,7 +1,7 @@
 {
-  "name": "@fancyrobot/fred-dev",
-  "version": "0.2.1",
-  "description": "Fred dev-only tooling and contributor workflows",
+  "name": "@fancyrobot/fred-http",
+  "version": "0.1.0",
+  "description": "Fred Bun HTTP server and composable HTTP app tools",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -13,20 +13,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./chat-defaults": {
-      "types": "./src/chat-defaults.ts",
-      "import": "./src/chat-defaults.ts"
     }
   },
   "scripts": {
-    "dev": "bun run src/dev-chat.ts",
-    "server": "bun run src/server.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --format esm"
-  },
-  "dependencies": {
-    "@fancyrobot/fred-http": "workspace:^",
-    "chokidar": "^5.0.0"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^1.0.0",
@@ -43,9 +33,9 @@
   },
   "keywords": [
     "fred",
-    "dev",
-    "cli",
-    "development"
+    "http",
+    "bun",
+    "api"
   ],
   "license": "MIT"
 }
