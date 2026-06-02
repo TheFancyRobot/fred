@@ -1,8 +1,24 @@
+import { MissingConvexClientError, ConvexRuntimeLoadError } from './errors';
+
+/**
+ * Structural interface for a Convex HTTP client.
+ * Matches the public shape of `ConvexHttpClient` without importing app-generated types.
+ * Consuming apps pass their own `ConvexHttpClient` instance.
+ */
+export interface ConvexClient {
+  readonly query: (functionReference: string, args?: Record<string, unknown>) => Promise<unknown>;
+  readonly mutation: (functionReference: string, args?: Record<string, unknown>) => Promise<unknown>;
+  readonly action: (functionReference: string, args?: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * Loader function that provides a ConvexClient instance.
+ * Typically wraps `() => new ConvexHttpClient(url)`.
+ */
+export type ConvexClientLoader = () => Promise<ConvexClient> | ConvexClient;
+
 /**
  * Configuration for initializing a Fred Convex runtime.
- *
- * Consuming apps provide their deployment URL and optional auth token;
- * the generated `convex/_generated/api` module reference is owned by the app.
  */
 export interface ConvexRuntimeConfig {
   /** Convex deployment URL, e.g. `https://cool-cat-123.convex.cloud` */
@@ -13,24 +29,64 @@ export interface ConvexRuntimeConfig {
 
 /**
  * Opaque handle returned by `initFredConvexRuntime`.
- * Holds the configured Convex client and deployment info.
+ * Holds the configured client loader and deployment info.
  */
-export interface ConvexRuntime {
+export interface FredConvexRuntime {
   readonly config: ConvexRuntimeConfig;
+  loadClient(): Promise<ConvexClient> | ConvexClient;
 }
 
 /**
- * Initialize a Fred Convex runtime with the given deployment configuration.
+ * Options for initializing a Fred Convex runtime.
+ */
+export interface InitFredConvexRuntimeOptions {
+  /** Deployment URL and optional auth token */
+  config: ConvexRuntimeConfig;
+  /** Loader that provides a ConvexClient instance */
+  loadClient?: ConvexClientLoader;
+}
+
+/**
+ * Initialize a Fred Convex runtime with the given configuration and client loader.
  *
- * @param config - Deployment URL and optional auth token
- * @returns A `ConvexRuntime` handle used by all call/tool helpers
+ * @param options - Deployment config and optional client loader
+ * @returns A `FredConvexRuntime` handle used by all call/tool helpers
  *
  * @example
  * ```ts
+ * import { ConvexHttpClient } from 'convex/browser';
  * import { initFredConvexRuntime } from '@fancyrobot/fred-convex';
- * const runtime = initFredConvexRuntime({ url: process.env.CONVEX_URL! });
+ *
+ * const runtime = initFredConvexRuntime({
+ *   config: { url: process.env.CONVEX_URL! },
+ *   loadClient: () => {
+ *     const client = new ConvexHttpClient(process.env.CONVEX_URL!);
+ *     if (process.env.CONVEX_AUTH_TOKEN) client.setAuth(process.env.CONVEX_AUTH_TOKEN);
+ *     return client;
+ *   },
+ * });
  * ```
  */
-export function initFredConvexRuntime(config: ConvexRuntimeConfig): ConvexRuntime {
-  return { config };
+export function initFredConvexRuntime(options: InitFredConvexRuntimeOptions): FredConvexRuntime {
+  return {
+    config: options.config,
+    async loadClient(): Promise<ConvexClient> {
+      if (!options.loadClient) {
+        throw new MissingConvexClientError({
+          message:
+            `No Convex client loader configured for url \`${options.config.url}\`. ` +
+            'Pass loadClient when wiring @fancyrobot/fred-convex.',
+        });
+      }
+
+      try {
+        return await options.loadClient();
+      } catch (cause) {
+        throw new ConvexRuntimeLoadError({
+          message: `Failed to load Convex client for url \`${options.config.url}\`.`,
+          cause,
+        });
+      }
+    },
+  };
 }

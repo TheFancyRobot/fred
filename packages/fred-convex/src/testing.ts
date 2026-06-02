@@ -1,14 +1,35 @@
-import type { ConvexRuntime, ConvexRuntimeConfig } from './runtime';
+import type { ConvexClient, FredConvexRuntime, ConvexRuntimeConfig, ConvexClientLoader } from './runtime';
 
 /**
- * A deterministic stub Convex client for testing.
- * All calls return configurable values without hitting a real Convex deployment.
+ * Create a stub Convex client for deterministic testing.
+ * All calls dispatch to pre-configured response maps.
  */
-export interface StubConvexClient {
-  /** Config used to create the stub (url is typically a sentinel like `https://test.convex.cloud`) */
-  readonly config: ConvexRuntimeConfig;
-  /** Pre-configured response map: functionReference -> result */
-  responses: Map<string, unknown>;
+export function createStubConvexClient(
+  responses?: Record<string, unknown>,
+): ConvexClient & { responses: Map<string, unknown> } {
+  const responseMap = new Map(Object.entries(responses ?? {}));
+
+  return {
+    responses: responseMap,
+    async query(functionReference: string, _args?: Record<string, unknown>): Promise<unknown> {
+      if (responseMap.has(functionReference)) {
+        return responseMap.get(functionReference);
+      }
+      throw new Error(`StubConvexClient: no response configured for query \`${functionReference}\``);
+    },
+    async mutation(functionReference: string, _args?: Record<string, unknown>): Promise<unknown> {
+      if (responseMap.has(functionReference)) {
+        return responseMap.get(functionReference);
+      }
+      throw new Error(`StubConvexClient: no response configured for mutation \`${functionReference}\``);
+    },
+    async action(functionReference: string, _args?: Record<string, unknown>): Promise<unknown> {
+      if (responseMap.has(functionReference)) {
+        return responseMap.get(functionReference);
+      }
+      throw new Error(`StubConvexClient: no response configured for action \`${functionReference}\``);
+    },
+  };
 }
 
 /**
@@ -20,15 +41,21 @@ export interface StubConvexClient {
  * @example
  * ```ts
  * import { createStubConvexRuntime } from '@fancyrobot/fred-convex/testing';
- * const stub = createStubConvexRuntime({ 'api.tasks.list': [{ _id: '1', title: 'Test' }] });
+ * const { runtime, client } = createStubConvexRuntime({ 'api/tasks:list': [{ _id: '1', title: 'Test' }] });
  * ```
  */
 export function createStubConvexRuntime(
-  responses?: Record<string, unknown>
-): { runtime: ConvexRuntime; client: StubConvexClient } {
+  responses?: Record<string, unknown>,
+): { runtime: FredConvexRuntime; client: ReturnType<typeof createStubConvexClient> } {
+  const client = createStubConvexClient(responses);
   const config: ConvexRuntimeConfig = { url: 'https://test.convex.cloud' };
-  const responseMap = new Map(Object.entries(responses ?? {}));
-  const runtime: ConvexRuntime = { config };
-  const client: StubConvexClient = { config, responses: responseMap };
+  const loadClient: ConvexClientLoader = () => client;
+
+  // Inline runtime construction (avoids importing initFredConvexRuntime which requires options)
+  const runtime: FredConvexRuntime = {
+    config,
+    loadClient,
+  };
+
   return { runtime, client };
 }
