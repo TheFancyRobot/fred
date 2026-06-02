@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "files": [
     "src",
+    "dist",
     "README.md"
   ],
   "exports": {
@@ -17,12 +18,12 @@
     },
     "./testing": {
       "types": "./src/testing.ts",
-      "import": "./src/testing.ts",
-      "default": "./src/testing.ts"
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
     }
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm"
+    "build": "bun build src/index.ts src/testing.ts --outdir dist --target bun --format esm"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^1.0.0",

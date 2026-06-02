@@ -88,7 +88,7 @@ describe('initFredConvexRuntime', () => {
 describe('createStubConvexRuntime', () => {
   test('returns runtime and client with configured responses', async () => {
     const { runtime, client } = createStubConvexRuntime({
-      'api/tasks:list': [{ _id: '1', title: 'Test' }],
+      query: { 'api/tasks:list': [{ _id: '1', title: 'Test' }] },
     });
     const loadedClient = await runtime.loadClient();
     expect(loadedClient).toBe(client);
@@ -109,17 +109,26 @@ describe('createStubConvexRuntime', () => {
 
 describe('callConvexQuery', () => {
   test('dispatches to client.query', async () => {
-    const stub = createStubConvexClient({ 'api/tasks:list': [{ _id: '1' }] });
+    const stub = createStubConvexClient({ query: { 'api/tasks:list': [{ _id: '1' }] } });
     const runtime = makeRuntimeWithClient(stub);
     const result = await callConvexQuery(runtime, 'api/tasks:list');
     expect(result).toEqual([{ _id: '1' }]);
   });
 
   test('passes args to client.query', async () => {
-    const stub = createStubConvexClient({ 'api/tasks:get': { _id: '42' } });
+    const stub = createStubConvexClient({ query: { 'api/tasks:get': { _id: '42' } } });
     const runtime = makeRuntimeWithClient(stub);
     const result = await callConvexQuery(runtime, 'api/tasks:get', { id: '42' });
     expect(result).toEqual({ _id: '42' });
+  });
+
+  test('accepts object-style function references', async () => {
+    const listTasksRef = { module: 'tasks', name: 'list' };
+    const { runtime } = createStubConvexRuntime({
+      query: { [JSON.stringify(listTasksRef)]: [{ _id: 'obj-1' }] },
+    });
+
+    await expect(callConvexQuery(runtime, listTasksRef)).resolves.toEqual([{ _id: 'obj-1' }]);
   });
 
   test('preserves class-based client method bindings', async () => {
@@ -143,6 +152,11 @@ describe('callConvexQuery', () => {
     await expect(callConvexQuery(runtime, 'api/tasks:list')).resolves.toEqual([{ _id: '1' }]);
   });
 
+  test('rejects wrong function type against typed stubs', async () => {
+    const stub = createStubConvexClient({ query: { 'api/tasks:list': [{ _id: '1' }] } });
+    await expect(stub.mutation('api/tasks:list')).rejects.toThrow(/no response configured for mutation/);
+  });
+
   test('wraps client errors as ConvexFunctionCallError', async () => {
     const stub = createStubConvexClient();
     const runtime = makeRuntimeWithClient(stub);
@@ -160,7 +174,7 @@ describe('callConvexQuery', () => {
 
 describe('callConvexMutation', () => {
   test('dispatches to client.mutation', async () => {
-    const stub = createStubConvexClient({ 'api/tasks:create': { _id: 'new' } });
+    const stub = createStubConvexClient({ mutation: { 'api/tasks:create': { _id: 'new' } } });
     const runtime = makeRuntimeWithClient(stub);
     const result = await callConvexMutation(runtime, 'api/tasks:create', { title: 'New' });
     expect(result).toEqual({ _id: 'new' });
@@ -181,7 +195,7 @@ describe('callConvexMutation', () => {
 
 describe('callConvexAction', () => {
   test('dispatches to client.action', async () => {
-    const stub = createStubConvexClient({ 'api/tasks:process': 'done' });
+    const stub = createStubConvexClient({ action: { 'api/tasks:process': 'done' } });
     const runtime = makeRuntimeWithClient(stub);
     const result = await callConvexAction(runtime, 'api/tasks:process');
     expect(result).toBe('done');
@@ -231,7 +245,7 @@ describe('call helpers passthrough', () => {
 
 describe('createConvexTool', () => {
   test('returns a Fred Tool with correct metadata', () => {
-    const { runtime } = createStubConvexRuntime({ 'api/tasks:create': { _id: '1' } });
+    const { runtime } = createStubConvexRuntime({ mutation: { 'api/tasks:create': { _id: '1' } } });
     const tool = createConvexTool({
       id: 'convex.createTask',
       description: 'Create a task',
@@ -251,7 +265,7 @@ describe('createConvexTool', () => {
   });
 
   test('executes a query-backed tool', async () => {
-    const { runtime } = createStubConvexRuntime({ 'api/tasks:list': [{ _id: '1', title: 'Hello' }] });
+    const { runtime } = createStubConvexRuntime({ query: { 'api/tasks:list': [{ _id: '1', title: 'Hello' }] } });
     const tool = createConvexTool({
       id: 'convex.listTasks',
       description: 'List tasks',
@@ -267,7 +281,7 @@ describe('createConvexTool', () => {
   });
 
   test('executes a mutation-backed tool with mapInput', async () => {
-    const { runtime } = createStubConvexRuntime({ 'api/tasks:create': { _id: '99' } });
+    const { runtime } = createStubConvexRuntime({ mutation: { 'api/tasks:create': { _id: '99' } } });
     const tool = createConvexTool({
       id: 'convex.createTask',
       description: 'Create a task',
@@ -331,7 +345,7 @@ describe('createConvexTool', () => {
 
 describe('Fred integration', () => {
   test('registers and executes a Convex-backed tool through Fred', async () => {
-    const { runtime } = createStubConvexRuntime({ 'api/tasks:list': [{ _id: '1', title: 'Test' }] });
+    const { runtime } = createStubConvexRuntime({ query: { 'api/tasks:list': [{ _id: '1', title: 'Test' }] } });
 
     const tool = createConvexTool({
       id: 'convex.listTasks',

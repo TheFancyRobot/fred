@@ -37,6 +37,7 @@ const runtime = initFredConvexRuntime({
 });
 
 const tasks = await callConvexQuery(runtime, 'api/tasks:list', {});
+// In a real Convex app you can also pass generated references like `api.tasks.list`.
 
 const createTaskTool = createConvexTool({
   id: 'convex.createTask',
@@ -55,7 +56,9 @@ const createTaskTool = createConvexTool({
 import { createStubConvexRuntime } from '@fancyrobot/fred-convex/testing';
 
 const { runtime, client } = createStubConvexRuntime({
-  'api/tasks:list': [{ _id: '1', title: 'Test task' }],
+  query: {
+    'api/tasks:list': [{ _id: '1', title: 'Test task' }],
+  },
 });
 ```
 
