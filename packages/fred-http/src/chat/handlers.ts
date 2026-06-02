@@ -6,7 +6,6 @@ import type { Prompt } from '@effect/ai';
 
 interface ChatContextService {
   generateConversationId(): string;
-  getHistory(conversationId: string): Promise<Prompt.MessageEncoded[]>;
   addMessage(conversationId: string, message: Prompt.MessageEncoded): Promise<void>;
 }
 
@@ -28,10 +27,6 @@ export class ChatHandlers {
       role: msg.role as Prompt.MessageEncoded['role'],
       content: msg.content || '',
     })) as Prompt.MessageEncoded[];
-
-    const history = await this.contextManager.getHistory(conversationId);
-    const allMessages: Prompt.MessageEncoded[] = [...history, ...modelMessages];
-    void allMessages;
 
     const lastUserMessage = modelMessages[modelMessages.length - 1];
     if (!lastUserMessage || lastUserMessage.role !== 'user') {

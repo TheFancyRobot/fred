@@ -1,4 +1,4 @@
-import { Fred, sanitizeError } from '@fancyrobot/fred';
+import { Fred } from '@fancyrobot/fred';
 import type { Prompt } from '@effect/ai';
 import { ServerHandlers } from './handlers';
 import { Router } from './routes';
@@ -44,7 +44,6 @@ export class ServerApp {
 
     const chatContextAdapter = {
       generateConversationId: () => framework.generateConversationId(),
-      getHistory: (conversationId: string) => framework.getHistory(conversationId),
       addMessage: (conversationId: string, message: Prompt.MessageEncoded) =>
         framework.addMessages(conversationId, [message]),
     };
@@ -103,9 +102,10 @@ export class ServerApp {
           });
         }
 
+        const corsAllowed = origin ? matchOrigin(origin, this.securityConfig.corsAllowedOrigins) : false;
+
         try {
           const response = await this.router.handleRequest(req);
-          const corsAllowed = origin ? matchOrigin(origin, this.securityConfig.corsAllowedOrigins) : false;
           if (corsAllowed && origin) {
             response.headers.set('Access-Control-Allow-Origin', origin);
             response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -113,15 +113,22 @@ export class ServerApp {
           }
 
           return response;
-        } catch (error) {
-          sanitizeError(error, 'Request failed');
-          return Response.json(
+        } catch {
+          const errorResponse = Response.json(
             {
               success: false,
               error: 'Request failed',
             },
             { status: 500 }
           );
+
+          if (corsAllowed && origin) {
+            errorResponse.headers.set('Access-Control-Allow-Origin', origin);
+            errorResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          }
+
+          return errorResponse;
         }
       },
     });

@@ -1,5 +1,6 @@
-import { Fred, sanitizeError } from '@fancyrobot/fred';
+import { Fred } from '@fancyrobot/fred';
 import type { Prompt } from '@effect/ai';
+import { isIP } from 'node:net';
 import { ChatHandlers } from './chat/handlers';
 import { ChatRoutes } from './chat/routes';
 import { ServerHandlers } from './handlers';
@@ -25,10 +26,13 @@ export interface CreateFredHttpAppOptions {
   fred: Fred;
   security?: Partial<ServerSecurityConfig>;
   routes?: ReadonlyArray<FredHttpCustomRoute>;
+  trustProxy?: boolean;
+  getClientIp?: (request: Request) => string | undefined;
 }
 
 export interface FredHttpApp {
   fetch(request: Request): Promise<Response>;
+  dispose(): void;
 }
 
 interface NormalizedCustomRoute extends FredHttpCustomRoute {
@@ -56,7 +60,6 @@ function createBuiltInRouter(framework: Fred): Router {
   const handlers = new ServerHandlers(framework);
   const chatContextAdapter = {
     generateConversationId: () => framework.generateConversationId(),
-    getHistory: (conversationId: string) => framework.getHistory(conversationId),
     addMessage: (conversationId: string, message: Prompt.MessageEncoded) =>
       framework.addMessages(conversationId, [message]),
   };
@@ -65,10 +68,21 @@ function createBuiltInRouter(framework: Fred): Router {
   return new Router(handlers, chatRoutes);
 }
 
+function getAllowedCorsMethods(routes: ReadonlyArray<NormalizedCustomRoute>): string {
+  const methods = new Set<string>(['GET', 'POST', 'OPTIONS']);
+
+  for (const route of routes) {
+    methods.add(route.method);
+  }
+
+  return Array.from(methods).join(', ');
+}
+
 function applyCorsHeaders(
   response: Response,
   origin: string | null,
-  securityConfig: ServerSecurityConfig
+  securityConfig: ServerSecurityConfig,
+  allowedMethods: string
 ): Response {
   const corsAllowed = origin ? matchOrigin(origin, securityConfig.corsAllowedOrigins) : false;
   if (!corsAllowed || !origin) {
@@ -76,27 +90,39 @@ function applyCorsHeaders(
   }
 
   response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Methods', allowedMethods);
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   return response;
 }
 
-function resolveClientIp(request: Request): string {
+function extractProxyIp(request: Request): string | undefined {
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    return forwardedFor.split(',')[0]?.trim() || 'unknown';
+    const candidate = forwardedFor.split(',')[0]?.trim();
+    if (candidate && isIP(candidate)) {
+      return candidate;
+    }
   }
 
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp && isIP(realIp)) {
     return realIp;
   }
 
-  const hostname = new URL(request.url).hostname;
-  if (hostname === 'localhost') {
-    return '127.0.0.1';
+  return undefined;
+}
+
+function resolveClientIp(request: Request, options: CreateFredHttpAppOptions): string {
+  const explicitClientIp = options.getClientIp?.(request)?.trim();
+  if (explicitClientIp) {
+    return explicitClientIp;
   }
-  return hostname || 'unknown';
+
+  if (options.trustProxy) {
+    return extractProxyIp(request) ?? 'unknown';
+  }
+
+  return 'unknown';
 }
 
 export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpApp {
@@ -110,6 +136,7 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
     securityConfig.rateLimitMaxRequests,
     securityConfig.rateLimitWindowMs
   );
+  const allowedCorsMethods = getAllowedCorsMethods(customRoutes);
 
   return {
     async fetch(request: Request): Promise<Response> {
@@ -126,14 +153,14 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
           status: 204,
           headers: {
             'Access-Control-Allow-Origin': origin,
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Methods': allowedCorsMethods,
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           },
         });
       }
 
       const matchedCustomRoute = matchCustomRoute(request, customRoutes);
-      const clientIP = resolveClientIp(request);
+      const clientIP = resolveClientIp(request, options);
       const rateLimitResult = rateLimiter.check(clientIP);
       if (!rateLimitResult.allowed) {
         const retryAfterSeconds = Math.max(1, Math.ceil((rateLimitResult.retryAfterMs ?? 0) / 1000));
@@ -167,9 +194,8 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
           ? await matchedCustomRoute.handler(request)
           : await builtInRouter.handleRequest(request);
 
-        return applyCorsHeaders(response, origin, securityConfig);
-      } catch (error) {
-        sanitizeError(error, 'Request failed');
+        return applyCorsHeaders(response, origin, securityConfig, allowedCorsMethods);
+      } catch {
         return applyCorsHeaders(
           Response.json(
             {
@@ -179,9 +205,13 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
             { status: 500 }
           ),
           origin,
-          securityConfig
+          securityConfig,
+          allowedCorsMethods
         );
       }
+    },
+    dispose(): void {
+      rateLimiter.dispose();
     },
   };
 }
