@@ -3,7 +3,7 @@ import { Effect, Schema } from 'effect';
 import {
   ProviderDefinition,
   ProviderConfig,
-} from '../../../../../packages/core/src/platform/provider';
+} from '../../../../packages/core/src/platform/provider';
 
 // ─── Capability key coverage ────────────────────────────────────────────────
 
@@ -11,7 +11,7 @@ describe('Provider Capability Contract', () => {
   describe('ProviderCapabilityKey', () => {
     test('defines all expected capability keys', async () => {
       const { ProviderCapabilityKeys } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const expectedKeys = [
@@ -30,7 +30,7 @@ describe('Provider Capability Contract', () => {
 
     test('ProviderCapabilityKey type covers all six modalities', async () => {
       const { ProviderCapabilityKeys } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       expect(ProviderCapabilityKeys.length).toBe(6);
@@ -40,7 +40,7 @@ describe('Provider Capability Contract', () => {
   describe('UnsupportedProviderCapabilityError', () => {
     test('is a Schema.TaggedError with providerId and capability', async () => {
       const { UnsupportedProviderCapabilityError } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const error = new UnsupportedProviderCapabilityError({
@@ -55,7 +55,7 @@ describe('Provider Capability Contract', () => {
 
     test('has meaningful message including provider and capability', async () => {
       const { UnsupportedProviderCapabilityError } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const error = new UnsupportedProviderCapabilityError({
@@ -69,7 +69,7 @@ describe('Provider Capability Contract', () => {
 
     test('works with Effect.catchTag', async () => {
       const { UnsupportedProviderCapabilityError } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const program = Effect.fail(
@@ -94,7 +94,7 @@ describe('Provider Capability Contract', () => {
   describe('getCapability helper', () => {
     test('returns failure Effect when capability is not supported', async () => {
       const { getCapability, UnsupportedProviderCapabilityError } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const definition: ProviderDefinition = {
@@ -118,7 +118,7 @@ describe('Provider Capability Contract', () => {
 
     test('returns success when capability is supported', async () => {
       const { getCapability } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const definition: ProviderDefinition = {
@@ -146,7 +146,7 @@ describe('Provider Capability Contract', () => {
 
     test('failure contains UnsupportedProviderCapabilityError', async () => {
       const { getCapability, UnsupportedProviderCapabilityError } = await import(
-        '../../../../../packages/core/src/platform/provider-capabilities'
+        '../../../../packages/core/src/platform/provider-capabilities'
       );
 
       const definition: ProviderDefinition = {
