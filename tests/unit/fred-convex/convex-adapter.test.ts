@@ -122,6 +122,27 @@ describe('callConvexQuery', () => {
     expect(result).toEqual({ _id: '42' });
   });
 
+  test('preserves class-based client method bindings', async () => {
+    class BoundClient implements ConvexClient {
+      private readonly responses = new Map([['api/tasks:list', [{ _id: '1' }]]]);
+
+      async query(functionReference: string): Promise<unknown> {
+        return this.responses.get(functionReference);
+      }
+
+      async mutation(functionReference: string): Promise<unknown> {
+        return this.responses.get(functionReference);
+      }
+
+      async action(functionReference: string): Promise<unknown> {
+        return this.responses.get(functionReference);
+      }
+    }
+
+    const runtime = makeRuntimeWithClient(new BoundClient());
+    await expect(callConvexQuery(runtime, 'api/tasks:list')).resolves.toEqual([{ _id: '1' }]);
+  });
+
   test('wraps client errors as ConvexFunctionCallError', async () => {
     const stub = createStubConvexClient();
     const runtime = makeRuntimeWithClient(stub);

@@ -15,27 +15,37 @@ bun add @fancyrobot/fred-convex
 ## Quick Start
 
 ```ts
-import { initFredConvexRuntime, createConvexTool, callConvexQuery } from '@fancyrobot/fred-convex';
+import { Schema } from 'effect';
+import {
+  initFredConvexRuntime,
+  createConvexTool,
+  callConvexQuery,
+} from '@fancyrobot/fred-convex';
 
-// Initialize runtime with your Convex deployment URL
 const runtime = initFredConvexRuntime({
-  url: process.env.CONVEX_URL!,
+  config: { url: process.env.CONVEX_URL! },
+  loadClient: async () => {
+    const { ConvexHttpClient } = await import('convex/browser');
+    const client = new ConvexHttpClient(process.env.CONVEX_URL!);
+
+    if (process.env.CONVEX_AUTH_TOKEN) {
+      client.setAuth(process.env.CONVEX_AUTH_TOKEN);
+    }
+
+    return client;
+  },
 });
 
-// Call a Convex function directly
-const tasks = await callConvexQuery(runtime, 'api.tasks.list', {});
+const tasks = await callConvexQuery(runtime, 'api/tasks:list', {});
 
-// Create a Fred tool backed by a Convex mutation
-const createTaskTool = createConvexTool(runtime, {
-  name: 'createTask',
+const createTaskTool = createConvexTool({
+  id: 'convex.createTask',
   description: 'Create a new task in Convex',
-  functionReference: 'api.tasks.create',
+  functionReference: 'api/tasks:create',
   functionType: 'mutation',
-  parameters: {
-    type: 'object',
-    properties: { title: { type: 'string' } },
-    required: ['title'],
-  },
+  inputSchema: Schema.Struct({ title: Schema.String }),
+  successSchema: Schema.Struct({ _id: Schema.String }),
+  runtime,
 });
 ```
 
@@ -45,18 +55,18 @@ const createTaskTool = createConvexTool(runtime, {
 import { createStubConvexRuntime } from '@fancyrobot/fred-convex/testing';
 
 const { runtime, client } = createStubConvexRuntime({
-  'api.tasks.list': [{ _id: '1', title: 'Test task' }],
+  'api/tasks:list': [{ _id: '1', title: 'Test task' }],
 });
 ```
 
 ## API
 
-- `initFredConvexRuntime(config)` — Initialize runtime with deployment URL and optional auth
-- `callConvexQuery(runtime, fnRef, args?)` — Call a Convex query
-- `callConvexMutation(runtime, fnRef, args?)` — Call a Convex mutation
-- `callConvexAction(runtime, fnRef, args?)` — Call a Convex action
-- `createConvexTool(runtime, options)` — Create a Fred tool backed by a Convex function
-- `createStubConvexRuntime(responses?)` — Create deterministic test stub (from `/testing`)
+- `initFredConvexRuntime({ config, loadClient? })` — initialize a runtime with deployment config and an optional async client loader
+- `callConvexQuery(runtime, fnRef, args?)` — call a Convex query
+- `callConvexMutation(runtime, fnRef, args?)` — call a Convex mutation
+- `callConvexAction(runtime, fnRef, args?)` — call a Convex action
+- `createConvexTool({ id, description, functionReference, functionType, inputSchema, successSchema, runtime, ... })` — create a Fred tool backed by a Convex function
+- `createStubConvexRuntime(responses?)` — create a deterministic test stub (from `/testing`)
 
 ## License
 
