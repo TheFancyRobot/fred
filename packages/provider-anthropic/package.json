@@ -16,7 +16,7 @@
     "build": "bun build src/index.ts --outdir dist --target bun --format esm"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "workspace:^",
+    "@fancyrobot/fred": "^1.0.0",
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
     "@effect/ai-anthropic": "^0.25.0"
