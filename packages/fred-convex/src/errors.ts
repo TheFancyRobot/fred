@@ -1,10 +1,20 @@
 import { Schema } from 'effect';
 
 /**
- * Error thrown when Convex runtime initialization fails.
+ * Error thrown when no Convex client is configured on the runtime.
  */
-export class ConvexRuntimeInitError extends Schema.TaggedError<ConvexRuntimeInitError>()(
-  'ConvexRuntimeInitError',
+export class MissingConvexClientError extends Schema.TaggedError<MissingConvexClientError>()(
+  'MissingConvexClientError',
+  {
+    message: Schema.String,
+  },
+) {}
+
+/**
+ * Error thrown when Convex runtime initialization or client loading fails.
+ */
+export class ConvexRuntimeLoadError extends Schema.TaggedError<ConvexRuntimeLoadError>()(
+  'ConvexRuntimeLoadError',
   {
     message: Schema.String,
     cause: Schema.optional(Schema.Unknown),
@@ -25,13 +35,13 @@ export class ConvexFunctionCallError extends Schema.TaggedError<ConvexFunctionCa
 ) {}
 
 /**
- * Error thrown when creating a Convex tool adapter fails.
+ * Error thrown when creating or executing a Convex-backed Fred tool fails.
  */
-export class ConvexToolCreateError extends Schema.TaggedError<ConvexToolCreateError>()(
-  'ConvexToolCreateError',
+export class ConvexToolExecutionError extends Schema.TaggedError<ConvexToolExecutionError>()(
+  'ConvexToolExecutionError',
   {
+    toolId: Schema.String,
     message: Schema.String,
-    toolName: Schema.String,
     cause: Schema.optional(Schema.Unknown),
   },
 ) {}
