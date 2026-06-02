@@ -7,7 +7,7 @@ phase_id: PHASE-55
 status: planned
 owner: ''
 created: '2026-04-29'
-updated: '2026-04-29'
+updated: '2026-06-02'
 depends_on:
   - '[[02_Phases/Phase_54_cancellation_propagation/Phase|PHASE-54 Cancellation Propagation]]'
 related_architecture:
@@ -102,7 +102,7 @@ Use this note for a bounded phase. Keep it focused, link outward, and avoid dupl
 <!-- AGENT-START:phase-linear-context -->
 - Previous phase: [[02_Phases/Phase_54_cancellation_propagation/Phase|PHASE-54 Cancellation Propagation]]
 - Current phase status: planned
-- Next phase: not planned yet.
+- Next phase: [[02_Phases/Phase_56_build_fred_convex_adapter_package/Phase|PHASE-56 Build Fred Convex adapter package]]
 <!-- AGENT-END:phase-linear-context -->
 
 ## Related Architecture

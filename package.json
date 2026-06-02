@@ -66,6 +66,7 @@
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-anthropic": "workspace:*",
+    "@fancyrobot/fred-baml": "workspace:*",
     "@fancyrobot/fred-cli": "workspace:*",
     "@fancyrobot/fred-dev": "workspace:*",
     "@fancyrobot/fred-google": "workspace:*",
