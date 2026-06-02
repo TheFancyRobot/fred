@@ -208,7 +208,6 @@
       "name": "@fancyrobot/fred-baml",
       "version": "0.1.0",
       "devDependencies": {
-        "@fancyrobot/fred": "workspace:^",
         "effect": "^3.21.0",
       },
       "peerDependencies": {
@@ -220,7 +219,6 @@
       "name": "@fancyrobot/fred-convex",
       "version": "0.1.0",
       "devDependencies": {
-        "@fancyrobot/fred": "workspace:^",
         "convex": "^1.0.0",
         "effect": "^3.21.0",
       },

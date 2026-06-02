@@ -24,7 +24,6 @@
     "effect": "^3.21.0"
   },
   "devDependencies": {
-    "@fancyrobot/fred": "workspace:^",
     "effect": "^3.21.0"
   },
   "publishConfig": {
