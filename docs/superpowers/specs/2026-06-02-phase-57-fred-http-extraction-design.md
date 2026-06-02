@@ -12,6 +12,7 @@ Phase 57 should be redefined from the already-completed sibling-consumption clar
 - Move the existing server runtime/API from `packages/dev` into `packages/fred-http`.
 - Remove server API ownership from `@fancyrobot/fred-dev`.
 - Update all internal and sibling consumers to import `@fancyrobot/fred-http`.
+- Allow consumers to build broader HTTP APIs in front of Fred, including custom consumer-defined routes and handlers in the same secured server app.
 - Validate all affected consumers, builds, docs, and tests after migration.
 - Orchestrate the full Phase 57 execution through vault step orchestration.
 
@@ -51,6 +52,24 @@ This package owns:
 - route wiring
 - auth/rate-limit/CORS/error-sanitization behavior
 - Bun HTTP runtime integration required to host a Fred instance over HTTP
+- a composable, Effect-friendly app builder surface for consumer-defined routes and handlers
+
+### API shape
+`@fancyrobot/fred-http` should expose two usage modes.
+
+#### Simple mode
+A batteries-included entrypoint for consumers who just want Fred's HTTP API:
+- `startServer(...)`
+- `ServerApp(...)`
+
+#### Composable mode
+An Effect-oriented composition surface for consumers who need to build a wider HTTP API around Fred:
+- register consumer-defined routes/handlers
+- mount Fred routes into the same app
+- share one centrally managed security pipeline
+- avoid deep imports into internal route files
+
+The composable API should follow Effect-TS best practices: small composable services/modules, explicit dependency wiring, and no APIs that encourage bypassing security or runtime boundaries.
 
 ### Remaining dev package boundary
 `packages/dev` keeps:
@@ -62,6 +81,26 @@ This package owns:
 
 ### Runtime constraint
 `@fancyrobot/fred-http` remains explicitly Bun-oriented for this phase. Success means normal Bun package-name imports and workspace/`file:` dependency consumption, not generic Node portability.
+
+### Security model
+Security must default to safe composition.
+
+The package should provide a top-level builder/factory that enforces the request pipeline in the correct order and makes the secure path the easiest path for both Fred routes and consumer-defined routes.
+
+Required request path:
+- CORS preflight
+- request classification / public-route decision
+- rate limit
+- auth when required
+- route handler
+- conditional CORS response headers
+- sanitized errors
+
+Design constraints:
+- custom consumer routes should plug into the app inside the controlled security pipeline
+- public or unauthenticated routes must be explicit opt-ins
+- built-in Fred routes and consumer routes should share the same default hardening behavior
+- the API should avoid encouraging middleware bypasses, ad hoc auth handling, or unsanitized error paths
 
 ## Migration Plan Shape
 
@@ -100,6 +139,9 @@ Validation must cover:
 - build/test of all updated sibling consumers
 - sibling-style `file:` dependency import smoke tests
 - package-surface checks for exported server APIs
+- custom-route composition behavior in the same app as Fred routes
+- auth/public route separation for consumer-defined handlers
+- sanitized failures from both Fred-owned and consumer-owned handlers
 
 At minimum, behavior preservation must confirm:
 - CORS preflight
@@ -109,6 +151,7 @@ At minimum, behavior preservation must confirm:
 - conditional CORS response headers
 - sanitized errors
 - health/smoke route behavior
+- custom consumer route handling under the shared security model
 
 ## Effect and boundary rules
 
@@ -135,8 +178,10 @@ At minimum, behavior preservation must confirm:
 
 Phase 57 is complete when:
 - `packages/fred-http` exists and owns the reusable HTTP server API.
+- `packages/fred-http` supports both simple server startup and composable consumer-defined routes/handlers.
 - `packages/dev` no longer exports the server surface.
 - all known consumers import `@fancyrobot/fred-http`.
 - tests/builds/sibling smoke checks pass after migration.
+- custom routes can be hosted alongside Fred routes under the shared security model.
 - docs/examples are updated.
 - vault phase and step notes reflect the new execution reality.
