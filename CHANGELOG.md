@@ -5,6 +5,21 @@ All notable changes to Fred will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`@fancyrobot/fred-convex` adapter package** for sibling-app Convex integration
+  - `initFredConvexRuntime()` for lazy or injected Convex client wiring
+  - `callConvexQuery()`, `callConvexMutation()`, and `callConvexAction()` helper APIs
+  - `createConvexTool()` for wrapping Convex functions as Fred tools with Effect Schema contracts
+  - Typed errors for missing clients, runtime load failures, and tool execution failures
+  - Test helpers and package exports suitable for local `file:` dependency consumption
+
+### Changed
+
+- Convex adapter package metadata and build outputs now support temporary sibling installs outside the monorepo workspace
+
 ## [0.2.5] - 2026-01-30
 
 ### Added
