@@ -31,8 +31,8 @@ context_summary: Advance [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_0
 
 - Create package contract for `packages/fred-baml` in the Bun workspace (core-adjacent extension library).
 - Define public API shape and imports (`import '@fancyrobot/fred-baml'` side-effects vs explicit runtime helpers).
-- Expose planned exports aligned with research findings: `createBamlTool`, `BamlAgent`, `initFredBamlRuntime` (or equivalent), and BAML test-runner helpers.
-- Define build/test/dependency posture for Bun and monorepo publishing consistency, including `@boundaryml/baml` peer/optional contracts.
+- Expose planned exports aligned with research findings: `createBamlTool`, `BamlAgent`, `initFredBamlRuntime`, and explicit test helpers (`createStubBamlRuntime`, `loadStubBamlClient`).
+- Define build/test/dependency posture for Bun and monorepo publishing consistency, including whether `@boundaryml/baml` is a direct package dependency or remains consumer-owned.
 
 ## Outcome
 
@@ -57,9 +57,9 @@ context_summary: Advance [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_0
 ## Success Conditions
 
 - [ ] New package directory and workspace-visible structure is planned, with clear production/test entrypoints.
-- [ ] `@boundaryml/baml`, `@fancyrobot/fred`, and Effect-related peer/runtime dependencies are explicit.
-- [ ] Public API contract documents the helper names for adapters and test/eval runners.
-- [ ] No source code changes planned in this repo yet are omitted from this step plan (documentation + manifest only).
+- [ ] Consumer-owned BAML runtime expectations and `@fancyrobot/fred` / Effect peer dependencies are explicit.
+- [ ] Public API contract documents the helper names for adapters and test helpers, including `baml.<functionName>` tool-id generation.
+- [ ] Step contract covers the scaffolded source modules, tests, manifests, and docs needed for the first publishable `fred-baml` package slice.
 
 ## Companion Notes
 
@@ -80,7 +80,7 @@ context_summary: Advance [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_0
 ## Human Notes
 
 - Refinement verdict: ready for first-day junior execution after STEP-55-01. Scaffold only; avoid importing generated BAML client at package top level.
-- Key dependency: mirror provider package export/build conventions before inventing a new package shape.
+- Key dependency: mirror provider package export/build conventions before inventing a new package shape, while keeping generated-client loading and `@boundaryml/baml` version ownership in the consumer app.
 
 ## Session History
 

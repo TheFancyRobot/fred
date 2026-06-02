@@ -10,9 +10,9 @@ You can safely import `@fancyrobot/fred-baml` before a consumer has a BAML proje
 Current public exports:
 
 - `createBamlTool` - create a Fred-compatible tool from a lazy BAML-backed executor
-- `BamlAgent` - helper object for building explicit Fred agent configs with BAML tool ids
+- `BamlAgent` - helper object for building explicit Fred agent configs with `baml.<functionName>` tool ids
 - `initFredBamlRuntime` - runtime helper that defers generated client loading until explicitly requested
-- `createStubBamlRuntime` - test helper for import-safe and deterministic tests
+- `createStubBamlRuntime` / `loadStubBamlClient` - test helpers for import-safe and deterministic tests
 - typed errors from `errors.ts`
 
 ## Example
@@ -39,9 +39,13 @@ const summarize = createBamlTool({
 });
 ```
 
+## Dependency posture
+
+`@fancyrobot/fred-baml` does not import `@boundaryml/baml` directly.
+Consumers own their BAML toolchain version and generated client output; this package only consumes a caller-provided lazy loader.
+
 ## Non-goals in this scaffold
 
 - no CLI plugin wiring
 - no implicit code generation
-- no fixed `@boundaryml/baml` version policy yet
 - no generated-client imports in module initialization paths

@@ -21,18 +21,11 @@
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^1.0.0",
-    "effect": "^3.21.0",
-    "@boundaryml/baml": "*"
-  },
-  "peerDependenciesMeta": {
-    "@boundaryml/baml": {
-      "optional": true
-    }
+    "effect": "^3.21.0"
   },
   "devDependencies": {
     "@fancyrobot/fred": "workspace:^",
-    "effect": "^3.21.0",
-    "@boundaryml/baml": "*"
+    "effect": "^3.21.0"
   },
   "publishConfig": {
     "access": "public"
