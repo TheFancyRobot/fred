@@ -9,6 +9,7 @@ export class RateLimiter {
     this.cleanupTimer = setInterval(() => {
       this.cleanup();
     }, 60_000);
+    this.cleanupTimer.unref?.();
   }
 
   check(ip: string): { allowed: boolean; retryAfterMs?: number } {

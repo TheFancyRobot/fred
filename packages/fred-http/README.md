@@ -45,6 +45,7 @@ const app = createFredHttpApp({
 });
 
 const response = await app.fetch(new Request('http://localhost/public/ping'));
+app.dispose();
 ```
 
 ## Route visibility
@@ -64,3 +65,7 @@ The package applies a shared security-first request path:
 - sanitized errors
 
 Custom route failures return sanitized error payloads and should not leak raw exception details.
+
+`createFredHttpApp()` does not trust proxy headers by default. If your embedding server has a trusted client-IP source, pass `getClientIp(request)` explicitly. Only set `trustProxy: true` when the deployment boundary guarantees `x-forwarded-for` / `x-real-ip` are trustworthy.
+
+Composable apps also expose `dispose()` so callers can release internal rate-limiter resources when tearing an app down.

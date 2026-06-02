@@ -5,6 +5,7 @@ import { createFredHttpApp } from '../../../packages/fred-http/src/index';
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
   let now = 0;
+  const createdApps: Array<{ dispose?: () => void }> = [];
 
   beforeEach(() => {
     now = 0;
@@ -13,6 +14,20 @@ describe('createFredHttpApp', () => {
 
   afterEach(() => {
     Date.now = originalNow;
+    for (const app of createdApps.splice(0)) {
+      app.dispose?.();
+    }
+  });
+
+  it('exposes a dispose method for composable apps', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false },
+    });
+    createdApps.push(app);
+
+    expect(typeof Reflect.get(app, 'dispose')).toBe('function');
   });
 
   it('allows explicit public custom routes without auth', async () => {
@@ -27,7 +42,8 @@ describe('createFredHttpApp', () => {
           handler: () => new Response('pong', { status: 200 }),
         },
       ],
-    } as never);
+    });
+    createdApps.push(app);
 
     const response = await app.fetch(new Request('http://localhost/public/ping'));
     expect(response.status).toBe(200);
@@ -48,9 +64,39 @@ describe('createFredHttpApp', () => {
         },
       ],
     });
+    createdApps.push(app);
 
     const unauthenticated = await app.fetch(new Request('http://localhost/private/ping'));
     expect(unauthenticated.status).toBe(401);
+  });
+
+  it('does not allow spoofed forwarded headers to bypass local auth exemptions', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: {
+        requireAuth: true,
+        authToken: 'secret',
+        allowLocalRequestsWithoutAuth: true,
+      },
+      routes: [
+        {
+          method: 'GET',
+          path: '/private/ping',
+          visibility: 'authenticated',
+          handler: () => new Response('pong', { status: 200 }),
+        },
+      ],
+    });
+    createdApps.push(app);
+
+    const spoofed = await app.fetch(new Request('http://example.test/private/ping', {
+      headers: {
+        'x-forwarded-for': '127.0.0.1',
+      },
+    }));
+
+    expect(spoofed.status).toBe(401);
   });
 
   it('applies rate limiting to custom routes', async () => {
@@ -71,6 +117,7 @@ describe('createFredHttpApp', () => {
         },
       ],
     });
+    createdApps.push(app);
 
     const first = await app.fetch(new Request('http://localhost/limited'));
     expect(first.status).toBe(200);
@@ -79,5 +126,37 @@ describe('createFredHttpApp', () => {
     const second = await app.fetch(new Request('http://localhost/limited'));
     expect(second.status).toBe(429);
     expect(second.headers.get('Retry-After')).toBe('1');
+  });
+
+  it('reflects custom route methods in CORS preflight responses', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['http://client.test:*'],
+      },
+      routes: [
+        {
+          method: 'PUT',
+          path: '/resource',
+          visibility: 'public',
+          handler: () => new Response('updated', { status: 200 }),
+        },
+      ],
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/resource', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://client.test:3000',
+        'Access-Control-Request-Method': 'PUT',
+      },
+    }));
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
   });
 });
