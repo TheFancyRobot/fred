@@ -11,6 +11,8 @@
 // Re-export main dev tools
 export { startDevChat } from './dev-chat';
 export { startServer, ServerApp } from './server';
+export { DEFAULT_SECURITY_CONFIG } from './server/security';
+export type { ServerSecurityConfig } from './server/security';
 export {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider,

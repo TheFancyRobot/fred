@@ -25,10 +25,10 @@
     "build": "bun build src/index.ts --outdir dist --target bun --format esm"
   },
   "dependencies": {
-    "@fancyrobot/fred": "workspace:^",
     "chokidar": "^5.0.0"
   },
   "peerDependencies": {
+    "@fancyrobot/fred": "^1.0.0",
     "effect": "^3.21.0",
     "@effect/platform-bun": "^0.89.0"
   },
