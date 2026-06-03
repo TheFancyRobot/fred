@@ -13,14 +13,24 @@
  * - Uses Data.TaggedError for typed, catchable MiniMax video errors.
  * - Video generation is async: createTask returns a task_id, queryTask polls for status.
  * - Supports text-to-video, image-to-video, and subject-reference-to-video modes.
+ * - Shared config/errors/helpers imported from ./config and ./errors.
  */
 
-import { Data, Effect, Layer, Schedule } from 'effect';
-import * as Duration from 'effect/Duration';
+import { Data, Effect, Schedule } from 'effect';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import * as HttpBody from '@effect/platform/HttpBody';
-import { FetchHttpClient } from '@effect/platform';
+import {
+  classifyHttpError,
+  buildRetrySchedule,
+  createAuthenticatedClient,
+  formatApiErrorMessage,
+} from './config';
+import {
+  MiniMaxErrorFields,
+  formatMiniMaxErrorMessage,
+  buildErrorFields,
+} from './errors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,19 +44,6 @@ export const MINIMAX_VIDEO_GENERATION_ENDPOINT = '/video_generation' as const;
  */
 export const MINIMAX_VIDEO_QUERY_ENDPOINT = '/query/video_generation' as const;
 
-/**
- * Retry configuration for transient MiniMax video API failures.
- */
-const VIDEO_RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelayMs: 500,
-} as const;
-
-/**
- * HTTP status codes that are non-retryable (client errors).
- */
-const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
-
 // ─── Error Types ──────────────────────────────────────────────────────────────
 
 /**
@@ -54,14 +51,9 @@ const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
  */
 export class MiniMaxVideoError extends Data.TaggedError(
   'MiniMaxVideoError'
-)<{
-  readonly module: string;
-  readonly method: string;
-  readonly description: string;
-  readonly cause?: unknown;
-}> {
+)<MiniMaxErrorFields> {
   get message(): string {
-    return `[${this.module}.${this.method}] ${this.description}`;
+    return formatMiniMaxErrorMessage(this);
   }
 }
 
@@ -151,40 +143,6 @@ interface MiniMaxVideoQueryResponse {
   model?: string;
 }
 
-// ─── Error Classification ──────────────────────────────────────────────────────
-
-interface ErrorClassification {
-  retryable: boolean;
-  statusCode?: number;
-  category: 'transient' | 'rate-limit' | 'non-retryable';
-}
-
-function classifyHttpError(error: unknown): ErrorClassification {
-  if (error && typeof error === 'object' && 'response' in error) {
-    const responseError = error as { response?: { status?: number } };
-    const status = responseError.response?.status;
-    if (typeof status === 'number') {
-      if (status === 429) {
-        return { retryable: true, statusCode: status, category: 'rate-limit' };
-      }
-      if (NON_RETRYABLE_STATUS_CODES.has(status)) {
-        return { retryable: false, statusCode: status, category: 'non-retryable' };
-      }
-      if (status >= 500) {
-        return { retryable: true, statusCode: status, category: 'transient' };
-      }
-    }
-  }
-  return { retryable: true, category: 'transient' };
-}
-
-function buildRetrySchedule() {
-  return Schedule.intersect(
-    Schedule.exponential(Duration.millis(VIDEO_RETRY_CONFIG.baseDelayMs)),
-    Schedule.recurs(VIDEO_RETRY_CONFIG.maxRetries)
-  );
-}
-
 // ─── Adapter ───────────────────────────────────────────────────────────────────
 
 /**
@@ -214,16 +172,7 @@ export function createMiniMaxVideoAdapter(
   ): Effect.Effect<VideoTaskResult, MiniMaxVideoError> {
     return yield* Effect.gen(function* () {
       const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
-        )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
       const requestBody: Record<string, unknown> = {
         model: input.model,
@@ -238,22 +187,15 @@ export function createMiniMaxVideoAdapter(
         body: HttpBody.unsafeJson(requestBody),
       });
 
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      const response = yield* client.execute(request).pipe(
         Effect.retry(
           buildRetrySchedule().pipe(
             Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
           )
         ),
         Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVideoError({
-            module: 'MiniMaxVideoAdapter',
-            method: 'createTask',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
+          const fields = buildErrorFields(error, 'MiniMaxVideoAdapter', 'createTask');
+          return Effect.fail(new MiniMaxVideoError(fields));
         })
       );
 
@@ -272,7 +214,7 @@ export function createMiniMaxVideoAdapter(
         return yield* Effect.fail(new MiniMaxVideoError({
           module: 'MiniMaxVideoAdapter',
           method: 'createTask',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
         }));
       }
 
@@ -297,37 +239,21 @@ export function createMiniMaxVideoAdapter(
   ): Effect.Effect<VideoQueryResult, MiniMaxVideoError> {
     return yield* Effect.gen(function* () {
       const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
-        )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
       const request = HttpClientRequest.get(
         `${MINIMAX_VIDEO_QUERY_ENDPOINT}?task_id=${encodeURIComponent(input.task_id)}`
       );
 
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      const response = yield* client.execute(request).pipe(
         Effect.retry(
           buildRetrySchedule().pipe(
             Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
           )
         ),
         Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVideoError({
-            module: 'MiniMaxVideoAdapter',
-            method: 'queryTask',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
+          const fields = buildErrorFields(error, 'MiniMaxVideoAdapter', 'queryTask');
+          return Effect.fail(new MiniMaxVideoError(fields));
         })
       );
 
@@ -346,7 +272,7 @@ export function createMiniMaxVideoAdapter(
         return yield* Effect.fail(new MiniMaxVideoError({
           module: 'MiniMaxVideoAdapter',
           method: 'queryTask',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
         }));
       }
 

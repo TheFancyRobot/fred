@@ -28,27 +28,24 @@ import * as Response from '@effect/ai/Response';
 import * as Tool from '@effect/ai/Tool';
 import { IdGenerator } from '@effect/ai/IdGenerator';
 import type { ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import {
+  MINIMAX_DEFAULT_BASE_URL,
+  MINIMAX_API_KEY_ENV_VAR,
+  classifyHttpError,
+  buildRetrySchedule,
+  createAuthenticatedClient,
+  createAuthenticatedClientRaw,
+  formatApiErrorMessage,
+} from './config';
+import {
+  MiniMaxMissingApiKeyError,
+  formatMiniMaxErrorMessage,
+  buildErrorFields,
+} from './errors';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-/**
- * Default MiniMax API base URL for OpenAI-compatible endpoints.
- */
-export const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.chat/v1';
-
-/**
- * Retry configuration for transient MiniMax API failures.
- * Max 3 retries with exponential backoff: 500ms → 1s → 2s.
- */
-const MINIMAX_RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelayMs: 500,
-} as const;
-
-/**
- * HTTP status codes that are non-retryable (client errors).
- */
-const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
+// Re-export for public API backward compatibility
+export { MINIMAX_DEFAULT_BASE_URL } from './config';
+export { MiniMaxMissingApiKeyError } from './errors';
 
 /**
  * Capability set for the MiniMax provider.
@@ -59,20 +56,6 @@ const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422]);
 export const MINIMAX_CAPABILITIES = new Set<import('@fancyrobot/fred').ProviderCapabilityKey>(['language']);
 
 // ─── Error Types ──────────────────────────────────────────────────────────────
-
-/**
- * Error thrown when the MiniMax API key is missing.
- */
-export class MiniMaxMissingApiKeyError extends Data.TaggedError(
-  'MiniMaxMissingApiKeyError'
-)<{
-  readonly provider: string;
-  readonly envVar: string;
-}> {
-  get message(): string {
-    return `MiniMax API key not found. Set ${this.envVar} environment variable.`;
-  }
-}
 
 /**
  * Error thrown for MiniMax language model failures (upstream errors,
@@ -87,7 +70,7 @@ export class MiniMaxLanguageModelError extends Data.TaggedError(
   readonly cause?: unknown;
 }> {
   get message(): string {
-    return `[${this.module}.${this.method}] ${this.description}`;
+    return formatMiniMaxErrorMessage(this);
   }
 }
 
