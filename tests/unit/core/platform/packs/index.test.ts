@@ -6,8 +6,7 @@ import '../../../../../packages/provider-anthropic/src/index';
 import '../../../../../packages/provider-google/src/index';
 import '../../../../../packages/provider-groq/src/index';
 import '../../../../../packages/provider-openrouter/src/index';
-// STEP-58-01: MiniMax provider will auto-register once implemented
-// import '../../../../../packages/provider-minimax/src/index';
+import '../../../../../packages/provider-minimax/src/index';
 
 import { Effect, Layer } from 'effect';
 import {
@@ -38,16 +37,13 @@ describe('Built-in Pack Registry', () => {
 
     test('includes all expected providers', () => {
       // ownKeys returns unique provider IDs only (aliases like 'gemini' are not enumerated)
-      const expectedProviders = ['anthropic', 'google', 'groq', 'openai', 'openrouter'];
+      const expectedProviders = ['anthropic', 'google', 'groq', 'minimax', 'openai', 'openrouter'];
       const actualProviders = Object.keys(BUILTIN_PACKS).sort();
 
       expect(actualProviders).toEqual(expectedProviders);
     });
 
-    // STEP-58-01: This test will FAIL until provider-minimax is implemented
-    test.todo('includes minimax provider once imported', () => {
-      // Uncomment the minimax import at the top of this file to make this test pass
-      // import '../../../../../packages/provider-minimax/src/index';
+    test('includes minimax provider once imported', () => {
       expect(BUILTIN_PACKS.minimax).toBeDefined();
       expect(BUILTIN_PACKS.minimax.id).toBe('minimax');
     });
@@ -91,7 +87,7 @@ describe('Built-in Pack Registry', () => {
     });
 
     test('loads all built-in providers', () => {
-      const providers = ['anthropic', 'google', 'groq', 'openai', 'openrouter'];
+      const providers = ['anthropic', 'google', 'groq', 'minimax', 'openai', 'openrouter'];
       providers.forEach((id) => {
         const pack = loadBuiltinPack(id);
         expect(pack).not.toBeNull();
@@ -124,7 +120,7 @@ describe('Built-in Pack Registry', () => {
     });
 
     test('returns true for all built-in providers', () => {
-      const providers = ['anthropic', 'google', 'groq', 'openai', 'openrouter'];
+      const providers = ['anthropic', 'google', 'groq', 'minimax', 'openai', 'openrouter'];
       providers.forEach((id) => {
         expect(isBuiltinPack(id)).toBe(true);
       });
@@ -142,7 +138,7 @@ describe('Built-in Pack Registry', () => {
 
     test('returns all expected provider ids', () => {
       const ids = getBuiltinPackIds();
-      const expected = ['anthropic', 'google', 'groq', 'openai', 'openrouter'];
+      const expected = ['anthropic', 'google', 'groq', 'minimax', 'openai', 'openrouter'];
 
       expect(ids.sort()).toEqual(expected);
     });

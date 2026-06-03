@@ -1,0 +1,44 @@
+{
+  "name": "@fancyrobot/fred-minimax",
+  "version": "1.0.0",
+  "description": "MiniMax multi-modality provider for Fred AI framework",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm"
+  },
+  "peerDependencies": {
+    "@fancyrobot/fred": "^1.0.0",
+    "effect": "^3.21.0",
+    "@effect/ai": "^0.35.0"
+  },
+  "devDependencies": {
+    "@fancyrobot/fred": "workspace:^",
+    "effect": "^3.21.0",
+    "@effect/ai": "^0.35.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "fred",
+    "minimax",
+    "ai",
+    "provider",
+    "multi-modality",
+    "image-generation",
+    "video-generation",
+    "speech",
+    "voice",
+    "music"
+  ],
+  "license": "MIT"
+}
