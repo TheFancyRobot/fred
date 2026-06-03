@@ -284,11 +284,13 @@
       "version": "1.0.0",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
+        "@effect/platform": "^0.96.0",
         "@fancyrobot/fred": "workspace:^",
         "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
+        "@effect/platform": "^0.96.0",
         "@fancyrobot/fred": "^1.0.0",
         "effect": "^3.21.0",
       },

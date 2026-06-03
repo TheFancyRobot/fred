@@ -1,6 +1,20 @@
 import { Effect, Layer, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import {
+  MiniMaxProviderFactory as LanguageFactory,
+  MINIMAX_CAPABILITIES,
+  MINIMAX_DEFAULT_BASE_URL,
+} from './language';
+
+// Re-export language capability public API
+export {
+  createMiniMaxLanguageModel,
+  MiniMaxMissingApiKeyError,
+  MiniMaxLanguageModelError,
+  MINIMAX_DEFAULT_BASE_URL,
+  MINIMAX_CAPABILITIES,
+} from './language';
 
 /**
  * MiniMax provider pack factory.
@@ -9,6 +23,9 @@ import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } fro
  * and external pack pattern. MiniMax supports language, image, video,
  * speech, voice, and music capabilities.
  *
+ * Language capability is implemented via MiniMax's OpenAI-compatible
+ * Chat Completions API (see `./language.ts`).
+ *
  * Multi-modality capabilities (image, video, speech, voice, music) are
  * implemented in dedicated adapter modules loaded by subsequent steps.
  */
@@ -16,37 +33,8 @@ export const MiniMaxProviderFactory: EffectProviderFactory = {
   id: 'minimax',
   aliases: ['minimax'],
   load: async (config: ProviderConfig) => {
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'MINIMAX_API_KEY';
-    const apiKeyString = process.env[apiKeyEnvVar];
-    const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
-    const baseUrl = config.baseUrl ?? 'https://api.minimax.chat/v1';
-
-    if (!apiKey) {
-      throw new Error(
-        `MiniMax API key not found. Set ${apiKeyEnvVar} environment variable.`
-      );
-    }
-
-    // Placeholder layer — will be replaced by proper HttpClient layer
-    // when modality adapters are implemented in subsequent steps.
-    // Using Layer.empty as any to satisfy the EffectProviderFactory contract
-    // which expects Layer<any, any, any>.
-    const layer = Layer.empty as any;
-
-    return {
-      layer,
-      getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
-        // Language model support will be implemented in Step 05.
-        // For now, return a clear failure so callers know the provider
-        // is registered but language is not yet wired.
-        return Effect.fail(
-          new Error(
-            `MiniMax language model "${modelId}" is not yet implemented. ` +
-              `Language capability will be added in a subsequent step.`
-          )
-        );
-      },
-    };
+    // Delegate to the language adapter which handles config and errors
+    return LanguageFactory.load(config);
   },
 };
 
