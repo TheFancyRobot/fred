@@ -28,6 +28,7 @@ import * as Response from '@effect/ai/Response';
 import * as Tool from '@effect/ai/Tool';
 import { IdGenerator } from '@effect/ai/IdGenerator';
 import type { ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import { normalizeMessages } from '../../core/src/messages';
 import {
   MINIMAX_DEFAULT_BASE_URL,
   MINIMAX_API_KEY_ENV_VAR,
@@ -36,6 +37,7 @@ import {
   createAuthenticatedClient,
   createAuthenticatedClientRaw,
   formatApiErrorMessage,
+  type ErrorClassification,
 } from './config';
 import {
   MiniMaxMissingApiKeyError,
@@ -138,51 +140,6 @@ interface ChatCompletionStreamChunk {
   };
 }
 
-// ─── Error Classification ──────────────────────────────────────────────────────
-
-interface ErrorClassification {
-  retryable: boolean;
-  statusCode?: number;
-  category: 'transient' | 'rate-limit' | 'non-retryable';
-}
-
-/**
- * Classify an HTTP error as retryable or not based on status code.
- * - 429 (rate limit): retryable
- * - 5xx (server errors): retryable (transient)
- * - 400, 401, 403, 404, 422 (client errors): non-retryable
- * - Network/connection errors (no status): retryable (transient)
- */
-function classifyHttpError(error: unknown): ErrorClassification {
-  if (error && typeof error === 'object' && 'response' in error && 'reason' in error) {
-    const responseError = error as { response?: { status?: number } };
-    const status = responseError.response?.status;
-    if (typeof status === 'number') {
-      if (status === 429) {
-        return { retryable: true, statusCode: status, category: 'rate-limit' };
-      }
-      if (NON_RETRYABLE_STATUS_CODES.has(status)) {
-        return { retryable: false, statusCode: status, category: 'non-retryable' };
-      }
-      if (status >= 500) {
-        return { retryable: true, statusCode: status, category: 'transient' };
-      }
-    }
-  }
-  return { retryable: true, category: 'transient' };
-}
-
-/**
- * Build a retry schedule for transient errors.
- * Exponential backoff: baseDelay * 2^attempt, capped at maxRetries.
- */
-function buildRetrySchedule() {
-  return Schedule.intersect(
-    Schedule.exponential(Duration.millis(MINIMAX_RETRY_CONFIG.baseDelayMs)),
-    Schedule.recurs(MINIMAX_RETRY_CONFIG.maxRetries)
-  );
-}
-
 // ─── Language Model Creation ────────────────────────────────────────────────
 
 /**
@@ -204,16 +161,8 @@ export function createMiniMaxLanguageModel(
     LanguageModel.LanguageModel,
     Effect.gen(function* () {
       const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(apiUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
-        )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      const clientWithBaseUrl = createAuthenticatedClientRaw(httpClient, apiKey, apiUrl);
+      const clientWithBaseUrlOk = createAuthenticatedClient(httpClient, apiKey, apiUrl);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return yield* LanguageModel.make({
@@ -490,34 +439,37 @@ interface MiniMaxMessage {
 
 /**
  * Convert @effect/ai Prompt to MiniMax Chat Completions messages format.
+ *
+ * The shared normalization layer keeps provider prompt handling aligned
+ * with the rest of the repo before MiniMax-specific shaping happens.
  */
 function convertPromptToMessages(prompt: Prompt.Prompt): MiniMaxMessage[] {
   const messages: MiniMaxMessage[] = [];
+  const normalizedMessages = normalizeMessages(prompt.content);
 
-  for (const message of prompt.content) {
-    if (message.role === 'system') {
-      messages.push({ role: 'system', content: message.content });
-    } else if (message.role === 'user') {
-      let content = '';
-      if (Array.isArray(message.content)) {
-        for (const part of message.content) {
-          if (part.type === 'text') {
-            content += part.text;
-          }
-        }
-      } else if (typeof message.content === 'string') {
-        content = message.content;
-      }
-      messages.push({ role: 'user', content });
-    } else if (message.role === 'assistant') {
-      let content = '';
+  for (const message of normalizedMessages) {
+    if (message.role === 'system' || message.role === 'user') {
+      messages.push({
+        role: message.role,
+        content: flattenMessageContent(message.content),
+      });
+      continue;
+    }
+
+    if (message.role === 'assistant') {
       const toolCalls: MiniMaxMessage['tool_calls'] = [];
+      const content = typeof message.content === 'string'
+        ? message.content
+        : Array.isArray(message.content)
+          ? message.content
+              .filter((part) => part.type === 'text')
+              .map((part) => part.text)
+              .join('')
+          : '';
 
       if (Array.isArray(message.content)) {
         for (const part of message.content) {
-          if (part.type === 'text') {
-            content += part.text;
-          } else if (part.type === 'tool-call') {
+          if (part.type === 'tool-call') {
             toolCalls.push({
               id: part.id,
               type: 'function',
@@ -528,43 +480,46 @@ function convertPromptToMessages(prompt: Prompt.Prompt): MiniMaxMessage[] {
             });
           }
         }
-      } else if (typeof message.content === 'string') {
-        content = message.content;
       }
 
-      const assistantMessage: MiniMaxMessage = {
+      messages.push({
         role: 'assistant',
         content: content || null,
-      };
-      if (toolCalls.length > 0) {
-        assistantMessage.tool_calls = toolCalls;
-      }
-      messages.push(assistantMessage);
-    } else if (message.role === 'tool') {
-      const toolMessage = message as any;
-      const content = toolMessage.content;
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+      });
+      continue;
+    }
 
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          if (part.type === 'tool-result') {
-            messages.push({
-              role: 'tool',
-              content: typeof part.result === 'string' ? part.result : JSON.stringify(part.result),
-              tool_call_id: part.id,
-            });
-          }
+    if (message.role === 'tool') {
+      const toolResults = Array.isArray(message.content) ? message.content : [];
+      for (const part of toolResults) {
+        if (part.type === 'tool-result') {
+          messages.push({
+            role: 'tool',
+            content: typeof part.result === 'string' ? part.result : JSON.stringify(part.result),
+            tool_call_id: part.id,
+          });
         }
-      } else {
-        messages.push({
-          role: 'tool',
-          content: typeof content === 'string' ? content : JSON.stringify(content),
-          tool_call_id: toolMessage.toolCallId ?? toolMessage.id,
-        });
       }
     }
   }
 
   return messages;
+}
+
+function flattenMessageContent(content: Prompt.MessageEncoded['content']): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('');
 }
 
 // ─── Tool Conversion ──────────────────────────────────────────────────────────

@@ -120,9 +120,8 @@ export function getCapability(
 function resolveCapabilities(
   definition: ProviderDefinition
 ): Set<ProviderCapabilityKey> {
-  const declared = (definition as any).capabilities;
-  if (declared instanceof Set) {
-    return declared as Set<ProviderCapabilityKey>;
+  if (definition.capabilities instanceof Set) {
+    return definition.capabilities;
   }
   // Backward-compatible default: language-only
   return new Set<ProviderCapabilityKey>(['language']);

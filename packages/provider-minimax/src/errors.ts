@@ -99,7 +99,7 @@ export function normalizeHttpError(
   const description = formatHttpErrorMessage(classification, attemptCount);
   return {
     ...classification,
-    description: `[${module}.${method}] ${description}`,
+    description,
   };
 }
 

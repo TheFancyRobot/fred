@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { Effect, Schema } from 'effect';
+import { Effect, Layer, Schema } from 'effect';
 import {
   ProviderDefinition,
   ProviderConfig,
@@ -79,7 +79,7 @@ describe('Provider Capability Contract', () => {
         })
       );
 
-      const result = await Effect.runPromise(
+      const result = await Effect.runPromiseExit(
         program.pipe(
           Effect.catchTag('UnsupportedProviderCapabilityError', (e) =>
             Effect.succeed(`caught: ${e.providerId}/${e.capability}`)
@@ -87,7 +87,10 @@ describe('Provider Capability Contract', () => {
         )
       );
 
-      expect(result).toBe('caught: openai/music');
+      expect(result._tag).toBe('Success');
+      if (result._tag === 'Success') {
+        expect(result.value).toBe('caught: openai/music');
+      }
     });
   });
 
@@ -212,13 +215,35 @@ describe('Provider Capability Contract', () => {
         config: {} as ProviderConfig,
         getModel: (_modelId: string) =>
           Effect.fail(new Error('not implemented')),
+        layer: Layer.empty as any,
       };
 
-      // When capabilities is not set, treat as language-only
-      const capabilities =
-        (definition as any).capabilities ?? new Set(['language'] as const);
-      expect(capabilities.has('language')).toBe(true);
-      expect(capabilities.size).toBe(1);
+      expect(definition.capabilities).toBeUndefined();
+    });
+
+    test('createProviderDefinition preserves factory capabilities', async () => {
+      const { createProviderDefinition } = await import(
+        '../../../../packages/core/src/platform/base'
+      );
+      const { hasCapability } = await import(
+        '../../../../packages/core/src/platform/provider-capabilities'
+      );
+
+      const factory = {
+        id: 'minimax',
+        aliases: ['minimax'],
+        capabilities: new Set(['language', 'image', 'video', 'speech', 'voice', 'music'] as const),
+        load: async () => ({
+          layer: Layer.empty as any,
+          getModel: (_modelId: string) => Effect.fail(new Error('not implemented')),
+        }),
+      };
+
+      const definition = await createProviderDefinition(factory, {} as ProviderConfig);
+
+      expect(definition.capabilities?.size).toBe(6);
+      expect(hasCapability(definition, 'image')).toBe(true);
+      expect(hasCapability(definition, 'music')).toBe(true);
     });
   });
 });
