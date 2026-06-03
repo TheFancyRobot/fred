@@ -8,6 +8,7 @@
 import { Schema, ParseResult } from 'effect';
 import type { EffectProviderFactory } from './base';
 import { ProviderPackLoadError } from './errors';
+import { ProviderCapabilityKeys, type ProviderCapabilityKey } from './provider-capabilities';
 
 /**
  * Custom schema for validating that a value is a function.
@@ -20,6 +21,20 @@ const FunctionSchema = Schema.declare(
   }
 );
 
+const ProviderCapabilitySetSchema = Schema.declare(
+  (input: unknown): input is ReadonlySet<ProviderCapabilityKey> =>
+    input instanceof Set
+    && [...input].every(
+      (capability): capability is ProviderCapabilityKey =>
+        typeof capability === 'string'
+        && ProviderCapabilityKeys.includes(capability as ProviderCapabilityKey)
+    ),
+  {
+    identifier: 'ProviderCapabilitySet',
+    description: 'A readonly set of provider capability keys',
+  }
+);
+
 /**
  * Effect Schema for validating EffectProviderFactory structure.
  *
@@ -29,6 +44,7 @@ const FunctionSchema = Schema.declare(
 export const ProviderFactorySchema = Schema.Struct({
   id: Schema.String.pipe(Schema.minLength(1, { message: () => 'Provider id is required' })),
   aliases: Schema.optional(Schema.Array(Schema.String)),
+  capabilities: Schema.optional(ProviderCapabilitySetSchema),
   load: FunctionSchema,
 });
 
@@ -106,6 +122,7 @@ export function validatePackExports(
         'Provider pack must export an object with:',
         '  - id: string (required, non-empty)',
         '  - aliases: string[] (optional)',
+        '  - capabilities: Set<ProviderCapabilityKey> (optional)',
         '  - load: (config) => Promise<{ layer, getModel }> (required)',
         '',
         'Validation errors:',

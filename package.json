@@ -72,6 +72,7 @@
     "@fancyrobot/fred-google": "workspace:*",
     "@fancyrobot/fred-groq": "workspace:*",
     "@fancyrobot/fred-http": "workspace:*",
+    "@fancyrobot/fred-minimax": "workspace:*",
     "@fancyrobot/fred-openai": "workspace:*",
     "@fancyrobot/fred-openrouter": "workspace:*"
   }

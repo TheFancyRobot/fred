@@ -11,3 +11,10 @@ export {
 } from './provider';
 export { createProviderDefinition } from './base';
 export { buildProviderService, createDynamicProvider, resolveProviderAliases } from './dynamic';
+export type { ProviderCapabilityKey } from './provider-capabilities';
+export {
+  ProviderCapabilityKeys,
+  UnsupportedProviderCapabilityError,
+  hasCapability,
+  getCapability,
+} from './provider-capabilities';

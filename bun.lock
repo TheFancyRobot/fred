@@ -13,6 +13,7 @@
         "@fancyrobot/fred-google": "workspace:*",
         "@fancyrobot/fred-groq": "workspace:*",
         "@fancyrobot/fred-http": "workspace:*",
+        "@fancyrobot/fred-minimax": "workspace:*",
         "@fancyrobot/fred-openai": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
       },
@@ -293,6 +294,22 @@
         "effect": "^3.21.0",
       },
     },
+    "packages/provider-minimax": {
+      "name": "@fancyrobot/fred-minimax",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@effect/ai": "^0.35.0",
+        "@effect/platform": "^0.96.0",
+        "@fancyrobot/fred": "workspace:^",
+        "effect": "^3.21.0",
+      },
+      "peerDependencies": {
+        "@effect/ai": "^0.35.0",
+        "@effect/platform": "^0.96.0",
+        "@fancyrobot/fred": "^1.0.0",
+        "effect": "^3.21.0",
+      },
+    },
     "packages/provider-openai": {
       "name": "@fancyrobot/fred-openai",
       "version": "3.0.0",
@@ -500,6 +517,8 @@
     "@fancyrobot/fred-groq": ["@fancyrobot/fred-groq@workspace:packages/provider-groq"],
 
     "@fancyrobot/fred-http": ["@fancyrobot/fred-http@workspace:packages/fred-http"],
+
+    "@fancyrobot/fred-minimax": ["@fancyrobot/fred-minimax@workspace:packages/provider-minimax"],
 
     "@fancyrobot/fred-openai": ["@fancyrobot/fred-openai@workspace:packages/provider-openai"],
 

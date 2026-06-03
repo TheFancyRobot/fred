@@ -75,6 +75,7 @@ See the [core package documentation](packages/core/README.md) for the full getti
 | [@fancyrobot/fred-google](packages/provider-google/README.md) | Google (Gemini) provider |
 | [@fancyrobot/fred-groq](packages/provider-groq/README.md) | Groq provider |
 | [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | OpenRouter provider |
+| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | MiniMax multi-modality provider |
 
 ## Examples
 

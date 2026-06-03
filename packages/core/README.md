@@ -309,6 +309,7 @@ const fred = new Fred({
 | Google | [@fancyrobot/fred-google](../provider-google/README.md) | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | Groq | [@fancyrobot/fred-groq](../provider-groq/README.md) | `GROQ_API_KEY` |
 | OpenRouter | [@fancyrobot/fred-openrouter](../provider-openrouter/README.md) | `OPENROUTER_API_KEY` |
+| MiniMax | [@fancyrobot/fred-minimax](../provider-minimax/README.md) | `MINIMAX_API_KEY` |
 
 ## Advanced: Effect Services
 

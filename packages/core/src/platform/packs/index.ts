@@ -99,6 +99,7 @@ export const BUILTIN_PACKS: Record<string, EffectProviderFactory> = new Proxy(
 //   import '@fancyrobot/fred-google';     // Google/Gemini via @effect/ai-google
 //   import '@fancyrobot/fred-groq';       // Groq (Chat Completions API)
 //   import '@fancyrobot/fred-openrouter'; // OpenRouter via @effect/ai-openai
+//   import '@fancyrobot/fred-minimax';    // MiniMax (language + image/video/speech/voice/music)
 //
 // Each provider auto-registers itself when imported.
 // =============================================================================
