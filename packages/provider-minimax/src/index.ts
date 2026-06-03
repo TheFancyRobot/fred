@@ -22,6 +22,20 @@ import {
   MiniMaxMusicError,
   MINIMAX_MUSIC_ENDPOINT,
 } from './music';
+import {
+  createMiniMaxSpeechAdapter,
+  MiniMaxSpeechError,
+  MINIMAX_TTS_ENDPOINT,
+  MINIMAX_TTS_ASYNC_ENDPOINT,
+} from './speech';
+import {
+  createMiniMaxVoiceAdapter,
+  MiniMaxVoiceError,
+  MINIMAX_VOICE_CLONE_ENDPOINT,
+  MINIMAX_VOICE_DESIGN_ENDPOINT,
+  MINIMAX_VOICE_LIST_ENDPOINT,
+  MINIMAX_VOICE_DELETE_ENDPOINT,
+} from './voice';
 
 // Re-export language capability public API
 export {
@@ -53,16 +67,35 @@ export {
   MINIMAX_MUSIC_ENDPOINT,
 } from './music';
 
+// Re-export speech capability public API
+export {
+  createMiniMaxSpeechAdapter,
+  MiniMaxSpeechError,
+  MINIMAX_TTS_ENDPOINT,
+  MINIMAX_TTS_ASYNC_ENDPOINT,
+} from './speech';
+
+// Re-export voice capability public API
+export {
+  createMiniMaxVoiceAdapter,
+  MiniMaxVoiceError,
+  MINIMAX_VOICE_CLONE_ENDPOINT,
+  MINIMAX_VOICE_DESIGN_ENDPOINT,
+  MINIMAX_VOICE_LIST_ENDPOINT,
+  MINIMAX_VOICE_DELETE_ENDPOINT,
+} from './voice';
+
 /**
  * Combined capability set for the MiniMax provider.
- * Includes language (from Step 05), image, video, and music.
- * Speech and voice will be added in Step 07.
+ * Includes language (from Step 05), image, video, music, speech, and voice.
  */
 export const MINIMAX_CAPABILITIES = new Set<ProviderCapabilityKey>([
   ...LANGUAGE_CAPABILITIES,
   'image',
   'video',
   'music',
+  'speech',
+  'voice',
 ]);
 
 /**
