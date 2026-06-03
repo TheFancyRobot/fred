@@ -213,7 +213,8 @@ The API returns standard error responses:
 CORS is enabled by default for chat tools. For production, configure allowed origins:
 
 ```typescript
-// In server configuration
+import { ServerApp } from '@fancyrobot/fred-http';
+
 const app = new ServerApp(fred);
 // CORS headers are automatically added
 ```

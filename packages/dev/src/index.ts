@@ -1,16 +1,11 @@
 /**
  * @fancyrobot/fred-dev - Fred AI framework development tools
  *
- * This package provides development tooling for Fred:
- * - dev-chat: Interactive development chat interface with hot reload
- * - server: HTTP server for chat API
- *
- * These tools are not needed in production installs.
+ * This package provides dev-only tooling for Fred contributors.
+ * Reusable HTTP server APIs now live in @fancyrobot/fred-http.
  */
 
-// Re-export main dev tools
 export { startDevChat } from './dev-chat';
-export { startServer, ServerApp } from './server';
 export {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider,

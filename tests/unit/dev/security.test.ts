@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { checkAuth, matchOrigin, type ServerSecurityConfig } from '../../../packages/dev/src/server/security';
+import { checkAuth, matchOrigin, type ServerSecurityConfig } from '../../../packages/fred-http/src/security';
 
 const baseConfig = (overrides: Partial<ServerSecurityConfig> = {}): ServerSecurityConfig => ({
   requireAuth: true,

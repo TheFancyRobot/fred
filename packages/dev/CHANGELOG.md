@@ -1,5 +1,13 @@
 # @fred/dev
 
+## Unreleased
+
+### Patch Changes
+
+- Move reusable HTTP server ownership out of `@fancyrobot/fred-dev` into the new `@fancyrobot/fred-http` package.
+- Keep `@fancyrobot/fred-dev` focused on dev-only tooling and a thin local server command bridge.
+- Update documentation to point reusable server consumers at `@fancyrobot/fred-http`.
+
 ## 0.2.1
 
 ### Patch Changes

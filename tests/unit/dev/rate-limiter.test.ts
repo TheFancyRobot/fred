@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { RateLimiter } from '../../../packages/dev/src/server/rate-limiter';
+import { RateLimiter } from '../../../packages/fred-http/src/rate-limiter';
 
 describe('RateLimiter', () => {
   const originalNow = Date.now;
