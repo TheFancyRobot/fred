@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Convex adapter package metadata and build outputs now support temporary sibling installs outside the monorepo workspace
-- BAML and Convex adapter testing subpath exports resolve to source files for local `file:` dependency consumption
+- BAML and Convex adapter testing subpath exports prefer source files for Bun local `file:` dependency consumption while retaining built JavaScript fallbacks
 
 ## [0.2.5] - 2026-01-30
 
