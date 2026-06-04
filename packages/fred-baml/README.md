@@ -12,7 +12,7 @@ Current public exports:
 - `createBamlTool` - create a Fred-compatible tool from a lazy BAML-backed executor
 - `BamlAgent` - helper object for building explicit Fred agent configs with `baml.<functionName>` tool ids
 - `initFredBamlRuntime` - runtime helper that defers generated client loading until explicitly requested
-- `createStubBamlRuntime` / `loadStubBamlClient` - test helpers for import-safe and deterministic tests
+- `createStubBamlRuntime` / `loadStubBamlClient` - test helpers for import-safe and deterministic tests (also available from `@fancyrobot/fred-baml/testing`)
 - typed errors from `errors.ts`
 
 ## Example

@@ -68,6 +68,7 @@
     "@fancyrobot/fred-anthropic": "workspace:*",
     "@fancyrobot/fred-baml": "workspace:*",
     "@fancyrobot/fred-cli": "workspace:*",
+    "@fancyrobot/fred-convex": "workspace:*",
     "@fancyrobot/fred-dev": "workspace:*",
     "@fancyrobot/fred-google": "workspace:*",
     "@fancyrobot/fred-groq": "workspace:*",

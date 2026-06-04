@@ -9,6 +9,7 @@
         "@fancyrobot/fred-anthropic": "workspace:*",
         "@fancyrobot/fred-baml": "workspace:*",
         "@fancyrobot/fred-cli": "workspace:*",
+        "@fancyrobot/fred-convex": "workspace:*",
         "@fancyrobot/fred-dev": "workspace:*",
         "@fancyrobot/fred-google": "workspace:*",
         "@fancyrobot/fred-groq": "workspace:*",
@@ -193,6 +194,7 @@
       "name": "@fancyrobot/fred-dev",
       "version": "0.2.1",
       "dependencies": {
+        "@fancyrobot/fred-http": "workspace:^",
         "chokidar": "^5.0.0",
       },
       "devDependencies": {
