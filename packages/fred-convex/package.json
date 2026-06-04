@@ -18,6 +18,7 @@
     },
     "./testing": {
       "types": "./src/testing.ts",
+      "bun": "./src/testing.ts",
       "import": "./dist/testing.js",
       "default": "./dist/testing.js"
     }
