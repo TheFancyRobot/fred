@@ -38,18 +38,18 @@ describe('MiniMax Image Capability', () => {
 
   describe('createMiniMaxImageAdapter', () => {
     test('returns an adapter object with generate method', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter).toBeDefined();
       expect(typeof adapter.generate).toBe('function');
     });
 
     test('adapter has correct capability key', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter.capability).toBe('image');
     });
 
     test('generate requires prompt parameter', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
       // generate should accept at least a prompt
       expect(adapter.generate.length).toBeGreaterThanOrEqual(1);
     });
@@ -58,7 +58,7 @@ describe('MiniMax Image Capability', () => {
   describe('request shaping', () => {
     test('generate sends correct request body with model and prompt', async () => {
       // We verify the adapter accepts the expected shape
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       // Verify generate accepts text-to-image parameters
       const result = adapter.generate({
@@ -72,7 +72,7 @@ describe('MiniMax Image Capability', () => {
     });
 
     test('generate accepts optional aspect_ratio parameter', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'image-01',
@@ -84,7 +84,7 @@ describe('MiniMax Image Capability', () => {
     });
 
     test('generate accepts optional n parameter for batch generation', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'image-01',
@@ -99,7 +99,7 @@ describe('MiniMax Image Capability', () => {
   describe('normalized response', () => {
     test('generate returns an Effect that resolves to image URLs', async () => {
       // This test verifies the response shape when mocked
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       // The Effect should resolve to an object with image_urls
       const result = adapter.generate({
@@ -149,7 +149,7 @@ describe('MiniMax Image Capability', () => {
 
   describe('input type completeness', () => {
     test('ImageGenerationInput accepts reference_image_url for image-to-image', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'image-01',
@@ -161,7 +161,7 @@ describe('MiniMax Image Capability', () => {
     });
 
     test('ImageGenerationInput accepts seed for reproducibility', () => {
-      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxImageAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'image-01',

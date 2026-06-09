@@ -4,7 +4,6 @@ import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults, Prov
 import {
   MiniMaxProviderFactory as LanguageFactory,
   MINIMAX_CAPABILITIES as LANGUAGE_CAPABILITIES,
-  MINIMAX_DEFAULT_BASE_URL,
 } from './language';
 import {
   createMiniMaxImageAdapter,
@@ -36,14 +35,22 @@ import {
   MINIMAX_VOICE_LIST_ENDPOINT,
   MINIMAX_VOICE_DELETE_ENDPOINT,
 } from './voice';
+import {
+  createMiniMaxLyricsAdapter,
+  MiniMaxLyricsError,
+  MINIMAX_LYRICS_ENDPOINT,
+} from './lyrics';
 
 // Re-export language capability public API
 export {
   createMiniMaxLanguageModel,
   MiniMaxMissingApiKeyError,
   MiniMaxLanguageModelError,
-  MINIMAX_DEFAULT_BASE_URL,
 } from './language';
+export {
+  MINIMAX_DEFAULT_BASE_URL,
+  MINIMAX_NATIVE_BASE_URL,
+} from './config';
 
 // Re-export image capability public API
 export {
@@ -84,6 +91,13 @@ export {
   MINIMAX_VOICE_LIST_ENDPOINT,
   MINIMAX_VOICE_DELETE_ENDPOINT,
 } from './voice';
+
+// Re-export lyrics capability public API
+export {
+  createMiniMaxLyricsAdapter,
+  MiniMaxLyricsError,
+  MINIMAX_LYRICS_ENDPOINT,
+} from './lyrics';
 
 /**
  * Combined capability set for the MiniMax provider.

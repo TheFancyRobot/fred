@@ -7,8 +7,8 @@
  * API References:
  * - T2A HTTP: https://platform.minimax.io/docs/api-reference/speech-t2a-http
  *   Endpoint: POST /v1/t2a_v2
- * - T2A Async: https://platform.minimax.io/docs/guides/speech-t2a-async
- *   Endpoint: POST /v1/t2a_async
+ * - T2A Async: https://platform.minimax.io/docs/api-reference/speech-t2a-async-create
+ *   Endpoint: POST /v1/t2a_async_v2
  *
  * Design choices:
  * - Uses @effect/platform HttpClient for HTTP requests (consistent with other adapters).
@@ -28,6 +28,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
+  MINIMAX_NATIVE_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -45,7 +46,7 @@ export const MINIMAX_TTS_ENDPOINT = '/t2a_v2' as const;
 /**
  * MiniMax async long-form TTS endpoint (appended to base URL).
  */
-export const MINIMAX_TTS_ASYNC_ENDPOINT = '/t2a_async' as const;
+export const MINIMAX_TTS_ASYNC_ENDPOINT = '/t2a_async_v2' as const;
 
 // ─── Error Types ──────────────────────────────────────────────────────────────
 
@@ -187,12 +188,12 @@ export interface MiniMaxSpeechAdapter {
  * Create a MiniMax speech/TTS adapter.
  *
  * @param apiKey - MiniMax API key
- * @param baseUrl - MiniMax API base URL (e.g. 'https://api.minimax.chat/v1')
+ * @param baseUrl - MiniMax API base URL (defaults to 'https://api.minimax.io/v1')
  * @returns Speech adapter with `synthesize` and `createAsyncTask` methods
  */
 export function createMiniMaxSpeechAdapter(
   apiKey: string,
-  baseUrl: string
+  baseUrl: string = MINIMAX_NATIVE_BASE_URL
 ): MiniMaxSpeechAdapter {
   const synthesize = Effect.fn('MiniMaxSpeechAdapter.synthesize')(function* (
     input: SpeechSynthesisInput
