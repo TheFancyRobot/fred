@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
 import { FetchHttpClient } from '@effect/platform';
-import {
-  MINIMAX_DEFAULT_BASE_URL,
-  MINIMAX_NATIVE_BASE_URL,
-} from '../../../packages/provider-minimax/src/config';
+import * as minimaxConfig from '../../../packages/provider-minimax/src/config';
+import { MINIMAX_DEFAULT_BASE_URL } from '../../../packages/provider-minimax/src/config';
 import { createMiniMaxImageAdapter, MINIMAX_IMAGE_ENDPOINT } from '../../../packages/provider-minimax/src/image';
 import {
   createMiniMaxVideoAdapter,
@@ -83,9 +81,9 @@ function mockFetch(capturedRequests: CapturedRequest[]) {
 }
 
 describe('MiniMax endpoint and base URL configuration', () => {
-  test('uses the current official MiniMax API host for language and native defaults', () => {
+  test('exposes a single canonical MiniMax API base URL', () => {
     expect(MINIMAX_DEFAULT_BASE_URL).toBe('https://api.minimax.io/v1');
-    expect(MINIMAX_NATIVE_BASE_URL).toBe('https://api.minimax.io/v1');
+    expect('MINIMAX_NATIVE_BASE_URL' in minimaxConfig).toBe(false);
   });
 
   test('native endpoint constants are relative to the /v1 base URL', () => {

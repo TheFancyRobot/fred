@@ -24,12 +24,6 @@ import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 export const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
 
 /**
- * Default MiniMax API base URL for native multi-modality endpoints.
- * Currently shares the same host as the compatibility endpoint.
- */
-export const MINIMAX_NATIVE_BASE_URL = MINIMAX_DEFAULT_BASE_URL;
-
-/**
  * Default environment variable name for the MiniMax API key.
  */
 export const MINIMAX_API_KEY_ENV_VAR = 'MINIMAX_API_KEY';

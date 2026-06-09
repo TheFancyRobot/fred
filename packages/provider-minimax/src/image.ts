@@ -24,7 +24,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
-  MINIMAX_NATIVE_BASE_URL,
+  MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -120,7 +120,7 @@ export interface MiniMaxImageAdapter {
  */
 export function createMiniMaxImageAdapter(
   apiKey: string,
-  baseUrl: string = MINIMAX_NATIVE_BASE_URL
+  baseUrl: string = MINIMAX_DEFAULT_BASE_URL
 ): MiniMaxImageAdapter {
   const generate = Effect.fn('MiniMaxImageAdapter.generate')(function* (
     input: ImageGenerationInput

@@ -28,7 +28,7 @@ import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import * as HttpBody from '@effect/platform/HttpBody';
-import { MINIMAX_NATIVE_BASE_URL } from './config';
+import { MINIMAX_DEFAULT_BASE_URL } from './config';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -334,7 +334,7 @@ export interface MiniMaxVoiceAdapter {
  */
 export function createMiniMaxVoiceAdapter(
   apiKey: string,
-  baseUrl: string = MINIMAX_NATIVE_BASE_URL
+  baseUrl: string = MINIMAX_DEFAULT_BASE_URL
 ): MiniMaxVoiceAdapter {
   const clone = Effect.fn('MiniMaxVoiceAdapter.clone')(function* (
     input: VoiceCloneInput
