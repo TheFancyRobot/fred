@@ -21,7 +21,12 @@ import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 /**
  * Default MiniMax API base URL for OpenAI-compatible endpoints.
  */
-export const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.chat/v1';
+export const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
+
+/**
+ * Default MiniMax API base URL for native multi-modality endpoints.
+ */
+export const MINIMAX_NATIVE_BASE_URL = 'https://api.minimax.io/v1';
 
 /**
  * Default environment variable name for the MiniMax API key.

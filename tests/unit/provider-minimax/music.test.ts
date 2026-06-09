@@ -38,20 +38,20 @@ describe('MiniMax Music Capability', () => {
 
   describe('createMiniMaxMusicAdapter', () => {
     test('returns an adapter object with generate method', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter).toBeDefined();
       expect(typeof adapter.generate).toBe('function');
     });
 
     test('adapter has correct capability key', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter.capability).toBe('music');
     });
   });
 
   describe('request shaping', () => {
     test('generate accepts model, prompt, and lyrics parameters', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',
@@ -64,7 +64,7 @@ describe('MiniMax Music Capability', () => {
     });
 
     test('generate accepts optional vocal_style parameter', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',
@@ -77,7 +77,7 @@ describe('MiniMax Music Capability', () => {
     });
 
     test('generate works with only prompt (auto-lyrics)', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',
@@ -90,7 +90,7 @@ describe('MiniMax Music Capability', () => {
 
   describe('normalized response', () => {
     test('generate returns an Effect that resolves to audio data', async () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',
@@ -152,7 +152,7 @@ describe('MiniMax Music Capability', () => {
 
   describe('input type completeness', () => {
     test('MusicGenerationInput accepts reference_audio_url for cover generation', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',
@@ -164,7 +164,7 @@ describe('MiniMax Music Capability', () => {
     });
 
     test('MusicGenerationInput accepts seed for reproducibility', () => {
-      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxMusicAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.generate({
         model: 'music-01',

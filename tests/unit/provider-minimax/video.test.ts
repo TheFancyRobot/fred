@@ -46,21 +46,21 @@ describe('MiniMax Video Capability', () => {
 
   describe('createMiniMaxVideoAdapter', () => {
     test('returns an adapter object with createTask and queryTask methods', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter).toBeDefined();
       expect(typeof adapter.createTask).toBe('function');
       expect(typeof adapter.queryTask).toBe('function');
     });
 
     test('adapter has correct capability key', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter.capability).toBe('video');
     });
   });
 
   describe('request shaping', () => {
     test('createTask accepts text-to-video parameters', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createTask({
         model: 'video-01',
@@ -72,7 +72,7 @@ describe('MiniMax Video Capability', () => {
     });
 
     test('createTask accepts image-to-video parameters with first_frame_image', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createTask({
         model: 'video-01',
@@ -84,7 +84,7 @@ describe('MiniMax Video Capability', () => {
     });
 
     test('queryTask accepts task_id parameter', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.queryTask({ task_id: '12345' });
 
@@ -95,7 +95,7 @@ describe('MiniMax Video Capability', () => {
 
   describe('normalized response', () => {
     test('createTask returns an Effect resolving to task_id', async () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createTask({
         model: 'video-01',
@@ -107,7 +107,7 @@ describe('MiniMax Video Capability', () => {
     });
 
     test('queryTask returns an Effect resolving to status and file_id', async () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.queryTask({ task_id: '12345' });
 
@@ -164,7 +164,7 @@ describe('MiniMax Video Capability', () => {
 
   describe('async workflow', () => {
     test('createTask supports async flag', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createTask({
         model: 'video-01',
@@ -176,7 +176,7 @@ describe('MiniMax Video Capability', () => {
     });
 
     test('createTask supports callback_url for notifications', () => {
-      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVideoAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createTask({
         model: 'video-01',

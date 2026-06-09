@@ -9,10 +9,10 @@
  *   Endpoint: POST /v1/voice_clone
  * - Voice Design: https://platform.minimax.io/docs/api-reference/voice-design-design
  *   Endpoint: POST /v1/voice_design
- * - Voice Management (List): https://platform.minimax.io/docs/api-reference/voice-management-list
- *   Endpoint: GET /v1/voice_management/list
+ * - Voice Management (Get): https://platform.minimax.io/docs/api-reference/voice-management-get
+ *   Endpoint: GET /v1/get_voice
  * - Voice Management (Delete): https://platform.minimax.io/docs/api-reference/voice-management-delete
- *   Endpoint: POST /v1/voice_management/delete
+ *   Endpoint: POST /v1/delete_voice
  *
  * Design choices:
  * - Uses @effect/platform HttpClient for HTTP requests (consistent with other adapters).
@@ -29,6 +29,7 @@ import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import * as HttpBody from '@effect/platform/HttpBody';
 import { FetchHttpClient } from '@effect/platform';
+import { MINIMAX_NATIVE_BASE_URL } from './config';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,12 +46,12 @@ export const MINIMAX_VOICE_DESIGN_ENDPOINT = '/voice_design' as const;
 /**
  * MiniMax voice management list endpoint (appended to base URL).
  */
-export const MINIMAX_VOICE_LIST_ENDPOINT = '/voice_management/list' as const;
+export const MINIMAX_VOICE_LIST_ENDPOINT = '/get_voice' as const;
 
 /**
  * MiniMax voice management delete endpoint (appended to base URL).
  */
-export const MINIMAX_VOICE_DELETE_ENDPOINT = '/voice_management/delete' as const;
+export const MINIMAX_VOICE_DELETE_ENDPOINT = '/delete_voice' as const;
 
 /**
  * Retry configuration for transient MiniMax voice API failures.
@@ -320,12 +321,12 @@ export interface MiniMaxVoiceAdapter {
  * Create a MiniMax voice lifecycle adapter.
  *
  * @param apiKey - MiniMax API key
- * @param baseUrl - MiniMax API base URL (e.g. 'https://api.minimax.chat/v1')
+ * @param baseUrl - MiniMax API base URL (defaults to 'https://api.minimax.io/v1')
  * @returns Voice adapter with `clone`, `design`, `list`, and `delete` methods
  */
 export function createMiniMaxVoiceAdapter(
   apiKey: string,
-  baseUrl: string
+  baseUrl: string = MINIMAX_NATIVE_BASE_URL
 ): MiniMaxVoiceAdapter {
   const clone = Effect.fn('MiniMaxVoiceAdapter.clone')(function* (
     input: VoiceCloneInput

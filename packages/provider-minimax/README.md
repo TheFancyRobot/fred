@@ -58,21 +58,22 @@ providers:
 | Speech | ✅ Stable | `speech.ts` | Text-to-speech (sync and async) |
 | Voice | ✅ Stable | `voice.ts` | Voice cloning, voice design, voice management |
 | Music | ✅ Stable | `music.ts` | Song generation from text prompts and lyrics |
+| Lyrics | ✅ Stable | `lyrics.ts` | Lyrics generation and editing for music workflows |
 
 ## Architecture: Compatibility Endpoint vs Native API
 
 MiniMax exposes two API surfaces:
 
-- **Compatibility endpoint** (`https://api.minimax.chat/v1`): An OpenAI-compatible Chat Completions API used for the **language** capability. This mirrors the `/v1/chat/completions` endpoint shape so tools and streaming work identically to other OpenAI-compatible providers.
+- **Compatibility endpoint** (`https://api.minimax.io/v1`): An OpenAI-compatible Chat Completions API used for the **language** capability. This mirrors the `/v1/chat/completions` endpoint shape so tools and streaming work identically to other OpenAI-compatible providers.
 
-- **Native MiniMax API**: Used for all multi-modality capabilities (image, video, speech, voice, music). These endpoints use MiniMax's own request/response format with `base_resp` status fields. Each adapter module (`image.ts`, `video.ts`, etc.) calls the native API directly via `@effect/platform` HttpClient.
+- **Native MiniMax API** (`https://api.minimax.io/v1`): Used for all multi-modality capabilities (image, video, speech, voice, music, lyrics). These endpoints use MiniMax's own request/response format with `base_resp` status fields. Each adapter module (`image.ts`, `video.ts`, etc.) calls the native API directly via `@effect/platform` HttpClient.
 
 The provider factory (`MiniMaxProviderFactory`) delegates language model loading to the compatibility adapter and exports separate adapter creation functions for native capabilities.
 
 ### Default Base URL
 
 ```
-https://api.minimax.chat/v1
+https://api.minimax.io/v1
 ```
 
 Override via `baseUrl` in config:
@@ -80,7 +81,7 @@ Override via `baseUrl` in config:
 ```yaml
 providers:
   - id: minimax
-    baseUrl: https://api.minimax.chat/v1
+    baseUrl: https://api.minimax.io/v1
 ```
 
 ## API Endpoints
@@ -92,12 +93,13 @@ providers:
 | Video generation (create) | `/video_generation` | POST |
 | Video generation (query) | `/query/video_generation` | GET |
 | Speech (sync TTS) | `/t2a_v2` | POST |
-| Speech (async TTS) | `/t2a_async` | POST |
+| Speech (async TTS) | `/t2a_async_v2` | POST |
 | Voice clone | `/voice_clone` | POST |
 | Voice design | `/voice_design` | POST |
-| Voice list | `/voice_management/list` | GET |
-| Voice delete | `/voice_management/delete` | POST |
+| Voice list/get | `/get_voice` | GET |
+| Voice delete | `/delete_voice` | POST |
 | Music generation | `/music_generation` | POST |
+| Lyrics generation | `/lyrics_generation` | POST |
 
 ## Error Handling
 
@@ -110,6 +112,7 @@ All adapters use `Data.TaggedError` for typed, catchable errors:
 - `MiniMaxMusicError` — music generation failures
 - `MiniMaxSpeechError` — TTS failures
 - `MiniMaxVoiceError` — voice clone/design/management failures
+- `MiniMaxLyricsError` — lyrics generation/editing failures
 
 All errors share a common `{ module, method, description, cause? }` shape for consistent logging.
 
@@ -140,6 +143,9 @@ export { createMiniMaxSpeechAdapter, MiniMaxSpeechError } from '@fancyrobot/fred
 
 // Voice
 export { createMiniMaxVoiceAdapter, MiniMaxVoiceError } from '@fancyrobot/fred-minimax';
+
+// Lyrics
+export { createMiniMaxLyricsAdapter, MiniMaxLyricsError } from '@fancyrobot/fred-minimax';
 ```
 
 ## Environment Variables

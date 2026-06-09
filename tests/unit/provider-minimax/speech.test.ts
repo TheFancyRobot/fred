@@ -22,7 +22,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('MINIMAX_TTS_ASYNC_ENDPOINT is set correctly', () => {
-      expect(MINIMAX_TTS_ASYNC_ENDPOINT).toBe('/t2a_async');
+      expect(MINIMAX_TTS_ASYNC_ENDPOINT).toBe('/t2a_async_v2');
     });
   });
 
@@ -79,21 +79,21 @@ describe('MiniMax Speech Capability', () => {
 
   describe('createMiniMaxSpeechAdapter', () => {
     test('returns an adapter object with synthesize and createAsyncTask methods', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter).toBeDefined();
       expect(typeof adapter.synthesize).toBe('function');
       expect(typeof adapter.createAsyncTask).toBe('function');
     });
 
     test('adapter has correct capability key', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter.capability).toBe('speech');
     });
   });
 
   describe('request shaping - synthesize', () => {
     test('synthesize accepts model, text, and voice_id parameters', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -106,7 +106,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('synthesize accepts optional speed, vol, pitch parameters', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -120,7 +120,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('synthesize accepts optional audio_format parameter', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -132,7 +132,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('synthesize accepts optional emotion parameter', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -144,7 +144,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('synthesize accepts optional language parameter', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -156,7 +156,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('synthesize works with minimal parameters (model + text only)', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -169,7 +169,7 @@ describe('MiniMax Speech Capability', () => {
 
   describe('request shaping - createAsyncTask', () => {
     test('createAsyncTask accepts model, text, and voice_id parameters', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createAsyncTask({
         model: 'speech-02',
@@ -181,7 +181,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('createAsyncTask accepts optional callback_url parameter', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createAsyncTask({
         model: 'speech-02',
@@ -193,7 +193,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('createAsyncTask accepts all TTS parameters', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createAsyncTask({
         model: 'speech-02',
@@ -213,7 +213,7 @@ describe('MiniMax Speech Capability', () => {
 
   describe('normalized response', () => {
     test('synthesize returns an Effect that resolves to speech data', async () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -225,7 +225,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('createAsyncTask returns an Effect that resolves to task data', async () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.createAsyncTask({
         model: 'speech-02',
@@ -274,7 +274,7 @@ describe('MiniMax Speech Capability', () => {
 
   describe('input type completeness', () => {
     test('SpeechSynthesisInput accepts seed for reproducibility', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -286,7 +286,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('SpeechSynthesisInput works with custom cloned voice_id', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -298,7 +298,7 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('SpeechSynthesisInput works with designed voice_id', () => {
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.synthesize({
         model: 'speech-02',
@@ -316,12 +316,12 @@ describe('MiniMax Speech Capability', () => {
     });
 
     test('createAsyncTask uses async endpoint', () => {
-      expect(MINIMAX_TTS_ASYNC_ENDPOINT).toBe('/t2a_async');
+      expect(MINIMAX_TTS_ASYNC_ENDPOINT).toBe('/t2a_async_v2');
     });
 
     test('async endpoint returns task_id for polling', () => {
       // Verify the return type shape — AsyncSpeechTaskResult has task_id and async fields
-      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
       expect(typeof adapter.createAsyncTask).toBe('function');
     });
   });

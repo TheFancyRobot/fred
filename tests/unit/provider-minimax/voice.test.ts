@@ -35,11 +35,11 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('MINIMAX_VOICE_LIST_ENDPOINT is set correctly', () => {
-      expect(MINIMAX_VOICE_LIST_ENDPOINT).toBe('/voice_management/list');
+      expect(MINIMAX_VOICE_LIST_ENDPOINT).toBe('/get_voice');
     });
 
     test('MINIMAX_VOICE_DELETE_ENDPOINT is set correctly', () => {
-      expect(MINIMAX_VOICE_DELETE_ENDPOINT).toBe('/voice_management/delete');
+      expect(MINIMAX_VOICE_DELETE_ENDPOINT).toBe('/delete_voice');
     });
   });
 
@@ -96,7 +96,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('createMiniMaxVoiceAdapter', () => {
     test('returns an adapter object with clone, design, list, and delete methods', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter).toBeDefined();
       expect(typeof adapter.clone).toBe('function');
       expect(typeof adapter.design).toBe('function');
@@ -105,14 +105,14 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('adapter has correct capability key', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
       expect(adapter.capability).toBe('voice');
     });
   });
 
   describe('request shaping - clone', () => {
     test('clone accepts audio_source parameter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.clone({
         audio_source: 'https://example.com/voice-sample.mp3',
@@ -122,7 +122,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('clone accepts optional audio_source_type parameter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.clone({
         audio_source: 'aGVsbG8gd29ybGQ=',
@@ -133,7 +133,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('clone accepts optional voice_name parameter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.clone({
         audio_source: 'https://example.com/sample.wav',
@@ -144,7 +144,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('clone accepts optional text and language parameters', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.clone({
         audio_source: 'https://example.com/sample.wav',
@@ -158,7 +158,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('request shaping - design', () => {
     test('design accepts prompt and preview_text parameters', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.design({
         prompt: 'Excited and enthusiastic male product reviewer, fast-paced, high energy.',
@@ -169,7 +169,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('design accepts optional language parameter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.design({
         prompt: 'Calm, soothing female narrator for meditation.',
@@ -181,7 +181,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('design works with descriptive voice prompts', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.design({
         prompt: 'Deep, authoritative male voice, similar to a movie trailer narrator.',
@@ -194,7 +194,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('request shaping - list', () => {
     test('list can be called with no parameters', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.list();
 
@@ -202,7 +202,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('list accepts optional voice_type filter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.list({
         voice_type: 'clone',
@@ -212,7 +212,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('list accepts optional pagination parameters', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.list({
         page: 2,
@@ -225,7 +225,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('request shaping - delete', () => {
     test('delete accepts voice_id parameter', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.delete({
         voice_id: 'clone-voice-abc123',
@@ -237,7 +237,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('normalized response', () => {
     test('clone returns an Effect', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.clone({
         audio_source: 'https://example.com/sample.wav',
@@ -247,7 +247,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('design returns an Effect', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.design({
         prompt: 'Test voice',
@@ -258,7 +258,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('list returns an Effect', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.list();
 
@@ -266,7 +266,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('delete returns an Effect', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.delete({
         voice_id: 'test-voice-id',
@@ -335,8 +335,8 @@ describe('MiniMax Voice Capability', () => {
     test('clone → synthesize flow: cloned voice_id can be used for TTS', () => {
       // Verify that the adapter's clone method returns a type with voice_id
       // and the speech adapter's synthesize accepts voice_id
-      const voiceAdapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
-      const speechAdapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const voiceAdapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
+      const speechAdapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       // Both adapters are created and have the expected methods
       expect(typeof voiceAdapter.clone).toBe('function');
@@ -344,15 +344,15 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('design → synthesize flow: designed voice_id can be used for TTS', () => {
-      const voiceAdapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
-      const speechAdapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.chat/v1');
+      const voiceAdapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
+      const speechAdapter = createMiniMaxSpeechAdapter('test-key', 'https://api.minimax.io/v1');
 
       expect(typeof voiceAdapter.design).toBe('function');
       expect(typeof speechAdapter.synthesize).toBe('function');
     });
 
     test('clone → list → delete flow: full voice lifecycle', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       // All lifecycle methods are available
       expect(typeof adapter.clone).toBe('function');
@@ -363,7 +363,7 @@ describe('MiniMax Voice Capability', () => {
 
   describe('input type completeness', () => {
     test('VoiceCloneInput default audio_source_type is url', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       // audio_source_type is optional, defaults to url behavior
       const result = adapter.clone({
@@ -374,7 +374,7 @@ describe('MiniMax Voice Capability', () => {
     });
 
     test('VoiceListInput allows filtering by all voice types', () => {
-      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.chat/v1');
+      const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const cloneList = adapter.list({ voice_type: 'clone' });
       const designList = adapter.list({ voice_type: 'design' });

@@ -25,6 +25,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
+  MINIMAX_NATIVE_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -160,12 +161,12 @@ export interface MiniMaxVideoAdapter {
  * Create a MiniMax video generation adapter.
  *
  * @param apiKey - MiniMax API key
- * @param baseUrl - MiniMax API base URL (e.g. 'https://api.minimax.chat/v1')
+ * @param baseUrl - MiniMax API base URL (defaults to 'https://api.minimax.io/v1')
  * @returns Video adapter with createTask and queryTask methods
  */
 export function createMiniMaxVideoAdapter(
   apiKey: string,
-  baseUrl: string
+  baseUrl: string = MINIMAX_NATIVE_BASE_URL
 ): MiniMaxVideoAdapter {
   const createTask = Effect.fn('MiniMaxVideoAdapter.createTask')(function* (
     input: VideoGenerationInput

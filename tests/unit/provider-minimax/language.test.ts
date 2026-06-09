@@ -35,7 +35,7 @@ describe('MiniMax Language Capability', () => {
 
   describe('configuration', () => {
     test('MINIMAX_DEFAULT_BASE_URL is set to MiniMax API v1 endpoint', () => {
-      expect(MINIMAX_DEFAULT_BASE_URL).toBe('https://api.minimax.chat/v1');
+      expect(MINIMAX_DEFAULT_BASE_URL).toBe('https://api.minimax.io/v1');
     });
 
     test('MINIMAX_CAPABILITIES includes language', () => {
