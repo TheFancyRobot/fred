@@ -24,7 +24,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
-  MINIMAX_NATIVE_BASE_URL,
+  MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -125,7 +125,7 @@ export interface MiniMaxMusicAdapter {
  */
 export function createMiniMaxMusicAdapter(
   apiKey: string,
-  baseUrl: string = MINIMAX_NATIVE_BASE_URL
+  baseUrl: string = MINIMAX_DEFAULT_BASE_URL
 ): MiniMaxMusicAdapter {
   const generate = Effect.fn('MiniMaxMusicAdapter.generate')(function* (
     input: MusicGenerationInput

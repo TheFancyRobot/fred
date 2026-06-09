@@ -28,7 +28,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
-  MINIMAX_NATIVE_BASE_URL,
+  MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -193,7 +193,7 @@ export interface MiniMaxSpeechAdapter {
  */
 export function createMiniMaxSpeechAdapter(
   apiKey: string,
-  baseUrl: string = MINIMAX_NATIVE_BASE_URL
+  baseUrl: string = MINIMAX_DEFAULT_BASE_URL
 ): MiniMaxSpeechAdapter {
   const synthesize = Effect.fn('MiniMaxSpeechAdapter.synthesize')(function* (
     input: SpeechSynthesisInput

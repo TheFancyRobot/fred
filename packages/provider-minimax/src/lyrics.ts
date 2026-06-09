@@ -29,7 +29,7 @@ import {
   buildRetrySchedule,
   createAuthenticatedClient,
   formatApiErrorMessage,
-  MINIMAX_NATIVE_BASE_URL,
+  MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
   MiniMaxErrorFields,
@@ -207,7 +207,7 @@ export interface MiniMaxLyricsAdapter {
  */
 export function createMiniMaxLyricsAdapter(
   apiKey: string,
-  baseUrl: string = MINIMAX_NATIVE_BASE_URL
+  baseUrl: string = MINIMAX_DEFAULT_BASE_URL
 ): MiniMaxLyricsAdapter {
   const generate = Effect.fn('MiniMaxLyricsAdapter.generate')(function* (
     input: LyricsGenerationInput

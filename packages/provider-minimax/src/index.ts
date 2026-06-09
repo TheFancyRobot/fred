@@ -47,10 +47,7 @@ export {
   MiniMaxMissingApiKeyError,
   MiniMaxLanguageModelError,
 } from './language';
-export {
-  MINIMAX_DEFAULT_BASE_URL,
-  MINIMAX_NATIVE_BASE_URL,
-} from './config';
+export { MINIMAX_DEFAULT_BASE_URL } from './config';
 
 // Re-export image capability public API
 export {
