@@ -43,9 +43,8 @@ import {
  * The lyrics_generation endpoint MUST use https://api.minimax.io,
  * NOT https://api.minimax.chat.
  *
- * The .chat domain is reserved for the OpenAI-compatible language
- * capability. All native multi-modality endpoints (image, video,
- * speech, voice, music, lyrics) use api.minimax.io.
+ * The legacy .chat domain must not be used for lyrics. Current MiniMax
+ * APIs in this package use api.minimax.io.
  */
 const EXPECTED_LYRICS_BASE_URL = 'https://api.minimax.io/v1';
 
@@ -109,7 +108,7 @@ describe('MiniMax Lyrics Adapter — Contract Tests', () => {
     });
 
     test('endpoint path does not contain api.minimax.chat domain', () => {
-      // The .chat domain is for OpenAI-compatible language only.
+      // The legacy .chat domain should not appear in the endpoint path.
       // Lyrics uses the native API at api.minimax.io.
       expect(EXPECTED_LYRICS_ENDPOINT_PATH).not.toContain('api.minimax.chat');
     });

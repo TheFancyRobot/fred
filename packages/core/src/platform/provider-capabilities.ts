@@ -8,7 +8,7 @@
  * - Backward-compatible: existing providers remain valid with language-only
  *   implementations. The `capabilities` field is optional.
  * - Future-proof: MiniMax and other multi-modality providers can declare
- *   all six supported capabilities under a single provider ID.
+ *   all supported capabilities under a single provider ID.
  * - Explicit failure: callers get a typed `UnsupportedProviderCapabilityError`
  *   instead of having to probe arbitrarily.
  */
@@ -19,7 +19,7 @@ import type { ProviderDefinition } from './provider';
 // ─── Capability Keys ────────────────────────────────────────────────────────
 
 /**
- * The six provider capability modalities.
+ * The provider capability modalities.
  *
  * Each key maps to a distinct adapter surface on a provider definition.
  */
@@ -29,7 +29,8 @@ export type ProviderCapabilityKey =
   | 'video'
   | 'speech'
   | 'voice'
-  | 'music';
+  | 'music'
+  | 'lyrics';
 
 /**
  * Runtime array of all capability keys.
@@ -43,6 +44,7 @@ export const ProviderCapabilityKeys: readonly ProviderCapabilityKey[] = [
   'speech',
   'voice',
   'music',
+  'lyrics',
 ] as const;
 
 // ─── Unsupported Capability Error ────────────────────────────────────────────

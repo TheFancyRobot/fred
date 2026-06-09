@@ -21,6 +21,7 @@ describe('Provider Capability Contract', () => {
         'speech',
         'voice',
         'music',
+        'lyrics',
       ] as const;
 
       expectedKeys.forEach((key) => {
@@ -28,12 +29,12 @@ describe('Provider Capability Contract', () => {
       });
     });
 
-    test('ProviderCapabilityKey type covers all six modalities', async () => {
+    test('ProviderCapabilityKey type covers all supported modalities', async () => {
       const { ProviderCapabilityKeys } = await import(
         '../../../../packages/core/src/platform/provider-capabilities'
       );
 
-      expect(ProviderCapabilityKeys.length).toBe(6);
+      expect(ProviderCapabilityKeys.length).toBe(7);
     });
   });
 
@@ -189,7 +190,7 @@ describe('Provider Capability Contract', () => {
       expect(capabilities.has('music')).toBe(false);
     });
 
-    test('multi-modality provider can list all six capabilities', () => {
+    test('multi-modality provider can list all supported capabilities', () => {
       const capabilities = new Set([
         'language',
         'image',
@@ -197,15 +198,17 @@ describe('Provider Capability Contract', () => {
         'speech',
         'voice',
         'music',
+        'lyrics',
       ] as const);
 
-      expect(capabilities.size).toBe(6);
+      expect(capabilities.size).toBe(7);
       expect(capabilities.has('language')).toBe(true);
       expect(capabilities.has('image')).toBe(true);
       expect(capabilities.has('video')).toBe(true);
       expect(capabilities.has('speech')).toBe(true);
       expect(capabilities.has('voice')).toBe(true);
       expect(capabilities.has('music')).toBe(true);
+      expect(capabilities.has('lyrics')).toBe(true);
     });
 
     test('definition without capabilities defaults to language-only', () => {
@@ -232,7 +235,7 @@ describe('Provider Capability Contract', () => {
       const factory = {
         id: 'minimax',
         aliases: ['minimax'],
-        capabilities: new Set(['language', 'image', 'video', 'speech', 'voice', 'music'] as const),
+        capabilities: new Set(['language', 'image', 'video', 'speech', 'voice', 'music', 'lyrics'] as const),
         load: async () => ({
           layer: Layer.empty as any,
           getModel: (_modelId: string) => Effect.fail(new Error('not implemented')),
@@ -241,9 +244,10 @@ describe('Provider Capability Contract', () => {
 
       const definition = await createProviderDefinition(factory, {} as ProviderConfig);
 
-      expect(definition.capabilities?.size).toBe(6);
+      expect(definition.capabilities?.size).toBe(7);
       expect(hasCapability(definition, 'image')).toBe(true);
       expect(hasCapability(definition, 'music')).toBe(true);
+      expect(hasCapability(definition, 'lyrics')).toBe(true);
     });
   });
 });

@@ -25,8 +25,9 @@ export const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
 
 /**
  * Default MiniMax API base URL for native multi-modality endpoints.
+ * Currently shares the same host as the compatibility endpoint.
  */
-export const MINIMAX_NATIVE_BASE_URL = 'https://api.minimax.io/v1';
+export const MINIMAX_NATIVE_BASE_URL = MINIMAX_DEFAULT_BASE_URL;
 
 /**
  * Default environment variable name for the MiniMax API key.

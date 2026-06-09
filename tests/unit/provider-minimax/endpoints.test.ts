@@ -25,6 +25,7 @@ import {
   MINIMAX_VOICE_LIST_ENDPOINT,
 } from '../../../packages/provider-minimax/src/voice';
 import { createMiniMaxLyricsAdapter, MINIMAX_LYRICS_ENDPOINT } from '../../../packages/provider-minimax/src/lyrics';
+import { MINIMAX_CAPABILITIES, MiniMaxProviderFactory } from '../../../packages/provider-minimax/src/index';
 
 const originalFetch = globalThis.fetch;
 
@@ -32,44 +33,49 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function mockFetch(capturedUrls: string[]) {
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
+interface CapturedRequest {
+  readonly url: string;
+  readonly method: string;
+  readonly body?: unknown;
+}
 
-    capturedUrls.push(url);
+function mockFetch(capturedRequests: CapturedRequest[]) {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    const url = request.url;
+    const text = await request.clone().text();
+    const requestBody = text ? JSON.parse(text) : undefined;
+
+    capturedRequests.push({ url, method: request.method, body: requestBody });
 
     const baseResp = { status_code: 0, status_msg: 'success' };
-    let body: unknown = { base_resp: baseResp };
+    let responseBody: unknown = { base_resp: baseResp };
 
     if (url.includes('/image_generation')) {
-      body = { base_resp: baseResp, image_urls: ['https://example.com/image.png'] };
+      responseBody = { base_resp: baseResp, image_urls: ['https://example.com/image.png'] };
     } else if (url.includes('/query/video_generation')) {
-      body = { base_resp: baseResp, task_id: 'video-task', status: 'Success', file_id: 'file-1' };
+      responseBody = { base_resp: baseResp, task_id: 'video-task', status: 'Success', file_id: 'file-1' };
     } else if (url.includes('/video_generation')) {
-      body = { base_resp: baseResp, task_id: 'video-task' };
+      responseBody = { base_resp: baseResp, task_id: 'video-task' };
     } else if (url.includes('/music_generation')) {
-      body = { base_resp: baseResp, audio_url: 'https://example.com/song.mp3' };
+      responseBody = { base_resp: baseResp, audio_url: 'https://example.com/song.mp3' };
     } else if (url.includes('/t2a_async_v2')) {
-      body = { base_resp: baseResp, task_id: 'speech-task' };
+      responseBody = { base_resp: baseResp, task_id: 'speech-task' };
     } else if (url.includes('/t2a_v2')) {
-      body = { base_resp: baseResp, data: { audio: '00ff' } };
+      responseBody = { base_resp: baseResp, data: { audio: '00ff' } };
     } else if (url.includes('/voice_clone')) {
-      body = { base_resp: baseResp, voice_id: 'voice-clone' };
+      responseBody = { base_resp: baseResp, voice_id: 'voice-clone' };
     } else if (url.includes('/voice_design')) {
-      body = { base_resp: baseResp, voice_id: 'voice-design' };
+      responseBody = { base_resp: baseResp, voice_id: 'voice-design' };
     } else if (url.includes('/get_voice')) {
-      body = { base_resp: baseResp, voices: [] };
+      responseBody = { base_resp: baseResp, system_voice: [], voice_cloning: [], voice_generation: [] };
     } else if (url.includes('/delete_voice')) {
-      body = { base_resp: baseResp };
+      responseBody = { base_resp: baseResp };
     } else if (url.includes('/lyrics_generation')) {
-      body = { base_resp: baseResp, lyrics: '[Verse]\nTest lyric' };
+      responseBody = { base_resp: baseResp, lyrics: '[Verse]\nTest lyric' };
     }
 
-    return new Response(JSON.stringify(body), {
+    return new Response(JSON.stringify(responseBody), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -96,9 +102,14 @@ describe('MiniMax endpoint and base URL configuration', () => {
     expect(MINIMAX_LYRICS_ENDPOINT).toBe('/lyrics_generation');
   });
 
+  test('provider advertises lyrics alongside other MiniMax capabilities', () => {
+    expect(MINIMAX_CAPABILITIES.has('lyrics')).toBe(true);
+    expect(MiniMaxProviderFactory.capabilities?.has('lyrics')).toBe(true);
+  });
+
   test('native adapters default to documented api.minimax.io/v1 URLs', async () => {
-    const capturedUrls: string[] = [];
-    mockFetch(capturedUrls);
+    const capturedRequests: CapturedRequest[] = [];
+    mockFetch(capturedRequests);
 
     const image = createMiniMaxImageAdapter('test-key');
     const video = createMiniMaxVideoAdapter('test-key');
@@ -119,10 +130,10 @@ describe('MiniMax endpoint and base URL configuration', () => {
     await run(voice.clone({ audio_source: 'https://example.com/voice.mp3' }));
     await run(voice.design({ prompt: 'warm narrator', preview_text: 'hello' }));
     await run(voice.list());
-    await run(voice.delete({ voice_id: 'voice-design' }));
+    await run(voice.delete({ voice_type: 'voice_generation', voice_id: 'voice-design' }));
     await run(lyrics.generate({ mode: 'write_full_song', prompt: 'write a hook' }));
 
-    expect(capturedUrls).toEqual([
+    expect(capturedRequests.map((request) => request.url)).toEqual([
       'https://api.minimax.io/v1/image_generation',
       'https://api.minimax.io/v1/video_generation',
       'https://api.minimax.io/v1/query/video_generation?task_id=video-task',
@@ -135,5 +146,14 @@ describe('MiniMax endpoint and base URL configuration', () => {
       'https://api.minimax.io/v1/delete_voice',
       'https://api.minimax.io/v1/lyrics_generation',
     ]);
+
+    expect(capturedRequests[8]).toMatchObject({
+      method: 'POST',
+      body: { voice_type: 'all' },
+    });
+    expect(capturedRequests[9]).toMatchObject({
+      method: 'POST',
+      body: { voice_type: 'voice_generation', voice_id: 'voice-design' },
+    });
   });
 });
