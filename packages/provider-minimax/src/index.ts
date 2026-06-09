@@ -101,7 +101,7 @@ export {
 
 /**
  * Combined capability set for the MiniMax provider.
- * Includes language (from Step 05), image, video, music, speech, and voice.
+ * Includes language, image, video, music, speech, voice, and lyrics.
  */
 export const MINIMAX_CAPABILITIES = new Set<ProviderCapabilityKey>([
   ...LANGUAGE_CAPABILITIES,
@@ -110,6 +110,7 @@ export const MINIMAX_CAPABILITIES = new Set<ProviderCapabilityKey>([
   'music',
   'speech',
   'voice',
+  'lyrics',
 ]);
 
 /**
@@ -117,13 +118,13 @@ export const MINIMAX_CAPABILITIES = new Set<ProviderCapabilityKey>([
  *
  * Implements EffectProviderFactory interface for use as both built-in
  * and external pack pattern. MiniMax supports language, image, video,
- * speech, voice, and music capabilities.
+ * speech, voice, music, and lyrics capabilities.
  *
  * Language capability is implemented via MiniMax's OpenAI-compatible
  * Chat Completions API (see `./language.ts`).
  *
- * Multi-modality capabilities (image, video, speech, voice, music) are
- * implemented in dedicated adapter modules loaded by subsequent steps.
+ * Multi-modality capabilities (image, video, speech, voice, music, lyrics)
+ * are implemented in dedicated adapter modules.
  */
 export const MiniMaxProviderFactory: EffectProviderFactory = {
   id: 'minimax',

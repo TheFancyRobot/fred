@@ -117,7 +117,9 @@ export function isLyricsErrorRetryable(error: unknown): boolean {
   // MiniMaxLyricsError with base_resp_code 1002 → retryable
   if (error instanceof MiniMaxLyricsError) {
     if (error.base_resp_code !== undefined) {
-      return RETRYABLE_BASE_RESP_CODES.has(error.base_resp_code);
+      if (RETRYABLE_BASE_RESP_CODES.has(error.base_resp_code)) return true;
+      if (NON_RETRYABLE_BASE_RESP_CODES.has(error.base_resp_code)) return false;
+      return false;
     }
     // Lyrics errors without a base_resp_code (validation, parse, missing fields)
     // are not retryable — they indicate client-side or structural issues.

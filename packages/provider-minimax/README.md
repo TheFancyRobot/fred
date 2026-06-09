@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@fancyrobot/fred-minimax)](https://www.npmjs.com/package/@fancyrobot/fred-minimax)
 
-MiniMax multi-modality provider for the Fred AI framework. Supports six capabilities — language, image, video, speech, voice, and music — through a single package.
+MiniMax multi-modality provider for the Fred AI framework. Supports seven capabilities — language, image, video, speech, voice, music, and lyrics — through a single package.
 
 ## Installation
 
@@ -96,7 +96,7 @@ providers:
 | Speech (async TTS) | `/t2a_async_v2` | POST |
 | Voice clone | `/voice_clone` | POST |
 | Voice design | `/voice_design` | POST |
-| Voice list/get | `/get_voice` | GET |
+| Voice list/get | `/get_voice` | POST |
 | Voice delete | `/delete_voice` | POST |
 | Music generation | `/music_generation` | POST |
 | Lyrics generation | `/lyrics_generation` | POST |

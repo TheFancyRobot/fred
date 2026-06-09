@@ -10,7 +10,7 @@
  * - Voice Design: https://platform.minimax.io/docs/api-reference/voice-design-design
  *   Endpoint: POST /v1/voice_design
  * - Voice Management (Get): https://platform.minimax.io/docs/api-reference/voice-management-get
- *   Endpoint: GET /v1/get_voice
+ *   Endpoint: POST /v1/get_voice
  * - Voice Management (Delete): https://platform.minimax.io/docs/api-reference/voice-management-delete
  *   Endpoint: POST /v1/delete_voice
  *
@@ -28,7 +28,6 @@ import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import * as HttpBody from '@effect/platform/HttpBody';
-import { FetchHttpClient } from '@effect/platform';
 import { MINIMAX_NATIVE_BASE_URL } from './config';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -119,22 +118,23 @@ export interface VoiceDesignInput {
   language?: string;
 }
 
+export type VoiceListType = 'system' | 'voice_cloning' | 'voice_generation' | 'all';
+export type DeletableVoiceType = 'voice_cloning' | 'voice_generation';
+
 /**
  * Input shape for voice list requests.
  */
 export interface VoiceListInput {
-  /** Filter by voice type (e.g. 'clone', 'design', 'preset') */
-  voice_type?: string;
-  /** Page number for pagination (default 1) */
-  page?: number;
-  /** Page size for pagination (default 10) */
-  page_size?: number;
+  /** Voice type to query (default: 'all') */
+  voice_type?: VoiceListType;
 }
 
 /**
  * Input shape for voice delete requests.
  */
 export interface VoiceDeleteInput {
+  /** Voice type to delete */
+  voice_type: DeletableVoiceType;
   /** Voice ID to delete */
   voice_id: string;
 }
@@ -173,11 +173,15 @@ export interface VoiceResource {
   voice_id: string;
   /** Voice name */
   voice_name?: string;
-  /** Voice type (e.g. 'clone', 'design', 'preset') */
-  voice_type?: string;
+  /** Voice type */
+  voice_type?: VoiceListType | DeletableVoiceType;
+  /** Human-readable description entries */
+  description?: ReadonlyArray<string>;
   /** Language */
   language?: string;
   /** Creation timestamp */
+  created_time?: string;
+  /** Legacy creation timestamp alias */
   created_at?: string;
   /** Expiration timestamp (for cloned voices) */
   expires_at?: string;
@@ -237,23 +241,27 @@ interface MiniMaxVoiceDesignResponse {
 /**
  * MiniMax raw API response for voice list.
  */
+interface MiniMaxVoiceEntry {
+  voice_id: string;
+  voice_name?: string;
+  description?: string[];
+  language?: string;
+  created_time?: string;
+  created_at?: string;
+  expires_at?: string;
+  [key: string]: unknown;
+}
+
 interface MiniMaxVoiceListResponse {
   base_resp?: {
     status_code: number;
     status_msg: string;
   };
-  voices?: Array<{
-    voice_id: string;
-    voice_name?: string;
-    voice_type?: string;
-    language?: string;
-    created_at?: string;
-    expires_at?: string;
-    [key: string]: unknown;
-  }>;
+  system_voice?: MiniMaxVoiceEntry[];
+  voice_cloning?: MiniMaxVoiceEntry[];
+  voice_generation?: MiniMaxVoiceEntry[];
+  voices?: MiniMaxVoiceEntry[];
   total?: number;
-  page?: number;
-  page_size?: number;
 }
 
 /**
@@ -523,15 +531,13 @@ export function createMiniMaxVoiceAdapter(
       );
       const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
-      const queryParams = new URLSearchParams();
-      if (input?.voice_type) queryParams.set('voice_type', input.voice_type);
-      if (input?.page) queryParams.set('page', String(input.page));
-      if (input?.page_size) queryParams.set('page_size', String(input.page_size));
+      const requestBody: Record<string, unknown> = {
+        voice_type: input?.voice_type ?? 'all',
+      };
 
-      const qs = queryParams.toString();
-      const url = qs ? `${MINIMAX_VOICE_LIST_ENDPOINT}?${qs}` : MINIMAX_VOICE_LIST_ENDPOINT;
-
-      const request = HttpClientRequest.get(url);
+      const request = HttpClientRequest.post(MINIMAX_VOICE_LIST_ENDPOINT, {
+        body: HttpBody.unsafeJson(requestBody),
+      });
 
       const response = yield* clientWithBaseUrlOk.execute(request).pipe(
         Effect.retry(
@@ -571,20 +577,30 @@ export function createMiniMaxVoiceAdapter(
         }));
       }
 
-      const voices: VoiceResource[] = (json.voices ?? []).map((v) => ({
+      const toVoiceResource = (
+        voice_type: VoiceResource['voice_type'],
+        v: MiniMaxVoiceEntry
+      ): VoiceResource => ({
         voice_id: v.voice_id,
         voice_name: v.voice_name,
-        voice_type: v.voice_type,
+        voice_type,
+        description: v.description,
         language: v.language,
+        created_time: v.created_time,
         created_at: v.created_at,
         expires_at: v.expires_at,
-      }));
+      });
+
+      const voices: VoiceResource[] = [
+        ...(json.system_voice ?? []).map((v) => toVoiceResource('system', v)),
+        ...(json.voice_cloning ?? []).map((v) => toVoiceResource('voice_cloning', v)),
+        ...(json.voice_generation ?? []).map((v) => toVoiceResource('voice_generation', v)),
+        ...(json.voices ?? []).map((v) => toVoiceResource(v.voice_type as VoiceResource['voice_type'], v)),
+      ];
 
       return {
         voices,
-        total: json.total,
-        page: json.page,
-        page_size: json.page_size,
+        total: json.total ?? voices.length,
       };
     });
   });
@@ -606,6 +622,7 @@ export function createMiniMaxVoiceAdapter(
       const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
       const requestBody: Record<string, unknown> = {
+        voice_type: input.voice_type,
         voice_id: input.voice_id,
       };
 

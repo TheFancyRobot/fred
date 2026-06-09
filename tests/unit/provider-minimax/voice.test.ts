@@ -205,21 +205,24 @@ describe('MiniMax Voice Capability', () => {
       const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.list({
-        voice_type: 'clone',
+        voice_type: 'voice_cloning',
       });
 
       expect(result).toBeDefined();
     });
 
-    test('list accepts optional pagination parameters', () => {
+    test('list accepts all documented voice_type values', () => {
       const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
-      const result = adapter.list({
-        page: 2,
-        page_size: 20,
-      });
+      const systemList = adapter.list({ voice_type: 'system' });
+      const cloneList = adapter.list({ voice_type: 'voice_cloning' });
+      const generatedList = adapter.list({ voice_type: 'voice_generation' });
+      const allList = adapter.list({ voice_type: 'all' });
 
-      expect(result).toBeDefined();
+      expect(systemList).toBeDefined();
+      expect(cloneList).toBeDefined();
+      expect(generatedList).toBeDefined();
+      expect(allList).toBeDefined();
     });
   });
 
@@ -228,6 +231,7 @@ describe('MiniMax Voice Capability', () => {
       const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.delete({
+        voice_type: 'voice_cloning',
         voice_id: 'clone-voice-abc123',
       });
 
@@ -269,6 +273,7 @@ describe('MiniMax Voice Capability', () => {
       const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
       const result = adapter.delete({
+        voice_type: 'voice_cloning',
         voice_id: 'test-voice-id',
       });
 
@@ -373,16 +378,18 @@ describe('MiniMax Voice Capability', () => {
       expect(result).toBeDefined();
     });
 
-    test('VoiceListInput allows filtering by all voice types', () => {
+    test('VoiceListInput allows filtering by documented voice types', () => {
       const adapter = createMiniMaxVoiceAdapter('test-key', 'https://api.minimax.io/v1');
 
-      const cloneList = adapter.list({ voice_type: 'clone' });
-      const designList = adapter.list({ voice_type: 'design' });
-      const presetList = adapter.list({ voice_type: 'preset' });
+      const systemList = adapter.list({ voice_type: 'system' });
+      const cloneList = adapter.list({ voice_type: 'voice_cloning' });
+      const generatedList = adapter.list({ voice_type: 'voice_generation' });
+      const allList = adapter.list({ voice_type: 'all' });
 
+      expect(systemList).toBeDefined();
       expect(cloneList).toBeDefined();
-      expect(designList).toBeDefined();
-      expect(presetList).toBeDefined();
+      expect(generatedList).toBeDefined();
+      expect(allList).toBeDefined();
     });
   });
 });
