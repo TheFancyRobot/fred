@@ -35,4 +35,36 @@ describe('local adapter package exports', () => {
       });
     }
   });
+
+  test('locally consumed adapter packages do not expose workspace protocol dependencies', async () => {
+    const localAdapterManifests = [
+      'packages/fred-baml/package.json',
+      'packages/fred-convex/package.json',
+      'packages/provider-minimax/package.json',
+    ];
+
+    for (const packagePath of localAdapterManifests) {
+      const manifest = JSON.parse(await Bun.file(packagePath).text()) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+        optionalDependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+      };
+
+      const dependencySections = {
+        dependencies: manifest.dependencies ?? {},
+        devDependencies: manifest.devDependencies ?? {},
+        optionalDependencies: manifest.optionalDependencies ?? {},
+        peerDependencies: manifest.peerDependencies ?? {},
+      };
+
+      for (const [sectionName, dependencies] of Object.entries(dependencySections)) {
+        for (const [dependencyName, version] of Object.entries(dependencies)) {
+          expect({ packagePath, sectionName, dependencyName, version }).not.toMatchObject({
+            version: expect.stringMatching(/^workspace:/),
+          });
+        }
+      }
+    }
+  });
 });

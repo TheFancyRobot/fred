@@ -22,7 +22,6 @@
     "@effect/platform": "^0.96.0"
   },
   "devDependencies": {
-    "@fancyrobot/fred": "workspace:^",
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
     "@effect/platform": "^0.96.0"
