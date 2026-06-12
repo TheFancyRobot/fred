@@ -21,6 +21,25 @@ describe('local adapter package exports', () => {
     expect(typeof testing.createStubConvexClient).toBe('function');
   });
 
+  test('root manifests prefer Bun source while retaining built JavaScript fallback', async () => {
+    for (const packagePath of ['packages/fred-baml/package.json', 'packages/fred-convex/package.json']) {
+      const manifest = JSON.parse(await Bun.file(packagePath).text()) as {
+        main: string;
+        types: string;
+        exports: { '.': Record<string, string> };
+      };
+
+      expect(manifest.main).toBe('./dist/index.js');
+      expect(manifest.types).toBe('./src/index.ts');
+      expect(manifest.exports['.']).toEqual({
+        types: './src/index.ts',
+        bun: './src/index.ts',
+        import: './dist/index.js',
+        default: './dist/index.js',
+      });
+    }
+  });
+
   test('testing subpath manifests prefer Bun source while retaining built JavaScript fallback', async () => {
     for (const packagePath of ['packages/fred-baml/package.json', 'packages/fred-convex/package.json']) {
       const manifest = JSON.parse(await Bun.file(packagePath).text()) as {
@@ -33,6 +52,17 @@ describe('local adapter package exports', () => {
         import: './dist/testing.js',
         default: './dist/testing.js',
       });
+    }
+  });
+
+  test('adapter package build scripts keep peer dependencies external', async () => {
+    for (const packagePath of ['packages/fred-baml/package.json', 'packages/fred-convex/package.json']) {
+      const manifest = JSON.parse(await Bun.file(packagePath).text()) as {
+        scripts: { build: string };
+      };
+
+      expect(manifest.scripts.build).toContain('--external effect');
+      expect(manifest.scripts.build).toContain('--external @fancyrobot/fred');
     }
   });
 
