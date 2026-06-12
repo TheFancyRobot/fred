@@ -91,8 +91,8 @@ export interface NormalizedError extends ErrorClassification {
  */
 export function normalizeHttpError(
   error: unknown,
-  module: string,
-  method: string,
+  _module: string,
+  _method: string,
   attemptCount?: number
 ): NormalizedError {
   const classification = classifyHttpError(error);

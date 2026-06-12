@@ -4,7 +4,7 @@
   "description": "BAML integration helpers for the Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "files": [
     "src",
     "dist",
@@ -12,20 +12,21 @@
   ],
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./testing": {
-      "types": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
       "bun": "./src/testing.ts",
       "import": "./dist/testing.js",
       "default": "./dist/testing.js"
     }
   },
   "scripts": {
-    "build": "bun build src/index.ts src/testing.ts --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred"
+    "build": "bun build src/index.ts src/testing.ts --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred && tsc --emitDeclarationOnly --outDir dist",
+    "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^1.0.0",

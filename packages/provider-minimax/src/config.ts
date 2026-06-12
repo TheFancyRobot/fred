@@ -11,7 +11,7 @@
  * All capability adapters import from this module to avoid drift.
  */
 
-import { Effect, Schedule } from 'effect';
+import { Schedule } from 'effect';
 import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
