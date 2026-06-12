@@ -55,6 +55,11 @@ export {
   MiniMaxImageError,
   MINIMAX_IMAGE_ENDPOINT,
 } from './image';
+export type {
+  ImageGenerationInput,
+  ImageGenerationResult,
+  MiniMaxImageAdapter,
+} from './image';
 
 // Re-export video capability public API
 export {
@@ -63,12 +68,25 @@ export {
   MINIMAX_VIDEO_GENERATION_ENDPOINT,
   MINIMAX_VIDEO_QUERY_ENDPOINT,
 } from './video';
+export type {
+  VideoGenerationInput,
+  VideoQueryInput,
+  VideoTaskResult,
+  VideoTaskStatus,
+  VideoQueryResult,
+  MiniMaxVideoAdapter,
+} from './video';
 
 // Re-export music capability public API
 export {
   createMiniMaxMusicAdapter,
   MiniMaxMusicError,
   MINIMAX_MUSIC_ENDPOINT,
+} from './music';
+export type {
+  MusicGenerationInput,
+  MusicGenerationResult,
+  MiniMaxMusicAdapter,
 } from './music';
 
 // Re-export speech capability public API
@@ -77,6 +95,13 @@ export {
   MiniMaxSpeechError,
   MINIMAX_TTS_ENDPOINT,
   MINIMAX_TTS_ASYNC_ENDPOINT,
+} from './speech';
+export type {
+  SpeechSynthesisInput,
+  AsyncSpeechSynthesisInput,
+  SpeechSynthesisResult,
+  AsyncSpeechTaskResult,
+  MiniMaxSpeechAdapter,
 } from './speech';
 
 // Re-export voice capability public API
@@ -88,12 +113,31 @@ export {
   MINIMAX_VOICE_LIST_ENDPOINT,
   MINIMAX_VOICE_DELETE_ENDPOINT,
 } from './voice';
+export type {
+  VoiceCloneInput,
+  VoiceDesignInput,
+  VoiceListType,
+  DeletableVoiceType,
+  VoiceListInput,
+  VoiceDeleteInput,
+  VoiceCloneResult,
+  VoiceDesignResult,
+  VoiceResource,
+  VoiceListResult,
+  VoiceDeleteResult,
+  MiniMaxVoiceAdapter,
+} from './voice';
 
 // Re-export lyrics capability public API
 export {
   createMiniMaxLyricsAdapter,
   MiniMaxLyricsError,
   MINIMAX_LYRICS_ENDPOINT,
+} from './lyrics';
+export type {
+  LyricsGenerationInput,
+  LyricsGenerationResult,
+  MiniMaxLyricsAdapter,
 } from './lyrics';
 
 /**
