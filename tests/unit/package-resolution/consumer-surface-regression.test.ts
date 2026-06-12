@@ -33,7 +33,7 @@ describe('consumer-surface regression: raw-source manifests', () => {
    * (bun → src, import → dist, types → src). These are baseline-good
    * and should NOT appear as RED findings.
    */
-  const BASELINE_GOOD_PACKAGES = ['fred-baml', 'fred-convex'];
+  const BASELINE_GOOD_PACKAGES = ['fred-convex'];
 
   /**
    * Packages expected to be consumed by external applications (Stanza, etc.)
@@ -44,6 +44,7 @@ describe('consumer-surface regression: raw-source manifests', () => {
     'core',             // @fancyrobot/fred
     'provider-minimax', // @fancyrobot/fred-minimax
     'fred-http',        // @fancyrobot/fred-http
+    'fred-baml',        // @fancyrobot/fred-baml
     'provider-openai',  // @fancyrobot/fred-openai
     'provider-anthropic', // @fancyrobot/fred-anthropic
     'provider-google',  // @fancyrobot/fred-google
@@ -63,7 +64,7 @@ describe('consumer-surface regression: raw-source manifests', () => {
         // RED expectation: most packages only have types+import pointing to src
         // GREEN target: conditional exports with bun → src, import → dist
         expect(rootExport).toMatchObject({
-          types: expect.any(String),
+          types: expect.stringContaining('./dist/'),
           bun: expect.any(String),
           import: expect.stringContaining('./dist/'),
           default: expect.stringContaining('./dist/'),
@@ -79,6 +80,15 @@ describe('consumer-surface regression: raw-source manifests', () => {
         // RED expectation: main → ./src/index.ts
         // GREEN target: main → ./dist/index.js
         expect(manifest.main).toContain('./dist/');
+      },
+    );
+
+    test.skipIf(BASELINE_GOOD_PACKAGES.includes(pkg))(
+      `${pkg}: "types" field points to built dist declarations, not raw source`,
+      () => {
+        const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8'));
+
+        expect(manifest.types).toContain('./dist/');
       },
     );
   }
