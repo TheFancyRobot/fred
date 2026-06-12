@@ -9,6 +9,8 @@
     { "path": "packages/provider-google" },
     { "path": "packages/provider-groq" },
     { "path": "packages/provider-openrouter" },
+    { "path": "packages/provider-minimax" },
+    { "path": "packages/fred-http" },
     { "path": "packages/fred-baml" },
     { "path": "packages/fred-convex" }
   ]

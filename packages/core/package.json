@@ -3,62 +3,78 @@
   "version": "1.0.0",
   "description": "Fred AI agent framework - core package",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./eval": {
-      "types": "./src/eval/public.ts",
-      "import": "./src/eval/public.ts",
-      "default": "./src/eval/public.ts"
+      "types": "./dist/eval/public.d.ts",
+      "bun": "./src/eval/public.ts",
+      "import": "./dist/eval/public.js",
+      "default": "./dist/eval/public.js"
     },
     "./context/sqlite": {
-      "types": "./src/context/storage/sqlite.ts",
-      "import": "./src/context/storage/sqlite.ts",
-      "default": "./src/context/storage/sqlite.ts"
+      "types": "./dist/context/storage/sqlite.d.ts",
+      "bun": "./src/context/storage/sqlite.ts",
+      "import": "./dist/context/storage/sqlite.js",
+      "default": "./dist/context/storage/sqlite.js"
     },
     "./context/postgres": {
-      "types": "./src/context/storage/postgres.ts",
-      "import": "./src/context/storage/postgres.ts",
-      "default": "./src/context/storage/postgres.ts"
+      "types": "./dist/context/storage/postgres.d.ts",
+      "bun": "./src/context/storage/postgres.ts",
+      "import": "./dist/context/storage/postgres.js",
+      "default": "./dist/context/storage/postgres.js"
     },
     "./tools": {
-      "types": "./src/tool/calculator.ts",
-      "import": "./src/tool/calculator.ts",
-      "default": "./src/tool/calculator.ts"
+      "types": "./dist/tool/calculator.d.ts",
+      "bun": "./src/tool/calculator.ts",
+      "import": "./dist/tool/calculator.js",
+      "default": "./dist/tool/calculator.js"
     },
     "./effect": {
-      "types": "./src/effect/index.ts",
-      "import": "./src/effect/index.ts",
-      "default": "./src/effect/index.ts"
+      "types": "./dist/effect/index.d.ts",
+      "bun": "./src/effect/index.ts",
+      "import": "./dist/effect/index.js",
+      "default": "./dist/effect/index.js"
     },
     "./mcp/types": {
-      "types": "./src/mcp/types.ts",
-      "import": "./src/mcp/types.ts",
-      "default": "./src/mcp/types.ts"
+      "types": "./dist/mcp/types.d.ts",
+      "bun": "./src/mcp/types.ts",
+      "import": "./dist/mcp/types.js",
+      "default": "./dist/mcp/types.js"
     },
     "./mcp/registry": {
-      "types": "./src/mcp/registry.ts",
-      "import": "./src/mcp/registry.ts",
-      "default": "./src/mcp/registry.ts"
+      "types": "./dist/mcp/registry.d.ts",
+      "bun": "./src/mcp/registry.ts",
+      "import": "./dist/mcp/registry.js",
+      "default": "./dist/mcp/registry.js"
     },
     "./tool/tool": {
-      "types": "./src/tool/tool.ts",
-      "import": "./src/tool/tool.ts",
-      "default": "./src/tool/tool.ts"
+      "types": "./dist/tool/tool.d.ts",
+      "bun": "./src/tool/tool.ts",
+      "import": "./dist/tool/tool.js",
+      "default": "./dist/tool/tool.js"
     },
     "./stream": {
-      "types": "./src/stream/smooth-text.ts",
-      "import": "./src/stream/smooth-text.ts",
-      "default": "./src/stream/smooth-text.ts"
+      "types": "./dist/stream/smooth-text.d.ts",
+      "bun": "./src/stream/smooth-text.ts",
+      "import": "./dist/stream/smooth-text.js",
+      "default": "./dist/stream/smooth-text.js"
     }
   },
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm",
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/platform --external @effect/platform-bun --external @effect/platform-node",
+    "build:declarations": "tsc --emitDeclarationOnly --outDir dist",
     "test": "bun test"
   },
   "peerDependencies": {
