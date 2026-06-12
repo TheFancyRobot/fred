@@ -1,4 +1,4 @@
-import { Effect, Redacted } from 'effect';
+import { Data, Effect, Redacted } from 'effect';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import { registerBuiltinPack } from '@fancyrobot/fred';
@@ -10,6 +10,16 @@ import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } fro
  * Implements EffectProviderFactory interface for use as both built-in
  * and external pack pattern. Uses dynamic import to avoid hard dependency.
  */
+export class GoogleLanguageModelUnavailableError extends Data.TaggedError(
+  'GoogleLanguageModelUnavailableError'
+)<{
+  readonly message: string;
+}> {
+  constructor() {
+    super({ message: 'Google LanguageModel not available in provider pack' });
+  }
+}
+
 export const GoogleProviderFactory: EffectProviderFactory = {
   id: 'google',
   aliases: ['google', 'gemini'],
@@ -55,7 +65,7 @@ export const GoogleProviderFactory: EffectProviderFactory = {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
         if (!module.GoogleLanguageModel?.model) {
-          return Effect.fail(new Error('Google LanguageModel not available in provider pack'));
+          return Effect.fail(new GoogleLanguageModelUnavailableError());
         }
         // Config structure follows GenerateContentRequest schema with generationConfig nested
         return Effect.succeed(

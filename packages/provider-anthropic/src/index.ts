@@ -1,4 +1,4 @@
-import { Effect, Redacted } from 'effect';
+import { Data, Effect, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
@@ -8,6 +8,16 @@ import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } fro
  * Implements EffectProviderFactory interface for use as both built-in
  * and external pack pattern. Uses dynamic import to avoid hard dependency.
  */
+export class AnthropicLanguageModelUnavailableError extends Data.TaggedError(
+  'AnthropicLanguageModelUnavailableError'
+)<{
+  readonly message: string;
+}> {
+  constructor() {
+    super({ message: 'Anthropic LanguageModel not available in provider pack' });
+  }
+}
+
 export const AnthropicProviderFactory: EffectProviderFactory = {
   id: 'anthropic',
   aliases: ['anthropic'],
@@ -40,7 +50,7 @@ export const AnthropicProviderFactory: EffectProviderFactory = {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
         if (!module.AnthropicLanguageModel?.model) {
-          return Effect.fail(new Error('Anthropic LanguageModel not available in provider pack'));
+          return Effect.fail(new AnthropicLanguageModelUnavailableError());
         }
         return Effect.succeed(
           module.AnthropicLanguageModel.model(modelId, {
