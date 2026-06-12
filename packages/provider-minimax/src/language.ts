@@ -28,7 +28,7 @@ import * as Response from '@effect/ai/Response';
 import * as Tool from '@effect/ai/Tool';
 import { IdGenerator } from '@effect/ai/IdGenerator';
 import type { ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
-import { normalizeMessages } from '../../core/src/messages';
+import { normalizeMessages } from '@fancyrobot/fred/messages';
 import {
   MINIMAX_DEFAULT_BASE_URL,
   MINIMAX_API_KEY_ENV_VAR,
@@ -224,14 +224,14 @@ export function createMiniMaxLanguageModel(
 
           const response = yield* retriedHttpEffect;
 
-          const json = (yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-            Effect.catchAll((error) =>
-              Effect.fail(new MiniMaxLanguageModelError({
+          const json = (yield* response.json.pipe(
+            Effect.mapError((error) =>
+              new MiniMaxLanguageModelError({
                 module: 'MiniMaxLanguageModel',
                 method: 'generateText',
                 description: 'Failed to parse response JSON',
                 cause: error,
-              }))
+              })
             )
           )) as ChatCompletionResponse;
           const choice = json.choices[0];
@@ -445,7 +445,7 @@ interface MiniMaxMessage {
  */
 function convertPromptToMessages(prompt: Prompt.Prompt): MiniMaxMessage[] {
   const messages: MiniMaxMessage[] = [];
-  const normalizedMessages = normalizeMessages(prompt.content);
+  const normalizedMessages = normalizeMessages([...prompt.content]);
 
   for (const message of normalizedMessages) {
     if (message.role === 'system' || message.role === 'user') {

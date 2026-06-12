@@ -27,7 +27,7 @@ import {
   MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
-  MiniMaxErrorFields,
+  type MiniMaxErrorFields,
   formatMiniMaxErrorMessage,
   buildErrorFields,
 } from './errors';
@@ -113,7 +113,7 @@ interface MiniMaxMusicResponse {
  */
 export interface MiniMaxMusicAdapter {
   readonly capability: 'music';
-  readonly generate: (input: MusicGenerationInput) => Effect.Effect<MusicGenerationResult, MiniMaxMusicError>;
+  readonly generate: (input: MusicGenerationInput) => Effect.Effect<MusicGenerationResult, MiniMaxMusicError, HttpClient.HttpClient>;
 }
 
 /**
@@ -129,73 +129,71 @@ export function createMiniMaxMusicAdapter(
 ): MiniMaxMusicAdapter {
   const generate = Effect.fn('MiniMaxMusicAdapter.generate')(function* (
     input: MusicGenerationInput
-  ): Effect.Effect<MusicGenerationResult, MiniMaxMusicError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        model: input.model,
-        prompt: input.prompt,
-        ...(input.lyrics && { lyrics: input.lyrics }),
-        ...(input.vocal_style && { vocal_style: input.vocal_style }),
-        ...(input.seed !== undefined && { seed: input.seed }),
-        ...(input.reference_audio_url && { reference_audio_url: input.reference_audio_url }),
-      };
+    const requestBody: Record<string, unknown> = {
+      model: input.model,
+      prompt: input.prompt,
+      ...(input.lyrics && { lyrics: input.lyrics }),
+      ...(input.vocal_style && { vocal_style: input.vocal_style }),
+      ...(input.seed !== undefined && { seed: input.seed }),
+      ...(input.reference_audio_url && { reference_audio_url: input.reference_audio_url }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_MUSIC_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
+    const request = HttpClientRequest.post(MINIMAX_MUSIC_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
+    });
 
-      const response = yield* client.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const fields = buildErrorFields(error, 'MiniMaxMusicAdapter', 'generate');
-          return Effect.fail(new MiniMaxMusicError(fields));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxMusicError({
-            module: 'MiniMaxMusicAdapter',
-            method: 'generate',
-            description: 'Failed to parse music generation response JSON',
-            cause: error,
-          }))
+    const response = yield* client.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
         )
-      ) as MiniMaxMusicResponse;
+      ),
+      Effect.catchAll((error) => {
+        const fields = buildErrorFields(error, 'MiniMaxMusicAdapter', 'generate');
+        return Effect.fail(new MiniMaxMusicError(fields));
+      })
+    );
 
-      // Check for API-level errors
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxMusicError({
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxMusicError({
           module: 'MiniMaxMusicAdapter',
           method: 'generate',
-          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
-        }));
-      }
+          description: 'Failed to parse music generation response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxMusicResponse;
 
-      // Collect extra fields beyond the known ones
-      const knownKeys = new Set(['base_resp', 'audio_url', 'lyrics', 'request_id', 'task_id']);
-      const extra: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(json)) {
-        if (!knownKeys.has(key)) {
-          extra[key] = value;
-        }
-      }
+    // Check for API-level errors
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxMusicError({
+        module: 'MiniMaxMusicAdapter',
+        method: 'generate',
+        description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
+      }));
+    }
 
-      return {
-        audio_url: json.audio_url,
-        lyrics: json.lyrics,
-        extra: Object.keys(extra).length > 0 ? extra : undefined,
-        model: input.model,
-        request_id: json.request_id,
-      };
-    });
+    // Collect extra fields beyond the known ones
+    const knownKeys = new Set(['base_resp', 'audio_url', 'lyrics', 'request_id', 'task_id']);
+    const extra: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(json)) {
+      if (!knownKeys.has(key)) {
+        extra[key] = value;
+      }
+    }
+
+    return {
+      audio_url: json.audio_url,
+      lyrics: json.lyrics,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
+      model: input.model,
+      request_id: json.request_id,
+    };
   });
 
   return {

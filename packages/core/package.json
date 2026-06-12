@@ -65,6 +65,12 @@
       "bun": "./src/stream/smooth-text.ts",
       "import": "./dist/stream/smooth-text.js",
       "default": "./dist/stream/smooth-text.js"
+    },
+    "./messages": {
+      "types": "./dist/messages.d.ts",
+      "bun": "./src/messages.ts",
+      "import": "./dist/messages.js",
+      "default": "./dist/messages.js"
     }
   },
   "files": [

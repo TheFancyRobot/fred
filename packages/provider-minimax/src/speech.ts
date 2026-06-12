@@ -31,7 +31,7 @@ import {
   MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
-  MiniMaxErrorFields,
+  type MiniMaxErrorFields,
   formatMiniMaxErrorMessage,
   buildErrorFields,
 } from './errors';
@@ -180,8 +180,8 @@ interface MiniMaxTTSAsyncResponse {
  */
 export interface MiniMaxSpeechAdapter {
   readonly capability: 'speech';
-  readonly synthesize: (input: SpeechSynthesisInput) => Effect.Effect<SpeechSynthesisResult, MiniMaxSpeechError>;
-  readonly createAsyncTask: (input: AsyncSpeechSynthesisInput) => Effect.Effect<AsyncSpeechTaskResult, MiniMaxSpeechError>;
+  readonly synthesize: (input: SpeechSynthesisInput) => Effect.Effect<SpeechSynthesisResult, MiniMaxSpeechError, HttpClient.HttpClient>;
+  readonly createAsyncTask: (input: AsyncSpeechSynthesisInput) => Effect.Effect<AsyncSpeechTaskResult, MiniMaxSpeechError, HttpClient.HttpClient>;
 }
 
 /**
@@ -197,148 +197,144 @@ export function createMiniMaxSpeechAdapter(
 ): MiniMaxSpeechAdapter {
   const synthesize = Effect.fn('MiniMaxSpeechAdapter.synthesize')(function* (
     input: SpeechSynthesisInput
-  ): Effect.Effect<SpeechSynthesisResult, MiniMaxSpeechError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        model: input.model,
-        text: input.text,
-        ...(input.voice_id && { voice_id: input.voice_id }),
-        ...(input.speed !== undefined && { speed: input.speed }),
-        ...(input.vol !== undefined && { vol: input.vol }),
-        ...(input.pitch !== undefined && { pitch: input.pitch }),
-        ...(input.audio_format && { audio_format: input.audio_format }),
-        ...(input.emotion && { emotion: input.emotion }),
-        ...(input.seed !== undefined && { seed: input.seed }),
-        ...(input.language && { language: input.language }),
-      };
+    const requestBody: Record<string, unknown> = {
+      model: input.model,
+      text: input.text,
+      ...(input.voice_id && { voice_id: input.voice_id }),
+      ...(input.speed !== undefined && { speed: input.speed }),
+      ...(input.vol !== undefined && { vol: input.vol }),
+      ...(input.pitch !== undefined && { pitch: input.pitch }),
+      ...(input.audio_format && { audio_format: input.audio_format }),
+      ...(input.emotion && { emotion: input.emotion }),
+      ...(input.seed !== undefined && { seed: input.seed }),
+      ...(input.language && { language: input.language }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_TTS_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
+    const request = HttpClientRequest.post(MINIMAX_TTS_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
+    });
 
-      const response = yield* client.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const fields = buildErrorFields(error, 'MiniMaxSpeechAdapter', 'synthesize');
-          return Effect.fail(new MiniMaxSpeechError(fields));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxSpeechError({
-            module: 'MiniMaxSpeechAdapter',
-            method: 'synthesize',
-            description: 'Failed to parse TTS response JSON',
-            cause: error,
-          }))
+    const response = yield* client.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
         )
-      ) as MiniMaxTTSResponse;
+      ),
+      Effect.catchAll((error) => {
+        const fields = buildErrorFields(error, 'MiniMaxSpeechAdapter', 'synthesize');
+        return Effect.fail(new MiniMaxSpeechError(fields));
+      })
+    );
 
-      // Check for API-level errors
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxSpeechError({
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxSpeechError({
           module: 'MiniMaxSpeechAdapter',
           method: 'synthesize',
-          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
-        }));
-      }
+          description: 'Failed to parse TTS response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxTTSResponse;
 
-      // Collect extra fields beyond the known ones
-      const knownKeys = new Set(['base_resp', 'data', 'audio_url', 'request_id']);
-      const extra: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(json)) {
-        if (!knownKeys.has(key)) {
-          extra[key] = value;
-        }
-      }
+    // Check for API-level errors
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxSpeechError({
+        module: 'MiniMaxSpeechAdapter',
+        method: 'synthesize',
+        description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
+      }));
+    }
 
-      return {
-        audio_hex: json.data?.audio,
-        audio_url: json.audio_url,
-        model: input.model,
-        request_id: json.request_id,
-        extra: Object.keys(extra).length > 0 ? extra : undefined,
-      };
-    });
+    // Collect extra fields beyond the known ones
+    const knownKeys = new Set(['base_resp', 'data', 'audio_url', 'request_id']);
+    const extra: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(json)) {
+      if (!knownKeys.has(key)) {
+        extra[key] = value;
+      }
+    }
+
+    return {
+      audio_hex: json.data?.audio,
+      audio_url: json.audio_url,
+      model: input.model,
+      request_id: json.request_id,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
+    };
   });
 
   const createAsyncTask = Effect.fn('MiniMaxSpeechAdapter.createAsyncTask')(function* (
     input: AsyncSpeechSynthesisInput
-  ): Effect.Effect<AsyncSpeechTaskResult, MiniMaxSpeechError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        model: input.model,
-        text: input.text,
-        ...(input.voice_id && { voice_id: input.voice_id }),
-        ...(input.speed !== undefined && { speed: input.speed }),
-        ...(input.vol !== undefined && { vol: input.vol }),
-        ...(input.pitch !== undefined && { pitch: input.pitch }),
-        ...(input.audio_format && { audio_format: input.audio_format }),
-        ...(input.emotion && { emotion: input.emotion }),
-        ...(input.callback_url && { callback_url: input.callback_url }),
-      };
+    const requestBody: Record<string, unknown> = {
+      model: input.model,
+      text: input.text,
+      ...(input.voice_id && { voice_id: input.voice_id }),
+      ...(input.speed !== undefined && { speed: input.speed }),
+      ...(input.vol !== undefined && { vol: input.vol }),
+      ...(input.pitch !== undefined && { pitch: input.pitch }),
+      ...(input.audio_format && { audio_format: input.audio_format }),
+      ...(input.emotion && { emotion: input.emotion }),
+      ...(input.callback_url && { callback_url: input.callback_url }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_TTS_ASYNC_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
-
-      const response = yield* client.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const fields = buildErrorFields(error, 'MiniMaxSpeechAdapter', 'createAsyncTask');
-          return Effect.fail(new MiniMaxSpeechError(fields));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxSpeechError({
-            module: 'MiniMaxSpeechAdapter',
-            method: 'createAsyncTask',
-            description: 'Failed to parse async TTS response JSON',
-            cause: error,
-          }))
-        )
-      ) as MiniMaxTTSAsyncResponse;
-
-      // Check for API-level errors
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxSpeechError({
-          module: 'MiniMaxSpeechAdapter',
-          method: 'createAsyncTask',
-          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
-        }));
-      }
-
-      if (!json.task_id) {
-        return yield* Effect.fail(new MiniMaxSpeechError({
-          module: 'MiniMaxSpeechAdapter',
-          method: 'createAsyncTask',
-          description: 'No task_id returned from MiniMax async TTS API',
-        }));
-      }
-
-      return {
-        task_id: json.task_id,
-        async: true,
-        model: input.model,
-      };
+    const request = HttpClientRequest.post(MINIMAX_TTS_ASYNC_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
     });
+
+    const response = yield* client.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
+        )
+      ),
+      Effect.catchAll((error) => {
+        const fields = buildErrorFields(error, 'MiniMaxSpeechAdapter', 'createAsyncTask');
+        return Effect.fail(new MiniMaxSpeechError(fields));
+      })
+    );
+
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxSpeechError({
+          module: 'MiniMaxSpeechAdapter',
+          method: 'createAsyncTask',
+          description: 'Failed to parse async TTS response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxTTSAsyncResponse;
+
+    // Check for API-level errors
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxSpeechError({
+        module: 'MiniMaxSpeechAdapter',
+        method: 'createAsyncTask',
+        description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
+      }));
+    }
+
+    if (!json.task_id) {
+      return yield* Effect.fail(new MiniMaxSpeechError({
+        module: 'MiniMaxSpeechAdapter',
+        method: 'createAsyncTask',
+        description: 'No task_id returned from MiniMax async TTS API',
+      }));
+    }
+
+    return {
+      task_id: json.task_id,
+      async: true,
+      model: input.model,
+    };
   });
 
   return {
