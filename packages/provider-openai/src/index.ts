@@ -1,4 +1,4 @@
-import { Effect, Redacted } from 'effect';
+import { Data, Effect, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
@@ -8,6 +8,16 @@ import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } fro
  * Implements EffectProviderFactory interface for use as both built-in
  * and external pack pattern. Uses dynamic import to avoid hard dependency.
  */
+export class OpenAiLanguageModelUnavailableError extends Data.TaggedError(
+  'OpenAiLanguageModelUnavailableError'
+)<{
+  readonly message: string;
+}> {
+  constructor() {
+    super({ message: 'OpenAI LanguageModel not available in provider pack' });
+  }
+}
+
 export const OpenAiProviderFactory: EffectProviderFactory = {
   id: 'openai',
   aliases: ['openai'],
@@ -40,7 +50,7 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
         if (!module.OpenAiLanguageModel?.model) {
-          return Effect.fail(new Error('OpenAI LanguageModel not available in provider pack'));
+          return Effect.fail(new OpenAiLanguageModelUnavailableError());
         }
         return Effect.succeed(
           module.OpenAiLanguageModel.model(modelId, {

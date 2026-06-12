@@ -1,6 +1,16 @@
-import { Effect, Redacted } from 'effect';
+import { Data, Effect, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+
+export class OpenRouterLanguageModelUnavailableError extends Data.TaggedError(
+  'OpenRouterLanguageModelUnavailableError'
+)<{
+  readonly message: string;
+}> {
+  constructor() {
+    super({ message: 'OpenRouter LanguageModel not available in provider pack' });
+  }
+}
 
 function getOpenRouterAttribution(config: ProviderConfig): {
   referrer?: string;
@@ -52,7 +62,7 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
         if (!module.OpenRouterLanguageModel?.model) {
-          return Effect.fail(new Error('OpenRouter LanguageModel not available in provider pack'));
+          return Effect.fail(new OpenRouterLanguageModelUnavailableError());
         }
         return Effect.succeed(
           module.OpenRouterLanguageModel.model(modelId, {

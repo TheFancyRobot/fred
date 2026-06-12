@@ -3,17 +3,24 @@
   "version": "3.0.0",
   "description": "OpenAI provider for Fred AI framework",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm"
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/ai-openai --external @fancyrobot/fred",
+    "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^1.0.0",
@@ -22,7 +29,6 @@
     "@effect/ai-openai": "^0.39.0"
   },
   "devDependencies": {
-    "@fancyrobot/fred": "workspace:^",
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
     "@effect/ai-openai": "^0.39.0"
