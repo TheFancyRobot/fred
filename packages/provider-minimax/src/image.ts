@@ -27,7 +27,7 @@ import {
   MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
-  MiniMaxErrorFields,
+  type MiniMaxErrorFields,
   formatMiniMaxErrorMessage,
   buildErrorFields,
 } from './errors';
@@ -108,7 +108,7 @@ interface MiniMaxImageResponse {
  */
 export interface MiniMaxImageAdapter {
   readonly capability: 'image';
-  readonly generate: (input: ImageGenerationInput) => Effect.Effect<ImageGenerationResult, MiniMaxImageError>;
+  readonly generate: (input: ImageGenerationInput) => Effect.Effect<ImageGenerationResult, MiniMaxImageError, HttpClient.HttpClient>;
 }
 
 /**
@@ -124,71 +124,69 @@ export function createMiniMaxImageAdapter(
 ): MiniMaxImageAdapter {
   const generate = Effect.fn('MiniMaxImageAdapter.generate')(function* (
     input: ImageGenerationInput
-  ): Effect.Effect<ImageGenerationResult, MiniMaxImageError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        model: input.model,
-        prompt: input.prompt,
-        ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-        ...(input.n && { n: input.n }),
-        ...(input.reference_image_url && { reference_image_url: input.reference_image_url }),
-        ...(input.reference_image_base64 && { reference_image: input.reference_image_base64 }),
-        ...(input.seed !== undefined && { seed: input.seed }),
-      };
+    const requestBody: Record<string, unknown> = {
+      model: input.model,
+      prompt: input.prompt,
+      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
+      ...(input.n && { n: input.n }),
+      ...(input.reference_image_url && { reference_image_url: input.reference_image_url }),
+      ...(input.reference_image_base64 && { reference_image: input.reference_image_base64 }),
+      ...(input.seed !== undefined && { seed: input.seed }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_IMAGE_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
-
-      const response = yield* client.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const fields = buildErrorFields(error, 'MiniMaxImageAdapter', 'generate');
-          return Effect.fail(new MiniMaxImageError(fields));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxImageError({
-            module: 'MiniMaxImageAdapter',
-            method: 'generate',
-            description: 'Failed to parse image generation response JSON',
-            cause: error,
-          }))
-        )
-      ) as MiniMaxImageResponse;
-
-      // Check for API-level errors
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxImageError({
-          module: 'MiniMaxImageAdapter',
-          method: 'generate',
-          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
-        }));
-      }
-
-      if (!json.image_urls || json.image_urls.length === 0) {
-        return yield* Effect.fail(new MiniMaxImageError({
-          module: 'MiniMaxImageAdapter',
-          method: 'generate',
-          description: 'No image URLs returned from MiniMax API',
-        }));
-      }
-
-      return {
-        image_urls: json.image_urls,
-        model: input.model,
-        request_id: json.request_id,
-      };
+    const request = HttpClientRequest.post(MINIMAX_IMAGE_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
     });
+
+    const response = yield* client.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
+        )
+      ),
+      Effect.catchAll((error) => {
+        const fields = buildErrorFields(error, 'MiniMaxImageAdapter', 'generate');
+        return Effect.fail(new MiniMaxImageError(fields));
+      })
+    );
+
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxImageError({
+          module: 'MiniMaxImageAdapter',
+          method: 'generate',
+          description: 'Failed to parse image generation response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxImageResponse;
+
+    // Check for API-level errors
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxImageError({
+        module: 'MiniMaxImageAdapter',
+        method: 'generate',
+        description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
+      }));
+    }
+
+    if (!json.image_urls || json.image_urls.length === 0) {
+      return yield* Effect.fail(new MiniMaxImageError({
+        module: 'MiniMaxImageAdapter',
+        method: 'generate',
+        description: 'No image URLs returned from MiniMax API',
+      }));
+    }
+
+    return {
+      image_urls: json.image_urls,
+      model: input.model,
+      request_id: json.request_id,
+    };
   });
 
   return {

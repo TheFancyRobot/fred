@@ -32,7 +32,7 @@ import {
   MINIMAX_DEFAULT_BASE_URL,
 } from './config';
 import {
-  MiniMaxErrorFields,
+  type MiniMaxErrorFields,
   formatMiniMaxErrorMessage,
   buildErrorFields,
 } from './errors';
@@ -195,7 +195,7 @@ interface MiniMaxLyricsResponse {
  */
 export interface MiniMaxLyricsAdapter {
   readonly capability: 'lyrics';
-  readonly generate: (input: LyricsGenerationInput) => Effect.Effect<LyricsGenerationResult, MiniMaxLyricsError>;
+  readonly generate: (input: LyricsGenerationInput) => Effect.Effect<LyricsGenerationResult, MiniMaxLyricsError, HttpClient.HttpClient>;
 }
 
 /**
@@ -211,130 +211,126 @@ export function createMiniMaxLyricsAdapter(
 ): MiniMaxLyricsAdapter {
   const generate = Effect.fn('MiniMaxLyricsAdapter.generate')(function* (
     input: LyricsGenerationInput
-  ): Effect.Effect<LyricsGenerationResult, MiniMaxLyricsError> {
-    return yield* Effect.gen(function* () {
-      // ─── Input Validation ─────────────────────────────────────────────
+  ) {
+    // ─── Input Validation ─────────────────────────────────────────────
 
-      if (input.prompt.length > PROMPT_MAX_LENGTH) {
-        return yield* Effect.fail(new MiniMaxLyricsError({
-          module: 'MiniMaxLyricsAdapter',
-          method: 'generate',
-          description: `Prompt exceeds maximum length of ${PROMPT_MAX_LENGTH} characters (got ${input.prompt.length})`,
-        }));
-      }
+    if (input.prompt.length > PROMPT_MAX_LENGTH) {
+      return yield* Effect.fail(new MiniMaxLyricsError({
+        module: 'MiniMaxLyricsAdapter',
+        method: 'generate',
+        description: `Prompt exceeds maximum length of ${PROMPT_MAX_LENGTH} characters (got ${input.prompt.length})`,
+      }));
+    }
 
-      if (input.lyrics && input.lyrics.length > LYRICS_MAX_LENGTH) {
-        return yield* Effect.fail(new MiniMaxLyricsError({
-          module: 'MiniMaxLyricsAdapter',
-          method: 'generate',
-          description: `Lyrics exceed maximum length of ${LYRICS_MAX_LENGTH} characters (got ${input.lyrics.length})`,
-        }));
-      }
+    if (input.lyrics && input.lyrics.length > LYRICS_MAX_LENGTH) {
+      return yield* Effect.fail(new MiniMaxLyricsError({
+        module: 'MiniMaxLyricsAdapter',
+        method: 'generate',
+        description: `Lyrics exceed maximum length of ${LYRICS_MAX_LENGTH} characters (got ${input.lyrics.length})`,
+      }));
+    }
 
-      // ─── Build Request Body ───────────────────────────────────────────
+    // ─── Build Request Body ───────────────────────────────────────────
 
-      // Only send documented keys; omit lyrics in write_full_song mode
-      // since it is only effective in edit mode per API docs.
-      const requestBody: Record<string, unknown> = {
-        mode: input.mode,
-        prompt: input.prompt,
-        // lyrics only included for edit mode
-        ...(input.mode === 'edit' && input.lyrics && { lyrics: input.lyrics }),
-        ...(input.title && { title: input.title }),
-      };
+    // Only send documented keys; omit lyrics in write_full_song mode
+    // since it is only effective in edit mode per API docs.
+    const requestBody: Record<string, unknown> = {
+      mode: input.mode,
+      prompt: input.prompt,
+      // lyrics only included for edit mode
+      ...(input.mode === 'edit' && input.lyrics && { lyrics: input.lyrics }),
+      ...(input.title && { title: input.title }),
+    };
 
-      // ─── Execute and parse within retry scope ─────────────────────────
-      //
-      // The retry scope covers the entire request+parse+base_resp check
-      // so that base_resp 1002 (rate limit) triggers a retry, not just
-      // transport-level errors. This differs from other adapters (image,
-      // video, music) which only retry transport errors — lyrics is the
-      // first adapter to require base_resp-level retry.
+    // ─── Execute and parse within retry scope ─────────────────────────
+    //
+    // The retry scope covers the entire request+parse+base_resp check
+    // so that base_resp 1002 (rate limit) triggers a retry, not just
+    // transport-level errors.
 
-      const performRequest = Effect.gen(function* () {
-        const httpClient = yield* HttpClient.HttpClient;
-        const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
+    const performRequest = Effect.gen(function* () {
+      const httpClient = yield* HttpClient.HttpClient;
+      const client = createAuthenticatedClient(httpClient, apiKey, baseUrl);
 
-        const request = HttpClientRequest.post(MINIMAX_LYRICS_ENDPOINT, {
-          body: HttpBody.unsafeJson(requestBody),
-        });
-
-        // Transport-level request: let raw errors propagate so
-        // classifyHttpError can assess retryability in the retry loop.
-        const response = yield* client.execute(request);
-
-        // ─── Parse Response ───────────────────────────────────────────
-
-        const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-          Effect.catchAll((error) =>
-            Effect.fail(new MiniMaxLyricsError({
-              module: 'MiniMaxLyricsAdapter',
-              method: 'generate',
-              description: 'Failed to parse lyrics generation response JSON',
-              cause: error,
-            }))
-          )
-        ) as MiniMaxLyricsResponse;
-
-        // ─── Handle Missing base_resp ─────────────────────────────────
-
-        if (!json.base_resp) {
-          return yield* Effect.fail(new MiniMaxLyricsError({
-            module: 'MiniMaxLyricsAdapter',
-            method: 'generate',
-            description: 'Missing base_resp in lyrics generation response',
-          }));
-        }
-
-        // ─── Handle base_resp Errors ──────────────────────────────────
-
-        if (json.base_resp.status_code !== 0) {
-          return yield* Effect.fail(new MiniMaxLyricsError({
-            module: 'MiniMaxLyricsAdapter',
-            method: 'generate',
-            description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
-            base_resp_code: json.base_resp.status_code,
-          }));
-        }
-
-        // ─── Handle Missing Lyrics in Response ────────────────────────
-
-        if (!json.lyrics) {
-          return yield* Effect.fail(new MiniMaxLyricsError({
-            module: 'MiniMaxLyricsAdapter',
-            method: 'generate',
-            description: 'Missing lyrics in lyrics generation response',
-          }));
-        }
-
-        // ─── Return Normalized Result ─────────────────────────────────
-
-        return {
-          song_title: json.song_title ?? '',
-          style_tags: json.style_tags ?? '',
-          lyrics: json.lyrics,
-          base_resp: json.base_resp,
-        } satisfies LyricsGenerationResult;
+      const request = HttpClientRequest.post(MINIMAX_LYRICS_ENDPOINT, {
+        body: HttpBody.unsafeJson(requestBody),
       });
 
-      // ─── Retry on transport errors AND base_resp 1002 ────────────────
+      // Transport-level request: let raw errors propagate so
+      // classifyHttpError can assess retryability in the retry loop.
+      const response = yield* client.execute(request);
 
-      const result = yield* performRequest.pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput(isLyricsErrorRetryable)
-          )
-        ),
-        // After retries exhausted, wrap any remaining raw transport errors
-        Effect.catchAll((error) => {
-          if (error instanceof MiniMaxLyricsError) return Effect.fail(error);
-          const fields = buildErrorFields(error, 'MiniMaxLyricsAdapter', 'generate');
-          return Effect.fail(new MiniMaxLyricsError(fields));
-        })
-      );
+      // ─── Parse Response ───────────────────────────────────────────
 
-      return result;
+      const json = (yield* response.json.pipe(
+        Effect.mapError((error) =>
+          new MiniMaxLyricsError({
+            module: 'MiniMaxLyricsAdapter',
+            method: 'generate',
+            description: 'Failed to parse lyrics generation response JSON',
+            cause: error,
+          })
+        )
+      )) as MiniMaxLyricsResponse;
+
+      // ─── Handle Missing base_resp ─────────────────────────────────
+
+      if (!json.base_resp) {
+        return yield* Effect.fail(new MiniMaxLyricsError({
+          module: 'MiniMaxLyricsAdapter',
+          method: 'generate',
+          description: 'Missing base_resp in lyrics generation response',
+        }));
+      }
+
+      // ─── Handle base_resp Errors ──────────────────────────────────
+
+      if (json.base_resp.status_code !== 0) {
+        return yield* Effect.fail(new MiniMaxLyricsError({
+          module: 'MiniMaxLyricsAdapter',
+          method: 'generate',
+          description: formatApiErrorMessage(json.base_resp.status_code, json.base_resp.status_msg),
+          base_resp_code: json.base_resp.status_code,
+        }));
+      }
+
+      // ─── Handle Missing Lyrics in Response ────────────────────────
+
+      if (!json.lyrics) {
+        return yield* Effect.fail(new MiniMaxLyricsError({
+          module: 'MiniMaxLyricsAdapter',
+          method: 'generate',
+          description: 'Missing lyrics in lyrics generation response',
+        }));
+      }
+
+      // ─── Return Normalized Result ─────────────────────────────────
+
+      return {
+        song_title: json.song_title ?? '',
+        style_tags: json.style_tags ?? '',
+        lyrics: json.lyrics,
+        base_resp: json.base_resp,
+      } satisfies LyricsGenerationResult;
     });
+
+    // ─── Retry on transport errors AND base_resp 1002 ────────────────
+
+    const result = yield* performRequest.pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput(isLyricsErrorRetryable)
+        )
+      ),
+      // After retries exhausted, wrap any remaining raw transport errors
+      Effect.catchAll((error) => {
+        if (error instanceof MiniMaxLyricsError) return Effect.fail(error);
+        const fields = buildErrorFields(error, 'MiniMaxLyricsAdapter', 'generate');
+        return Effect.fail(new MiniMaxLyricsError(fields));
+      })
+    );
+
+    return result;
   });
 
   return {

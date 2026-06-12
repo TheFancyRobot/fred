@@ -319,10 +319,10 @@ function buildRetrySchedule() {
  */
 export interface MiniMaxVoiceAdapter {
   readonly capability: 'voice';
-  readonly clone: (input: VoiceCloneInput) => Effect.Effect<VoiceCloneResult, MiniMaxVoiceError>;
-  readonly design: (input: VoiceDesignInput) => Effect.Effect<VoiceDesignResult, MiniMaxVoiceError>;
-  readonly list: (input?: VoiceListInput) => Effect.Effect<VoiceListResult, MiniMaxVoiceError>;
-  readonly delete: (input: VoiceDeleteInput) => Effect.Effect<VoiceDeleteResult, MiniMaxVoiceError>;
+  readonly clone: (input: VoiceCloneInput) => Effect.Effect<VoiceCloneResult, MiniMaxVoiceError, HttpClient.HttpClient>;
+  readonly design: (input: VoiceDesignInput) => Effect.Effect<VoiceDesignResult, MiniMaxVoiceError, HttpClient.HttpClient>;
+  readonly list: (input?: VoiceListInput) => Effect.Effect<VoiceListResult, MiniMaxVoiceError, HttpClient.HttpClient>;
+  readonly delete: (input: VoiceDeleteInput) => Effect.Effect<VoiceDeleteResult, MiniMaxVoiceError, HttpClient.HttpClient>;
 }
 
 /**
@@ -338,341 +338,333 @@ export function createMiniMaxVoiceAdapter(
 ): MiniMaxVoiceAdapter {
   const clone = Effect.fn('MiniMaxVoiceAdapter.clone')(function* (
     input: VoiceCloneInput
-  ): Effect.Effect<VoiceCloneResult, MiniMaxVoiceError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const clientWithBaseUrl = httpClient.pipe(
+      HttpClient.mapRequest((request) =>
+        request.pipe(
+          HttpClientRequest.prependUrl(baseUrl),
+          HttpClientRequest.bearerToken(apiKey),
+          HttpClientRequest.setHeader('Content-Type', 'application/json')
         )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      )
+    );
+    const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        audio_source: input.audio_source,
-        ...(input.audio_source_type && { audio_source_type: input.audio_source_type }),
-        ...(input.voice_name && { voice_name: input.voice_name }),
-        ...(input.text && { text: input.text }),
-        ...(input.language && { language: input.language }),
-      };
+    const requestBody: Record<string, unknown> = {
+      audio_source: input.audio_source,
+      ...(input.audio_source_type && { audio_source_type: input.audio_source_type }),
+      ...(input.voice_name && { voice_name: input.voice_name }),
+      ...(input.text && { text: input.text }),
+      ...(input.language && { language: input.language }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_VOICE_CLONE_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
-
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'clone',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'clone',
-            description: 'Failed to parse voice clone response JSON',
-            cause: error,
-          }))
-        )
-      ) as MiniMaxVoiceCloneResponse;
-
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
-          module: 'MiniMaxVoiceAdapter',
-          method: 'clone',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
-        }));
-      }
-
-      if (!json.voice_id) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
-          module: 'MiniMaxVoiceAdapter',
-          method: 'clone',
-          description: 'No voice_id returned from MiniMax voice clone API',
-        }));
-      }
-
-      const knownKeys = new Set(['base_resp', 'voice_id', 'trial_audio', 'voice_name']);
-      const extra: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(json)) {
-        if (!knownKeys.has(key)) {
-          extra[key] = value;
-        }
-      }
-
-      return {
-        voice_id: json.voice_id,
-        trial_audio: json.trial_audio,
-        voice_name: json.voice_name,
-        extra: Object.keys(extra).length > 0 ? extra : undefined,
-      };
+    const request = HttpClientRequest.post(MINIMAX_VOICE_CLONE_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
     });
+
+    const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
+        )
+      ),
+      Effect.catchAll((error) => {
+        const classification = classifyHttpError(error);
+        return Effect.fail(new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'clone',
+          description: classification.retryable
+            ? `HTTP request failed after retries (${classification.category})`
+            : `HTTP request failed: non-retryable ${classification.statusCode} error`,
+          cause: error,
+        }));
+      })
+    );
+
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'clone',
+          description: 'Failed to parse voice clone response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxVoiceCloneResponse;
+
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'clone',
+        description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+      }));
+    }
+
+    if (!json.voice_id) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'clone',
+        description: 'No voice_id returned from MiniMax voice clone API',
+      }));
+    }
+
+    const knownKeys = new Set(['base_resp', 'voice_id', 'trial_audio', 'voice_name']);
+    const extra: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(json)) {
+      if (!knownKeys.has(key)) {
+        extra[key] = value;
+      }
+    }
+
+    return {
+      voice_id: json.voice_id,
+      trial_audio: json.trial_audio,
+      voice_name: json.voice_name,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
+    };
   });
 
   const design = Effect.fn('MiniMaxVoiceAdapter.design')(function* (
     input: VoiceDesignInput
-  ): Effect.Effect<VoiceDesignResult, MiniMaxVoiceError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const clientWithBaseUrl = httpClient.pipe(
+      HttpClient.mapRequest((request) =>
+        request.pipe(
+          HttpClientRequest.prependUrl(baseUrl),
+          HttpClientRequest.bearerToken(apiKey),
+          HttpClientRequest.setHeader('Content-Type', 'application/json')
         )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      )
+    );
+    const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        prompt: input.prompt,
-        preview_text: input.preview_text,
-        ...(input.language && { language: input.language }),
-      };
+    const requestBody: Record<string, unknown> = {
+      prompt: input.prompt,
+      preview_text: input.preview_text,
+      ...(input.language && { language: input.language }),
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_VOICE_DESIGN_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
-
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'design',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'design',
-            description: 'Failed to parse voice design response JSON',
-            cause: error,
-          }))
-        )
-      ) as MiniMaxVoiceDesignResponse;
-
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
-          module: 'MiniMaxVoiceAdapter',
-          method: 'design',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
-        }));
-      }
-
-      if (!json.voice_id) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
-          module: 'MiniMaxVoiceAdapter',
-          method: 'design',
-          description: 'No voice_id returned from MiniMax voice design API',
-        }));
-      }
-
-      const knownKeys = new Set(['base_resp', 'voice_id', 'trial_audio']);
-      const extra: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(json)) {
-        if (!knownKeys.has(key)) {
-          extra[key] = value;
-        }
-      }
-
-      return {
-        voice_id: json.voice_id,
-        trial_audio: json.trial_audio,
-        extra: Object.keys(extra).length > 0 ? extra : undefined,
-      };
+    const request = HttpClientRequest.post(MINIMAX_VOICE_DESIGN_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
     });
+
+    const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
+        )
+      ),
+      Effect.catchAll((error) => {
+        const classification = classifyHttpError(error);
+        return Effect.fail(new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'design',
+          description: classification.retryable
+            ? `HTTP request failed after retries (${classification.category})`
+            : `HTTP request failed: non-retryable ${classification.statusCode} error`,
+          cause: error,
+        }));
+      })
+    );
+
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'design',
+          description: 'Failed to parse voice design response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxVoiceDesignResponse;
+
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'design',
+        description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+      }));
+    }
+
+    if (!json.voice_id) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'design',
+        description: 'No voice_id returned from MiniMax voice design API',
+      }));
+    }
+
+    const knownKeys = new Set(['base_resp', 'voice_id', 'trial_audio']);
+    const extra: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(json)) {
+      if (!knownKeys.has(key)) {
+        extra[key] = value;
+      }
+    }
+
+    return {
+      voice_id: json.voice_id,
+      trial_audio: json.trial_audio,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
+    };
   });
 
   const list = Effect.fn('MiniMaxVoiceAdapter.list')(function* (
     input?: VoiceListInput
-  ): Effect.Effect<VoiceListResult, MiniMaxVoiceError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const clientWithBaseUrl = httpClient.pipe(
+      HttpClient.mapRequest((request) =>
+        request.pipe(
+          HttpClientRequest.prependUrl(baseUrl),
+          HttpClientRequest.bearerToken(apiKey),
+          HttpClientRequest.setHeader('Content-Type', 'application/json')
         )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      )
+    );
+    const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        voice_type: input?.voice_type ?? 'all',
-      };
+    const requestBody: Record<string, unknown> = {
+      voice_type: input?.voice_type ?? 'all',
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_VOICE_LIST_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
+    const request = HttpClientRequest.post(MINIMAX_VOICE_LIST_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
+    });
 
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'list',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'list',
-            description: 'Failed to parse voice list response JSON',
-            cause: error,
-          }))
+    const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
         )
-      ) as MiniMaxVoiceListResponse;
-
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
+      ),
+      Effect.catchAll((error) => {
+        const classification = classifyHttpError(error);
+        return Effect.fail(new MiniMaxVoiceError({
           module: 'MiniMaxVoiceAdapter',
           method: 'list',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+          description: classification.retryable
+            ? `HTTP request failed after retries (${classification.category})`
+            : `HTTP request failed: non-retryable ${classification.statusCode} error`,
+          cause: error,
         }));
-      }
+      })
+    );
 
-      const toVoiceResource = (
-        voice_type: VoiceResource['voice_type'],
-        v: MiniMaxVoiceEntry
-      ): VoiceResource => ({
-        voice_id: v.voice_id,
-        voice_name: v.voice_name,
-        voice_type,
-        description: v.description,
-        language: v.language,
-        created_time: v.created_time,
-        created_at: v.created_at,
-        expires_at: v.expires_at,
-      });
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'list',
+          description: 'Failed to parse voice list response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxVoiceListResponse;
 
-      const voices: VoiceResource[] = [
-        ...(json.system_voice ?? []).map((v) => toVoiceResource('system', v)),
-        ...(json.voice_cloning ?? []).map((v) => toVoiceResource('voice_cloning', v)),
-        ...(json.voice_generation ?? []).map((v) => toVoiceResource('voice_generation', v)),
-        ...(json.voices ?? []).map((v) => toVoiceResource(v.voice_type as VoiceResource['voice_type'], v)),
-      ];
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'list',
+        description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+      }));
+    }
 
-      return {
-        voices,
-        total: json.total ?? voices.length,
-      };
+    const toVoiceResource = (
+      voice_type: VoiceResource['voice_type'],
+      v: MiniMaxVoiceEntry
+    ): VoiceResource => ({
+      voice_id: v.voice_id,
+      voice_name: v.voice_name,
+      voice_type,
+      description: v.description,
+      language: v.language,
+      created_time: v.created_time,
+      created_at: v.created_at,
+      expires_at: v.expires_at,
     });
+
+    const voices: VoiceResource[] = [
+      ...(json.system_voice ?? []).map((v: MiniMaxVoiceEntry) => toVoiceResource('system', v)),
+      ...(json.voice_cloning ?? []).map((v: MiniMaxVoiceEntry) => toVoiceResource('voice_cloning', v)),
+      ...(json.voice_generation ?? []).map((v: MiniMaxVoiceEntry) => toVoiceResource('voice_generation', v)),
+      ...(json.voices ?? []).map((v: MiniMaxVoiceEntry) => toVoiceResource(v.voice_type as VoiceResource['voice_type'], v)),
+    ];
+
+    return {
+      voices,
+      total: json.total ?? voices.length,
+    };
   });
 
   const delete_ = Effect.fn('MiniMaxVoiceAdapter.delete')(function* (
     input: VoiceDeleteInput
-  ): Effect.Effect<VoiceDeleteResult, MiniMaxVoiceError> {
-    return yield* Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
-      const clientWithBaseUrl = httpClient.pipe(
-        HttpClient.mapRequest((request) =>
-          request.pipe(
-            HttpClientRequest.prependUrl(baseUrl),
-            HttpClientRequest.bearerToken(apiKey),
-            HttpClientRequest.setHeader('Content-Type', 'application/json')
-          )
+  ) {
+    const httpClient = yield* HttpClient.HttpClient;
+    const clientWithBaseUrl = httpClient.pipe(
+      HttpClient.mapRequest((request) =>
+        request.pipe(
+          HttpClientRequest.prependUrl(baseUrl),
+          HttpClientRequest.bearerToken(apiKey),
+          HttpClientRequest.setHeader('Content-Type', 'application/json')
         )
-      );
-      const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
+      )
+    );
+    const clientWithBaseUrlOk = HttpClient.filterStatusOk(clientWithBaseUrl);
 
-      const requestBody: Record<string, unknown> = {
-        voice_type: input.voice_type,
-        voice_id: input.voice_id,
-      };
+    const requestBody: Record<string, unknown> = {
+      voice_type: input.voice_type,
+      voice_id: input.voice_id,
+    };
 
-      const request = HttpClientRequest.post(MINIMAX_VOICE_DELETE_ENDPOINT, {
-        body: HttpBody.unsafeJson(requestBody),
-      });
+    const request = HttpClientRequest.post(MINIMAX_VOICE_DELETE_ENDPOINT, {
+      body: HttpBody.unsafeJson(requestBody),
+    });
 
-      const response = yield* clientWithBaseUrlOk.execute(request).pipe(
-        Effect.retry(
-          buildRetrySchedule().pipe(
-            Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
-          )
-        ),
-        Effect.catchAll((error) => {
-          const classification = classifyHttpError(error);
-          return Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'delete',
-            description: classification.retryable
-              ? `HTTP request failed after retries (${classification.category})`
-              : `HTTP request failed: non-retryable ${classification.statusCode} error`,
-            cause: error,
-          }));
-        })
-      );
-
-      const json = yield* (response.json as Effect.Effect<unknown, unknown>).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(new MiniMaxVoiceError({
-            module: 'MiniMaxVoiceAdapter',
-            method: 'delete',
-            description: 'Failed to parse voice delete response JSON',
-            cause: error,
-          }))
+    const response = yield* clientWithBaseUrlOk.execute(request).pipe(
+      Effect.retry(
+        buildRetrySchedule().pipe(
+          Schedule.whileInput((error: unknown) => classifyHttpError(error).retryable)
         )
-      ) as MiniMaxVoiceDeleteResponse;
-
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        return yield* Effect.fail(new MiniMaxVoiceError({
+      ),
+      Effect.catchAll((error) => {
+        const classification = classifyHttpError(error);
+        return Effect.fail(new MiniMaxVoiceError({
           module: 'MiniMaxVoiceAdapter',
           method: 'delete',
-          description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+          description: classification.retryable
+            ? `HTTP request failed after retries (${classification.category})`
+            : `HTTP request failed: non-retryable ${classification.statusCode} error`,
+          cause: error,
         }));
-      }
+      })
+    );
 
-      return {
-        success: true,
-        voice_id: input.voice_id,
-      };
-    });
+    const json = (yield* response.json.pipe(
+      Effect.mapError((error) =>
+        new MiniMaxVoiceError({
+          module: 'MiniMaxVoiceAdapter',
+          method: 'delete',
+          description: 'Failed to parse voice delete response JSON',
+          cause: error,
+        })
+      )
+    )) as MiniMaxVoiceDeleteResponse;
+
+    if (json.base_resp && json.base_resp.status_code !== 0) {
+      return yield* Effect.fail(new MiniMaxVoiceError({
+        module: 'MiniMaxVoiceAdapter',
+        method: 'delete',
+        description: `MiniMax API error: ${json.base_resp.status_msg} (code: ${json.base_resp.status_code})`,
+      }));
+    }
+
+    return {
+      success: true,
+      voice_id: input.voice_id,
+    };
   });
 
   return {
