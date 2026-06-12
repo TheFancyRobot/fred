@@ -1797,6 +1797,10 @@ export const evaluation = {
 // Re-export all types and classes
 export * from './exports';
 
+// Public type alias for consumers that need a stable identifier
+// independent of the concrete Fred class implementation.
+export type FredInstance = Fred;
+
 // Re-export StreamResult types
 export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './stream/result';
 
