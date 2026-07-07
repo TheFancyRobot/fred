@@ -4,7 +4,8 @@ import type {
   ConversationContext,
   ConversationMetadata,
   ConversationPolicy,
-  ContextStorage
+  ContextStorage,
+  SessionSummary
 } from './context';
 import { ContextNotFoundError, ContextStorageError } from './errors';
 import { normalizeMessage, normalizeMessages } from '../messages';
@@ -93,6 +94,13 @@ export interface ContextStorageService {
    * Replace the storage adapter at runtime (e.g. swap in-memory for SQLite/Postgres).
    */
   replaceStorage(adapter: ContextStorage): Effect.Effect<void>;
+
+  /**
+   * List session summaries from the currently active storage adapter.
+   * Returns an empty array when no persistent adapter is configured
+   * (the default in-memory storage is not queryable this way).
+   */
+  listSessions(): Effect.Effect<SessionSummary[]>;
 }
 
 export const ContextStorageService = Context.GenericTag<ContextStorageService>(
@@ -136,6 +144,10 @@ class InMemoryStorage {
   clear(): Effect.Effect<void> {
     return Ref.set(this.contexts, new Map());
   }
+
+  listSessions(): Effect.Effect<SessionSummary[]> {
+    return Effect.succeed([]);
+  }
 }
 
 /**
@@ -170,6 +182,13 @@ class ExternalStorageAdapter {
       try: () => this.adapter.clear(),
       catch: (error) => error,
     }).pipe(Effect.catchAll(() => Effect.void));
+  }
+
+  listSessions(): Effect.Effect<SessionSummary[]> {
+    return Effect.tryPromise({
+      try: () => this.adapter.listSessions(),
+      catch: (error) => error,
+    }).pipe(Effect.catchAll(() => Effect.succeed([])));
   }
 }
 
@@ -343,6 +362,10 @@ class ContextStorageServiceImpl implements ContextStorageService {
     return Effect.sync(() => {
       (this as any).storage = new ExternalStorageAdapter(adapter);
     });
+  }
+
+  listSessions(): Effect.Effect<SessionSummary[]> {
+    return this.storage.listSessions();
   }
 
   private toStorageError(operation: string, cause: unknown): ContextStorageError {

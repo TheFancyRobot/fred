@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, openSync, closeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 // ---------------------------------------------------------------------------
-// STEP-59-01: Consumer-surface regression tests (RED phase)
+// STEP-59-01: Consumer-surface regression tests
 //
-// These tests assert the CURRENT broken state of Fred package surfaces.
-// They are expected to FAIL until later Phase 59 steps fix the issues.
+// These tests assert the fixed/green state of Fred package surfaces
+// (dist entrypoints, tsconfig references, barrel re-exports, etc.).
 //
 // Failure categories covered:
 //   1. Raw-source manifests (main/types/import → src/*.ts, no dist fallback)
@@ -91,6 +91,31 @@ describe('consumer-surface regression: raw-source manifests', () => {
         expect(manifest.types).toContain('./dist/');
       },
     );
+  }
+
+  /**
+   * Any package that declares a `bin` must point it at the built dist
+   * artifact, not raw TypeScript source. A published bin at `./src/*.ts`
+   * ships a Bun/TS entry that standard package-manager bin execution
+   * cannot run before the CLI starts.
+   */
+  const PACKAGES_WITH_BIN = ['cli'];
+  for (const pkg of PACKAGES_WITH_BIN) {
+    test(`${pkg}: bin entries point at built dist, not raw source`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, 'packages', pkg, 'package.json'), 'utf-8'),
+      );
+      const bin = manifest.bin ?? {};
+      const entries = typeof bin === 'string' ? [bin] : Object.values(bin);
+
+      for (const target of entries as string[]) {
+        expect({ pkg, target }).toMatchObject({
+          pkg,
+          target: expect.stringContaining('./dist/'),
+        });
+        expect(target.endsWith('.ts')).toBe(false);
+      }
+    });
   }
 });
 
@@ -270,6 +295,48 @@ describe('consumer-surface regression: build externalization', () => {
       }
     });
   }
+
+  /**
+   * Every subpath in `exports` with a `bun: "./src/**"` condition must have
+   * its source entrypoint passed to the `build` script, so the matching
+   * non-Bun ("import"/"default") dist file is actually produced. Otherwise
+   * TypeScript resolves the subpath fine via co-located .d.ts
+   * (build:declarations walks the whole src/ tree), but a real Node/bundler
+   * consumer hits a runtime module-not-found error because `bun run build`
+   * never bundled that entrypoint.
+   */
+  const PACKAGES_WITH_SUBPATH_EXPORTS = [
+    'core',
+    'cli',
+    'fred-http',
+    'fred-baml',
+    'fred-convex',
+    'provider-minimax',
+  ];
+
+  for (const pkg of PACKAGES_WITH_SUBPATH_EXPORTS) {
+    test(`${pkg}: build script bundles every exports-map entrypoint`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, 'packages', pkg, 'package.json'), 'utf-8'),
+      );
+      const buildScript: string = manifest.scripts?.build ?? '';
+      const exportsMap = manifest.exports ?? {};
+
+      for (const [subpath, condition] of Object.entries(exportsMap) as [string, Record<string, string>][]) {
+        const sourceEntry = condition.bun;
+        if (!sourceEntry || !sourceEntry.startsWith('./src/')) continue;
+
+        const relativeSource = sourceEntry.replace(/^\.\//, '');
+        if (!buildScript.includes(relativeSource)) {
+          throw new Error(
+            `${pkg}: exports["${subpath}"].bun points at ${sourceEntry}, but the build script does ` +
+              `not pass it to bun build, so ${condition.import ?? condition.default} will never be ` +
+              `produced. Add it as an entrypoint in packages/${pkg}/package.json's "build" script.`,
+          );
+        }
+      }
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -399,8 +466,12 @@ describe('consumer-surface regression: temp-consumer typecheck', () => {
   /**
    * Run tsc --noEmit on a minimal consumer that imports one type,
    * and check whether tsc reports a missing-export error for it.
-   * Uses file-based output capture because Bun's execSync in test mode
-   * doesn't reliably capture child process stdout/stderr.
+   *
+   * Uses spawnSync with an argv array (no shell) so no command string is
+   * built from path values. Under `bun test`, spawnSync's piped stdout/
+   * stderr capture is unreliable, so tsc's output is redirected to a file
+   * via file-descriptor stdio (opened here, not through a shell redirect)
+   * and read back.
    */
   function checkTypeExportViaTsc(
     packageName: string,
@@ -427,6 +498,7 @@ describe('consumer-surface regression: temp-consumer typecheck', () => {
           noEmit: true,
           skipLibCheck: true,
           types: [],
+          baseUrl: '.',
           paths: { [packageName]: [packagePath] },
         },
       }, null, 2),
@@ -437,26 +509,28 @@ describe('consumer-surface regression: temp-consumer typecheck', () => {
       `import type { ${typeName} } from '${packageName}';\nexport type T = ${typeName};\n`,
     );
 
-    const outputFile = join(testCaseDir, 'tsc-output.txt');
     const tscCmd = existsSync(TSC_BIN) ? TSC_BIN : 'tsc';
-
+    const outputFile = join(testCaseDir, 'tsc-output.txt');
+    const outFd = openSync(outputFile, 'w');
+    let status: number | null;
+    let signal: NodeJS.Signals | null;
     try {
-      // Redirect tsc output to a file for reliable capture
-      execSync(`${tscCmd} --noEmit > "${outputFile}" 2>&1; echo $? >> "${outputFile}"`, {
+      const result = spawnSync(tscCmd, ['--noEmit'], {
         cwd: testCaseDir,
-        encoding: 'utf-8',
         timeout: 30_000,
-        shell: '/bin/bash',
+        stdio: ['ignore', outFd, outFd],
       });
-    } catch {
-      // execSync may throw even when output is captured to file
+      status = result.status;
+      signal = result.signal;
+    } finally {
+      closeSync(outFd);
     }
 
     let output = '';
     try {
       output = readFileSync(outputFile, 'utf-8');
     } catch {
-      // File might not exist if tsc timed out
+      // File might not exist if tsc failed to spawn.
     }
 
     // Check for specific TypeScript error codes indicating missing exports:
@@ -464,6 +538,19 @@ describe('consumer-surface regression: temp-consumer typecheck', () => {
     // TS2305: Module has no exported member named
     // TS2724: Module has no exported member named (with suggestion)
     const hasMissingExport = /TS(2614|2305|2724)/.test(output) && output.includes(typeName);
+
+    // A non-zero exit that isn't a recognized missing-export error means tsc
+    // failed for some other reason (bad tsconfig, missing binary, timeout,
+    // syntax error) — that must fail loudly rather than silently report
+    // `exported: true`, which would make the test pass without having
+    // verified anything.
+    if (status !== 0 && !hasMissingExport) {
+      if (existsSync(testCaseDir)) rmSync(testCaseDir, { recursive: true, force: true });
+      throw new Error(
+        `tsc exited ${status ?? '(signal ' + signal + ')'} for an unrecognized reason ` +
+          `while checking ${packageName}#${typeName}:\n${output}`
+      );
+    }
 
     // Cleanup
     if (existsSync(testCaseDir)) rmSync(testCaseDir, { recursive: true, force: true });

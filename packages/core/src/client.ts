@@ -323,23 +323,14 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             (context) => (context ? buildSessionDetails(context) : null)
           )
         ),
-      list: async () => {
-        if (closed) {
-          throw new FredClientClosedError({ message: 'FredClient has been shut down' });
-        }
-        return options.storage ? options.storage.listSessions() : [];
-      },
+      list: () => run(Effect.flatMap(ContextStorageService, (s) => s.listSessions())),
       delete: (conversationId) =>
         run(Effect.flatMap(ContextStorageService, (s) => s.clearContext(conversationId))),
     },
 
     providers: {
       use: (idOrPackage, config = {}) =>
-        run(
-          Effect.flatMap(ProviderRegistryService, (s) =>
-            Effect.andThen(s.register(idOrPackage, config), s.getDefinition(idOrPackage))
-          )
-        ),
+        run(Effect.flatMap(ProviderRegistryService, (s) => s.register(idOrPackage, config))),
     },
 
     runtime,

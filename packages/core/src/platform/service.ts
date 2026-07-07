@@ -11,10 +11,16 @@ import { createProviderDefinitionEffect } from './base';
  */
 export interface ProviderRegistryService {
   /**
-   * Register a provider pack by id/package name
-   * Loads the pack dynamically and validates exports
+   * Register a provider pack by id/package name.
+   * Loads the pack dynamically and validates exports.
+   *
+   * Returns the registered definition, since the pack's declared `id` (or
+   * an alias) often differs from `idOrPackage` when it is a package
+   * specifier (e.g. `"@fancyrobot/fred-openai"` registers under `"openai"`)
+   * — callers that need to look the definition back up should use the
+   * returned value rather than re-querying by `idOrPackage`.
    */
-  register(idOrPackage: string, config?: ProviderConfig): Effect.Effect<void, ProviderRegistrationError>;
+  register(idOrPackage: string, config?: ProviderConfig): Effect.Effect<ProviderDefinition, ProviderRegistrationError>;
 
   /**
    * Register a pre-created factory (for programmatic use)
@@ -86,7 +92,7 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
     private initialized: Ref.Ref<boolean>
   ) {}
 
-  register(idOrPackage: string, config: ProviderConfig = {}): Effect.Effect<void, ProviderRegistrationError> {
+  register(idOrPackage: string, config: ProviderConfig = {}): Effect.Effect<ProviderDefinition, ProviderRegistrationError> {
     const self = this;
     return Effect.gen(function* () {
       // Load factory with proper Effect error channel
@@ -101,6 +107,7 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
       const definition = yield* createProviderDefinitionEffect(factory, config);
 
       yield* self.registerDefinition(definition);
+      return definition;
     });
   }
 

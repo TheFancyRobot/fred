@@ -23,6 +23,7 @@ import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/gr
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
 import type { GraphExecutionResult } from '../../../packages/core/src/pipeline/graph-executor';
 import { createMockProvider } from '../helpers/mock-provider';
+import { createMockStorage } from '../helpers/mock-storage';
 
 const activeClients: FredClient[] = [];
 
@@ -166,6 +167,37 @@ describe('createFred client', () => {
 
     await client.sessions.delete(conversationId);
     expect(await client.sessions.get(conversationId)).toBeNull();
+  });
+
+  it('sessions.list reflects storage swapped in via the runtime after creation', async () => {
+    // Regression: sessions.list() must read the live ContextStorageService,
+    // not a storage adapter captured at createFred() time. A caller can
+    // replace storage through the exposed runtime escape hatch; list() has
+    // to see the new adapter's sessions.
+    const client = track(await createFred());
+
+    // Initially no persistent adapter -> empty.
+    expect(await client.sessions.list()).toEqual([]);
+
+    const storage = createMockStorage();
+    await Runtime.runPromise(client.runtime)(
+      Effect.flatMap(ContextStorageService, (s) => s.replaceStorage(storage))
+    );
+
+    // Seed a session through the client's normal write path.
+    const conversationId = await Runtime.runPromise(client.runtime)(
+      Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        const id = yield* context.generateConversationId();
+        yield* context.addMessages(id, [
+          { role: 'user', content: 'in the new store' } as any,
+        ]);
+        return id;
+      })
+    );
+
+    const sessions = await client.sessions.list();
+    expect(sessions.map((s) => s.id)).toContain(conversationId);
   });
 
   it('providers.use rejects cleanly for unknown provider packs', async () => {
