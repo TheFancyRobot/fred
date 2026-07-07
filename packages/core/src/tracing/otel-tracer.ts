@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { Tracer, Span, SpanOptions, SpanContext, SpanStatus } from './tracer';
+import { type Tracer, type Span, type SpanOptions, type SpanContext, SpanStatus } from './tracer';
 import { setActiveSpan, getActiveSpan } from './context';
 
 const esmRequire = createRequire(import.meta.url);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { extname } from 'path';
 import yaml from 'js-yaml';
-import { FrameworkConfig, ConfigFormat } from './types';
+import type { FrameworkConfig, ConfigFormat } from './types';
 
 /**
  * Parse a config file (JSON or YAML)

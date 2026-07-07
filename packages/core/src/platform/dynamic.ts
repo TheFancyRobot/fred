@@ -1,5 +1,5 @@
 import { Effect, Layer } from 'effect';
-import { ProviderConfig, ProviderDefinition, ProviderModelDefaults } from './provider';
+import type { ProviderConfig, ProviderDefinition, ProviderModelDefaults } from './provider';
 import { createProviderDefinition } from './base';
 import { loadProviderPack } from './loader';
 import { ProviderNotFoundError } from './errors';

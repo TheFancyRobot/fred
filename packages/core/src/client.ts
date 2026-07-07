@@ -30,6 +30,11 @@ import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
 import { executeGraphWorkflowEffect } from './pipeline/graph-executor';
 import type { AgentManagerLike, HookManagerLike, PipelineResult } from './pipeline/executor';
+import type {
+  GraphValidationError,
+  PipelineAlreadyExistsError,
+  PipelineExecutionError,
+} from './pipeline/errors';
 import type { HookType } from './hooks';
 import type { Tool } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
@@ -160,6 +165,12 @@ export interface CreateFredOptions {
 /** A workflow definition: a V1 pipeline, a V2 pipeline, or a graph workflow. */
 export type WorkflowDefinition = AnyPipelineConfig | GraphWorkflowConfig;
 
+/** Failures workflows.define can produce across the three workflow kinds. */
+export type WorkflowDefineError =
+  | PipelineAlreadyExistsError
+  | PipelineExecutionError
+  | GraphValidationError;
+
 /** Result of workflows.run — shape depends on the workflow kind. */
 export type WorkflowRunResult = AgentResponse | PipelineResult | GraphExecutionResult;
 
@@ -265,7 +276,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     workflows: {
       define: (config) =>
         run(
-          Effect.flatMap(PipelineService, (s) => {
+          Effect.flatMap(PipelineService, (s): Effect.Effect<void, WorkflowDefineError> => {
             if (isGraphWorkflowConfig(config)) {
               return s.registerGraphWorkflow(config);
             }

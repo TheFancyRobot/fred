@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import type { Tool, ToolSchemaDefinition } from '../tool/tool';
-import { MCPClient, MCPToolDefinition } from './types';
+import type { MCPClient, MCPToolDefinition } from './types';
 
 /**
  * Convert MCP tool to Fred Tool interface

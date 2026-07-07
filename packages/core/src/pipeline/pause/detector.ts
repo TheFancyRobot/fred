@@ -7,8 +7,8 @@
  */
 
 import {
-  PauseSignal,
-  PauseRequest,
+  type PauseSignal,
+  type PauseRequest,
   isPauseSignal,
   isPauseRequest,
   toPauseMetadata,

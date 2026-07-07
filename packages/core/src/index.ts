@@ -110,12 +110,14 @@ export class Fred extends FredBase {
     }
 
     try {
+      // Built as Runtime<FredServices | TemplateEngine>; narrowed to the
+      // public FredRuntime type after service initialization.
       const runtime = Effect.runSync(
         Effect.scoped(Layer.toRuntime(this.buildRuntimeLayer()))
-      ) as FredRuntime;
+      );
       Runtime.runSync(runtime)(this.initializeRuntimeServices());
-      this.runtime = runtime;
-      return runtime;
+      this.runtime = runtime as FredRuntime;
+      return this.runtime;
     } catch (error) {
       throw new Error(
         'Fred runtime could not be initialized synchronously (a configured layer requires async setup). Use `await Fred.create()` or call an async Fred method before synchronous registration methods.',
@@ -138,12 +140,12 @@ export class Fred extends FredBase {
         try {
           const runtime = await Effect.runPromise(
             Effect.scoped(Layer.toRuntime(this.buildRuntimeLayer()))
-          ) as FredRuntime;
+          );
 
           await Runtime.runPromise(runtime)(this.initializeRuntimeServices());
 
-          this.runtime = runtime;
-          return runtime;
+          this.runtime = runtime as FredRuntime;
+          return this.runtime;
         } catch (error) {
           this.runtimePromise = null;
           throw error;

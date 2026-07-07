@@ -1,4 +1,4 @@
-import { MCPTransportInterface, MCPRequest, MCPResponse, MCPNotification } from './types';
+import type { MCPTransportInterface, MCPRequest, MCPResponse, MCPNotification } from './types';
 
 /**
  * MCP HTTP/SSE transport implementation

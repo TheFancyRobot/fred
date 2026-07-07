@@ -1,4 +1,4 @@
-import {
+import type {
   MCPClient,
   MCPInitializeParams,
   MCPInitializeResult,
@@ -8,10 +8,10 @@ import {
   MCPRequest,
   MCPNotification,
 } from './types';
-import { MCPTransportInterface } from './types';
+import type { MCPTransportInterface } from './types';
 import { StdioTransport } from './stdio-transport';
 import { HttpTransport } from './http-transport';
-import { MCPServerConfig } from './types';
+import type { MCPServerConfig } from './types';
 import { validateCommand, validateUrl } from './security';
 
 /**

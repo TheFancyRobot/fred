@@ -1,6 +1,6 @@
 import { Effect, Layer } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
-import { ProviderConfig, ProviderDefinition, ProviderModelDefaults } from './provider';
+import type { ProviderConfig, ProviderDefinition, ProviderModelDefaults } from './provider';
 import type { ProviderCapabilityKey } from './provider-capabilities';
 import { validatePackExports, isProviderFactory } from './pack-schema';
 import { ProviderPackLoadError, ProviderRegistrationError } from './errors';
