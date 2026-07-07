@@ -111,8 +111,8 @@ describe('Boundary execution contracts', () => {
   const source = fs.readFileSync(FRED_INDEX_PATH, 'utf-8');
 
   test('runEffect uses Runtime.runPromise for runtime-scoped execution', () => {
-    // Extract runEffect method body
-    const runEffectBody = extractMethodBody(source, /private\s+async\s+runEffect\s*</);
+    // Extract runEffect method body (protected: FredBase delegations call it)
+    const runEffectBody = extractMethodBody(source, /(?:private|protected)\s+async\s+runEffect\s*</);
     expect(runEffectBody).not.toBe('');
 
     // Must use Runtime.runPromise(runtime) — runtime-scoped execution

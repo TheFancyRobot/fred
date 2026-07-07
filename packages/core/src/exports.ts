@@ -1,3 +1,10 @@
+import { normalizeRunRecord, normalizeLegacyGoldenTrace } from './eval/normalizer';
+import { FileTraceStorageLive } from './eval/storage';
+import { compare } from './eval/comparator';
+import { createReplayOrchestrator, replay, replayWithStorage } from './eval/replay';
+import { runSuite, parseSuiteManifest, decodeSuiteManifest } from './eval/suite';
+import { calculateIntentMetrics } from './eval/metrics';
+
 // ─── Intent Types ───────────────────────────────────────────────────────────
 export type { ActionType, Action, Intent, IntentMatch } from './intent/intent';
 
@@ -275,3 +282,87 @@ export type {
   ChunkingStrategy,
   SmoothStreamOptions,
 } from './stream/smooth-text';
+
+// ─── Stream Result Types ────────────────────────────────────────────────────
+export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './stream/result';
+
+// ─── Effect Services and Layer Composition ──────────────────────────────────
+// The full Effect-native API is also available via '@fancyrobot/fred/effect'.
+export {
+  // Layer composition
+  FredLayers,
+  makeFredLayersWithLeafRouting,
+  makeFredRuntimeLayer,
+  createFredRuntime,
+  createScopedFredRuntime,
+  createFredRuntimeWithOptions,
+  type FredLayerOptions,
+  type FredRuntime,
+  type FredServices,
+  // Service tags + Live layers (all 14 FredServices members)
+  ToolRegistryService,
+  ToolRegistryServiceLive,
+  ToolGateService,
+  ToolGateServiceLive,
+  HookManagerService,
+  HookManagerServiceLive,
+  ProviderRegistryService,
+  ProviderRegistryServiceLive,
+  ContextStorageService,
+  ContextStorageServiceLive,
+  AgentService,
+  AgentServiceLive,
+  WorkflowService,
+  WorkflowServiceLive,
+  CheckpointService,
+  CheckpointServiceLive,
+  PauseService,
+  PauseServiceLive,
+  PipelineService,
+  PipelineServiceLive,
+  MessageProcessorService,
+  MessageProcessorServiceLive,
+  SubagentService,
+  SubagentServiceLive,
+  IntentMatcherService,
+  IntentMatcherServiceLive,
+  IntentRouterService,
+  IntentRouterServiceLive,
+  MessageRouterService,
+  MessageRouterServiceLiveWithConfig,
+  ObservabilityService,
+  ObservabilityServiceLive,
+} from './services';
+
+// ─── MessageProcessor Error Types ───────────────────────────────────────────
+export type {
+  MessageProcessorError,
+  MessageValidationError,
+  NoRouteFoundError,
+  RouteExecutionError,
+  HandoffError,
+  ConversationIdRequiredError,
+  AgentNotFoundError,
+  MaxHandoffDepthError,
+} from './message-processor/errors';
+
+// ─── Evaluation Helpers ─────────────────────────────────────────────────────
+/**
+ * Public evaluation helpers exposed from the main Fred entrypoint.
+ *
+ * This keeps evaluation workflows available from `@fancyrobot/fred`
+ * without requiring internal path imports.
+ */
+export const evaluation = {
+  normalizeRunRecord,
+  normalizeLegacyGoldenTrace,
+  compare,
+  createReplayOrchestrator,
+  replay,
+  replayWithStorage,
+  runSuite,
+  parseSuiteManifest,
+  decodeSuiteManifest,
+  calculateIntentMetrics,
+  FileTraceStorageLive,
+} as const;

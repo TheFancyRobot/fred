@@ -48,6 +48,10 @@ export {
 } from '../pipeline/checkpoint/service';
 
 export {
+  CheckpointServiceLive,
+} from '../services';
+
+export {
   PauseService,
   PauseServiceLive,
 } from '../pipeline/pause/service';
@@ -57,15 +61,58 @@ export {
   PipelineServiceLive,
 } from '../pipeline/service';
 
+export {
+  ToolGateService,
+  ToolGateServiceLive,
+} from '../tool-gate/service';
+
+export {
+  MessageProcessorService,
+  MessageProcessorServiceLive,
+} from '../message-processor/service';
+
+export {
+  SubagentService,
+  SubagentServiceLive,
+} from '../subagent/service';
+
+export {
+  IntentMatcherService,
+  IntentMatcherServiceLive,
+  IntentRouterService,
+  IntentRouterServiceLive,
+} from '../intent/service';
+
+export {
+  MessageRouterService,
+  MessageRouterServiceLive,
+  MessageRouterServiceLiveWithConfig,
+  MessageRouterConfig,
+} from '../routing/service';
+
+export {
+  ObservabilityService,
+  ObservabilityServiceLive,
+} from '../observability/service';
+
+export {
+  TemplateEngine,
+  TemplateEngineLive,
+} from '../template';
+
 // Aggregate exports
 export {
   FredLayers,
+  makeFredLayersWithLeafRouting,
+  makeFredRuntimeLayer,
   createFredRuntime,
+  createFredRuntimeWithOptions,
   createScopedFredRuntime,
 } from '../services';
 
 // Type exports
 export type {
+  FredLayerOptions,
   FredRuntime,
   FredServices,
 } from '../services';
