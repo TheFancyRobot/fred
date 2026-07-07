@@ -286,9 +286,12 @@ export abstract class FredBase {
   }
 
   async useProvider(platform: string, config?: ProviderConfig): Promise<ProviderDefinition> {
-    await this.registerProviderPack(platform, config);
+    // Use the returned definition directly rather than re-querying by
+    // `platform`: package specifiers (e.g. "@fancyrobot/fred-openai")
+    // register under the pack's declared id/alias (e.g. "openai"), not
+    // under the specifier string itself.
     return this.runEffect(
-      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition(platform)),
+      Effect.flatMap(ProviderRegistryService, (s) => s.register(platform, config ?? {})),
       `Failed to use provider: ${platform}`
     );
   }
