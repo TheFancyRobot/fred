@@ -1,0 +1,19 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@fancyrobot/fred-cli": "0.5.0",
+    "@fancyrobot/fred": "1.0.0",
+    "@fancyrobot/fred-dev": "0.2.1",
+    "@fancyrobot/fred-baml": "0.1.0",
+    "@fancyrobot/fred-convex": "0.1.0",
+    "@fancyrobot/fred-http": "0.1.0",
+    "@fancyrobot/fred-anthropic": "3.0.0",
+    "@fancyrobot/fred-google": "3.0.0",
+    "@fancyrobot/fred-groq": "3.0.0",
+    "@fancyrobot/fred-minimax": "1.0.0",
+    "@fancyrobot/fred-openai": "3.0.0",
+    "@fancyrobot/fred-openrouter": "4.0.0"
+  },
+  "changesets": []
+}

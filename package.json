@@ -59,7 +59,7 @@
     "docs:deploy": "mkdocs gh-deploy",
     "prepare": "effect-language-service patch",
     "ci:version": "changeset version && bun update",
-    "ci:publish": "for dir in packages/*; do if [ -f \"$dir/package.json\" ] && grep -q '\"private\"[[:space:]]*:[[:space:]]*true' \"$dir/package.json\"; then echo \"Skipping private package $dir\"; continue; fi; (cd \"$dir\" && bun publish --tolerate-republish); done && changeset tag"
+    "ci:publish": "bash scripts/publish-packages.sh"
   },
   "type": "module",
   "workspaces": ["packages/*", "examples/*"],
