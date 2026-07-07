@@ -88,9 +88,15 @@ describe('Runtime lifecycle contracts', () => {
     expect(constructorBody).not.toMatch(/Layer\.toRuntime/);
 
     // ensureRuntime method definition must contain runtime creation call
+    // (directly or via the shared buildRuntimeLayer helper).
     const ensureRuntimeBody = extractMethodBody(source, /private\s+async\s+ensureRuntime\s*\(\)/);
     expect(ensureRuntimeBody).not.toBe('');
-    expect(ensureRuntimeBody).toMatch(/createFredRuntimeWithOptions|makeFredRuntimeLayer/);
+    expect(ensureRuntimeBody).toMatch(/createFredRuntimeWithOptions|makeFredRuntimeLayer|buildRuntimeLayer/);
+
+    // The shared layer builder must compose the canonical Fred layer graph.
+    const buildLayerBody = extractMethodBody(source, /private\s+buildRuntimeLayer\s*\(\)/);
+    expect(buildLayerBody).not.toBe('');
+    expect(buildLayerBody).toMatch(/makeFredRuntimeLayer/);
   });
 
   test('Fred.create() eagerly initializes runtime', () => {

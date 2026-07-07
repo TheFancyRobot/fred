@@ -79,7 +79,7 @@ import { MCPServerRegistry, MCPResourceService } from './mcp';
 import type { MCPGlobalServerConfig } from './config/types';
 import { BUILTIN_PACKS } from './platform/packs';
 import { AgentFileWatcher } from './agent/file-watcher';
-import { loadConfig } from './config/loader';
+import { loadConfig, extractObservability } from './config/loader';
 import {
   TemplateEngine,
   TemplateEngineLive,
@@ -117,14 +117,6 @@ export class Fred {
   private templateContextConfig: Partial<FrameworkConfig> = {};
   private globalVariables: Map<string, VariableFactory> = new Map();
   private templateCustomNamespaces = new Map<string, () => unknown>();
-  private runtimeGeneration = 0;
-  private readonly toolSnapshot = new Map<string, Tool>();
-  private readonly intentSnapshot = new Map<string, Intent>();
-  private readonly providerSnapshot = new Map<string, ProviderDefinition>();
-  private readonly workflowSnapshot = new Map<string, Workflow>();
-  private readonly hookSnapshot: Array<{ type: HookType; handler: HookHandler }> = [];
-  private readonly graphWorkflowSnapshot = new Map<string, GraphWorkflowConfig>();
-  private readonly builtInToolIds = new Set<string>();
   private readonly configInitializer: ConfigInitializer;
   private agentFileWatcher?: AgentFileWatcher;
 
@@ -135,13 +127,20 @@ export class Fred {
   private readonly mcpServerRegistry: MCPServerRegistry;
   private readonly mcpResourceService: MCPResourceService;
 
-  // Pending context state for pre-runtime replay
-  private pendingContextPolicy: any = null;
-  private pendingStorageAdapter: unknown = null;
+  // Instance-level context settings, applied to the runtime when it is built
+  // (and re-applied if a new runtime is built after shutdown()).
+  private defaultContextPolicy: {
+    maxMessages?: number;
+    maxChars?: number;
+    strict?: boolean;
+    isolated?: boolean;
+  } | null = null;
   // Persistent reference to the storage adapter for session listing
   private activeStorageAdapter: ContextStorage | null = null;
 
-  // Effect runtime for service execution (lazy initialized)
+  // Effect runtime for service execution. Built lazily exactly once on first
+  // use (sync or async) and never invalidated: configuration changes after
+  // the build are applied as live service mutations, not runtime rebuilds.
   private runtime: FredRuntime | null = null;
   private runtimePromise: Promise<FredRuntime> | null = null;
 
@@ -171,9 +170,6 @@ export class Fred {
     this.mcpServerRegistry = new MCPServerRegistry();
     this.mcpResourceService = new MCPResourceService(this.mcpServerRegistry);
 
-    // Register built-in tools
-    this.registerBuiltInTools();
-
     // Deprecation warning for direct construction
     // Only warn in development to avoid noise in production
     if (process.env.NODE_ENV === 'development') {
@@ -185,115 +181,107 @@ export class Fred {
     }
   }
 
-  private getRuntimeLayerOptionsSnapshot(): FredLayerOptions {
-    return {
+  private buildRuntimeLayer(): Layer.Layer<FredServices | TemplateEngine> {
+    const layerOptions: FredLayerOptions = {
       routingConfig: this.routingConfig,
       observabilityLayers: this.observabilityLayers,
     };
+
+    return Layer.mergeAll(
+      makeFredRuntimeLayer(layerOptions),
+      TemplateEngineLive({
+        ...this.templateConfig,
+        basePath: process.cwd(),
+      })
+    ) as Layer.Layer<FredServices | TemplateEngine>;
   }
 
-  private invalidateRuntime(reason: string): void {
-    this.runtimeGeneration += 1;
-    this.runtime = null;
-    this.runtimePromise = null;
-    // Preserve storage adapter so it gets replayed into the next runtime
-    if (this.activeStorageAdapter && !this.pendingStorageAdapter) {
-      this.pendingStorageAdapter = this.activeStorageAdapter;
-    }
-    void reason;
-  }
-
-  private async applyRuntimeState(runtime: FredRuntime): Promise<void> {
+  /**
+   * One-time service initialization applied right after the runtime is built:
+   * built-in tool registration plus instance-level settings (tracer, template
+   * context, memory defaults, context policy/storage). This is configuration
+   * application, not state replay — registered tools/agents/intents live only
+   * in the services themselves.
+   */
+  private initializeRuntimeServices(): Effect.Effect<void, never, FredServices | TemplateEngine> {
     const self = this;
-    const tools = Array.from(this.toolSnapshot.values()).filter(
-      (tool) => !this.builtInToolIds.has(tool.id)
-    );
-    const intents = Array.from(this.intentSnapshot.values());
-    const providers = Array.from(this.providerSnapshot.values());
-    const config = {
-      defaultAgentId: this.defaultAgentId,
-      memoryDefaults: this.memoryDefaults,
-      tracer: this.tracer,
-    };
-    const globalVariables = this.snapshotGlobalVariablesSync();
-    const templateNamespaces = this.snapshotTemplateNamespacesSync();
-    const envAllowlist = this.templateConfig.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST];
+    return Effect.gen(function* () {
+      const toolRegistryService = yield* ToolRegistryService;
+      const agentService = yield* AgentService;
+      const processor = yield* MessageProcessorService;
+      const templateEngine = yield* TemplateEngine;
 
-    await Runtime.runPromise(runtime as any)(
-      Effect.gen(function* () {
-        const toolRegistryService = yield* ToolRegistryService;
-        const providerRegistryService = yield* ProviderRegistryService;
-        const agentService = yield* AgentService;
-        const processor = yield* MessageProcessorService;
-        const workflowService = yield* WorkflowService;
-        const templateEngine = yield* TemplateEngine;
-        const matcherOption = yield* Effect.serviceOption(IntentMatcherService);
+      const calculatorTool = createCalculatorTool() as unknown as Tool;
+      yield* toolRegistryService.registerTool(calculatorTool);
+
+      yield* agentService.setTracer(self.tracer);
+      yield* agentService.setGlobalVariablesResolver(() => self.snapshotGlobalVariablesSync());
+      yield* agentService.setTemplateEngine(templateEngine);
+      yield* agentService.setTemplateCustomNamespaces(self.snapshotTemplateNamespacesSync());
+      yield* agentService.setTemplateEnvAllowlist(
+        self.templateConfig.envAllowlist ?? [...DEFAULT_ENV_ALLOWLIST]
+      );
+      yield* agentService.setTemplateFredConfig(self.templateContextConfig);
+
+      yield* processor.updateConfig({
+        defaultAgentId: self.defaultAgentId,
+        memoryDefaults: self.memoryDefaults,
+        tracer: self.tracer,
+      });
+
+      if (self.routingConfig) {
+        const router = yield* MessageRouterService;
+        yield* router.setConfig(self.routingConfig);
+      }
+
+      if (self.defaultAgentId) {
         const routerOption = yield* Effect.serviceOption(IntentRouterService);
-
-        if (tools.length > 0) {
-          yield* toolRegistryService.registerTools(tools);
-        }
-
-        if (providers.length > 0) {
-          for (const definition of providers) {
-            yield* providerRegistryService.registerDefinition(definition);
-          }
-        }
-
-        if (intents.length > 0 && matcherOption._tag === 'Some') {
-          yield* matcherOption.value.registerIntents(intents);
-        }
-
-        if (self.workflowSnapshot.size > 0) {
-          for (const workflow of self.workflowSnapshot.values()) {
-            yield* workflowService.addWorkflow(workflow.name, {
-              defaultAgent: workflow.defaultAgent,
-              agents: workflow.agents,
-              routing: workflow.routing,
-            });
-          }
-        }
-
-        if (self.graphWorkflowSnapshot.size > 0) {
-          const pipelineService = yield* PipelineService;
-          for (const config of self.graphWorkflowSnapshot.values()) {
-            yield* pipelineService.registerGraphWorkflow(config);
-          }
-        }
-
-        if (self.hookSnapshot.length > 0) {
-          const hooks = yield* HookManagerService;
-          for (const { type, handler } of self.hookSnapshot) {
-            yield* hooks.registerHook(type, handler);
-          }
-        }
-
-        if (self.defaultAgentId && routerOption._tag === 'Some') {
+        if (routerOption._tag === 'Some') {
           yield* routerOption.value.setDefaultAgent(self.defaultAgentId);
         }
+      }
 
-        yield* agentService.setTracer(self.tracer);
-        yield* agentService.setDefaultSystemMessage(undefined);
-        yield* agentService.setGlobalVariablesResolver(() => globalVariables);
-        yield* agentService.setTemplateEngine(templateEngine);
-        yield* agentService.setTemplateCustomNamespaces(templateNamespaces);
-        yield* agentService.setTemplateEnvAllowlist(envAllowlist);
-        yield* agentService.setTemplateFredConfig(self.templateContextConfig);
+      const contextService = yield* ContextStorageService;
+      if (self.defaultContextPolicy) {
+        yield* contextService.setDefaultPolicy(self.defaultContextPolicy);
+      }
+      if (self.activeStorageAdapter) {
+        yield* contextService.replaceStorage(self.activeStorageAdapter as any);
+      }
+    }) as Effect.Effect<void, never, FredServices | TemplateEngine>;
+  }
 
-        yield* processor.updateConfig(config);
+  /**
+   * Ensure the Effect runtime exists, building it synchronously if needed.
+   *
+   * The default Fred layer graph is fully synchronous, so synchronous
+   * registration methods (registerTool, registerIntents, ...) can force the
+   * build without awaiting. If an async layer is configured (e.g. OTel
+   * observability layers), synchronous building is impossible — use
+   * `await Fred.create()` or any async method first in that case.
+   */
+  private ensureRuntimeSync(): FredRuntime {
+    if (this.runtime) return this.runtime;
 
-        // Replay pending context configuration
-        const contextService = yield* ContextStorageService;
-        if (self.pendingContextPolicy) {
-          yield* contextService.setDefaultPolicy(self.pendingContextPolicy);
-          self.pendingContextPolicy = null;
-        }
-        if (self.pendingStorageAdapter) {
-          yield* contextService.replaceStorage(self.pendingStorageAdapter as any);
-          self.pendingStorageAdapter = null;
-        }
-      }) as Effect.Effect<void, never, FredServices | TemplateEngine>
-    );
+    if (this.runtimePromise) {
+      throw new Error(
+        'Fred runtime is currently initializing. Await Fred.create() (or a pending async call) before using synchronous registration methods.'
+      );
+    }
+
+    try {
+      const runtime = Effect.runSync(
+        Effect.scoped(Layer.toRuntime(this.buildRuntimeLayer()))
+      ) as FredRuntime;
+      Runtime.runSync(runtime)(this.initializeRuntimeServices());
+      this.runtime = runtime;
+      return runtime;
+    } catch (error) {
+      throw new Error(
+        'Fred runtime could not be initialized synchronously (a configured layer requires async setup). Use `await Fred.create()` or call an async Fred method before synchronous registration methods.',
+        { cause: error }
+      );
+    }
   }
 
   /**
@@ -306,39 +294,18 @@ export class Fred {
     if (this.runtime) return this.runtime;
 
     if (!this.runtimePromise) {
-      const generation = this.runtimeGeneration;
-      const layerOptions = this.getRuntimeLayerOptionsSnapshot();
-
       this.runtimePromise = (async () => {
         try {
           const runtime = await Effect.runPromise(
-            Effect.scoped(
-              Layer.toRuntime(
-                Layer.mergeAll(
-                  makeFredRuntimeLayer(layerOptions),
-                  TemplateEngineLive({
-                    ...this.templateConfig,
-                    basePath: process.cwd(),
-                  })
-                )
-              )
-            )
+            Effect.scoped(Layer.toRuntime(this.buildRuntimeLayer()))
           ) as FredRuntime;
 
-          await this.applyRuntimeState(runtime);
-
-          if (generation !== this.runtimeGeneration) {
-            this.runtimePromise = null;
-            return this.ensureRuntime();
-          }
+          await Runtime.runPromise(runtime)(this.initializeRuntimeServices());
 
           this.runtime = runtime;
           return runtime;
         } catch (error) {
-          if (generation === this.runtimeGeneration) {
-            this.runtime = null;
-            this.runtimePromise = null;
-          }
+          this.runtimePromise = null;
           throw error;
         }
       })();
@@ -423,21 +390,26 @@ export class Fred {
   }
 
   /**
-   * Register built-in tools that are available by default
-   */
-  private registerBuiltInTools(): void {
-    const calculatorTool = createCalculatorTool();
-    const tool = calculatorTool as unknown as Tool;
-    this.builtInToolIds.add(tool.id);
-    this.toolSnapshot.set(tool.id, tool);
-  }
-
-  /**
-   * Enable tracing with a tracer instance
+   * Enable tracing with a tracer instance.
+   *
+   * Applied live to the running runtime — no rebuild required.
    */
   enableTracing(tracer?: Tracer): void {
     this.tracer = tracer || new NoOpTracer();
-    this.invalidateRuntime('tracer updated');
+
+    if (!this.runtime) {
+      return; // Applied by initializeRuntimeServices when the runtime is built.
+    }
+
+    const nextTracer = this.tracer;
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        const processor = yield* MessageProcessorService;
+        yield* agentService.setTracer(nextTracer);
+        yield* processor.updateConfig({ tracer: nextTracer });
+      })
+    );
   }
 
   // --- Global Variables ---
@@ -508,13 +480,7 @@ export class Fred {
   // --- Provider Management ---
 
   registerProvider(_platform: string, provider: ProviderDefinition): void {
-    this.providerSnapshot.set(provider.id, provider);
-
-    if (!this.runtime) {
-      return;
-    }
-
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const providers = yield* ProviderRegistryService;
         yield* providers.registerDefinition(provider);
@@ -523,11 +489,7 @@ export class Fred {
   }
 
   listProviders(): string[] {
-    if (!this.runtime) {
-      return Array.from(this.providerSnapshot.keys());
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const providers = yield* ProviderRegistryService;
         return yield* providers.listProviders();
@@ -536,11 +498,7 @@ export class Fred {
   }
 
   hasProvider(providerId: string): boolean {
-    if (!this.runtime) {
-      return this.providerSnapshot.has(providerId);
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const providers = yield* ProviderRegistryService;
         return yield* providers.hasProvider(providerId);
@@ -567,8 +525,6 @@ export class Fred {
       }),
       `Failed to register provider pack: ${idOrPackage}`
     );
-
-    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerProviderFactory(factory: EffectProviderFactory, config: ProviderConfig = {}): Promise<void> {
@@ -579,8 +535,6 @@ export class Fred {
       }),
       `Failed to register provider factory: ${factory.id}`
     );
-
-    await this.refreshProviderSnapshotFromRuntime();
   }
 
   async registerDefaultProviders(config?: ProviderConfigInput): Promise<void> {
@@ -614,31 +568,10 @@ export class Fred {
     }
   }
 
-  private async refreshProviderSnapshotFromRuntime(): Promise<void> {
-    const definitions = await this.runEffect(
-      Effect.gen(function* () {
-        const providers = yield* ProviderRegistryService;
-        return yield* providers.getDefinitions();
-      }),
-      'Failed to refresh provider snapshot'
-    );
-
-    this.providerSnapshot.clear();
-    for (const definition of definitions) {
-      this.providerSnapshot.set(definition.id, definition);
-    }
-  }
-
   // --- Tool Management ---
 
   registerTool(tool: Tool): void {
-    this.toolSnapshot.set(tool.id, tool);
-
-    if (!this.runtime) {
-      return;
-    }
-
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const tools = yield* ToolRegistryService;
         yield* tools.registerTool(tool);
@@ -647,15 +580,11 @@ export class Fred {
   }
 
   registerTools(tools: Tool[]): void {
-    for (const tool of tools) {
-      this.toolSnapshot.set(tool.id, tool);
-    }
-
-    if (!this.runtime || tools.length === 0) {
+    if (tools.length === 0) {
       return;
     }
 
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const registry = yield* ToolRegistryService;
         yield* registry.registerTools(tools);
@@ -664,30 +593,22 @@ export class Fred {
   }
 
   getTool(id: string): Tool | undefined {
-    if (this.runtime) {
-      const tools = Runtime.runSync(this.runtime)(
-        Effect.gen(function* () {
-          const registry = yield* ToolRegistryService;
-          return yield* registry.getAllTools();
-        })
-      );
-      return tools.find((tool) => tool.id === id);
-    }
-
-    return this.toolSnapshot.get(id);
+    const tools = Runtime.runSync(this.ensureRuntimeSync())(
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistryService;
+        return yield* registry.getAllTools();
+      })
+    );
+    return tools.find((tool) => tool.id === id);
   }
 
   getTools(): Tool[] {
-    if (this.runtime) {
-      return Runtime.runSync(this.runtime)(
-        Effect.gen(function* () {
-          const registry = yield* ToolRegistryService;
-          return yield* registry.getAllTools();
-        })
-      );
-    }
-
-    return Array.from(this.toolSnapshot.values());
+    return Runtime.runSync(this.ensureRuntimeSync())(
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistryService;
+        return yield* registry.getAllTools();
+      })
+    );
   }
 
   // --- Intent Management ---
@@ -697,31 +618,18 @@ export class Fred {
   }
 
   registerIntents(intents: Intent[]): void {
-    for (const intent of intents) {
-      this.intentSnapshot.set(intent.id, intent);
-    }
-
-    if (!this.runtime) {
-      return;
-    }
-
-    const currentIntents = Array.from(this.intentSnapshot.values());
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const matcher = yield* Effect.serviceOption(IntentMatcherService);
         if (matcher._tag === 'Some') {
-          yield* matcher.value.registerIntents(currentIntents);
+          yield* matcher.value.registerIntents(intents);
         }
       })
     );
   }
 
   getIntents(): Intent[] {
-    if (!this.runtime) {
-      return Array.from(this.intentSnapshot.values());
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const matcher = yield* Effect.serviceOption(IntentMatcherService);
         if (matcher._tag === 'Some') {
@@ -778,11 +686,7 @@ export class Fred {
   }
 
   getAgent(id: string): AgentInstance | undefined {
-    if (!this.runtime) {
-      return undefined;
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const agentService = yield* AgentService;
         return yield* agentService.getAgentOptional(id);
@@ -791,11 +695,7 @@ export class Fred {
   }
 
   getAgents(): AgentInstance[] {
-    if (!this.runtime) {
-      return [];
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const agentService = yield* AgentService;
         return yield* agentService.getAllAgents();
@@ -804,25 +704,23 @@ export class Fred {
   }
 
   setDefaultAgent(agentId: string): void {
-    if (this.runtime) {
-      const exists = Runtime.runSync(this.runtime)(
-        Effect.gen(function* () {
-          const agentService = yield* AgentService;
-          return yield* agentService.hasAgent(agentId);
-        })
-      );
-      if (!exists) {
-        throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
-      }
-
-      // Update the processor config in the running runtime without invalidation
-      Runtime.runSync(this.runtime)(
-        Effect.gen(function* () {
-          const processor = yield* MessageProcessorService;
-          yield* processor.updateConfig({ defaultAgentId: agentId });
-        })
-      );
+    const runtime = this.ensureRuntimeSync();
+    const exists = Runtime.runSync(runtime)(
+      Effect.gen(function* () {
+        const agentService = yield* AgentService;
+        return yield* agentService.hasAgent(agentId);
+      })
+    );
+    if (!exists) {
+      throw new Error(`Agent not found: ${agentId}. Create the agent first.`);
     }
+
+    Runtime.runSync(runtime)(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        yield* processor.updateConfig({ defaultAgentId: agentId });
+      })
+    );
 
     this.defaultAgentId = agentId;
   }
@@ -854,13 +752,7 @@ export class Fred {
   }
 
   registerGraphWorkflow(config: GraphWorkflowConfig): void {
-    this.graphWorkflowSnapshot.set(config.id, config);
-
-    if (!this.runtime) {
-      return;
-    }
-
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* PipelineService;
         yield* service.registerGraphWorkflow(config);
@@ -873,12 +765,20 @@ export class Fred {
     input: string,
     options?: { conversationId?: string }
   ): Promise<GraphExecutionResult> {
-    const config = this.graphWorkflowSnapshot.get(id);
-    if (!config) {
+    const runtime = await this.ensureRuntime();
+
+    const configExit = await Runtime.runPromise(runtime)(
+      Effect.exit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          return yield* service.getGraphWorkflow(id);
+        })
+      )
+    );
+    if (Exit.isFailure(configExit)) {
       throw new Error(`Graph workflow not found: ${id}`);
     }
-
-    const runtime = await this.ensureRuntime();
+    const config = configExit.value;
     const agents = await Runtime.runPromise(runtime)(
       Effect.gen(function* () {
         const agentService = yield* AgentService;
@@ -966,11 +866,7 @@ export class Fred {
   }
 
   getPipeline(id: string): PipelineInstance | undefined {
-    if (!this.runtime) {
-      return undefined;
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* PipelineService;
         return yield* service.getPipelineOptional(id);
@@ -979,11 +875,7 @@ export class Fred {
   }
 
   getAllPipelines(): PipelineInstance[] {
-    if (!this.runtime) {
-      return [];
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* PipelineService;
         return yield* service.getAllPipelines();
@@ -992,11 +884,7 @@ export class Fred {
   }
 
   removePipeline(id: string): boolean {
-    if (!this.runtime) {
-      return false;
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* PipelineService;
         return yield* service.removePipeline(id);
@@ -1033,7 +921,18 @@ export class Fred {
       rules: [...config.rules],
       fallbackAgents: config.fallbackAgents ? [...config.fallbackAgents] : undefined,
     };
-    this.invalidateRuntime('routing config updated');
+
+    if (!this.runtime) {
+      return; // Applied by initializeRuntimeServices when the runtime is built.
+    }
+
+    const nextConfig = this.routingConfig;
+    Runtime.runSync(this.runtime)(
+      Effect.gen(function* () {
+        const router = yield* MessageRouterService;
+        yield* router.setConfig(nextConfig);
+      })
+    );
   }
 
   async testRoute(message: string, metadata?: Record<string, unknown>): Promise<RoutingDecision | null> {
@@ -1081,30 +980,23 @@ export class Fred {
   // --- Workflow Configuration ---
 
   configureWorkflows(workflows: Workflow[]): void {
-    this.workflowSnapshot.clear();
-    for (const workflow of workflows) {
-      this.addWorkflow(workflow.name, {
-        defaultAgent: workflow.defaultAgent,
-        agents: workflow.agents,
-        routing: workflow.routing,
-      });
-    }
-
-    if (this.runtime) {
-      this.invalidateRuntime('workflow config updated');
-    }
+    Runtime.runSync(this.ensureRuntimeSync())(
+      Effect.gen(function* () {
+        const service = yield* WorkflowService;
+        yield* service.clear();
+        for (const workflow of workflows) {
+          yield* service.addWorkflow(workflow.name, {
+            defaultAgent: workflow.defaultAgent,
+            agents: workflow.agents,
+            routing: workflow.routing,
+          });
+        }
+      })
+    );
   }
 
   addWorkflow(name: string, config: Omit<Workflow, 'name'>): void {
-    const workflow: Workflow = { name, ...config };
-    this.workflowSnapshot.set(name, workflow);
-    this.validateWorkflowSync(name, workflow);
-
-    if (!this.runtime) {
-      return;
-    }
-
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* WorkflowService;
         yield* service.addWorkflow(name, config);
@@ -1113,11 +1005,7 @@ export class Fred {
   }
 
   getWorkflow(name: string): Workflow | undefined {
-    if (!this.runtime) {
-      return this.workflowSnapshot.get(name);
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* WorkflowService;
         return yield* service.getWorkflow(name);
@@ -1126,11 +1014,7 @@ export class Fred {
   }
 
   listWorkflows(): string[] {
-    if (!this.runtime) {
-      return Array.from(this.workflowSnapshot.keys());
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* WorkflowService;
         return yield* service.listWorkflows();
@@ -1139,11 +1023,7 @@ export class Fred {
   }
 
   hasWorkflow(name: string): boolean {
-    if (!this.runtime) {
-      return this.workflowSnapshot.has(name);
-    }
-
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const service = yield* WorkflowService;
         return yield* service.hasWorkflow(name);
@@ -1163,22 +1043,6 @@ export class Fred {
       listWorkflows: () => this.listWorkflows(),
       hasWorkflow: (name) => this.hasWorkflow(name),
     };
-  }
-
-  private validateWorkflowSync(name: string, workflow: Workflow): void {
-    if (!this.getAgent(workflow.defaultAgent)) {
-      console.warn(
-        `[Workflow] Default agent "${workflow.defaultAgent}" not found in workflow "${name}"`
-      );
-    }
-
-    for (const agentId of workflow.agents) {
-      if (!this.getAgent(agentId)) {
-        console.warn(
-          `[Workflow] Agent "${agentId}" referenced in workflow "${name}" not found`
-        );
-      }
-    }
   }
 
   // --- Message Processing (delegated to MessageProcessor) ---
@@ -1256,10 +1120,7 @@ export class Fred {
   // --- Context Management ---
 
   generateConversationId(): string {
-    if (!this.runtime) {
-      return `conv_${crypto.randomUUID()}`;
-    }
-    return Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const context = yield* ContextStorageService;
         return yield* context.generateConversationId();
@@ -1273,11 +1134,8 @@ export class Fred {
     strict?: boolean;
     isolated?: boolean;
   }): void {
-    if (!this.runtime) {
-      this.pendingContextPolicy = policy;
-      return;
-    }
-    Runtime.runSync(this.runtime)(
+    this.defaultContextPolicy = policy;
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const context = yield* ContextStorageService;
         yield* context.setDefaultPolicy(policy);
@@ -1287,11 +1145,7 @@ export class Fred {
 
   setStorage(storage: unknown): void {
     this.activeStorageAdapter = storage as ContextStorage;
-    if (!this.runtime) {
-      this.pendingStorageAdapter = storage;
-      return;
-    }
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const context = yield* ContextStorageService;
         yield* context.replaceStorage(storage as any);
@@ -1485,13 +1339,7 @@ export class Fred {
   // --- Hook Management ---
 
   registerHook(type: HookType, handler: HookHandler): void {
-    this.hookSnapshot.push({ type, handler });
-
-    if (!this.runtime) {
-      return;
-    }
-
-    Runtime.runSync(this.runtime)(
+    Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const hooks = yield* HookManagerService;
         yield* hooks.registerHook(type, handler);
@@ -1500,29 +1348,12 @@ export class Fred {
   }
 
   unregisterHook(type: HookType, handler: HookHandler): boolean {
-    const snapshotIndex = this.hookSnapshot.findIndex(
-      (entry) => entry.type === type && entry.handler === handler
-    );
-
-    if (!this.runtime) {
-      if (snapshotIndex >= 0) {
-        this.hookSnapshot.splice(snapshotIndex, 1);
-      }
-      return false;
-    }
-
-    const removed = Runtime.runSync(this.runtime)(
+    return Runtime.runSync(this.ensureRuntimeSync())(
       Effect.gen(function* () {
         const hooks = yield* HookManagerService;
         return yield* hooks.unregisterHook(type, handler);
       })
     );
-
-    if (removed && snapshotIndex >= 0) {
-      this.hookSnapshot.splice(snapshotIndex, 1);
-    }
-
-    return removed;
   }
 
   ['getHook' + 'Manager'](): any {
@@ -1568,9 +1399,23 @@ export class Fred {
   // --- Observability ---
 
   configureObservability(config: ObservabilityConfig): void {
+    if (this.runtime) {
+      // Idempotent re-application of the same config is a no-op (e.g. when
+      // initializeFromConfig already applied it before the runtime was built).
+      if (JSON.stringify(this.observabilityConfig ?? null) === JSON.stringify(config ?? null)) {
+        return;
+      }
+      const warning =
+        '[Fred] configureObservability was called after the runtime was initialized. ' +
+        'Observability layers (OTel tracer/logger) are applied when the runtime is built and cannot be changed afterwards. ' +
+        'Configure observability before first use (e.g. via initializeFromConfig on a fresh instance, or before Fred.create() resolves).';
+      this.emitWarning(warning);
+      console.warn(warning);
+      return;
+    }
+
     this.observabilityConfig = config;
     this.observabilityLayers = buildObservabilityLayers(config);
-    this.invalidateRuntime('observability config updated');
   }
 
   async setToolPolicies(policies: ToolPoliciesConfig | undefined): Promise<void> {
@@ -1607,10 +1452,26 @@ export class Fred {
     // Get memory defaults before initialization
     const memoryDefaults = this.configInitializer.getMemoryDefaults(configPath);
     this.memoryDefaults = memoryDefaults;
-    this.invalidateRuntime('memory defaults updated from config');
+
+    // Apply layer-baked configuration (observability) before the runtime is
+    // first built so it lands in the layer graph. When the runtime already
+    // exists, configureObservability warns instead of rebuilding.
+    if (!this.runtime) {
+      this.configureObservability(extractObservability(config));
+    }
 
     // Ensure runtime is built before ConfigInitializer accesses service proxies
     await this.ensureRuntime();
+
+    // Apply live-mutable settings to the existing runtime.
+    const currentMemoryDefaults = this.memoryDefaults;
+    await this.runEffect(
+      Effect.gen(function* () {
+        const processor = yield* MessageProcessorService;
+        yield* processor.updateConfig({ memoryDefaults: currentMemoryDefaults });
+      }),
+      'Failed to apply memory defaults from config'
+    );
 
     // Delegate to config initializer
     await this.configInitializer.initialize(this as unknown as FredLike, configPath, options);
@@ -1661,7 +1522,13 @@ export class Fred {
       registerDefinition: (definition: ProviderDefinition) => this.registerProvider(definition.id, definition),
       listProviders: () => this.listProviders(),
       hasProvider: (providerId: string) => this.hasProvider(providerId),
-      getDefinitions: () => Array.from(this.providerSnapshot.values()),
+      getDefinitions: () =>
+        Runtime.runSync(this.ensureRuntimeSync())(
+          Effect.gen(function* () {
+            const providers = yield* ProviderRegistryService;
+            return yield* providers.getDefinitions();
+          })
+        ),
       markInitialized: () => undefined,
     };
   }
@@ -1768,9 +1635,13 @@ export class Fred {
       ).catch(() => undefined);
     }
 
-    // Runtime cleanup happens automatically via Effect.scoped
-    // when the runtime was created. Reset state for potential reuse.
-    this.invalidateRuntime('shutdown');
+    // Runtime cleanup happens automatically via Effect.scoped when the
+    // runtime was created. Reset the runtime reference so a later use builds
+    // a fresh one; registered tools/agents/intents are gone at that point —
+    // only instance-level settings (tracer, routing, storage adapter, context
+    // policy) are re-applied to the new runtime.
+    this.runtime = null;
+    this.runtimePromise = null;
   }
 }
 

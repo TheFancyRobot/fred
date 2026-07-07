@@ -172,7 +172,8 @@ describe('Fred.create integration', () => {
     const runtime = await fred.getRuntime();
     expect(runtime).toBeDefined();
 
-    // Can run effects with the runtime
+    // Can run effects with the runtime. Built-in tools (calculator) are
+    // registered into the runtime registry when the runtime is built.
     const result = await Runtime.runPromise(runtime)(
       Effect.gen(function* () {
         const service = yield* ToolRegistryService;
@@ -180,7 +181,7 @@ describe('Fred.create integration', () => {
       })
     );
 
-    expect(result).toBe(0);
+    expect(result).toBe(1);
 
     await fred.shutdown();
   });
