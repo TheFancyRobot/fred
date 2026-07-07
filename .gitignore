@@ -12,6 +12,12 @@ build/
 lib/
 *.tsbuildinfo
 *.js.map
+# Declaration output occasionally lands in src/ instead of dist/ when a
+# package's own tsc invocation runs against project-reference type info
+# that hasn't been built yet. No package in this repo checks in hand-written
+# .d.ts files, so this is always stray build output.
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
 
 # Environment variables
 .env
