@@ -10,10 +10,21 @@
 # or unexpected exit codes.
 set -uo pipefail
 
+# Explicit topological order: packages/* globs alphabetically, which builds
+# `dev` before `fred-http` even though dev imports fred-http's declared
+# types (dev/src/server.ts imports startServer from @fancyrobot/fred-http).
+# On a clean checkout that leaves no dist/ for the import to resolve
+# against. `core` has no sibling dependencies and must come first; `cli`
+# depends on `dev`, so it comes last. Any package not listed here still
+# gets built, appended at the end, so a new package works without needing
+# this list updated unless it introduces a new inter-package dependency.
+ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http dev cli"
+
 status=0
-for dir in packages/*; do
-  [ -f "$dir/package.json" ] || continue
-  grep -q '"build:declarations"' "$dir/package.json" || continue
+build_one() {
+  local dir=$1
+  [ -f "$dir/package.json" ] || return 0
+  grep -q '"build:declarations"' "$dir/package.json" || return 0
 
   echo "==> $dir"
   out=$( (cd "$dir" && rm -f tsconfig.tsbuildinfo && bun run build:declarations) 2>&1 )
@@ -30,6 +41,17 @@ for dir in packages/*; do
     echo "FAILED (exit $rc): $dir"
     status=1
   fi
+}
+
+for name in $ORDERED_PACKAGES; do
+  build_one "packages/$name"
+done
+
+for dir in packages/*; do
+  case " $ORDERED_PACKAGES " in
+    *" $(basename "$dir") "*) continue ;;
+  esac
+  build_one "$dir"
 done
 
 exit $status
