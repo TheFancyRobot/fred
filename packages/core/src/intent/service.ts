@@ -179,7 +179,14 @@ class IntentMatcherServiceImpl implements IntentMatcherService {
   }
 
   registerIntents(intents: Intent[]): Effect.Effect<void> {
-    return Ref.set(this.intents, intents);
+    // Upsert by id so repeated registrations are idempotent and additive.
+    return Ref.update(this.intents, (existing) => {
+      const merged = new Map(existing.map((intent) => [intent.id, intent]));
+      for (const intent of intents) {
+        merged.set(intent.id, intent);
+      }
+      return Array.from(merged.values());
+    });
   }
 
   getIntents(): Effect.Effect<Intent[]> {

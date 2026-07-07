@@ -5,7 +5,7 @@
  * imperative MessageRouter class.
  */
 
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Option, Ref } from 'effect';
 import {
   type RoutingDecision,
   type RoutingConfig,
@@ -31,6 +31,14 @@ export interface MessageRouterService {
     message: string,
     metadata?: Record<string, unknown>
   ): Effect.Effect<RoutingDecision, NoAgentsAvailableError>;
+
+  /**
+   * Replace the active routing configuration on the live runtime.
+   *
+   * Routing config is mutable at the service level so changing it never
+   * requires rebuilding the Effect runtime.
+   */
+  setConfig(config: RoutingConfig): Effect.Effect<void>;
 }
 
 export const MessageRouterService = Context.GenericTag<MessageRouterService>(
@@ -54,7 +62,7 @@ const MATCH_TYPE_SCORES: Record<MatchType, number> = {
 
 type RouteMatchWithOrder = RouteMatch & { order: number };
 
-class StandaloneRoutingServiceImpl implements MessageRouterService {
+class StandaloneRoutingServiceImpl {
   constructor(private readonly config: RoutingConfig) {}
 
   route(
@@ -401,8 +409,32 @@ class StandaloneRoutingServiceImpl implements MessageRouterService {
 export const MessageRouterServiceLive = Layer.effect(
   MessageRouterService,
   Effect.gen(function* () {
-    const config = yield* MessageRouterConfig;
-    return new StandaloneRoutingServiceImpl(config);
+    const initialConfig = yield* Effect.serviceOption(MessageRouterConfig);
+    const routerRef = yield* Ref.make<Option.Option<StandaloneRoutingServiceImpl>>(
+      Option.map(initialConfig, (config) => new StandaloneRoutingServiceImpl(config))
+    );
+
+    const withRouter = <A>(
+      run: (router: StandaloneRoutingServiceImpl) => Effect.Effect<A, NoAgentsAvailableError>
+    ): Effect.Effect<A, NoAgentsAvailableError> =>
+      Ref.get(routerRef).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () =>
+              Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
+            onSome: run,
+          })
+        )
+      );
+
+    const service: MessageRouterService = {
+      route: (message, metadata) => withRouter((router) => router.route(message, metadata)),
+      testRoute: (message, metadata) => withRouter((router) => router.testRoute(message, metadata)),
+      setConfig: (config) =>
+        Ref.set(routerRef, Option.some(new StandaloneRoutingServiceImpl(config))),
+    };
+
+    return service;
   })
 );
 

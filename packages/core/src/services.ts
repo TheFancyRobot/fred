@@ -28,9 +28,9 @@ import { IntentRouterService, IntentRouterServiceLive } from './intent/service';
 import { SubagentService, SubagentServiceLive } from './subagent/service';
 import {
   MessageRouterService,
+  MessageRouterServiceLive,
   MessageRouterServiceLiveWithConfig,
 } from './routing/service';
-import { NoAgentsAvailableError } from './routing/errors';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
 import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
@@ -320,16 +320,14 @@ const intentLayer = Layer.mergeAll(
 );
 
 /**
- * Default no-op MessageRouterService for base FredLayers.
- * Returns NoAgentsAvailableError since no routing rules are configured.
- * Override with MessageRouterServiceLiveWithConfig when routing is needed.
+ * Default MessageRouterService for base FredLayers.
+ *
+ * Starts unconfigured (route/testRoute fail with NoAgentsAvailableError) and
+ * accepts live routing configuration via `setConfig`, so changing routing
+ * never requires rebuilding the runtime. Providing
+ * MessageRouterServiceLiveWithConfig still works for config-at-build usage.
  */
-const defaultRouterLayer = Layer.succeed(MessageRouterService, {
-  route: (_message: string, _metadata?: Record<string, unknown>) =>
-    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
-  testRoute: (_message: string, _metadata?: Record<string, unknown>) =>
-    Effect.fail(new NoAgentsAvailableError({ message: 'No routing rules configured' })),
-});
+const defaultRouterLayer = MessageRouterServiceLive;
 
 /**
  * Complete Fred layers - all 14 services composed

@@ -7,6 +7,7 @@ export interface WorkflowService {
   getWorkflow(name: string): Effect.Effect<Workflow | undefined>;
   listWorkflows(): Effect.Effect<string[]>;
   hasWorkflow(name: string): Effect.Effect<boolean>;
+  clear(): Effect.Effect<void>;
 }
 
 export const WorkflowService = Context.GenericTag<WorkflowService>('WorkflowService');
@@ -62,6 +63,8 @@ export const WorkflowServiceLive = Layer.effect(
 
       hasWorkflow: (name) =>
         Effect.map(Ref.get(workflowsRef), (workflows) => workflows.has(name)),
+
+      clear: () => Ref.set(workflowsRef, new Map<string, Workflow>()),
     };
 
     return service;
