@@ -1,6 +1,6 @@
-import { AgentConfig, AgentMessage, AgentResponse } from '../agent/agent';
-import { HookHandler } from '../hooks/types';
-import { PipelineStep } from './steps';
+import type { AgentConfig, AgentMessage, AgentResponse } from '../agent/agent';
+import type { HookHandler } from '../hooks/types';
+import type { PipelineStep } from './steps';
 
 /**
  * Agent reference in a pipeline - can be either:

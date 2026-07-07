@@ -29,6 +29,12 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
+      # Consumer-facing package types point at dist/, so declarations must
+      # exist before the examples guard and package-resolution consumer
+      # tests run their typechecks.
+      - name: Build package declarations
+        run: bash scripts/build-declarations.sh
+
       - name: Run tests
         run: bun test
 

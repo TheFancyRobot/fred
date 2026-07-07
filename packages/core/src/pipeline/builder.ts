@@ -1,4 +1,4 @@
-import {
+import type {
   PipelineStep,
   AgentStep,
   FunctionStep,
@@ -7,8 +7,8 @@ import {
   RetryConfig,
   PipelineContext,
 } from './steps';
-import { PipelineConfigV2, PipelineHooks } from './pipeline';
-import { HookHandler } from '../hooks/types';
+import type { PipelineConfigV2, PipelineHooks } from './pipeline';
+import type { HookHandler } from '../hooks/types';
 
 /**
  * Step options for builder methods

@@ -1,4 +1,4 @@
-import { Span } from './tracer';
+import type { Span } from './tracer';
 import { AsyncLocalStorage } from 'async_hooks';
 
 /**

@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { sanitizeError } from '@fancyrobot/fred';
 import { ChatHandlers } from './handlers';
-import { ChatCompletionRequest } from './chat';
+import type { ChatCompletionRequest } from './chat';
 
 const ChatMessageSchema = Schema.Struct({
   role: Schema.Union(
@@ -58,7 +58,12 @@ function validateSimpleChatRequest(input: unknown): {
   stream?: boolean;
 } {
   try {
-    return Schema.decodeUnknownSync(SimpleChatRequestSchema)(input);
+    return Schema.decodeUnknownSync(SimpleChatRequestSchema)(input) as {
+      messages?: any[];
+      message?: string;
+      conversation_id?: string;
+      stream?: boolean;
+    };
   } catch (error) {
     throw new Error(`Invalid request: ${error instanceof Error ? error.message : 'validation failed'}`);
   }

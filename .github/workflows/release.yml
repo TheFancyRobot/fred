@@ -32,6 +32,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Consumer-facing package types and JS entrypoints point at dist/ —
+      # build bundles and declarations before tests, and before publish so
+      # tarballs actually ship dist/ (it is gitignored and absent on CI).
+      - name: Build packages
+        run: bun run build
+
+      - name: Build package declarations
+        run: bash scripts/build-declarations.sh
+
       - name: Run tests
         run: bun test
 

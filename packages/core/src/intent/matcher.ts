@@ -1,5 +1,5 @@
 import { Effect, Ref } from 'effect';
-import { Intent, IntentMatch } from './intent';
+import type { Intent, IntentMatch } from './intent';
 import { IntentMatchError } from './errors';
 
 /**

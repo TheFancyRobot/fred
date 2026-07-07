@@ -49,7 +49,7 @@ const program = Effect.gen(function* () {
     () => Effect.promise(() => app.stop())
   );
 
-  yield* Effect.never;
+  return yield* Effect.never;
 }).pipe(
   Effect.scoped,
   Effect.catchAll((error) =>
@@ -92,7 +92,7 @@ export function startServer(options?: { configPath?: string; port?: number }): v
       () => Effect.promise(() => app.stop())
     );
 
-    yield* Effect.never;
+    return yield* Effect.never;
   }).pipe(
     Effect.scoped,
     Effect.catchAll((error) =>

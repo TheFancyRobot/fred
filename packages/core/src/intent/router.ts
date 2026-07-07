@@ -1,5 +1,5 @@
 import { Effect, Ref } from 'effect';
-import { IntentMatch, Action } from './intent';
+import type { IntentMatch, Action } from './intent';
 import {
   ActionHandlerNotFoundError,
   DefaultAgentNotConfiguredError,
@@ -108,13 +108,12 @@ export class IntentRouter {
         );
       }
 
-      return yield* Effect.tryPromise({
-        try: () => agent.processMessage(userMessage, previousMessages),
-        catch: (error) => new IntentRouteError({
+      return yield* agent.processMessage(userMessage, previousMessages).pipe(
+        Effect.mapError((error) => new IntentRouteError({
           intentId: 'default',
           cause: error instanceof Error ? error : new Error(String(error))
-        })
-      });
+        }))
+      );
     });
   }
 
@@ -139,13 +138,12 @@ export class IntentRouter {
       }
 
       const messages: AgentMessage[] = payload.previousMessages || [];
-      return yield* Effect.tryPromise({
-        try: () => agent.processMessage(payload.userMessage, messages),
-        catch: (error) => new IntentRouteError({
+      return yield* agent.processMessage(payload.userMessage, messages).pipe(
+        Effect.mapError((error) => new IntentRouteError({
           intentId: payload.match?.intent?.id || 'unknown',
           cause: error instanceof Error ? error : new Error(String(error))
-        })
-      });
+        }))
+      );
     });
   }
 

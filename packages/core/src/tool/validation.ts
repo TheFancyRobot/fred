@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { Tool } from './tool';
+import type { Tool } from './tool';
 
 export interface ToolCoercion {
   path: string;

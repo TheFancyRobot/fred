@@ -1,7 +1,12 @@
+import { Effect } from 'effect';
 import { AgentInstance, AgentMessage, AgentResponse } from '../../../packages/core/src/agent/agent';
 
 /**
- * Create a mock agent instance for testing
+ * Create a mock agent instance for testing.
+ *
+ * processMessage returns an Effect, matching the real AgentInstance
+ * contract (packages/core/src/agent/agent.ts) — production code composes
+ * it with yield* / Effect.mapError, never awaits it as a Promise.
  */
 export function createMockAgent(
   id: string,
@@ -18,12 +23,11 @@ export function createMockAgent(
   return {
     id,
     config: defaultConfig as AgentInstance['config'],
-    processMessage: async (message: string, previousMessages?: AgentMessage[]): Promise<AgentResponse> => {
-      return {
+    processMessage: (message: string, previousMessages?: AgentMessage[]): Effect.Effect<AgentResponse, Error> =>
+      Effect.succeed({
         content: `Mock response to: ${message}`,
         toolCalls: [],
-      };
-    },
+      }),
   };
 }
 
@@ -36,12 +40,12 @@ export function createMockAgentWithResponse(
   config?: Partial<AgentInstance['config']>
 ): AgentInstance {
   const agent = createMockAgent(id, config);
-  agent.processMessage = async () => response;
+  agent.processMessage = () => Effect.succeed(response);
   return agent;
 }
 
 /**
- * Create a mock agent that throws an error
+ * Create a mock agent that fails with an error
  */
 export function createMockAgentWithError(
   id: string,
@@ -49,8 +53,6 @@ export function createMockAgentWithError(
   config?: Partial<AgentInstance['config']>
 ): AgentInstance {
   const agent = createMockAgent(id, config);
-  agent.processMessage = async () => {
-    throw error;
-  };
+  agent.processMessage = () => Effect.fail(error);
   return agent;
 }

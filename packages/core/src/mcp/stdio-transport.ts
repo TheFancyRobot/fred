@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
-import { MCPTransportInterface, MCPRequest, MCPResponse, MCPNotification } from './types';
+import type { MCPTransportInterface, MCPRequest, MCPResponse, MCPNotification } from './types';
 import { filterEnv } from './security';
 
 /**

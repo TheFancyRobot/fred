@@ -357,15 +357,15 @@ class IntentRouterServiceImpl implements IntentRouterService {
         );
       }
 
-      return yield* Effect.tryPromise({
-        try: () => agent.processMessage(userMessage, previousMessages),
-        catch: (cause) =>
+      return yield* agent.processMessage(userMessage, previousMessages).pipe(
+        Effect.mapError((cause) =>
           new IntentRouteErrorType({
             intentId,
             message: getIntentRouteErrorMessage(intentId),
             cause: cause instanceof Error ? cause : new Error(String(cause)),
-          }),
-      });
+          })
+        )
+      );
     });
   }
 }
