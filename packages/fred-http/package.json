@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-http",
   "version": "1.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/fred-http"
+  },
   "description": "Fred Bun HTTP server and composable HTTP app tools",
   "type": "module",
   "main": "./dist/index.js",

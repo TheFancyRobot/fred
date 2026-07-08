@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-dev",
   "version": "1.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/dev"
+  },
   "description": "Fred dev-only tooling and contributor workflows",
   "type": "module",
   "main": "./dist/index.js",
