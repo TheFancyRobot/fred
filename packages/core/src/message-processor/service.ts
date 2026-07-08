@@ -53,6 +53,7 @@ import type {
 import { AgentService } from '../agent/service';
 import { PipelineService } from '../pipeline/service';
 import { ContextStorageService } from '../context/service';
+import { SessionService } from '../context/session-service';
 import {
   IntentMatcherService,
   IntentRouterService,
@@ -158,8 +159,28 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
     private readonly intentMatcherService: typeof IntentMatcherService.Service | undefined,
     private readonly intentRouterService: typeof IntentRouterService.Service | undefined,
     private readonly messageRouterService: typeof MessageRouterService.Service | undefined,
-    private readonly config: Ref.Ref<MessageProcessorConfig>
+    private readonly config: Ref.Ref<MessageProcessorConfig>,
+    private readonly sessionService: typeof SessionService.Service | undefined = undefined
   ) {}
+
+  /**
+   * Resolve the conversation id to use for history, honouring precedence:
+   * explicit `conversationId` > ambient SessionService.current > none.
+   * Ambient lookup is skipped when `useSessionHistory` is `false` or no
+   * SessionService is available. Returns `undefined` when nothing resolves
+   * (callers then generate a fresh id or require one).
+   */
+  private resolveAmbientConversationId(
+    options?: ProcessingOptions
+  ): Effect.Effect<string | undefined> {
+    const self = this;
+    return Effect.gen(function* () {
+      if (options?.conversationId) return options.conversationId;
+      if (options?.useSessionHistory === false || !self.sessionService) return undefined;
+      const current = yield* self.sessionService.current;
+      return current._tag === 'Some' ? (current.value.id as string) : undefined;
+    });
+  }
 
   routeMessage(
     message: string,
@@ -439,7 +460,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
 
       try {
         const requireConversationId = options?.requireConversationId ?? config.memoryDefaults.requireConversationId;
-        let conversationId = options?.conversationId;
+        let conversationId = yield* self.resolveAmbientConversationId(options);
 
         if (!conversationId && !requireConversationId) {
           conversationId = yield* self.contextStorage.generateConversationId();
@@ -778,7 +799,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
         }
 
         const requireConversationId = options?.requireConversationId ?? config.memoryDefaults.requireConversationId;
-        let conversationId = options?.conversationId;
+        let conversationId = yield* self.resolveAmbientConversationId(options);
 
         if (!conversationId && !requireConversationId) {
           conversationId = yield* self.contextStorage.generateConversationId();
@@ -1266,7 +1287,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
       const config = yield* Ref.get(self.config);
 
       const requireConversationId = options?.requireConversationId ?? config.memoryDefaults.requireConversationId;
-      let conversationId = options?.conversationId;
+      let conversationId = yield* self.resolveAmbientConversationId(options);
 
       if (!conversationId && !requireConversationId) {
         conversationId = yield* self.contextStorage.generateConversationId();
@@ -1345,6 +1366,9 @@ export const MessageProcessorServiceLive = Layer.effect(
     const messageRouterService = yield* Effect.serviceOption(MessageRouterService).pipe(
       Effect.map((option) => option._tag === 'Some' ? option.value : undefined)
     );
+    const sessionService = yield* Effect.serviceOption(SessionService).pipe(
+      Effect.map((option) => option._tag === 'Some' ? option.value : undefined)
+    );
 
     const config = yield* Ref.make<MessageProcessorConfig>({
       defaultAgentId: undefined,
@@ -1359,7 +1383,8 @@ export const MessageProcessorServiceLive = Layer.effect(
       intentMatcherService,
       intentRouterService,
       messageRouterService,
-      config
+      config,
+      sessionService
     );
   })
 );
@@ -1386,6 +1411,9 @@ export const MessageProcessorServiceLiveWithConfig = (
       const messageRouterService = yield* Effect.serviceOption(MessageRouterService).pipe(
         Effect.map((option) => option._tag === 'Some' ? option.value : undefined)
       );
+      const sessionService = yield* Effect.serviceOption(SessionService).pipe(
+        Effect.map((option) => option._tag === 'Some' ? option.value : undefined)
+      );
 
       const config = yield* Ref.make<MessageProcessorConfig>({
         defaultAgentId: initialConfig.defaultAgentId,
@@ -1400,7 +1428,8 @@ export const MessageProcessorServiceLiveWithConfig = (
         intentMatcherService,
         intentRouterService,
         messageRouterService,
-        config
+        config,
+        sessionService
       );
     })
   );

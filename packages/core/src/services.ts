@@ -307,7 +307,12 @@ const pipelineLayer = PipelineServiceLive.pipe(
 const messageProcessorLayer = MessageProcessorServiceLive.pipe(
   Layer.provide(agentLayer),
   Layer.provide(pipelineLayer),
-  Layer.provide(ContextStorageServiceLive)
+  Layer.provide(ContextStorageServiceLive),
+  // Provide the ambient session so the processor can resolve conversation
+  // history from SessionService.current. Same const as the top-level
+  // SessionServiceLive in FredLayers, so layer memoization builds it once and
+  // the FiberRef is shared — withSession set on the runtime is observed here.
+  Layer.provide(SessionServiceLive)
 );
 
 const subagentLayer = SubagentServiceLive;

@@ -57,6 +57,13 @@ export interface ProcessingOptions {
   semanticThreshold?: number;
   conversationId?: string;
   requireConversationId?: boolean;
+  /**
+   * Whether to fall back to the ambient session (SessionService.current) for
+   * conversation history when no explicit `conversationId` is given. Defaults
+   * to `true`. Set `false` to opt a call out of ambient session history.
+   * An explicit `conversationId` always takes precedence over the ambient one.
+   */
+  useSessionHistory?: boolean;
   sequentialVisibility?: boolean;
   userId?: string;
   role?: string;
