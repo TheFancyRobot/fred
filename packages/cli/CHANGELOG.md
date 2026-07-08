@@ -1,5 +1,18 @@
 # @fred/cli
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`42a5d01`](https://github.com/TheFancyRobot/fred/commit/42a5d0160f57fdd2d1a7761e489331f5f9587217)]:
+  - @fancyrobot/fred@2.0.0-alpha.0
+  - @fancyrobot/fred-dev@1.0.0-alpha.0
+  - @fancyrobot/fred-anthropic@4.0.0-alpha.0
+  - @fancyrobot/fred-google@4.0.0-alpha.0
+  - @fancyrobot/fred-groq@4.0.0-alpha.0
+  - @fancyrobot/fred-openai@4.0.0-alpha.0
+  - @fancyrobot/fred-openrouter@5.0.0-alpha.0
+
 ## 0.5.0
 
 ### Minor Changes

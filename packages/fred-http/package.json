@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-http",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha.0",
   "description": "Fred Bun HTTP server and composable HTTP app tools",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,7 @@
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^1.0.0",
+    "@fancyrobot/fred": "^2.0.0-alpha.0",
     "effect": "^3.21.0",
     "@effect/platform-bun": "^0.89.0"
   },
