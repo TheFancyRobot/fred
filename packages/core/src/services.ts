@@ -14,6 +14,7 @@ import type { ToolGateServiceApi } from './tool-gate/types';
 import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import { ContextStorageService, ContextStorageServiceLive } from './context/service';
+import { SessionService, SessionServiceLive } from './context/session-service';
 import { AgentService, AgentServiceLive } from './agent/service';
 import { WorkflowService, WorkflowServiceLive } from './workflow/service';
 import { CheckpointService } from './pipeline/checkpoint/service';
@@ -55,6 +56,7 @@ export type FredServices =
   | IntentMatcherService
   | IntentRouterService
   | MessageRouterService
+  | SessionService
   | ObservabilityService;
 
 /**
@@ -372,7 +374,10 @@ export const FredLayers = Layer.mergeAll(
   messageProcessorLayer,
   subagentLayer,
   intentLayer,
-  defaultRouterLayer
+  defaultRouterLayer,
+  // Ambient session context (Phase 62). Scoped: owns a FiberRef built once per
+  // runtime. `open` uses ContextStorageService (Wave 2), provided by coreLayer.
+  SessionServiceLive
 );
 
 /**
@@ -469,6 +474,8 @@ export {
   ProviderRegistryServiceLive,
   ContextStorageService,
   ContextStorageServiceLive,
+  SessionService,
+  SessionServiceLive,
   AgentService,
   AgentServiceLive,
   WorkflowService,
