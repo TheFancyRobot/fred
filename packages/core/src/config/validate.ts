@@ -35,6 +35,82 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 const definedStrings = (values: ReadonlyArray<string | undefined>): Set<string> =>
   new Set(values.filter((v): v is string => Boolean(v)));
 
+/** Tool ids present in both lists — an allow/deny or deny/approval conflict. */
+const findConflicts = (
+  first: ReadonlyArray<string> | undefined,
+  second: ReadonlyArray<string> | undefined,
+): string[] => {
+  if (!first || !second || first.length === 0 || second.length === 0) return [];
+  const inSecond = new Set(second);
+  return first.filter((id) => inSecond.has(id));
+};
+
+/** Duplicate and unknown-tool checks for one allow/deny/requireApproval list. */
+const policyToolRefErrors = (
+  refs: ReadonlyArray<string> | undefined,
+  path: string,
+  label: string,
+  toolIds: Set<string>,
+): ConfigError[] => {
+  if (!refs || refs.length === 0) return [];
+  const out: ConfigError[] = [];
+  const seen = new Set<string>();
+  for (const toolId of refs) {
+    if (seen.has(toolId)) {
+      out.push(configError(path, `${label} contains duplicate tool reference "${toolId}"`, 'Remove the duplicate tool id.'));
+    }
+    seen.add(toolId);
+    if (!toolIds.has(toolId)) {
+      out.push(
+        configError(path, `${label} references unknown tool "${toolId}"`, 'Reference a tool declared under `tools`, or remove it.'),
+      );
+    }
+  }
+  return out;
+};
+
+/**
+ * Validate the contents of one tool-policy rule: unknown/duplicate tool refs in
+ * allow/deny/requireApproval, and allow/deny + deny/requireApproval conflicts.
+ * Mirrors the legacy `validatePolicyRule`.
+ */
+const policyRuleContentErrors = (
+  rule:
+    | { allow?: ReadonlyArray<string>; deny?: ReadonlyArray<string>; requireApproval?: ReadonlyArray<string> }
+    | undefined,
+  scopePath: string,
+  label: string,
+  toolIds: Set<string>,
+): ConfigError[] => {
+  if (!rule) return [];
+  const out: ConfigError[] = [
+    ...policyToolRefErrors(rule.allow, `${scopePath}.allow`, `${label} allow`, toolIds),
+    ...policyToolRefErrors(rule.deny, `${scopePath}.deny`, `${label} deny`, toolIds),
+    ...policyToolRefErrors(rule.requireApproval, `${scopePath}.requireApproval`, `${label} requireApproval`, toolIds),
+  ];
+  const allowDeny = findConflicts(rule.allow, rule.deny);
+  if (allowDeny.length > 0) {
+    out.push(
+      configError(
+        scopePath,
+        `${label} has conflicting allow/deny declarations for tool(s): ${allowDeny.map((id) => `"${id}"`).join(', ')}`,
+        'A tool cannot be both allowed and denied — remove it from one list.',
+      ),
+    );
+  }
+  const denyApproval = findConflicts(rule.deny, rule.requireApproval);
+  if (denyApproval.length > 0) {
+    out.push(
+      configError(
+        scopePath,
+        `${label} has conflicting deny/requireApproval declarations for tool(s): ${denyApproval.map((id) => `"${id}"`).join(', ')}`,
+        'A denied tool cannot also require approval — remove it from one list.',
+      ),
+    );
+  }
+  return out;
+};
+
 /**
  * Run every semantic rule over an already-structurally-decoded config and
  * return all violations. An empty array means the config is semantically
@@ -138,7 +214,7 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
           ),
         );
       }
-      if (!metadata.properties) {
+      if (!metadata.properties || typeof metadata.properties !== 'object') {
         errors.push(
           configError(
             `${base}.schema.metadata.properties`,
@@ -254,8 +330,14 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
     const policyKey = config.policies ? 'policies' : 'toolPolicies';
     const intentIds = definedStrings((config.intents ?? []).map((intent) => intent.id));
     const agentIds = definedStrings((config.agents ?? []).map((agent) => agent.id));
+    const toolIds = definedStrings((config.tools ?? []).map((tool) => tool.id));
 
-    for (const intentId of Object.keys(policies.intents ?? {})) {
+    // Default rule contents (unknown/duplicate tool refs, allow/deny conflicts).
+    errors.push(
+      ...policyRuleContentErrors(policies.default, `${policyKey}.default`, 'default tool policy', toolIds),
+    );
+
+    for (const [intentId, rule] of Object.entries(policies.intents ?? {})) {
       if (!intentIds.has(intentId)) {
         errors.push(
           configError(
@@ -265,8 +347,11 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
           ),
         );
       }
+      errors.push(
+        ...policyRuleContentErrors(rule, `${policyKey}.intents.${intentId}`, `tool policy for intent "${intentId}"`, toolIds),
+      );
     }
-    for (const agentId of Object.keys(policies.agents ?? {})) {
+    for (const [agentId, rule] of Object.entries(policies.agents ?? {})) {
       if (!agentIds.has(agentId)) {
         errors.push(
           configError(
@@ -276,6 +361,9 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
           ),
         );
       }
+      errors.push(
+        ...policyRuleContentErrors(rule, `${policyKey}.agents.${agentId}`, `tool policy for agent "${agentId}"`, toolIds),
+      );
     }
 
     const seenOverrideIds = new Set<string>();
@@ -315,6 +403,7 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
           ),
         );
       }
+      errors.push(...policyRuleContentErrors(override, base, `override "${override.id}"`, toolIds));
     });
   }
 

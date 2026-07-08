@@ -70,6 +70,20 @@ export type {
   ConfigConditionalStep, ConfigPipelineRefStep, ExtendedPipelineConfig,
 } from './config/types';
 
+// ─── Schema-first config (Phase 61) ──────────────────────────────────────────
+// Effect Schema, semantic validation, structured errors, and layer compilation
+// for config files. `loadValidatedConfig` is the schema-first load path.
+export { loadValidatedConfig, validateParsedConfig } from './config/load';
+export { FrameworkConfigSchema } from './config/schema';
+export { validateFrameworkConfig } from './config/validate';
+export { configToLayers, configToLayerOptions } from './config/compile';
+export {
+  ConfigError,
+  ConfigValidationError,
+  configValidationError,
+  formatConfigIssues,
+} from './config/errors';
+
 // ─── Template Types ──────────────────────────────────────────────────────────
 export {
   TemplateEngine,
