@@ -1,0 +1,136 @@
+/**
+ * Phase 61 / STEP-61-03: semantic config validation.
+ *
+ * Asserts each cross-field rule fires with a helpful remediation, that errors
+ * accumulate (not fail-fast), and that valid configs produce none.
+ */
+import { describe, expect, it } from 'bun:test';
+import { Schema } from 'effect';
+import { FrameworkConfigSchema, type FrameworkConfigSchemaType } from '../../../../packages/core/src/config/schema';
+import { validateFrameworkConfig } from '../../../../packages/core/src/config/validate';
+
+/** Decode then semantically validate, returning the ConfigError list. */
+const validate = (raw: unknown) => {
+  const decoded = Schema.decodeUnknownSync(FrameworkConfigSchema)(raw) as FrameworkConfigSchemaType;
+  return validateFrameworkConfig(decoded);
+};
+
+const findByPath = (raw: unknown, path: string) => validate(raw).find((e) => e.path === path);
+
+describe('validateFrameworkConfig — valid configs', () => {
+  it('returns no errors for an agent relying on defaultSystemMessage', () => {
+    expect(
+      validate({
+        defaultSystemMessage: 'You are helpful.',
+        agents: [{ id: 'a1', platform: 'openai', model: 'gpt-4' }],
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('returns no errors for a complete policies block referencing declared ids', () => {
+    expect(
+      validate({
+        defaultSystemMessage: 'x',
+        agents: [{ id: 'a1', platform: 'openai', model: 'gpt-4' }],
+        intents: [{ id: 'greet', utterances: ['hi'], action: { type: 'agent', target: 'a1' } }],
+        policies: {
+          intents: { greet: { allow: ['calc'] } },
+          agents: { a1: { deny: ['rm'] } },
+          overrides: [{ id: 'o1', override: true, target: { agentId: 'a1' } }],
+        },
+      }),
+    ).toHaveLength(0);
+  });
+});
+
+describe('validateFrameworkConfig — required fields', () => {
+  it('flags an agent missing platform/model with remediation', () => {
+    const platformErr = findByPath({ defaultSystemMessage: 'x', agents: [{ id: 'a1' }] }, 'agents[0].platform');
+    expect(platformErr?.issue).toContain('must have a platform');
+    expect(platformErr?.remediation).toContain('platform');
+  });
+
+  it('flags an agent with neither systemMessage nor defaultSystemMessage', () => {
+    const err = findByPath({ agents: [{ id: 'a1', platform: 'openai', model: 'gpt-4' }] }, 'agents[0].systemMessage');
+    expect(err?.issue).toContain('systemMessage or defaultSystemMessage');
+    expect(err?.remediation).toContain('defaultSystemMessage');
+  });
+
+  it('flags an intent missing utterances and action', () => {
+    const errors = validate({ intents: [{ id: 'greet' }] });
+    expect(errors.some((e) => e.path === 'intents[0].utterances')).toBe(true);
+    expect(errors.some((e) => e.path === 'intents[0].action')).toBe(true);
+  });
+
+  it('flags a tool missing name/description', () => {
+    const errors = validate({ tools: [{ id: 't1' }] });
+    expect(errors.some((e) => e.path === 'tools[0].name')).toBe(true);
+    expect(errors.some((e) => e.path === 'tools[0].description')).toBe(true);
+  });
+
+  it('flags strict tool metadata that is not type object / lacks properties', () => {
+    const errors = validate({
+      tools: [{ id: 't1', name: 'T', description: 'd', strict: true, schema: { metadata: { type: 'string' } } }],
+    });
+    expect(errors.some((e) => e.path === 'tools[0].schema.metadata.type')).toBe(true);
+    expect(errors.some((e) => e.path === 'tools[0].schema.metadata.properties')).toBe(true);
+  });
+});
+
+describe('validateFrameworkConfig — uniqueness & references', () => {
+  it('flags duplicate pipeline ids', () => {
+    const errors = validate({
+      defaultSystemMessage: 'x',
+      pipelines: [
+        { id: 'p1', agents: ['a1'] },
+        { id: 'p1', agents: ['a2'] },
+      ],
+    });
+    expect(errors.some((e) => e.path === 'pipelines[1].id' && e.issue.includes('duplicate'))).toBe(true);
+  });
+
+  it('flags a pipeline with no agents', () => {
+    const err = findByPath({ defaultSystemMessage: 'x', pipelines: [{ id: 'p1', agents: [] }] }, 'pipelines[0].agents');
+    expect(err?.issue).toContain('at least one agent');
+  });
+
+  it('rejects both policies and toolPolicies together', () => {
+    const err = findByPath(
+      { policies: { default: { allow: ['a'] } }, toolPolicies: { default: { allow: ['b'] } } },
+      'toolPolicies',
+    );
+    expect(err?.issue).toContain('both');
+    expect(err?.remediation).toContain('only one');
+  });
+
+  it('flags a policy referencing an unknown agent', () => {
+    const err = findByPath(
+      { defaultSystemMessage: 'x', agents: [{ id: 'a1', platform: 'openai', model: 'm' }], policies: { agents: { ghost: { deny: ['x'] } } } },
+      'policies.agents.ghost',
+    );
+    expect(err?.issue).toContain('unknown agent');
+  });
+
+  it('flags an override without a target scope and duplicate override ids', () => {
+    const errors = validate({
+      policies: {
+        overrides: [
+          { id: 'o1', override: true, target: {} },
+          { id: 'o1', override: true, target: { agentId: 'a1' } },
+        ],
+      },
+      defaultSystemMessage: 'x',
+      agents: [{ id: 'a1', platform: 'openai', model: 'm' }],
+    });
+    expect(errors.some((e) => e.path === 'policies.overrides[0].target')).toBe(true);
+    expect(errors.some((e) => e.path === 'policies.overrides[1].id' && e.issue.includes('duplicate'))).toBe(true);
+  });
+});
+
+describe('validateFrameworkConfig — accumulation', () => {
+  it('reports every problem at once rather than only the first', () => {
+    const errors = validate({ agents: [{ id: 'a1' }, { id: 'a2' }] });
+    // Each agent: missing systemMessage/default, platform, model = 3 each = 6 total.
+    expect(errors.length).toBeGreaterThanOrEqual(6);
+  });
+});
