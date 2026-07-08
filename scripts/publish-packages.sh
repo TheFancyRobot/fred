@@ -41,22 +41,30 @@ changeset tag
 # of leaving it to be discovered by a human running `npm view` hours later.
 echo ""
 echo "Verifying published packages are visible on the registry..."
-for entry in "${PUBLISHED_PKGS[@]}"; do
+# ${PUBLISHED_PKGS[@]+...} keeps `set -u` happy on bash 3.x (macOS system
+# bash 3.2) when the array is empty -- e.g. every package is private. An
+# unbound-variable exit here would contradict this check's never-fail intent.
+MAX_ATTEMPTS=6
+for entry in "${PUBLISHED_PKGS[@]+"${PUBLISHED_PKGS[@]}"}"; do
   name=${entry%@*}
   version=${entry##*@}
   encoded=${name/\//%2f}
   visible=0
-  for attempt in 1 2 3 4 5 6; do
+  for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+    # Version-specific endpoint returns the single version's document (200)
+    # or a direct 404 while it is not yet visible -- no need to download the
+    # full package metadata and inspect every version.
     if bun -e "
-      const res = await fetch('https://registry.npmjs.org/${encoded}');
-      if (!res.ok) process.exit(1);
-      const data = await res.json();
-      process.exit(data.versions && data.versions['${version}'] ? 0 : 1);
+      const res = await fetch('https://registry.npmjs.org/${encoded}/${version}');
+      process.exit(res.ok ? 0 : 1);
     " >/dev/null 2>&1; then
       visible=1
       break
     fi
-    sleep 5
+    # Don't sleep after the final attempt -- nothing polls again after it.
+    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+      sleep 5
+    fi
   done
   if [ "$visible" -eq 1 ]; then
     echo "  ok    ${entry}"
