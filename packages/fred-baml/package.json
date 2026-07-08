@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-baml",
   "version": "1.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/fred-baml"
+  },
   "description": "BAML integration helpers for the Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",

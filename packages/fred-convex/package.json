@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-convex",
   "version": "1.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/fred-convex"
+  },
   "description": "Convex integration helpers for the Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",

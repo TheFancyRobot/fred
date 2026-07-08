@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-anthropic",
   "version": "4.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/provider-anthropic"
+  },
   "description": "Anthropic provider for Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",

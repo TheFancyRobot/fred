@@ -1,6 +1,11 @@
 {
   "name": "@fancyrobot/fred-groq",
   "version": "4.0.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/provider-groq"
+  },
   "description": "Groq provider for Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",
