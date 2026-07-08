@@ -42,6 +42,36 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()('ConfigError'
   }
 }
 
+/**
+ * Aggregate of every `ConfigError` found while loading one config file.
+ *
+ * Thrown by the validated-load path so a caller sees all structural and
+ * semantic problems (with remediation) at once, rather than only the first.
+ */
+export class ConfigValidationError extends Schema.TaggedError<ConfigValidationError>()(
+  'ConfigValidationError',
+  {
+    message: Schema.String,
+    errors: Schema.Array(ConfigError),
+  },
+) {
+  /** Multi-line rendering: a header plus each problem's full diagnostic. */
+  override toString(): string {
+    const header = `ConfigValidationError: ${this.errors.length} problem(s) found`;
+    return [header, ...this.errors.map((e) => e.toString())].join('\n\n');
+  }
+}
+
+/** Build a `ConfigValidationError` from a list of issues, composing a summary message. */
+export const configValidationError = (errors: ReadonlyArray<ConfigError>): ConfigValidationError =>
+  new ConfigValidationError({
+    errors,
+    message:
+      errors.length === 1
+        ? errors[0]!.message
+        : `${errors.length} config problems: ${errors.map((e) => e.message).join('; ')}`,
+  });
+
 /** Shape of a single issue as produced by `ParseResult.ArrayFormatter`. */
 export interface ConfigIssue {
   readonly path: ReadonlyArray<PropertyKey>;
