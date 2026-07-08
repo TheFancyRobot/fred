@@ -15,5 +15,9 @@
     "@fancyrobot/fred-openai": "3.0.0",
     "@fancyrobot/fred-openrouter": "4.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "fred-v2-effect-first-core",
+    "local-adapter-resolution",
+    "minimax-file-dependency-resolution"
+  ]
 }

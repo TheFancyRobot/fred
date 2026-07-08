@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-dev",
-  "version": "0.2.1",
+  "version": "1.0.0-alpha.0",
   "description": "Fred dev-only tooling and contributor workflows",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,8 +34,8 @@
     "chokidar": "^5.0.0"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^1.0.0",
-    "@fancyrobot/fred-http": "^0.1.0",
+    "@fancyrobot/fred": "^2.0.0-alpha.0",
+    "@fancyrobot/fred-http": "^1.0.0-alpha.0",
     "effect": "^3.21.0",
     "@effect/platform-bun": "^0.89.0"
   },

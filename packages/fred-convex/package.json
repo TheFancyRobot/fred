@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-convex",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha.0",
   "description": "Convex integration helpers for the Fred AI framework",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,7 +28,7 @@
     "build": "bun build src/index.ts src/testing.ts --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external convex"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^1.0.0",
+    "@fancyrobot/fred": "^2.0.0-alpha.0",
     "convex": "^1.0.0",
     "effect": "^3.21.0"
   },
