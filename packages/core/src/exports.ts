@@ -124,6 +124,10 @@ export {
   exportSessionToJson, exportSessionToMarkdown,
 } from './context/session';
 
+// Ambient session context (Phase 62)
+export { SessionService, SessionServiceLive, SessionId, makeSessionId } from './context/session-service';
+export type { SessionHandle } from './context/session-service';
+
 // ─── Checkpoint Types ───────────────────────────────────────────────────────
 export {
   PostgresCheckpointStorage,

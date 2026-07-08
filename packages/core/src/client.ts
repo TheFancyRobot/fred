@@ -57,7 +57,9 @@ import {
   HookManagerService,
   MessageProcessorService,
   SubagentService,
+  SessionService,
 } from './services';
+import type { SessionHandle } from './context/session-service';
 import { TemplateEngine, TemplateEngineLive } from './template';
 
 /**
@@ -189,6 +191,8 @@ export interface FredClient {
     ): Promise<WorkflowRunResult>;
   };
   readonly sessions: {
+    /** Open a session: resume `id`, or mint a fresh one when omitted. */
+    open(id?: string): Promise<SessionHandle>;
     get(conversationId: string): Promise<SessionDetails | null>;
     list(): Promise<SessionSummary[]>;
     delete(conversationId: string): Promise<void>;
@@ -316,6 +320,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     },
 
     sessions: {
+      open: (id) => run(Effect.flatMap(SessionService, (s) => s.open(id))),
       get: (conversationId) =>
         run(
           Effect.map(
