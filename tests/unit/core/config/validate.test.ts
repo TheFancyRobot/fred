@@ -33,6 +33,10 @@ describe('validateFrameworkConfig — valid configs', () => {
         defaultSystemMessage: 'x',
         agents: [{ id: 'a1', platform: 'openai', model: 'gpt-4' }],
         intents: [{ id: 'greet', utterances: ['hi'], action: { type: 'agent', target: 'a1' } }],
+        tools: [
+          { id: 'calc', name: 'Calc', description: 'calc' },
+          { id: 'rm', name: 'Rm', description: 'rm' },
+        ],
         policies: {
           intents: { greet: { allow: ['calc'] } },
           agents: { a1: { deny: ['rm'] } },
@@ -74,6 +78,50 @@ describe('validateFrameworkConfig — required fields', () => {
     });
     expect(errors.some((e) => e.path === 'tools[0].schema.metadata.type')).toBe(true);
     expect(errors.some((e) => e.path === 'tools[0].schema.metadata.properties')).toBe(true);
+  });
+
+  it('flags metadata.properties that is present but not an object', () => {
+    const errors = validate({
+      tools: [{ id: 't1', name: 'T', description: 'd', schema: { metadata: { type: 'object', properties: 'nope' } } }],
+    });
+    expect(errors.some((e) => e.path === 'tools[0].schema.metadata.properties')).toBe(true);
+  });
+});
+
+describe('validateFrameworkConfig — tool-policy rule contents', () => {
+  it('flags an unknown tool reference in a policy rule', () => {
+    const errors = validate({ policies: { default: { allow: ['ghost-tool'] } } });
+    const err = errors.find((e) => e.path === 'policies.default.allow');
+    expect(err?.issue).toContain('unknown tool "ghost-tool"');
+  });
+
+  it('flags a duplicate tool reference', () => {
+    const errors = validate({
+      tools: [{ id: 't1', name: 'T', description: 'd' }],
+      policies: { default: { allow: ['t1', 't1'] } },
+    });
+    expect(errors.some((e) => e.issue.includes('duplicate tool reference "t1"'))).toBe(true);
+  });
+
+  it('flags allow/deny and deny/requireApproval conflicts', () => {
+    const errors = validate({
+      tools: [
+        { id: 't1', name: 'T1', description: 'd' },
+        { id: 't2', name: 'T2', description: 'd' },
+      ],
+      policies: { default: { allow: ['t1'], deny: ['t1', 't2'], requireApproval: ['t2'] } },
+    });
+    expect(errors.some((e) => e.issue.includes('conflicting allow/deny'))).toBe(true);
+    expect(errors.some((e) => e.issue.includes('conflicting deny/requireApproval'))).toBe(true);
+  });
+
+  it('validates rule contents inside overrides too', () => {
+    const errors = validate({
+      defaultSystemMessage: 'x',
+      agents: [{ id: 'a1', platform: 'openai', model: 'm' }],
+      policies: { overrides: [{ id: 'o1', override: true, target: { agentId: 'a1' }, allow: ['ghost'] }] },
+    });
+    expect(errors.some((e) => e.path === 'policies.overrides[0].allow' && e.issue.includes('unknown tool'))).toBe(true);
   });
 });
 

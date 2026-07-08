@@ -38,7 +38,9 @@ export function configToLayerOptions(config: FrameworkConfig): FredLayerOptions 
     observabilityLayers: buildObservabilityLayers(extractObservability(config)),
   };
   if (config.routing) {
-    options.routingConfig = config.routing;
+    // Guarantee `rules` is an array even for an unvalidated config —
+    // MessageRouterService spreads it at dispatch and would crash on undefined.
+    options.routingConfig = { ...config.routing, rules: config.routing.rules ?? [] };
   }
   return options;
 }

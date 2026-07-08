@@ -355,7 +355,11 @@ export const PipelineConfigSchema = Schema.Struct(
 export const RoutingConfigSchema = Schema.Struct(
   {
     defaultAgent: Schema.optional(Schema.String),
-    rules: Schema.optional(Schema.Array(Schema.Struct({}, passthrough))),
+    // `rules` is required: the legacy validator rejects a routing block without
+    // it ("Routing rules must be an array"), and MessageRouterService spreads
+    // `config.rules` at dispatch — an absent array crashes the router. An empty
+    // list is valid (default-agent-only routing).
+    rules: Schema.Array(Schema.Struct({}, passthrough)),
   },
   passthrough,
 );

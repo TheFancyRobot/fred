@@ -228,4 +228,10 @@ describe('FrameworkConfigSchema — clearly-invalid inputs are rejected', () => 
     const result = decode({ mcpServers: { x: { transport: 'carrier-pigeon' } } });
     expect(result._tag).toBe('Left');
   });
+
+  it('rejects a routing block without a rules array (parity with legacy)', () => {
+    expect(decode({ routing: { defaultAgent: 'assistant' } })._tag).toBe('Left');
+    // an empty rules array is still valid (default-agent-only routing)
+    expect(decode({ routing: { defaultAgent: 'assistant', rules: [] } })._tag).toBe('Right');
+  });
 });

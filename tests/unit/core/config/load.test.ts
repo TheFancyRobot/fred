@@ -11,9 +11,12 @@ import { join } from 'path';
 import {
   loadValidatedConfig,
   validateParsedConfig,
-  ConfigValidationError,
 } from '../../../../packages/core/src/config/load';
-import { ConfigError, configValidationError } from '../../../../packages/core/src/config/errors';
+import {
+  ConfigError,
+  ConfigValidationError,
+  configValidationError,
+} from '../../../../packages/core/src/config/errors';
 
 const EXAMPLES_DIR = join(import.meta.dir, '../../../../examples');
 

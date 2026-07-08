@@ -20,7 +20,7 @@ import { Schema } from 'effect';
 import { parseConfigFile } from './parser';
 import { FrameworkConfigSchema } from './schema';
 import { validateFrameworkConfig } from './validate';
-import { ConfigValidationError, configValidationError, formatConfigIssues } from './errors';
+import { configValidationError, formatConfigIssues } from './errors';
 import type { FrameworkConfig } from './types';
 
 const decode = Schema.decodeUnknownEither(FrameworkConfigSchema);
@@ -58,5 +58,3 @@ export function validateParsedConfig(config: unknown): FrameworkConfig {
 export function loadValidatedConfig(filePath: string): FrameworkConfig {
   return validateParsedConfig(parseConfigFile(filePath));
 }
-
-export { ConfigValidationError };
