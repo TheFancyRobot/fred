@@ -11,7 +11,7 @@
  * loader run schema-decode + this pass and surface the aggregated errors.
  */
 import { ConfigError } from './errors';
-import type { FrameworkConfigSchemaType } from './schema';
+import type { ConfigStepShape, FrameworkConfigSchemaType } from './schema';
 
 const configError = (
   path: string,
@@ -284,6 +284,61 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
       }
     });
   });
+
+  // -- Pipelines V2 (extended, step-based) -----------------------------------
+  // Cross-check step references against what is verifiable at load time:
+  //
+  //  - `pipelineId` (pipeline steps): must name a declared pipeline — either a
+  //    `pipelines[].id` (V1) or a `pipelinesV2` key. These are entirely config-
+  //    local, so an unknown reference is a definite typo → hard `ConfigError`.
+  //  - `agentId` (agent steps): intentionally NOT cross-checked against
+  //    `config.agents`. Agents can be registered dynamically (via `agentDirs`
+  //    or in code), so an id absent from `config.agents` is not necessarily
+  //    wrong. This mirrors the routing-rule decision above and the "Don't throw
+  //    on unknown agent" note in loader.ts — every error here is fatal (see
+  //    load.ts), so flagging would break valid dynamic-registration configs.
+  //  - `functionId` (function steps): NOT verifiable here — functions are
+  //    registered in code via `registerPipelineFunction`, never declared in the
+  //    config file. `extractPipelineSteps` warns at load if one is unresolved.
+  //
+  // Conditional steps nest step arrays (`whenTrue`/`whenFalse`); recurse into
+  // both so nested references get the same treatment and precise paths.
+  if (config.pipelinesV2) {
+    const declaredPipelineIds = new Set<string>([
+      ...definedStrings((config.pipelines ?? []).map((p) => p.id)),
+      ...Object.keys(config.pipelinesV2),
+    ]);
+
+    const stepErrors = (steps: ReadonlyArray<ConfigStepShape>, basePath: string): ConfigError[] => {
+      const out: ConfigError[] = [];
+      steps.forEach((step, i) => {
+        const path = `${basePath}[${i}]`;
+        switch (step.type) {
+          case 'pipeline':
+            if (!declaredPipelineIds.has(step.pipelineId)) {
+              out.push(
+                configError(
+                  `${path}.pipelineId`,
+                  `step "${step.name}" references unknown pipeline "${step.pipelineId}"`,
+                  'Reference a pipeline declared under `pipelines` or `pipelinesV2`, or remove the step.',
+                ),
+              );
+            }
+            break;
+          case 'conditional':
+            out.push(...stepErrors(step.whenTrue, `${path}.whenTrue`));
+            if (step.whenFalse) out.push(...stepErrors(step.whenFalse, `${path}.whenFalse`));
+            break;
+          // 'agent' / 'function' steps: see note above — not cross-checked here.
+        }
+      });
+      return out;
+    };
+
+    for (const [name, pipeline] of Object.entries(config.pipelinesV2)) {
+      errors.push(...stepErrors(pipeline.steps, `pipelinesV2.${name}.steps`));
+    }
+  }
 
   // -- Routing rules ---------------------------------------------------------
   config.routing?.rules?.forEach((rule, i) => {

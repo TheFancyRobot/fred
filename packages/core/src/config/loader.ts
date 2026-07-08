@@ -173,6 +173,40 @@ export function validateConfig(config: FrameworkConfig): void {
     }
   }
 
+  // Validate extended (V2) pipeline step references. Mirrors the schema-first
+  // validateFrameworkConfig (see validate.ts): cross-check `pipelineId` (config-
+  // local, so verifiable) and recurse into conditional branches. `agentId` is
+  // not checked — agents can be registered dynamically ("Don't throw on unknown
+  // agent" above) — and `functionId` is registered in code, so neither is
+  // verifiable here (extractPipelineSteps warns at load for unresolved functions).
+  if (config.pipelinesV2) {
+    const declaredPipelineIds = new Set<string>([
+      ...(config.pipelines ?? []).map((p) => p.id).filter((id): id is string => Boolean(id)),
+      ...Object.keys(config.pipelinesV2),
+    ]);
+
+    const validateV2Steps = (steps: ConfigStep[], pipelineName: string): void => {
+      for (const step of steps) {
+        if (step.type === 'pipeline') {
+          if (!declaredPipelineIds.has(step.pipelineId)) {
+            throw new Error(
+              `Pipeline "${pipelineName}" step "${step.name}" references unknown pipeline "${step.pipelineId}". ` +
+                'Reference a pipeline declared under "pipelines" or "pipelinesV2".'
+            );
+          }
+        } else if (step.type === 'conditional') {
+          validateV2Steps(step.whenTrue, pipelineName);
+          if (step.whenFalse) validateV2Steps(step.whenFalse, pipelineName);
+        }
+      }
+    };
+
+    for (const [pipelineName, pipeline] of Object.entries(config.pipelinesV2)) {
+      const steps = Array.isArray(pipeline.steps) ? pipeline.steps : [];
+      validateV2Steps(steps, pipelineName);
+    }
+  }
+
   // Validate routing configuration
   if (config.routing) {
     // defaultAgent must be a string if present

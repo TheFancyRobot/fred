@@ -461,6 +461,84 @@ describe('Config Loader', () => {
       });
     });
 
+    describe('pipelinesV2 step validation', () => {
+      test('should allow a pipeline step referencing a declared pipelinesV2 key', () => {
+        const config: FrameworkConfig = {
+          pipelinesV2: {
+            main: { steps: [{ type: 'pipeline', name: 'call-sub', pipelineId: 'sub' }] },
+            sub: { steps: [{ type: 'agent', name: 'run', agentId: 'a1' }] },
+          },
+        };
+
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      test('should allow a pipeline step referencing a declared V1 pipelines[].id', () => {
+        const config: FrameworkConfig = {
+          pipelines: [{ id: 'legacy', agents: ['a1'] }],
+          pipelinesV2: {
+            main: { steps: [{ type: 'pipeline', name: 'call-legacy', pipelineId: 'legacy' }] },
+          },
+        };
+
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      test('should throw for a pipeline step referencing an unknown pipeline', () => {
+        const config: FrameworkConfig = {
+          pipelinesV2: {
+            main: { steps: [{ type: 'pipeline', name: 'call-ghost', pipelineId: 'ghost' }] },
+          },
+        };
+
+        expect(() => validateConfig(config)).toThrow(
+          'Pipeline "main" step "call-ghost" references unknown pipeline "ghost"'
+        );
+      });
+
+      test('should not throw for an agent step with an id absent from config.agents', () => {
+        const config: FrameworkConfig = {
+          pipelinesV2: {
+            main: { steps: [{ type: 'agent', name: 'run', agentId: 'registered-in-code' }] },
+          },
+        };
+
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      test('should not throw for a function step (functions are registered in code)', () => {
+        const config: FrameworkConfig = {
+          pipelinesV2: {
+            main: { steps: [{ type: 'function', name: 'transform', functionId: 'my-fn' }] },
+          },
+        };
+
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      test('should recurse into conditional whenTrue/whenFalse branches', () => {
+        const config: FrameworkConfig = {
+          pipelinesV2: {
+            main: {
+              steps: [
+                {
+                  type: 'conditional',
+                  name: 'branch',
+                  condition: { field: 'x', exists: true },
+                  whenTrue: [{ type: 'agent', name: 'ok', agentId: 'a1' }],
+                  whenFalse: [{ type: 'pipeline', name: 'call-ghost', pipelineId: 'ghost' }],
+                },
+              ],
+            },
+          },
+        };
+
+        expect(() => validateConfig(config)).toThrow(
+          'Pipeline "main" step "call-ghost" references unknown pipeline "ghost"'
+        );
+      });
+    });
+
     test('should validate empty config', () => {
       const config: FrameworkConfig = {};
       expect(() => validateConfig(config)).not.toThrow();

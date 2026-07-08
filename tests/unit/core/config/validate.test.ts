@@ -175,6 +175,121 @@ describe('validateFrameworkConfig — uniqueness & references', () => {
   });
 });
 
+describe('validateFrameworkConfig — pipelinesV2 step references', () => {
+  it('returns no errors when a pipeline step names a declared pipelinesV2 key', () => {
+    expect(
+      validate({
+        pipelinesV2: {
+          main: { steps: [{ type: 'pipeline', name: 'call-sub', pipelineId: 'sub' }] },
+          sub: { steps: [{ type: 'agent', name: 'run', agentId: 'a1' }] },
+        },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('resolves a pipeline step against a declared V1 pipelines[].id', () => {
+    expect(
+      validate({
+        pipelines: [{ id: 'legacy', agents: ['a1'] }],
+        pipelinesV2: {
+          main: { steps: [{ type: 'pipeline', name: 'call-legacy', pipelineId: 'legacy' }] },
+        },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('flags a pipeline step referencing an unknown pipeline with remediation', () => {
+    const err = findByPath(
+      { pipelinesV2: { main: { steps: [{ type: 'pipeline', name: 'call-ghost', pipelineId: 'ghost' }] } } },
+      'pipelinesV2.main.steps[0].pipelineId',
+    );
+    expect(err?.issue).toContain('unknown pipeline "ghost"');
+    expect(err?.remediation).toContain('pipelinesV2');
+  });
+
+  it('does NOT flag an agent step whose agentId is absent from config.agents (dynamic registration)', () => {
+    expect(
+      validate({
+        pipelinesV2: { main: { steps: [{ type: 'agent', name: 'run', agentId: 'registered-in-code' }] } },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('does NOT flag a function step (functions are registered in code, not the config)', () => {
+    expect(
+      validate({
+        pipelinesV2: { main: { steps: [{ type: 'function', name: 'transform', functionId: 'my-fn' }] } },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('recurses into a conditional step whenTrue/whenFalse branches with precise paths', () => {
+    const errors = validate({
+      pipelinesV2: {
+        main: {
+          steps: [
+            {
+              type: 'conditional',
+              name: 'branch',
+              condition: { field: 'x', exists: true },
+              whenTrue: [{ type: 'pipeline', name: 'call-ghost-t', pipelineId: 'ghost-true' }],
+              whenFalse: [{ type: 'pipeline', name: 'call-ghost-f', pipelineId: 'ghost-false' }],
+            },
+          ],
+        },
+      },
+    });
+    expect(errors.some((e) => e.path === 'pipelinesV2.main.steps[0].whenTrue[0].pipelineId')).toBe(true);
+    expect(errors.some((e) => e.path === 'pipelinesV2.main.steps[0].whenFalse[0].pipelineId')).toBe(true);
+  });
+
+  it('recurses into deeply nested conditionals', () => {
+    const err = findByPath(
+      {
+        pipelinesV2: {
+          main: {
+            steps: [
+              {
+                type: 'conditional',
+                name: 'outer',
+                condition: { field: 'x', exists: true },
+                whenTrue: [
+                  {
+                    type: 'conditional',
+                    name: 'inner',
+                    condition: { field: 'y', exists: true },
+                    whenTrue: [{ type: 'pipeline', name: 'deep', pipelineId: 'ghost' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      'pipelinesV2.main.steps[0].whenTrue[0].whenTrue[0].pipelineId',
+    );
+    expect(err?.issue).toContain('unknown pipeline "ghost"');
+  });
+
+  it('accumulates one error per unresolved reference across pipelines', () => {
+    const errors = validate({
+      pipelinesV2: {
+        p1: { steps: [{ type: 'pipeline', name: 's', pipelineId: 'nope-1' }] },
+        p2: { steps: [{ type: 'pipeline', name: 's', pipelineId: 'nope-2' }] },
+      },
+    });
+    expect(errors.filter((e) => e.issue.includes('unknown pipeline'))).toHaveLength(2);
+  });
+
+  it('allows a pipeline step that self-references its own pipelinesV2 key', () => {
+    expect(
+      validate({
+        pipelinesV2: { loop: { steps: [{ type: 'pipeline', name: 'again', pipelineId: 'loop' }] } },
+      }),
+    ).toHaveLength(0);
+  });
+});
+
 describe('validateFrameworkConfig — accumulation', () => {
   it('reports every problem at once rather than only the first', () => {
     const errors = validate({ agents: [{ id: 'a1' }, { id: 'a2' }] });
