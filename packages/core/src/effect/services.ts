@@ -34,6 +34,13 @@ export {
 } from '../context/service';
 
 export {
+  SessionService,
+  SessionServiceLive,
+  SessionId,
+  makeSessionId,
+} from '../context/session-service';
+
+export {
   AgentService,
   AgentServiceLive,
 } from '../agent/service';
@@ -116,3 +123,5 @@ export type {
   FredRuntime,
   FredServices,
 } from '../services';
+
+export type { SessionHandle } from '../context/session-service';
