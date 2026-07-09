@@ -166,6 +166,15 @@ describe('createFred client', () => {
     const result = (await client.workflows.run('client-graph', 'go')) as GraphExecutionResult;
     expect(result.success).toBe(true);
     expect(result.executedNodes).toContain('start');
+
+    // Phase 62 / STEP-62-04: a graph run with a session binds it as the ambient
+    // session (executeGraphWorkflowViaRuntime wraps the effect in withSession);
+    // exercise that branch to guard the wiring against regressions.
+    const scopedResult = (await client.workflows.run('client-graph', 'go', {
+      sessionId: 'conv_graph_session',
+    })) as GraphExecutionResult;
+    expect(scopedResult.success).toBe(true);
+    expect(scopedResult.executedNodes).toContain('start');
   });
 
   it('sessions sub-API gets and deletes conversation sessions', async () => {

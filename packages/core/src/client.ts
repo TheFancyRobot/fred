@@ -119,9 +119,18 @@ export async function executeGraphWorkflowViaRuntime(
   // Use the Effect-native path with the Fred runtime instead of the deprecated
   // function which uses Effect.runCallback without a runtime, causing hangs
   // when graph nodes call back into Runtime.runPromise.
-  const exit = await Runtime.runPromise(runtime)(
-    Effect.exit(executeGraphWorkflowEffect(config, input, graphOptions))
-  );
+  //
+  // When a conversation/session id is given, bind it as the ambient session for
+  // the whole graph run so session-aware nodes (and any nested
+  // MessageProcessorService.processMessage) observe it through the environment —
+  // matching the v1/v2 pipeline paths in workflows.run.
+  const graphEffect = executeGraphWorkflowEffect(config, input, graphOptions);
+  const scoped = options.conversationId
+    ? Effect.flatMap(SessionService, (session) =>
+        session.withSession(options.conversationId!, graphEffect)
+      )
+    : graphEffect;
+  const exit = await Runtime.runPromise(runtime)(Effect.exit(scoped));
 
   if (Exit.isSuccess(exit)) {
     return exit.value;
