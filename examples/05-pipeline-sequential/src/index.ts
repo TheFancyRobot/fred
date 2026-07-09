@@ -1,13 +1,21 @@
 import { Effect, Runtime } from 'effect';
-import { Fred, PipelineBuilder, PipelineService } from '@fancyrobot/fred';
+import { Fred, PipelineBuilder, PipelineService, SessionService } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 async function executePipelineV2(fred: Fred, pipelineId: string, input: string) {
   const runtime = await fred.getRuntime();
   return Runtime.runPromise(runtime)(
     Effect.gen(function* () {
+      const sessions = yield* SessionService;
       const pipelineService = yield* PipelineService;
-      return yield* pipelineService.executePipelineV2(pipelineId, input);
+      // Open one ambient session for the whole pipeline: every step shares the
+      // same conversation history through the environment, and the session id
+      // is resumable later. No manual previousMessages[] threading.
+      const session = yield* sessions.open();
+      return yield* sessions.withSession(
+        session,
+        pipelineService.executePipelineV2(pipelineId, input, { conversationId: session.id })
+      );
     })
   );
 }

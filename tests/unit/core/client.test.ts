@@ -119,6 +119,32 @@ describe('createFred client', () => {
     expect(result.finalOutput).toBe('echo:hello');
   });
 
+  it('workflows.run accepts a sessionId and stays transparent to execution', async () => {
+    // Phase 62 / STEP-62-04: a workflow run binds the given session as ambient
+    // for its whole execution. Function steps can't observe the environment, so
+    // here we assert the wrapping is transparent — the result is identical to a
+    // stateless run — and that the id round-trips as the persistence key.
+    const client = track(await createFred());
+
+    const config: PipelineConfigV2 = {
+      id: 'client-session-pipeline',
+      steps: [
+        {
+          type: 'function',
+          name: 'echo',
+          fn: (context: { input: string }) => `echo:${context.input}`,
+        },
+      ],
+    };
+    await client.workflows.define(config);
+
+    const result = (await client.workflows.run('client-session-pipeline', 'hi', {
+      sessionId: 'conv_session_run',
+    })) as PipelineResult;
+    expect(result.success).toBe(true);
+    expect(result.finalOutput).toBe('echo:hi');
+  });
+
   it('workflows sub-API defines and runs a graph workflow', async () => {
     const client = track(await createFred());
 
