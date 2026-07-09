@@ -9,9 +9,11 @@ async function executePipelineV2(fred: Fred, pipelineId: string, input: string) 
       const sessions = yield* SessionService;
       const pipelineService = yield* PipelineService;
       // Open one ambient session for the whole pipeline and run inside it. The
-      // pipeline resolves its conversation id from the ambient session, so every
-      // step shares the same history through the environment — no manual
-      // conversationId / previousMessages[] threading. The id is resumable later.
+      // pipeline picks up its conversation id from the ambient session — no
+      // manual conversationId threading — so the run is bound to a resumable
+      // id. (Within a V2 pipeline, step-to-step output flows through the
+      // pipeline context; the ambient session is what ties the run to a
+      // conversation and lets ContextStorage-backed agents share history.)
       const session = yield* sessions.open();
       return yield* sessions.withSession(
         session,

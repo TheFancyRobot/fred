@@ -202,11 +202,13 @@ export interface FredClient {
     define(config: WorkflowDefinition): Promise<void>;
     /**
      * Run a workflow. When a session is given (`sessionId`, or the legacy
-     * `conversationId` alias), it is made the ambient session for the whole run
-     * — every agent/function inside reads and writes the same conversation
-     * history through the Effect environment, and the exchange persists under
-     * that id so a later `run` with the same id resumes the conversation.
-     * Omit both for a stateless, non-persisted run.
+     * `conversationId` alias), it is bound as the ambient session for the whole
+     * run and used as the conversation/persistence key: agent steps that go
+     * through the ContextStorage-backed path (e.g. `MessageProcessor`) read and
+     * append history under it, so a later `run` with the same id continues that
+     * conversation. Steps that don't touch conversation storage (e.g. pure
+     * function steps) simply run under the bound id. Omit both for a run that is
+     * not associated with any session.
      */
     run(
       id: string,
