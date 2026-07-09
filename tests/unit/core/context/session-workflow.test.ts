@@ -21,6 +21,7 @@ import {
 import {
   SessionService,
   SessionServiceLive,
+  resolveAmbientConversationId,
 } from '../../../../packages/core/src/context/session-service';
 
 const testLayer = Layer.provideMerge(SessionServiceLive, ContextStorageServiceLive);
@@ -121,5 +122,41 @@ describe('workflow-level ambient sessions', () => {
     expect(result.idB).toBe('conv_B');
     expect(result.histA).toBe(2);
     expect(result.histB).toBe(2);
+  });
+});
+
+describe('resolveAmbientConversationId', () => {
+  it('returns undefined when no SessionService is in context', async () => {
+    // No requirement is added by the resolver, so it runs without a session.
+    const id = await Effect.runPromise(resolveAmbientConversationId());
+    expect(id).toBeUndefined();
+  });
+
+  it('returns the explicit id verbatim, without consulting the session', async () => {
+    const id = await Effect.runPromise(resolveAmbientConversationId('conv_explicit'));
+    expect(id).toBe('conv_explicit');
+  });
+
+  it('falls back to the ambient session id when no explicit id is given', async () => {
+    const id = await run(
+      Effect.gen(function* () {
+        const session = yield* SessionService;
+        return yield* session.withSession('conv_ambient', resolveAmbientConversationId());
+      })
+    );
+    expect(id).toBe('conv_ambient');
+  });
+
+  it('prefers the explicit id over the ambient session', async () => {
+    const id = await run(
+      Effect.gen(function* () {
+        const session = yield* SessionService;
+        return yield* session.withSession(
+          'conv_ambient',
+          resolveAmbientConversationId('conv_explicit')
+        );
+      })
+    );
+    expect(id).toBe('conv_explicit');
   });
 });

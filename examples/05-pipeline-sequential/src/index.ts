@@ -8,13 +8,14 @@ async function executePipelineV2(fred: Fred, pipelineId: string, input: string) 
     Effect.gen(function* () {
       const sessions = yield* SessionService;
       const pipelineService = yield* PipelineService;
-      // Open one ambient session for the whole pipeline: every step shares the
-      // same conversation history through the environment, and the session id
-      // is resumable later. No manual previousMessages[] threading.
+      // Open one ambient session for the whole pipeline and run inside it. The
+      // pipeline resolves its conversation id from the ambient session, so every
+      // step shares the same history through the environment — no manual
+      // conversationId / previousMessages[] threading. The id is resumable later.
       const session = yield* sessions.open();
       return yield* sessions.withSession(
         session,
-        pipelineService.executePipelineV2(pipelineId, input, { conversationId: session.id })
+        pipelineService.executePipelineV2(pipelineId, input)
       );
     })
   );

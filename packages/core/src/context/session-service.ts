@@ -76,6 +76,29 @@ const toHandle = (session: SessionHandle | string): SessionHandle =>
   typeof session === 'string' ? { id: makeSessionId(session) } : session;
 
 /**
+ * Resolve the conversation id a workflow should run under: the `explicit` id
+ * when given, otherwise the ambient session id (when a `SessionService` is in
+ * context and a session is open), otherwise `undefined`.
+ *
+ * Uses `Effect.serviceOption` so it adds no requirement — callers that run
+ * without a `SessionService` simply get the explicit id or `undefined`. This is
+ * the shared precedence (explicit > ambient) used by the pipeline and graph
+ * execution paths.
+ */
+export const resolveAmbientConversationId = (
+  explicit?: string,
+): Effect.Effect<string | undefined> =>
+  explicit !== undefined
+    ? Effect.succeed(explicit)
+    : Effect.flatMap(Effect.serviceOption(SessionService), (service) =>
+        Option.isNone(service)
+          ? Effect.succeed(undefined)
+          : Effect.map(service.value.current, (current) =>
+              Option.isSome(current) ? (current.value.id as string) : undefined,
+            ),
+      );
+
+/**
  * Live implementation. Scoped because the ambient `FiberRef` is created once
  * per runtime and shared by every fiber that runs against it.
  */

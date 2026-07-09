@@ -857,9 +857,11 @@ function createDailyBriefTool(fred: Fred): Tool<{ readonly focus?: string }, str
       },
     },
     execute: async ({ focus }) => {
-      // Open a session on first input and scope the whole daily-brief workflow
-      // to it. The returned id is resumable at any time, so a follow-up brief
-      // can continue the same conversation instead of starting fresh.
+      // Open a session on first input and run the whole daily-brief workflow
+      // under it. executeGraphWorkflow binds the id as the ambient session for
+      // the run (SessionService.withSession), so its nodes read/write the same
+      // conversation through the environment. The id is resumable at any time,
+      // so a follow-up brief can continue the same conversation.
       const runtime = await fred.getRuntime();
       const session = await Runtime.runPromise(runtime)(
         Effect.flatMap(SessionService, (sessions) => sessions.open()),

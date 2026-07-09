@@ -60,6 +60,7 @@ import {
   SessionService,
 } from './services';
 import type { SessionHandle } from './context/session-service';
+import { resolveAmbientConversationId } from './context/session-service';
 import { TemplateEngine, TemplateEngineLive } from './template';
 
 /**
@@ -109,25 +110,31 @@ export async function executeGraphWorkflowViaRuntime(
     }))
   ).catch(() => undefined);
 
+  // Resolve the conversation id: explicit wins, otherwise fall back to the
+  // ambient session so an ambient-only graph run still binds to it.
+  const conversationId = await Runtime.runPromise(runtime)(
+    resolveAmbientConversationId(options.conversationId)
+  );
+
   const graphOptions = {
     agentManager,
     hookManager,
     tracer: options.tracer,
-    conversationId: options.conversationId,
+    conversationId,
   };
 
   // Use the Effect-native path with the Fred runtime instead of the deprecated
   // function which uses Effect.runCallback without a runtime, causing hangs
   // when graph nodes call back into Runtime.runPromise.
   //
-  // When a conversation/session id is given, bind it as the ambient session for
-  // the whole graph run so session-aware nodes (and any nested
+  // When a conversation/session id is resolved, bind it as the ambient session
+  // for the whole graph run so session-aware nodes (and any nested
   // MessageProcessorService.processMessage) observe it through the environment —
   // matching the v1/v2 pipeline paths in workflows.run.
   const graphEffect = executeGraphWorkflowEffect(config, input, graphOptions);
-  const scoped = options.conversationId
+  const scoped = conversationId
     ? Effect.flatMap(SessionService, (session) =>
-        session.withSession(options.conversationId!, graphEffect)
+        session.withSession(conversationId, graphEffect)
       )
     : graphEffect;
   const exit = await Runtime.runPromise(runtime)(Effect.exit(scoped));
