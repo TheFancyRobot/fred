@@ -5,7 +5,7 @@
  * It replaces the class-based MessageProcessor with proper Effect service composition.
  */
 
-import { Context, Effect, Layer, Ref, Stream, Chunk } from 'effect';
+import { Context, Effect, Layer, Option, Ref, Stream, Chunk } from 'effect';
 import { Prompt } from '@effect/ai';
 import type { AgentMessage, AgentResponse, AgentInstance } from '../agent/agent';
 import type { StreamEvent, RunEndEvent, HandoffStartEvent } from '../stream/events';
@@ -178,7 +178,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
       if (options?.conversationId) return options.conversationId;
       if (options?.useSessionHistory === false || !self.sessionService) return undefined;
       const current = yield* self.sessionService.current;
-      return current._tag === 'Some' ? (current.value.id as string) : undefined;
+      return Option.isSome(current) ? (current.value.id as string) : undefined;
     });
   }
 

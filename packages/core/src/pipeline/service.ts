@@ -28,6 +28,7 @@ import {
 } from './errors';
 import { AgentService } from '../agent/service';
 import { HookManagerService } from '../hooks/service';
+import { resolveAmbientConversationId } from '../context/session-service';
 import { CheckpointService } from './checkpoint/service';
 import { PauseService } from './pause/service';
 import { validateGraphWorkflow } from './graph-validator';
@@ -588,9 +589,14 @@ class PipelineServiceImpl implements PipelineService {
         }))
       );
 
+      // Fall back to the ambient session id when the caller doesn't pass one,
+      // so `withSession(id, executePipelineV2(input))` runs under that session
+      // without threading a conversationId by hand (explicit still wins).
+      const conversationId = yield* resolveAmbientConversationId(options?.conversationId);
+
       const executorOptions: ExtendedExecutionOptions = {
         agentManager: self.createExecutorAgentManager(),
-        conversationId: options?.conversationId,
+        conversationId,
         history: options?.history,
       };
 
