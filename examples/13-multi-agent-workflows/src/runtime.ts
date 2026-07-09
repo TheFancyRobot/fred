@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
-import { Fred, GraphWorkflowBuilder, createHandoffTool, type Tool } from '@fancyrobot/fred';
-import { Effect, Schema } from 'effect';
+import { Fred, GraphWorkflowBuilder, SessionService, createHandoffTool, type Tool } from '@fancyrobot/fred';
+import { Effect, Runtime, Schema } from 'effect';
 import { appendNotebookEntry, ensureNotebook, queryNotebook } from './notes';
 import { fetchLatestNewsDigest } from './news';
 import {
@@ -857,7 +857,18 @@ function createDailyBriefTool(fred: Fred): Tool<{ readonly focus?: string }, str
       },
     },
     execute: async ({ focus }) => {
-      const result = await fred.executeGraphWorkflow('daily-brief', focus?.trim() || 'general daily brief');
+      // Open a session on first input and scope the whole daily-brief workflow
+      // to it. The returned id is resumable at any time, so a follow-up brief
+      // can continue the same conversation instead of starting fresh.
+      const runtime = await fred.getRuntime();
+      const session = await Runtime.runPromise(runtime)(
+        Effect.flatMap(SessionService, (sessions) => sessions.open()),
+      );
+      const result = await fred.executeGraphWorkflow(
+        'daily-brief',
+        focus?.trim() || 'general daily brief',
+        { conversationId: session.id },
+      );
       return readOutputField(result.outputs.writeDailyBrief, 'brief');
     },
   };

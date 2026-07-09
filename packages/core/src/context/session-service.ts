@@ -53,6 +53,21 @@ export interface SessionService {
     session: SessionHandle | string,
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
+
+  /**
+   * Auto-create (when `id` is omitted) or resume (when given) a session, run
+   * `effect` inside it, and return both the session handle and the result. The
+   * handle lets the caller echo the id back for later resumption. This is the
+   * "session auto-created on first input, resumable by id anytime" entry point.
+   */
+  readonly use: <A, E, R>(
+    id: string | undefined,
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<
+    { readonly session: SessionHandle; readonly result: A },
+    E,
+    R | ContextStorageService
+  >;
 }
 
 export const SessionService = Context.GenericTag<SessionService>('@fred/SessionService');
@@ -80,10 +95,16 @@ export const SessionServiceLive = Layer.scoped(
     const withSession: SessionService['withSession'] = (session, effect) =>
       Effect.locally(effect, currentRef, Option.some(toHandle(session)));
 
+    const use: SessionService['use'] = (id, effect) =>
+      Effect.flatMap(open(id), (session) =>
+        Effect.map(withSession(session, effect), (result) => ({ session, result })),
+      );
+
     return {
       open,
       current: FiberRef.get(currentRef),
       withSession,
+      use,
     } satisfies SessionService;
   }),
 );

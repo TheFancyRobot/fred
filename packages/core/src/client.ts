@@ -184,10 +184,18 @@ export interface FredClient {
   };
   readonly workflows: {
     define(config: WorkflowDefinition): Promise<void>;
+    /**
+     * Run a workflow. When a session is given (`sessionId`, or the legacy
+     * `conversationId` alias), it is made the ambient session for the whole run
+     * — every agent/function inside reads and writes the same conversation
+     * history through the Effect environment, and the exchange persists under
+     * that id so a later `run` with the same id resumes the conversation.
+     * Omit both for a stateless, non-persisted run.
+     */
     run(
       id: string,
       input: string,
-      options?: { conversationId?: string }
+      options?: { conversationId?: string; sessionId?: string }
     ): Promise<WorkflowRunResult>;
   };
   readonly sessions: {
@@ -291,6 +299,12 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           })
         ),
       run: async (id, input, runOptions) => {
+        // The session id (explicit `conversationId` wins over the `sessionId`
+        // alias). When present it becomes the ambient session for the run and
+        // the persistence key; when absent the run is stateless.
+        const sessionId = runOptions?.conversationId ?? runOptions?.sessionId;
+        const execOptions = sessionId ? { conversationId: sessionId } : undefined;
+
         const kind = await run(
           Effect.flatMap(PipelineService, (s) =>
             Effect.all({
@@ -304,18 +318,23 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             throw new FredClientClosedError({ message: 'FredClient has been shut down' });
           }
           return executeGraphWorkflowViaRuntime(runtime, id, input, {
-            conversationId: runOptions?.conversationId,
+            conversationId: sessionId,
             tracer: options.tracer,
           });
         }
-        if (kind.v2) {
-          return run(
-            Effect.flatMap(PipelineService, (s) => s.executePipelineV2(id, input, runOptions))
-          );
-        }
-        return run(
-          Effect.flatMap(PipelineService, (s) => s.executePipeline(id, input, [], runOptions))
-        );
+
+        const exec: Effect.Effect<WorkflowRunResult, PipelineExecutionError, PipelineService> =
+          kind.v2
+            ? Effect.flatMap(PipelineService, (s) => s.executePipelineV2(id, input, execOptions))
+            : Effect.flatMap(PipelineService, (s) => s.executePipeline(id, input, [], execOptions));
+
+        // Bind the ambient session for the whole run so nested agents/functions
+        // observe it through the environment without manual threading.
+        const scoped = sessionId
+          ? Effect.flatMap(SessionService, (session) => session.withSession(sessionId, exec))
+          : exec;
+
+        return run(scoped);
       },
     },
 
