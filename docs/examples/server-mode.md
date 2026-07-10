@@ -2,6 +2,10 @@
 
 Example showing how to run Fred as an HTTP server.
 
+For a complete runnable project—including credential-free auth/CORS/admin/docs
+smoke checks plus optional live sessions, SSE, and OpenAI SDK calls—see
+[Example 14: Optional HTTP Layer](https://github.com/TheFancyRobot/fred/tree/main/examples/14-http-layer).
+
 ## Basic Server
 
 ```typescript
