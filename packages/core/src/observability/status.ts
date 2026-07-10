@@ -58,6 +58,10 @@ export interface AgentRunAnnotation {
 
 export type AgentStatusSnapshot = ReadonlyArray<AgentRunInfo>;
 
+export type AgentStatusListener = (snapshot: AgentStatusSnapshot) => void;
+
+export type AgentStatusUnsubscribe = () => Promise<void>;
+
 export interface AgentStatusService {
   readonly snapshot: Effect.Effect<AgentStatusSnapshot>;
   readonly changes: Stream.Stream<AgentStatusSnapshot>;
@@ -98,6 +102,16 @@ interface TrackedAgentRun {
 
 type TrackedRuns = HashMap.HashMap<string, TrackedAgentRun>;
 
+interface AgentStatusState {
+  readonly version: number;
+  readonly runs: TrackedRuns;
+}
+
+interface AgentStatusChange {
+  readonly version: number;
+  readonly snapshot: AgentStatusSnapshot;
+}
+
 const toFiberId = (fiber: Fiber.RuntimeFiber<unknown, unknown>): string =>
   FiberId.threadName(fiber.id());
 
@@ -133,14 +147,14 @@ const agentMetricLabels = (agentId: string) => [
 
 class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapshot> {
   constructor(
-    private readonly runs: MutableRef.MutableRef<TrackedRuns>,
-    private readonly publish: (snapshot: AgentStatusSnapshot) => void
+    private readonly status: MutableRef.MutableRef<AgentStatusState>,
+    private readonly publish: (runs: TrackedRuns) => void
   ) {
     super();
   }
 
   get value(): Effect.Effect<AgentStatusSnapshot> {
-    return Effect.sync(() => toSnapshot(MutableRef.get(this.runs)));
+    return Effect.sync(() => toSnapshot(MutableRef.get(this.status).runs));
   }
 
   onStart<A, E, R>(
@@ -163,7 +177,7 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
     }
 
     const fiberId = toFiberId(fiber);
-    const current = MutableRef.get(this.runs);
+    const current = MutableRef.get(this.status).runs;
     if (HashMap.has(current, fiberId)) return;
 
     const info: AgentRunInfo = {
@@ -179,10 +193,9 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
       info,
       metricStartedAt: Date.now(),
     });
-    MutableRef.set(this.runs, next);
+    this.publish(next);
     agentsRunning.unsafeModify(1, []);
     agentRunsStarted.unsafeUpdate(1, agentMetricLabels(info.agentId));
-    this.publish(toSnapshot(next));
   }
 
   onEnd<A, E>(
@@ -190,12 +203,12 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
     fiber: Fiber.RuntimeFiber<A, E>
   ): void {
     const fiberId = toFiberId(fiber);
-    const current = MutableRef.get(this.runs);
+    const current = MutableRef.get(this.status).runs;
     const tracked = HashMap.get(current, fiberId);
     if (Option.isNone(tracked)) return;
 
     const next = HashMap.remove(current, fiberId);
-    MutableRef.set(this.runs, next);
+    this.publish(next);
     const labels = [
       ...agentMetricLabels(tracked.value.info.agentId),
       MetricLabel.make(
@@ -209,7 +222,6 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
       Math.max(0, Date.now() - tracked.value.metricStartedAt),
       labels
     );
-    this.publish(toSnapshot(next));
   }
 }
 
@@ -256,24 +268,55 @@ export const transitionAgentRun = (
   );
 
 const makeAgentStatusLayer = Effect.gen(function* () {
-  const changes = yield* Effect.acquireRelease(
-    PubSub.unbounded<AgentStatusSnapshot>(),
-    PubSub.shutdown
-  );
-  const runs = MutableRef.make<TrackedRuns>(HashMap.empty());
+  // The Fred facade retains its runtime after Layer.toRuntime returns, while
+  // the temporary construction Scope closes. This PubSub owns no external
+  // resource, so keeping it runtime-owned avoids ending `changes` as soon as
+  // Fred.create() resolves. Stream subscribers still release their scoped
+  // PubSub subscriptions when their consumer fibers are interrupted.
+  const changes = yield* PubSub.unbounded<AgentStatusChange>();
+  const status = MutableRef.make<AgentStatusState>({
+    version: 0,
+    runs: HashMap.empty(),
+  });
 
-  const publish = (snapshot: AgentStatusSnapshot): void => {
-    changes.unsafeOffer(snapshot);
+  const publish = (runs: TrackedRuns): void => {
+    const current = MutableRef.get(status);
+    const next = {
+      version: current.version + 1,
+      runs,
+    };
+    MutableRef.set(status, next);
+    changes.unsafeOffer({
+      version: next.version,
+      snapshot: toSnapshot(runs),
+    });
   };
-  const supervisor = new AgentRunSupervisor(runs, publish);
-  const snapshot = Effect.sync(() => toSnapshot(MutableRef.get(runs)));
+  const supervisor = new AgentRunSupervisor(status, publish);
+  const snapshot = Effect.sync(() => toSnapshot(MutableRef.get(status).runs));
+  const changeSnapshots = Stream.unwrapScoped(
+    Effect.gen(function* () {
+      // Subscribe before capturing the current version. Any update that lands
+      // between those operations is queued, while the version filter prevents
+      // that already-captured state from being replayed after the snapshot.
+      const liveChanges = yield* Stream.fromPubSub(changes, { scoped: true });
+      const initial = MutableRef.get(status);
+
+      return Stream.concat(
+        Stream.make(toSnapshot(initial.runs)),
+        liveChanges.pipe(
+          Stream.filter((change) => change.version > initial.version),
+          Stream.map((change) => change.snapshot),
+        ),
+      );
+    }),
+  );
 
   const transition = Effect.fn('AgentStatusService.transition')(
     function* (state: AgentRunState) {
       const annotation = yield* FiberRef.get(AgentRunAnnotationRef);
       if (Option.isNone(annotation)) return;
 
-      const current = MutableRef.get(runs);
+      const current = MutableRef.get(status).runs;
       let next = current;
       for (const [fiberId, tracked] of current) {
         if (tracked.runId === annotation.value.runId && tracked.info.state !== state) {
@@ -285,15 +328,14 @@ const makeAgentStatusLayer = Effect.gen(function* () {
       }
 
       if (next !== current) {
-        MutableRef.set(runs, next);
-        publish(toSnapshot(next));
+        publish(next);
       }
     }
   );
 
   const service: AgentStatusService = {
     snapshot,
-    changes: Stream.fromPubSub(changes),
+    changes: changeSnapshots,
     transition,
   };
 
@@ -305,4 +347,4 @@ const makeAgentStatusLayer = Effect.gen(function* () {
 
 /** One independent lifecycle tracker per scoped runtime. */
 export const AgentStatusServiceLive: Layer.Layer<AgentStatusService> =
-  Layer.unwrapScoped(makeAgentStatusLayer);
+  Layer.unwrapEffect(makeAgentStatusLayer);

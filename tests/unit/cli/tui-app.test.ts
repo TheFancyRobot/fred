@@ -10,6 +10,7 @@ import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { FredTuiApp } from '../../../packages/cli/src/tui/app.js';
 import type { TuiAppConfig } from '../../../packages/cli/src/tui/app.js';
+import type { TuiAgentRunInfo } from '../../../packages/cli/src/tui/state.js';
 
 /**
  * Poll until a condition is met, avoiding timing-based flakiness.
@@ -153,6 +154,84 @@ describe('TUI App (OpenTUI integration)', () => {
     // Should contain shortcut badges in status bar
     expect(frame).toContain('? Help');
     expect(frame).toContain('Esc Quit');
+  });
+
+  test('subscribes to agent status and disposes before ignoring later writes', async () => {
+    let emit: ((snapshot: ReadonlyArray<TuiAgentRunInfo>) => void) | undefined;
+    let disposeCalls = 0;
+    const errors: Error[] = [];
+
+    await createTestApp(
+      { onError: (error) => errors.push(error) },
+      {
+        agentStatus: {
+          subscribe: async (listener) => {
+            emit = listener;
+            listener([{
+              fiberId: '#1',
+              agentId: 'live-agent',
+              workflowId: 'workflow-1',
+              sessionId: 'session-1',
+              state: 'streaming',
+              startedAt: 1,
+            }]);
+            return async () => {
+              disposeCalls += 1;
+            };
+          },
+        },
+      },
+    );
+
+    await waitFor(() => app.getState().agentStatus.runs.length === 1);
+    await testSetup.renderOnce();
+    expect(testSetup.captureCharFrame()).toContain('live-agent:streaming');
+
+    app.stop();
+    await waitFor(() => disposeCalls === 1);
+    emit?.([]);
+
+    expect(app.getState().agentStatus.runs).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('disposes an agent status subscription that resolves after the TUI stops', async () => {
+    let emit: ((snapshot: ReadonlyArray<TuiAgentRunInfo>) => void) | undefined;
+    let resolveSubscription:
+      | ((unsubscribe: () => Promise<void>) => void)
+      | undefined;
+    let disposeCalls = 0;
+    const errors: Error[] = [];
+    const pendingSubscription = new Promise<() => Promise<void>>((resolve) => {
+      resolveSubscription = resolve;
+    });
+
+    await createTestApp(
+      { onError: (error) => errors.push(error) },
+      {
+        agentStatus: {
+          subscribe: async (listener) => {
+            emit = listener;
+            return pendingSubscription;
+          },
+        },
+      },
+    );
+
+    app.stop();
+    resolveSubscription?.(async () => {
+      disposeCalls += 1;
+    });
+    await waitFor(() => disposeCalls === 1);
+
+    emit?.([{
+      fiberId: '#late',
+      agentId: 'late-agent',
+      state: 'starting',
+      startedAt: 1,
+    }]);
+    expect(app.getState().agentStatus.runs).toEqual([]);
+    expect(errors).toEqual([]);
   });
 
   test('Tab cycles focus', async () => {

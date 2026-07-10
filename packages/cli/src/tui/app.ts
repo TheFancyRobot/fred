@@ -19,7 +19,7 @@ import {
   type CliRenderer,
   type MouseEvent,
 } from '@opentui/core';
-import type { TuiState, FocusablePaneId } from './state.js';
+import type { TuiState, FocusablePaneId, TuiAgentRunInfo } from './state.js';
 import {
   createInitialTuiStateWithPlugins,
   applySessionList,
@@ -57,6 +57,7 @@ import {
   dequeuePendingSubmission,
   hasPendingSubmissions,
   setSystemNotice,
+  applyAgentStatusSnapshot,
 } from './state.js';
 import { mapKeyToAction, applyKeyAction } from './keymap.js';
 import {
@@ -111,6 +112,7 @@ export interface TuiAppConfig {
   sessionService?: SessionServiceDependencies;
   initialSessionId?: string | null;
   pluginSlashCommands?: ReadonlyArray<PluginSlashCommandRuntime>;
+  agentStatus?: AgentStatusSource;
 
   /**
    * How to handle stream timeouts when waiting for the first token.
@@ -135,6 +137,12 @@ export interface TuiAppConfig {
    * Only used when streamTimeoutMode is 'patient'.
    */
   patienceIntervalMs?: number;
+}
+
+export interface AgentStatusSource {
+  subscribe: (
+    listener: (snapshot: ReadonlyArray<TuiAgentRunInfo>) => void,
+  ) => Promise<() => Promise<void>>;
 }
 
 export interface PluginSlashCommandRuntime {
@@ -168,6 +176,7 @@ export class FredTuiApp {
   private streamingController: StreamingController;
   private sessionService?: SessionServiceDependencies;
   private pluginSlashRegistry = new Map<string, PluginSlashCommandRuntime>();
+  private agentStatusUnsubscribe: (() => Promise<void>) | null = null;
 
   // OpenTUI component references
   private sidebarTitle!: TextRenderable;
@@ -270,6 +279,7 @@ export class FredTuiApp {
     await app.initializeSessions(config.initialSessionId ?? null);
     app.syncStateToUI();
     app.running = true;
+    await app.initializeAgentStatus();
     return app;
   }
 
@@ -287,7 +297,32 @@ export class FredTuiApp {
     void app.initializeSessions(config.initialSessionId ?? null);
     app.syncStateToUI();
     app.running = true;
+    void app.initializeAgentStatus();
     return app;
+  }
+
+  private async initializeAgentStatus(): Promise<void> {
+    const source = this.config.agentStatus;
+    if (!source) return;
+
+    try {
+      const unsubscribe = await source.subscribe((snapshot) => {
+        if (!this.running) return;
+        this.state = applyAgentStatusSnapshot(this.state, snapshot);
+        this.events.onStateChange?.(this.state);
+        this.syncStateToUI();
+      });
+
+      if (!this.running) {
+        await unsubscribe();
+        return;
+      }
+      this.agentStatusUnsubscribe = unsubscribe;
+    } catch (error) {
+      if (this.running) {
+        this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
   }
 
   private async initializeSessions(initialSessionId: string | null): Promise<void> {
@@ -2366,6 +2401,13 @@ export class FredTuiApp {
   stop(): void {
     if (!this.running) return;
     this.running = false;
+    const unsubscribeAgentStatus = this.agentStatusUnsubscribe;
+    this.agentStatusUnsubscribe = null;
+    if (unsubscribeAgentStatus) {
+      void unsubscribeAgentStatus().catch((error) => {
+        this.events.onError?.(error instanceof Error ? error : new Error(String(error)));
+      });
+    }
     this.stopSpinnerInterval();
     this.stopCursorBlink();
     this.clearStreamTimeout();

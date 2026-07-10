@@ -8,18 +8,24 @@ import {
   ManagedRuntime,
   Metric,
   MetricState,
+  Runtime,
   Stream,
 } from 'effect';
 import { LanguageModel } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import {
+  type AgentStatusSnapshot,
+  type AgentStatusUnsubscribe,
   AgentStatusService,
   AgentStatusServiceLive,
   trackAgentRun,
   trackAgentStream,
 } from '../../../../packages/core/src/observability/status';
 import { AgentStatusService as EffectAgentStatusService } from '../../../../packages/core/src/effect/services';
-import { AgentStatusService as PublicAgentStatusService } from '../../../../packages/core/src/index';
+import {
+  AgentStatusService as PublicAgentStatusService,
+  Fred,
+} from '../../../../packages/core/src/index';
 import { makeFredRuntimeLayer } from '../../../../packages/core/src/services';
 import { createMockProvider } from '../../helpers/mock-provider';
 import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
@@ -130,7 +136,7 @@ describe('AgentStatusService', () => {
         const release = yield* Deferred.make<void>();
 
         const observed = yield* status.changes.pipe(
-          Stream.take(3),
+          Stream.take(4),
           Stream.runCollect,
           Effect.fork
         );
@@ -149,9 +155,49 @@ describe('AgentStatusService', () => {
         yield* Fiber.join(run);
 
         const snapshots = Array.from(yield* Fiber.join(observed));
-        expect(snapshots.map((snapshot) => snapshot.length)).toEqual([1, 1, 0]);
-        expect(snapshots[0]?.[0]?.state).toBe('starting');
-        expect(snapshots[1]?.[0]?.state).toBe('streaming');
+        expect(snapshots.map((snapshot) => snapshot.length)).toEqual([0, 1, 1, 0]);
+        expect(snapshots[1]?.[0]?.state).toBe('starting');
+        expect(snapshots[2]?.[0]?.state).toBe('streaming');
+      }).pipe(Effect.provide(AgentStatusServiceLive))
+    );
+  });
+
+  test('subscribes after a run is active and then observes cleanup', async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const status = yield* AgentStatusService;
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const initialObserved = yield* Deferred.make<void>();
+
+        const run = yield* trackAgentRun(annotation)(
+          Deferred.succeed(started, undefined).pipe(
+            Effect.zipRight(Deferred.await(release)),
+          ),
+        ).pipe(Effect.fork);
+
+        yield* Deferred.await(started);
+        const observed = yield* status.changes.pipe(
+          Stream.tap((snapshot) =>
+            snapshot.length === 1
+              ? Deferred.succeed(initialObserved, undefined)
+              : Effect.void
+          ),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.fork,
+        );
+
+        yield* Deferred.await(initialObserved);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(run);
+
+        const snapshots = Array.from(yield* Fiber.join(observed));
+        expect(snapshots).toHaveLength(2);
+        expect(snapshots[0]).toMatchObject([
+          { agentId: 'agent-1', state: 'starting' },
+        ]);
+        expect(snapshots[1]).toEqual([]);
       }).pipe(Effect.provide(AgentStatusServiceLive))
     );
   });
@@ -388,5 +434,103 @@ describe('AgentStatusService', () => {
     expect(completed).toEqual([]);
     expect(EffectAgentStatusService).toBe(AgentStatusService);
     expect(PublicAgentStatusService).toBe(AgentStatusService);
+  });
+
+  test('facade subscription stays live after Fred.create and disposes idempotently', async () => {
+    const fred = await Fred.create();
+    const snapshots: Array<ReadonlyArray<{ agentId: string; state: string }>> = [];
+    let throwOnInitialSnapshot = true;
+    let resolveActive: (() => void) | undefined;
+    const activeObserved = new Promise<void>((resolve) => {
+      resolveActive = resolve;
+    });
+    let unsubscribe: (() => Promise<void>) | undefined;
+
+    try {
+      unsubscribe = await fred.subscribeAgentStatus((snapshot) => {
+        if (throwOnInitialSnapshot) {
+          throwOnInitialSnapshot = false;
+          throw new Error('listener failure must stay isolated');
+        }
+        snapshots.push(snapshot);
+        if (snapshot.length === 1) resolveActive?.();
+      });
+
+      const started = await Effect.runPromise(Deferred.make<void>());
+      const release = await Effect.runPromise(Deferred.make<void>());
+      const runtime = await fred.getRuntime();
+      const run = Runtime.runFork(runtime)(
+        trackAgentRun(annotation)(
+          Deferred.succeed(started, undefined).pipe(
+            Effect.zipRight(Deferred.await(release)),
+          ),
+        ),
+      );
+
+      await Effect.runPromise(Deferred.await(started));
+      await activeObserved;
+      expect(snapshots.at(-1)).toMatchObject([
+        { agentId: 'agent-1', state: 'starting' },
+      ]);
+
+      await unsubscribe();
+      await unsubscribe();
+      const callsAfterDispose = snapshots.length;
+
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.join(run));
+      expect(snapshots).toHaveLength(callsAfterDispose);
+    } finally {
+      await unsubscribe?.();
+      await fred.shutdown();
+    }
+  });
+
+  test('facade subscription starts with an active run and observes its cleanup', async () => {
+    const fred = await Fred.create();
+    const started = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const runtime = await fred.getRuntime();
+    const run = Runtime.runFork(runtime)(
+      trackAgentRun(annotation)(
+        Deferred.succeed(started, undefined).pipe(
+          Effect.zipRight(Deferred.await(release)),
+        ),
+      ),
+    );
+    const snapshots: AgentStatusSnapshot[] = [];
+    let resolveActive: (() => void) | undefined;
+    const activeObserved = new Promise<void>((resolve) => {
+      resolveActive = resolve;
+    });
+    let resolveCleanup: (() => void) | undefined;
+    const cleanupObserved = new Promise<void>((resolve) => {
+      resolveCleanup = resolve;
+    });
+    let unsubscribe: AgentStatusUnsubscribe | undefined;
+
+    try {
+      await Effect.runPromise(Deferred.await(started));
+      unsubscribe = await fred.subscribeAgentStatus((snapshot) => {
+        snapshots.push(snapshot);
+        if (snapshot.length === 1) resolveActive?.();
+        if (snapshot.length === 0) resolveCleanup?.();
+      });
+
+      await activeObserved;
+      expect(snapshots[0]).toMatchObject([
+        { agentId: 'agent-1', state: 'starting' },
+      ]);
+
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.join(run));
+      await cleanupObserved;
+      expect(snapshots.at(-1)).toEqual([]);
+    } finally {
+      await unsubscribe?.();
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await Effect.runPromise(Fiber.interrupt(run));
+      await fred.shutdown();
+    }
   });
 });

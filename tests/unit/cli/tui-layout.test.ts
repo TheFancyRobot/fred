@@ -4,6 +4,7 @@ import {
   renderSidebarContent,
   renderTranscriptContent,
   renderStatusContent,
+  renderAgentStatusSummary,
   buildStatusBadges,
   getToolBlockSummaryPresentation,
   sortToolBlocksByParent,
@@ -166,6 +167,59 @@ describe('TUI Layout', () => {
       expect(content.lines[0]).toContain('? Help');
       expect(content.lines[0]).toContain('Esc Quit');
       expect(content.lines[0]).toContain('Ctrl+B Sidebar');
+      expect(content.lines[0]).toContain('Agents 0');
+    });
+
+    test('renders one active agent with its state', () => {
+      const state = createInitialTuiState();
+      state.agentStatus.runs = [{
+        fiberId: '#1',
+        agentId: 'researcher',
+        workflowId: 'report',
+        sessionId: 'session-1',
+        state: 'calling_model',
+        startedAt: 1,
+      }];
+
+      expect(renderStatusContent(state).lines[0]).toContain(
+        'Agents 1 | researcher:calling_model',
+      );
+    });
+
+    test('renders multiple active agents concisely', () => {
+      const state = createInitialTuiState();
+      state.agentStatus.runs = [
+        {
+          fiberId: '#1',
+          agentId: 'researcher',
+          state: 'streaming',
+          startedAt: 1,
+        },
+        {
+          fiberId: '#2',
+          agentId: 'writer',
+          state: 'running_tool',
+          startedAt: 2,
+        },
+      ];
+
+      const summary = renderAgentStatusSummary(state.agentStatus.runs);
+      expect(summary).toContain('Agents 2');
+      expect(summary).toContain('researcher:streaming');
+      expect(summary).toContain('writer:running_tool');
+    });
+
+    test('bounds narrow status output and sanitizes long identifiers', () => {
+      const summary = renderAgentStatusSummary([{
+        fiberId: '#1',
+        agentId: '\u001b[31magent-with-an-extremely-long-identifier',
+        state: 'paused',
+        startedAt: 1,
+      }], 18);
+
+      expect(summary.length).toBeLessThanOrEqual(18);
+      expect(summary).not.toContain('\u001b');
+      expect(summary).toStartWith('Agents 1');
     });
 
     test('status output excludes telemetry metrics', () => {

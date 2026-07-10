@@ -694,14 +694,45 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
   const maxWidth = options.maxWidth ?? 120;
   const dim = options.dim ?? false;
 
-  // Build badge-based status line (no telemetry)
+  const agentStatus = renderAgentStatusSummary(state.agentStatus.runs, maxWidth);
   const badges = buildStatusBadges(state);
-  const statusText = joinBadgesWithTruncation(badges, maxWidth);
+  const shortcuts = joinBadgesWithTruncation(badges, maxWidth);
+  const fullStatus = state.agentStatus.runs.length > 0
+    ? `${agentStatus}  ${shortcuts}`
+    : `${shortcuts}  ${agentStatus}`;
+  const statusText = fullStatus.length <= maxWidth
+    ? fullStatus
+    : state.agentStatus.runs.length > 0
+      ? truncateStatus(`A${state.agentStatus.runs.length}  ${shortcuts}`, maxWidth)
+      : shortcuts;
 
   return {
     lines: [statusText],
     dim,
   };
+}
+
+const truncateStatus = (text: string, maxWidth: number): string => {
+  if (maxWidth <= 0) return '';
+  if (text.length <= maxWidth) return text;
+  if (maxWidth <= 3) return text.slice(0, maxWidth);
+  return `${text.slice(0, maxWidth - 3).trimEnd()}...`;
+};
+
+/** Render active agent count plus concise per-agent state detail. */
+export function renderAgentStatusSummary(
+  runs: TuiState['agentStatus']['runs'],
+  maxWidth = 120,
+): string {
+  const count = `Agents ${runs.length}`;
+  if (runs.length === 0) return truncateStatus(count, maxWidth);
+
+  const details = runs.map((run) => {
+    const agentId = truncateText(sanitizeForTerminalDisplay(run.agentId), 20);
+    return `${agentId}:${run.state}`;
+  }).join(', ');
+
+  return truncateStatus(`${count} | ${details}`, maxWidth);
 }
 
 /**

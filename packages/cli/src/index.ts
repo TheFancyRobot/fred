@@ -18,6 +18,7 @@ import { handleIntentCommand } from './commands/intent';
 import { handleRouteCommand } from './commands/route';
 import { handleMcpCommand } from './commands/mcp';
 import { handleValidateCommand } from './commands/validate';
+import { handleStatusCommand } from './commands/status';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import {
   AggregatedPluginValidationError,
@@ -73,6 +74,7 @@ const BUILTIN_COMMANDS = new Set([
   'config',
   'init',
   'run',
+  'status',
   'intent',
   'route',
   'mcp',
@@ -144,6 +146,8 @@ Commands:
                           --json           Output structured JSON response
                           --verbose        Show tool calls inline
                           --conversation-id <id>  Continue a conversation
+  status                  Show active agent runs in this Fred runtime
+                          --json           Output structured JSON
   agents                  List registered agents
   tools                   List registered tools
   intents                 List registered intents
@@ -190,6 +194,7 @@ ${pluginHelpSection}Options:
 Examples:
   fred chat
   fred run --agent assistant --input "What is 2+2?"
+  fred status
   fred agents
   fred tools --json
   fred config validate
@@ -307,6 +312,10 @@ async function main(): Promise<void> {
 
       case 'run':
         exitCode = await handleRunCommand(commandArgs, options);
+        break;
+
+      case 'status':
+        exitCode = await handleStatusCommand(commandArgs, options);
         break;
 
       case 'intent':

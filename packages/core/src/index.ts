@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Layer, Runtime, Stream } from 'effect';
+import { Cause, Effect, Exit, Fiber, Layer, Runtime, Stream } from 'effect';
 import type { AgentResponse } from './agent/agent';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
 import type { Tool } from './tool/tool';
@@ -19,12 +19,22 @@ import {
   PipelineService,
   MessageProcessorService,
   SubagentService,
+  AgentStatusService,
 } from './services';
 import { TemplateEngine, TemplateEngineLive } from './template';
 import { FredBase } from './facade';
 import { executeGraphWorkflowViaRuntime, executeWorkflowViaRuntime } from './client';
 import type { CompilableWorkflow } from './workflow/compile';
 import type { WorkflowExecutionResult } from './workflow/execute';
+import type {
+  AgentStatusListener,
+  AgentStatusSnapshot,
+  AgentStatusUnsubscribe,
+} from './observability/status';
+
+const cloneAgentStatusSnapshot = (
+  snapshot: AgentStatusSnapshot,
+): AgentStatusSnapshot => snapshot.map((run) => ({ ...run }));
 
 /**
  * Fred - Main class for building AI agents
@@ -206,6 +216,43 @@ export class Fred extends FredBase {
    */
   async runSafe<A, E>(effect: Effect.Effect<A, E, FredServices>): Promise<A> {
     return this.runEffect(effect, 'Effect execution failed');
+  }
+
+  /** Read the active agent runs owned by this Fred runtime. */
+  async getAgentStatus(): Promise<AgentStatusSnapshot> {
+    const snapshot = await this.runEffect(
+      Effect.flatMap(AgentStatusService, (status) => status.snapshot),
+      'Failed to read agent status',
+    );
+    return cloneAgentStatusSnapshot(snapshot);
+  }
+
+  /**
+   * Subscribe to status snapshots from this Fred runtime.
+   *
+   * The listener receives an initial snapshot followed by live changes. A
+   * listener exception is isolated to that notification and cannot terminate
+   * the subscription fiber. The returned disposer is safe to call repeatedly.
+   */
+  async subscribeAgentStatus(
+    listener: AgentStatusListener,
+  ): Promise<AgentStatusUnsubscribe> {
+    const runtime = await this.ensureRuntime();
+    const notify = (snapshot: AgentStatusSnapshot): Effect.Effect<void> =>
+      Effect.sync(() => listener(cloneAgentStatusSnapshot(snapshot))).pipe(
+        Effect.catchAllCause(() => Effect.void),
+      );
+    const subscription = Effect.flatMap(AgentStatusService, (status) =>
+      status.changes.pipe(Stream.runForEach(notify)),
+    );
+    const fiber = Runtime.runFork(runtime)(subscription);
+    let active = true;
+
+    return async () => {
+      if (!active) return;
+      active = false;
+      await Runtime.runPromise(runtime)(Fiber.interrupt(fiber));
+    };
   }
 
   // --- Global Variables (Promise-boundary reads; registration lives in FredBase) ---

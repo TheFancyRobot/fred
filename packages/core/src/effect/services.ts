@@ -120,7 +120,9 @@ export {
   type AgentRunAnnotation,
   type AgentRunInfo,
   type AgentRunState,
+  type AgentStatusListener,
   type AgentStatusSnapshot,
+  type AgentStatusUnsubscribe,
 } from '../observability/status';
 
 export {
