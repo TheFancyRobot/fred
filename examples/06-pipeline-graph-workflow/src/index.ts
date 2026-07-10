@@ -1,4 +1,4 @@
-import { Fred, GraphWorkflowBuilder } from '@fancyrobot/fred';
+import { Fred, defineWorkflow } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 function extractText(value: unknown): string {
@@ -35,39 +35,52 @@ async function main() {
   const fred = await Fred.create();
   await fred.initializeFromConfig('./config.yaml');
 
-  const workflow = new GraphWorkflowBuilder('research-flow')
-    .addNode('classifier', { type: 'agent', agentId: 'classifier', expose: ['content'] })
-    .addNode('routeByIntent', {
-      type: 'conditional',
-      condition: (ctx) => {
+  // Native WorkflowIR: the same edge-driven primitive that PipelineBuilder and
+  // GraphWorkflowBuilder compile to internally.
+  const workflow = defineWorkflow({
+    id: 'research-flow',
+    entry: 'classifier',
+    nodes: [
+      { id: 'classifier', kind: 'agent', agentId: 'classifier', expose: ['content'] },
+      {
+        id: 'routeByIntent',
+        kind: 'function',
+        expose: ['conditionResult'],
+        fn: (ctx) => {
         const classifierText = extractText(ctx.outputs.classifier).toLowerCase();
-        return classifierText.includes('factual');
+          return { conditionResult: classifierText.includes('factual') };
+        },
       },
-      expose: ['conditionResult'],
-    })
-    .addNode('researcher', { type: 'agent', agentId: 'researcher', expose: ['content'] })
-    .addNode('ideator', { type: 'agent', agentId: 'ideator', expose: ['content'] })
-    .addNode('synthesizer', { type: 'agent', agentId: 'synthesizer', expose: ['content'] })
-    .addEdge('classifier', 'routeByIntent')
-    .addEdge('routeByIntent', 'researcher', {
-      condition: {
-        field: 'routeByIntent.conditionResult',
-        operator: 'equals',
-        value: true,
+      { id: 'researcher', kind: 'agent', agentId: 'researcher', expose: ['content'] },
+      { id: 'ideator', kind: 'agent', agentId: 'ideator', expose: ['content'] },
+      { id: 'synthesizer', kind: 'agent', agentId: 'synthesizer', expose: ['content'] },
+    ],
+    edges: [
+      { from: 'classifier', to: 'routeByIntent' },
+      {
+        from: 'routeByIntent',
+        to: 'researcher',
+        when: {
+          type: 'branch',
+          condition: {
+            field: 'routeByIntent.conditionResult',
+            operator: 'equals',
+            value: true,
+          },
+        },
       },
-    })
-    .setDefaultEdge('routeByIntent', 'ideator')
-    .addEdge('researcher', 'synthesizer')
-    .addEdge('ideator', 'synthesizer')
-    .setEntry('classifier')
-    .build();
+      { from: 'routeByIntent', to: 'ideator', default: true },
+      { from: 'researcher', to: 'synthesizer' },
+      { from: 'ideator', to: 'synthesizer' },
+    ],
+  });
 
-  fred.registerGraphWorkflow(workflow);
+  await fred.defineWorkflow(workflow);
 
   console.log('=== Graph Workflow Demo: Branching Research Flow ===\n');
 
   console.log('--- Factual Question ---');
-  const factualResult = await fred.executeGraphWorkflow(
+  const factualResult = await fred.executeWorkflow(
     'research-flow',
     'What causes the northern lights?'
   );
@@ -75,7 +88,7 @@ async function main() {
   console.log('Final output:', extractText(factualResult.outputs.synthesizer));
 
   console.log('\n--- Creative Question ---');
-  const creativeResult = await fred.executeGraphWorkflow(
+  const creativeResult = await fred.executeWorkflow(
     'research-flow',
     'Imagine a world where gravity works in reverse.'
   );

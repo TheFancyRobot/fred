@@ -21,7 +21,9 @@ export interface CheckpointConfig {
 }
 
 /**
- * Pipeline configuration (V1 - legacy agent-based pipelines)
+ * Pipeline configuration (V1 - legacy agent-based pipelines).
+ * @deprecated Prefer `defineWorkflow()` or `PipelineConfigV2`; V1 is compiled
+ * to WorkflowIR and retained only as migration sugar.
  */
 export interface PipelineConfig {
   id: string;

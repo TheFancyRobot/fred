@@ -1,10 +1,10 @@
 # 06 - Graph Workflow: Branching Execution
 
-This example shows how to build a graph workflow that classifies a question, routes it down different paths, and merges into a final synthesis. Agent prompts are loaded from `agents/*.md`; graph topology and runtime branching stay in TypeScript.
+This example shows how to define native WorkflowIR that classifies a question, routes it down different paths, and merges into a final synthesis. Agent prompts are loaded from `agents/*.md`; graph topology and runtime branching stay in TypeScript.
 
 ## What You'll Learn
 
-- How to build DAG-style flows with `GraphWorkflowBuilder`
+- How to build DAG-style flows directly with `defineWorkflow()`
 - How to use conditional branching with `BranchCondition` and default edges
 - How merge nodes work naturally when multiple paths connect to one target node
 - Why `initializeFromConfig('./config.yaml')` runs before graph registration
@@ -52,4 +52,4 @@ Because agents are loaded from markdown files, workflow registration happens onl
 
 ## Why This Matters
 
-Compared with LangGraph-style imperative wiring, Fred's `GraphWorkflowBuilder` keeps topology and branch conditions declarative and compact in one fluent definition.
+`defineWorkflow()` exposes Fred's canonical nodes-and-edges representation directly. `GraphWorkflowBuilder` remains available as ergonomic sugar and compiles to the same representation.

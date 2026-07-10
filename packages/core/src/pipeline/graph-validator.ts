@@ -9,6 +9,72 @@ import Graph from 'graphology';
 import { hasCycle } from 'graphology-dag';
 import type { GraphWorkflowConfig, AnyGraphNode, GraphEdge } from './graph';
 
+export interface DirectedGraphShape {
+  readonly id: string;
+  readonly nodeIds: readonly string[];
+  readonly edges: readonly { readonly from: string; readonly to: string }[];
+  readonly entry: string;
+}
+
+/**
+ * Shared structural DAG validation used by both graph configs and WorkflowIR.
+ * Returns the first issue so each caller can preserve its public error type.
+ */
+export function findDirectedGraphIssue(
+  shape: DirectedGraphShape,
+  options: { readonly label: string; readonly requireReachable?: boolean },
+): string | undefined {
+  const nodeIds = new Set<string>();
+  const duplicates: string[] = [];
+  for (const nodeId of shape.nodeIds) {
+    if (nodeIds.has(nodeId)) duplicates.push(nodeId);
+    nodeIds.add(nodeId);
+  }
+  if (duplicates.length > 0) {
+    return `${options.label} ${shape.id} has duplicate node IDs: ${duplicates.join(', ')}`;
+  }
+  if (shape.nodeIds.length === 0) {
+    return `${options.label} ${shape.id} must contain at least one node`;
+  }
+  if (!nodeIds.has(shape.entry)) {
+    return `${options.label} ${shape.id} entry node '${shape.entry}' does not exist in nodes array`;
+  }
+  for (const edge of shape.edges) {
+    if (!nodeIds.has(edge.from)) {
+      return `${options.label} ${shape.id} edge references non-existent source node: ${edge.from}`;
+    }
+    if (!nodeIds.has(edge.to)) {
+      return `${options.label} ${shape.id} edge references non-existent target node: ${edge.to}`;
+    }
+  }
+
+  const graph = new Graph({ type: 'directed' });
+  for (const nodeId of shape.nodeIds) graph.addNode(nodeId);
+  for (const edge of shape.edges) {
+    if (!graph.hasEdge(edge.from, edge.to)) graph.addDirectedEdge(edge.from, edge.to);
+  }
+  if (hasCycle(graph)) return `${options.label} ${shape.id} contains a cycle (DAG required)`;
+
+  if (options.requireReachable) {
+    const visited = new Set<string>();
+    const queue = [shape.entry];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (current === undefined || visited.has(current)) continue;
+      visited.add(current);
+      for (const edge of shape.edges) {
+        if (edge.from === current && !visited.has(edge.to)) queue.push(edge.to);
+      }
+    }
+    const unreachable = shape.nodeIds.filter((nodeId) => !visited.has(nodeId));
+    if (unreachable.length > 0) {
+      return `${options.label} ${shape.id} has unreachable nodes: ${unreachable.join(', ')}`;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Validation error for graph workflows
  */
@@ -36,48 +102,13 @@ export class GraphValidationError extends Error {
  */
 export function validateGraphWorkflow(config: GraphWorkflowConfig): void {
   const { id, nodes, edges, entryNode, handoffs } = config;
+  const structuralIssue = findDirectedGraphIssue(
+    { id, nodeIds: nodes.map((node) => node.id), edges, entry: entryNode },
+    { label: 'Graph workflow' },
+  );
+  if (structuralIssue) throw new GraphValidationError(structuralIssue, id);
 
-  // Build node ID set for quick lookup
-  const nodeIds = new Set<string>();
-  const duplicates: string[] = [];
-
-  for (const node of nodes) {
-    if (nodeIds.has(node.id)) {
-      duplicates.push(node.id);
-    }
-    nodeIds.add(node.id);
-  }
-
-  if (duplicates.length > 0) {
-    throw new GraphValidationError(
-      `Graph workflow ${id} has duplicate node IDs: ${duplicates.join(', ')}`,
-      id
-    );
-  }
-
-  // Validate entry node exists
-  if (!nodeIds.has(entryNode)) {
-    throw new GraphValidationError(
-      `Graph workflow ${id} entry node '${entryNode}' does not exist in nodes array`,
-      id
-    );
-  }
-
-  // Validate edge references
-  for (const edge of edges) {
-    if (!nodeIds.has(edge.from)) {
-      throw new GraphValidationError(
-        `Graph workflow ${id} edge references non-existent source node: ${edge.from}`,
-        id
-      );
-    }
-    if (!nodeIds.has(edge.to)) {
-      throw new GraphValidationError(
-        `Graph workflow ${id} edge references non-existent target node: ${edge.to}`,
-        id
-      );
-    }
-  }
+  const nodeIds = new Set(nodes.map((node) => node.id));
 
   // Validate fork and join nodes
   for (const node of nodes) {
@@ -100,30 +131,6 @@ export function validateGraphWorkflow(config: GraphWorkflowConfig): void {
         }
       }
     }
-  }
-
-  // Build graph for cycle detection
-  const graph = new Graph({ type: 'directed' });
-
-  // Add all nodes to graph
-  for (const node of nodes) {
-    graph.addNode(node.id);
-  }
-
-  // Add all edges to graph
-  for (const edge of edges) {
-    // Allow multiple edges between same nodes
-    if (!graph.hasEdge(edge.from, edge.to)) {
-      graph.addDirectedEdge(edge.from, edge.to);
-    }
-  }
-
-  // Check for cycles
-  if (hasCycle(graph)) {
-    throw new GraphValidationError(
-      `Graph workflow ${id} contains a cycle (DAG required)`,
-      id
-    );
   }
 
   // Validate default branches at decision points

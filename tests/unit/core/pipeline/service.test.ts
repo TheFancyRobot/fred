@@ -13,7 +13,11 @@ import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
 import type { PipelineResult } from '../../../../packages/core/src/pipeline/executor';
 import { ExecutorService, ExecutorServiceLive } from '../../../../packages/core/src/pipeline/executor';
 import { GraphExecutorService, GraphExecutorServiceLive } from '../../../../packages/core/src/pipeline/graph-executor';
-import { PipelineExecutionError, PipelineNotFoundError } from '../../../../packages/core/src/pipeline/errors';
+import {
+  GraphValidationError,
+  PipelineExecutionError,
+  PipelineNotFoundError,
+} from '../../../../packages/core/src/pipeline/errors';
 import { AgentNotFoundError } from '../../../../packages/core/src/agent/errors';
 
 /**
@@ -228,6 +232,90 @@ describe('PipelineService', () => {
     });
   });
 
+  describe('removePipeline', () => {
+    test('removes V2, graph, and native workflows from every registry', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          yield* service.createPipelineV2({
+            id: 'remove-v2',
+            steps: [{ name: 'step', type: 'function', fn: () => 'v2' }],
+          });
+          yield* service.registerGraphWorkflow({
+            id: 'remove-graph',
+            type: 'graph',
+            entryNode: 'start',
+            nodes: [{ id: 'start', type: 'function', fn: () => 'graph' }],
+            edges: [],
+          });
+          yield* service.defineWorkflow({
+            id: 'remove-native',
+            source: 'native',
+            entry: 'start',
+            nodes: [{ id: 'start', kind: 'function', fn: () => 'native' }],
+            edges: [],
+          });
+
+          const removed = {
+            v2: yield* service.removePipeline('remove-v2'),
+            graph: yield* service.removePipeline('remove-graph'),
+            native: yield* service.removePipeline('remove-native'),
+          };
+          const remaining = {
+            v2: yield* service.hasPipelineV2('remove-v2'),
+            graph: yield* service.hasGraphWorkflow('remove-graph'),
+            v2Ir: yield* service.hasWorkflowIR('remove-v2'),
+            graphIr: yield* service.hasWorkflowIR('remove-graph'),
+            nativeIr: yield* service.hasWorkflowIR('remove-native'),
+          };
+
+          yield* service.createPipelineV2({
+            id: 'remove-v2',
+            steps: [{ name: 'replacement', type: 'function', fn: () => 'replacement' }],
+          });
+          return {
+            removed,
+            remaining,
+            redefined: yield* service.hasPipelineV2('remove-v2'),
+          };
+        })
+      );
+
+      expect(result.removed).toEqual({ v2: true, graph: true, native: true });
+      expect(result.remaining).toEqual({
+        v2: false,
+        graph: false,
+        v2Ir: false,
+        graphIr: false,
+        nativeIr: false,
+      });
+      expect(result.redefined).toBe(true);
+    });
+  });
+
+  describe('defineWorkflow', () => {
+    test('rejects invalid native workflow ids consistently', async () => {
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          yield* service.defineWorkflow({
+            id: 'invalid/native',
+            source: 'native',
+            entry: 'start',
+            nodes: [{ id: 'start', kind: 'function', fn: () => 'native' }],
+            edges: [],
+          });
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+      if (result._tag === 'Failure' && result.cause._tag === 'Fail') {
+        expect(result.cause.error).toBeInstanceOf(GraphValidationError);
+        expect(result.cause.error.message).toContain('invalid characters');
+      }
+    });
+  });
+
   describe('matchPipelineByUtterance', () => {
     test('returns null when no pipelines with utterances', async () => {
       const result = await runWithService(
@@ -288,6 +376,27 @@ describe('PipelineService', () => {
           });
         }).pipe(Effect.provide(TestLayer))
       );
+      expect(result._tag).toBe('Failure');
+    });
+
+    test('rejects an id already registered by another workflow dialect', async () => {
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          yield* service.defineWorkflow({
+            id: 'cross-dialect-duplicate',
+            entry: 'native-step',
+            nodes: [{ id: 'native-step', kind: 'function', fn: () => 'native' }],
+            edges: [],
+            source: 'native',
+          });
+          yield* service.createPipelineV2({
+            id: 'cross-dialect-duplicate',
+            steps: [{ name: 'v2-step', type: 'function', fn: () => 'v2' }],
+          });
+        }).pipe(Effect.provide(TestLayer))
+      );
+
       expect(result._tag).toBe('Failure');
     });
   });

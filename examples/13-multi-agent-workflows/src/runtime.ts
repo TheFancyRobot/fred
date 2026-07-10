@@ -1,6 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
-import { Fred, GraphWorkflowBuilder, SessionService, createHandoffTool, type Tool } from '@fancyrobot/fred';
+import {
+  Fred,
+  GraphWorkflowBuilder,
+  SessionService,
+  compileGraphWorkflow,
+  createHandoffTool,
+  defineWorkflow,
+  type Tool,
+} from '@fancyrobot/fred';
 import { Effect, Runtime, Schema } from 'effect';
 import { appendNotebookEntry, ensureNotebook, queryNotebook } from './notes';
 import { fetchLatestNewsDigest } from './news';
@@ -912,8 +920,12 @@ export async function setupExample(
 
   await fred.initializeFromConfig(configPath);
 
-  fred.registerGraphWorkflow(buildResearchWorkflow(fred));
-  fred.registerGraphWorkflow(buildDailyBriefWorkflow(fred, notebookPath));
+  // Builders remain ergonomic sugar; compiling them here makes the canonical
+  // WorkflowIR explicit and registers both through the unified API.
+  await fred.defineWorkflow(defineWorkflow(compileGraphWorkflow(buildResearchWorkflow(fred))));
+  await fred.defineWorkflow(
+    defineWorkflow(compileGraphWorkflow(buildDailyBriefWorkflow(fred, notebookPath))),
+  );
 
   return {
     notebookPath,

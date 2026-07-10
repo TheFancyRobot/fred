@@ -1,5 +1,11 @@
 import { Effect, Runtime } from 'effect';
-import { Fred, PipelineBuilder, PipelineService, SessionService } from '@fancyrobot/fred';
+import {
+  Fred,
+  PipelineBuilder,
+  PipelineService,
+  SessionService,
+  defineWorkflow,
+} from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 async function executePipelineV2(fred: Fred, pipelineId: string, input: string) {
@@ -26,6 +32,22 @@ async function executePipelineV2(fred: Fred, pipelineId: string, input: string) 
 async function main() {
   const fred = await Fred.create();
   await fred.initializeFromConfig('./config.yaml');
+
+  // Native WorkflowIR is useful when the workflow is already graph-shaped and
+  // no compatibility builder is needed. This small preflight executes through
+  // the same engine as the checkpointed PipelineBuilder workflow below.
+  const nativePreflight = defineWorkflow({
+    id: 'native-sequential-preflight',
+    entry: 'normalize',
+    nodes: [
+      { id: 'normalize', kind: 'function', fn: (ctx) => ctx.input.trim() },
+      { id: 'label', kind: 'function', fn: (ctx) => `ready:${ctx.outputs.normalize}` },
+    ],
+    edges: [{ from: 'normalize', to: 'label' }],
+  });
+  await fred.defineWorkflow(nativePreflight);
+  const preflight = await fred.executeWorkflow('native-sequential-preflight', ' TypeScript ');
+  console.log('[WorkflowIR] Preflight:', preflight.finalOutput);
 
   const built = new PipelineBuilder('classify-plan-summarize')
     .addAgentStep('classifier')

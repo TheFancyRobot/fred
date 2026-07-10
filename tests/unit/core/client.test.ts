@@ -22,6 +22,8 @@ import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipel
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
 import type { GraphExecutionResult } from '../../../packages/core/src/pipeline/graph-executor';
+import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
+import type { WorkflowExecutionResult } from '../../../packages/core/src/workflow/execute';
 import { createMockProvider } from '../helpers/mock-provider';
 import { createMockStorage } from '../helpers/mock-storage';
 
@@ -117,6 +119,53 @@ describe('createFred client', () => {
     const result = (await client.workflows.run('client-v2-pipeline', 'hello')) as PipelineResult;
     expect(result.success).toBe(true);
     expect(result.finalOutput).toBe('echo:hello');
+  });
+
+  it('resolves registered subworkflows through the public workflow runtime', async () => {
+    const client = track(await createFred());
+    await client.workflows.define({
+      id: 'client-child-workflow',
+      steps: [{
+        type: 'function',
+        name: 'child-result',
+        fn: (context) => `child:${context.input}`,
+      }],
+    });
+    await client.workflows.define({
+      id: 'client-parent-workflow',
+      steps: [{
+        type: 'pipeline',
+        name: 'nested',
+        pipelineId: 'client-child-workflow',
+      }],
+    });
+
+    const result = (await client.workflows.run(
+      'client-parent-workflow',
+      'hello',
+    )) as PipelineResult;
+    expect(result.success).toBe(true);
+    expect(result.finalOutput).toBe('child:hello');
+  });
+
+  it('workflows sub-API defines and runs native WorkflowIR directly', async () => {
+    const client = track(await createFred());
+    await client.workflows.define(defineWorkflow({
+      id: 'client-native-workflow',
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function', fn: (context) => `native:${context.input}` },
+      ],
+      edges: [],
+    }));
+
+    const result = (await client.workflows.run(
+      'client-native-workflow',
+      'hello',
+    )) as WorkflowExecutionResult;
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('completed');
+    expect(result.finalOutput).toBe('native:hello');
   });
 
   it('workflows.run accepts a sessionId and stays transparent to execution', async () => {

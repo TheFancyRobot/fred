@@ -8,6 +8,8 @@ This example packages several everyday-useful agent patterns into one workspace:
 - a `news-briefer` that fetches and summarizes the latest 24 hours of news
 - a `daily-brief` workflow that combines notes + news into one digest
 
+The two graph builders are explicitly compiled with `compileGraphWorkflow()` and registered with `defineWorkflow()`, showing how builder sugar and native WorkflowIR share one execution path.
+
 ## Why this split
 
 The design follows a few reliable multi-agent patterns:
