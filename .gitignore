@@ -104,6 +104,11 @@ Desktop.ini
 # Claude
 /.claude/
 
+# Local agent tool state
+/.codex/
+/.entire/
+/.memsearch/
+
 # Fred local runtime/eval artifacts
 /.fred/
 
