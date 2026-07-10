@@ -773,7 +773,7 @@ describe('TUI App (OpenTUI integration)', () => {
     expect(frame).toContain('1 field');
   });
 
-  test.skip('rebuilds transcript when tool activity arrives after assistant text has started streaming', async () => {
+  test('rebuilds transcript when tool activity arrives after assistant text has started streaming', async () => {
     await createTestApp();
 
     app.processKey(makeKey({ name: 'h' }));
