@@ -61,6 +61,9 @@ The underlying `@fancyrobot/fred-http` server exposes an OpenAI-compatible API:
 | `GET /intents` | List intents |
 | `GET /tools` | List tools |
 | `GET /health` | Health check |
+| `GET /status` | Live agent runs |
+| `GET /docs` | Swagger UI |
+| `GET /docs/openapi.json` | OpenAPI document |
 
 ## What It Exports
 

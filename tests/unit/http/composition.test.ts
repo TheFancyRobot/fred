@@ -30,6 +30,19 @@ describe('createFredHttpApp', () => {
     expect(typeof Reflect.get(app, 'dispose')).toBe('function');
   });
 
+  it('delegates built-in routes to the Effect HttpApi implementation', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false },
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/health'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: 'ok' });
+  });
+
   it('allows explicit public custom routes without auth', async () => {
     const fred = new Fred();
     const app = createFredHttpApp({

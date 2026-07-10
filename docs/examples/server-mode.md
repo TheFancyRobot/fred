@@ -5,40 +5,41 @@ Example showing how to run Fred as an HTTP server.
 ## Basic Server
 
 ```typescript
-import { Fred } from '@fancyrobot/fred';
-import { ServerApp } from '@fancyrobot/fred-http';
+import { createFred } from '@fancyrobot/fred';
+import { withHttp } from '@fancyrobot/fred-http';
 
 async function main() {
-  const fred = new Fred();
-  fred.registerDefaultProviders();
+  const core = await createFred();
+  await core.providers.use('openai');
 
-  await fred.createAgent({
+  await core.agents.register({
     id: 'agent',
     systemMessage: 'You are helpful.',
     platform: 'openai',
     model: 'gpt-3.5-turbo',
   });
-  fred.setDefaultAgent('agent');
 
-  const app = new ServerApp(fred);
-  await app.start(3000);
+  const fred = withHttp(core);
+  const server = await fred.server.listen({ port: 3000 });
+  console.log(server.url);
 }
 ```
 
-## Server with Config
+HTTP is opt-in: the core client has no listener until it is passed to
+`withHttp()`. Call `fred.server.stop()` to stop only HTTP, or `fred.shutdown()`
+to close HTTP and the underlying Fred client together.
 
-```typescript
-import { Fred } from '@fancyrobot/fred';
-import { ServerApp } from '@fancyrobot/fred-http';
+## Legacy config launcher
 
-async function main() {
-  const fred = new Fred();
-  await fred.initializeFromConfig('config.json');
+The repository command still accepts config files during the one-release
+compatibility window:
 
-  const app = new ServerApp(fred);
-  await app.start(3000);
-}
+```bash
+bun run server --config config.json --port 3000
 ```
+
+`ServerApp` and `createFredHttpApp` are deprecated and will be removed in the
+next major release.
 
 ## API Endpoints
 
@@ -49,3 +50,6 @@ async function main() {
 - `GET /intents` - List intents
 - `GET /tools` - List tools
 - `GET /health` - Health check
+- `GET /status` - Live agent runs
+- `GET /docs` - Swagger UI
+- `GET /docs/openapi.json` - OpenAPI document

@@ -213,10 +213,12 @@ The API returns standard error responses:
 CORS is enabled by default for chat tools. For production, configure allowed origins:
 
 ```typescript
-import { ServerApp } from '@fancyrobot/fred-http';
+import { withHttp } from '@fancyrobot/fred-http';
 
-const app = new ServerApp(fred);
-// CORS headers are automatically added
+const httpFred = withHttp(fred, {
+  security: { corsAllowedOrigins: ['https://app.example'] },
+});
+await httpFred.server.listen({ port: 3000 });
 ```
 
 ## Examples
@@ -262,4 +264,3 @@ def chat(message, conversation_id=None):
 - Learn about [Context Management](context-management.md)
 - Explore [Server Mode](../examples/server-mode.md)
 - Check [API Reference](../api-reference/fred-class.md)
-
