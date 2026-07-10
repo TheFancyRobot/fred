@@ -242,6 +242,29 @@ describe('AgentFactory typed input and output', () => {
     });
   });
 
+  it('derives a provider-safe structured object name from namespaced agent ids', async () => {
+    let objectName = '';
+    activeSpies.push(
+      spyOn(LanguageModel, 'generateObject').mockImplementation((options: any) => {
+        objectName = options.objectName;
+        return Effect.succeed(structuredResponse('safe name')) as any;
+      }),
+    );
+    const agent = await Effect.runPromise(factory.createAgent({
+      id: `billing.v1.${'tenant.'.repeat(12)}classifier`,
+      platform: 'openai',
+      model: 'gpt-4',
+      systemMessage: 'Return a structured answer.',
+      output: OutputSchema,
+    }, makeProvider()));
+
+    await Effect.runPromise(agent.run('hello'));
+
+    expect(objectName).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(objectName.length).toBeLessThanOrEqual(64);
+    expect(objectName).toStartWith('billing_v1_');
+  });
+
   it('retries MalformedOutput and succeeds within the configured retry budget', async () => {
     let providerCalls = 0;
     activeSpies.push(

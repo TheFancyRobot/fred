@@ -52,6 +52,13 @@ import type { FrameworkConfig } from '../config/types';
 import { createSubagentExecutionContext, withSubagentExecutionContext } from '../subagent/context';
 
 const SUBAGENT_TIMEOUT_RESERVE_MS = 2_500;
+const STRUCTURED_OBJECT_NAME_MAX_LENGTH = 64;
+
+const toStructuredObjectName = (agentId: string): string => {
+  const sanitized = agentId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const nonEmpty = sanitized.length > 0 ? sanitized : 'agent_output';
+  return nonEmpty.slice(0, STRUCTURED_OBJECT_NAME_MAX_LENGTH);
+};
 
 type ObservabilityServiceApi = {
   logStructured: (options: {
@@ -1270,7 +1277,7 @@ export class AgentFactory {
               const generateOptions = {
                 prompt: Prompt.make(stepMessages),
                 schema: config.output,
-                objectName: config.id,
+                objectName: toStructuredObjectName(config.id),
                 temperature: config.temperature,
               } as unknown as Parameters<typeof LanguageModel.generateObject>[0];
               const program = LanguageModel.generateObject(generateOptions);
