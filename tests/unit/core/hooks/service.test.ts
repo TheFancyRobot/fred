@@ -2,6 +2,11 @@ import { describe, test, expect } from 'bun:test';
 import { Effect, Layer } from 'effect';
 import { HookExecutionError, HookManagerService, HookManagerServiceLive } from '../../../../packages/core/src/hooks/service';
 import { ObservabilityService } from '../../../../packages/core/src/observability/service';
+import {
+  AgentStatusService,
+  AgentStatusServiceLive,
+  trackAgentRun,
+} from '../../../../packages/core/src/observability/status';
 import type { HookType, HookEvent } from '../../../../packages/core/src/hooks/types';
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, HookManagerService>) =>
@@ -23,6 +28,14 @@ const runWithServiceAndObservability = <A, E>(effect: Effect.Effect<A, E, HookMa
       )
     )
   );
+
+const statusAwareHookLayer = HookManagerServiceLive.pipe(
+  Layer.provide(AgentStatusServiceLive)
+);
+const hookAndStatusLayer = Layer.merge(
+  AgentStatusServiceLive,
+  statusAwareHookLayer
+);
 
 describe('HookManagerService', () => {
   describe('registerHook', () => {
@@ -84,6 +97,64 @@ describe('HookManagerService', () => {
         })
       );
       expect(result).toEqual([]);
+    });
+
+    test('drives live run states even when no user hook handlers are registered', async () => {
+      const states = await Effect.runPromise(
+        Effect.gen(function* () {
+          const hooks = yield* HookManagerService;
+          const status = yield* AgentStatusService;
+
+          return yield* trackAgentRun({
+            runId: 'hook-status-run',
+            agentId: 'hook-status-agent',
+          })(
+            Effect.gen(function* () {
+              const capture = Effect.map(status.snapshot, (snapshot) => snapshot[0]?.state);
+
+              yield* hooks.executeHooks('beforeResponseGenerated', {
+                type: 'beforeResponseGenerated',
+                data: {},
+              });
+              const callingModel = yield* capture;
+
+              yield* hooks.executeHooks('beforeToolCalled', {
+                type: 'beforeToolCalled',
+                data: {},
+              });
+              const runningTool = yield* capture;
+
+              yield* hooks.executeHooks('afterToolCalled', {
+                type: 'afterToolCalled',
+                data: {},
+              });
+              const resumedModel = yield* capture;
+
+              yield* hooks.executeHooks('afterResponseGenerated', {
+                type: 'afterResponseGenerated',
+                data: {},
+              });
+              const streaming = yield* capture;
+
+              yield* hooks.executeHooks('afterPolicyDecision', {
+                type: 'afterPolicyDecision',
+                data: { outcome: 'requireApproval' },
+              });
+              const paused = yield* capture;
+
+              return [callingModel, runningTool, resumedModel, streaming, paused];
+            })
+          );
+        }).pipe(Effect.provide(hookAndStatusLayer))
+      );
+
+      expect(states).toEqual([
+        'calling_model',
+        'running_tool',
+        'calling_model',
+        'streaming',
+        'paused',
+      ]);
     });
 
     test('continues execution even if a handler throws', async () => {

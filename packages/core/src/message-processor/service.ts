@@ -623,7 +623,9 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           const messageWithContext = handoffMessage + handoffContext;
 
           // Process message with target agent
-          const handoffResult = yield* targetAgent.processMessage(messageWithContext, previousMessages).pipe(
+          const handoffResult = yield* targetAgent.processMessage(messageWithContext, previousMessages, {
+            sessionId: conversationId,
+          }).pipe(
             Effect.mapError((error) =>
               new HandoffError({ fromAgentId: usedAgentId || 'unknown', toAgentId: handoff.agentId, cause: error instanceof Error ? error : new Error(String(error)) })
             )
@@ -928,7 +930,11 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
             });
           }
 
-          const response = yield* agent.processMessage(currentMessage, sequentialVisibility ? previousMessages : []);
+          const response = yield* agent.processMessage(
+            currentMessage,
+            sequentialVisibility ? previousMessages : [],
+            { sessionId: conversationId }
+          );
 
           if (response.content && shouldPersistHistory) {
             yield* self.contextStorage.addMessage(conversationId, {

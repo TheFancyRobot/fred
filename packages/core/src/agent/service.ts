@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, Layer, Option, Ref } from 'effect';
 import type * as Schema from 'effect/Schema';
 import type { AgentConfig, AgentInstance, AnyAgentInstance } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
@@ -24,6 +24,7 @@ import {
   PromptSourceService,
   type PromptSourceService as PromptSourceServiceApi,
 } from './prompt-source';
+import { AgentStatusService } from '../observability/status';
 
 /**
  * AgentService interface for Effect-based agent lifecycle management
@@ -128,6 +129,7 @@ class AgentServiceImpl implements AgentService {
     private providerRegistryService: typeof ProviderRegistryService.Service,
     private toolGateService: typeof ToolGateService.Service,
     private promptSourceService: PromptSourceServiceApi,
+    private agentStatusService?: typeof AgentStatusService.Service,
     private tracer?: Tracer
   ) {
     const emptyRegistry: ToolRegistryLike = {
@@ -138,6 +140,7 @@ class AgentServiceImpl implements AgentService {
     };
     this.factory = new AgentFactory(emptyRegistry, tracer, promptSourceService);
     this.factory.setToolGateService(toolGateService);
+    this.factory.setAgentStatusService(agentStatusService);
   }
 
   createAgent<
@@ -513,12 +516,14 @@ export const AgentServiceLayer = Layer.effect(
     const providerRegistryService = yield* ProviderRegistryService;
     const toolGateService = yield* ToolGateService;
     const promptSourceService = yield* PromptSourceService;
+    const agentStatusService = yield* Effect.serviceOption(AgentStatusService);
     return new AgentServiceImpl(
       agents,
       toolRegistryService,
       providerRegistryService,
       toolGateService,
-      promptSourceService
+      promptSourceService,
+      Option.isSome(agentStatusService) ? agentStatusService.value : undefined
     );
   })
 );

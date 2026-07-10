@@ -80,6 +80,16 @@ export interface AgentOutputRetryPolicy {
   readonly maxRetries?: number;
 }
 
+/** Correlation metadata available when an agent invocation is nested in a workflow/session. */
+export interface AgentInvocationMetadata {
+  readonly workflowId?: string;
+  readonly sessionId?: string;
+}
+
+export interface AgentStreamOptions extends AgentInvocationMetadata {
+  readonly threadId?: string;
+}
+
 export interface AgentConfig<
   InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
   OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
@@ -191,18 +201,20 @@ export interface AgentInstance<
   /** Validate and execute a typed input directly. */
   run: (
     input: Schema.Schema.Type<InputSchema>,
-    messages?: AgentMessage[]
+    messages?: AgentMessage[],
+    metadata?: AgentInvocationMetadata
   ) => Effect.Effect<AgentResponse<Schema.Schema.Type<OutputSchema>>, Error>;
   /** Compatibility entrypoint for routed and conversational string messages. */
   processMessage: (
     message: string,
-    messages?: AgentMessage[]
+    messages?: AgentMessage[],
+    metadata?: AgentInvocationMetadata
   ) => Effect.Effect<AgentResponse<Schema.Schema.Type<OutputSchema>>, Error>;
   // Stream has error and requirements channels - actual types vary by implementation
   streamMessage?: (
     message: string,
     messages?: AgentMessage[],
-    options?: { threadId?: string }
+    options?: AgentStreamOptions
   ) => Stream.Stream<StreamEvent, unknown, any>;
 }
 

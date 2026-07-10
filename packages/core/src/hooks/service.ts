@@ -1,6 +1,10 @@
 import { Context, Data, Effect, Layer, Ref, Runtime } from 'effect';
 import type { HookType, HookEvent, HookResult, HookHandler } from './types';
 import { ObservabilityService } from '../observability/service';
+import {
+  AgentStatusService,
+  type AgentRunState,
+} from '../observability/status';
 
 /**
  * Error thrown when hook execution encounters catastrophic failure
@@ -15,6 +19,37 @@ export class HookExecutionError extends Data.TaggedError("HookExecutionError")<{
  * Hook execution outcome for telemetry
  */
 type HookOutcome = 'executed' | 'skipped' | 'aborted' | 'modified' | 'error';
+
+const stateForHook = (
+  type: HookType,
+  event: HookEvent
+): AgentRunState | undefined => {
+  switch (type) {
+    case 'beforeMessageReceived':
+    case 'beforeAgentSelected':
+    case 'afterAgentSelected':
+    case 'beforePipeline':
+    case 'beforeStep':
+      return 'starting';
+    case 'beforeResponseGenerated':
+      return 'calling_model';
+    case 'afterResponseGenerated':
+      return 'streaming';
+    case 'beforeToolCalled':
+      return 'running_tool';
+    case 'afterToolCalled':
+      return 'calling_model';
+    case 'afterPolicyDecision':
+      return typeof event.data === 'object'
+          && event.data !== null
+          && 'outcome' in event.data
+          && event.data.outcome === 'requireApproval'
+        ? 'paused'
+        : undefined;
+    default:
+      return undefined;
+  }
+};
 
 /**
  * HookManagerService interface for Effect-based hook management
@@ -77,7 +112,8 @@ export const HookManagerService = Context.GenericTag<HookManagerService>(
 class HookManagerServiceImpl implements HookManagerService {
   constructor(
     private hooks: Ref.Ref<Map<HookType, HookHandler[]>>,
-    private observability?: Context.Tag.Service<ObservabilityService>
+    private observability?: Context.Tag.Service<typeof ObservabilityService>,
+    private agentStatus?: Context.Tag.Service<typeof AgentStatusService>
   ) {}
 
   registerHook(type: HookType, handler: HookHandler): Effect.Effect<void> {
@@ -115,6 +151,11 @@ class HookManagerServiceImpl implements HookManagerService {
     return Effect.gen(function* () {
       const startTime = Date.now();
       const runtime = yield* Effect.runtime<never>();
+
+      const nextState = stateForHook(type, event);
+      if (self.agentStatus && nextState) {
+        yield* self.agentStatus.transition(nextState);
+      }
 
       const hooks = yield* Ref.get(self.hooks);
       const handlers = hooks.get(type);
@@ -358,7 +399,12 @@ export const HookManagerServiceLive = Layer.effect(
 
     // Optionally inject ObservabilityService if available
     const observability = yield* Effect.serviceOption(ObservabilityService);
+    const agentStatus = yield* Effect.serviceOption(AgentStatusService);
 
-    return new HookManagerServiceImpl(hooks, observability._tag === 'Some' ? observability.value : undefined);
+    return new HookManagerServiceImpl(
+      hooks,
+      observability._tag === 'Some' ? observability.value : undefined,
+      agentStatus._tag === 'Some' ? agentStatus.value : undefined
+    );
   })
 );

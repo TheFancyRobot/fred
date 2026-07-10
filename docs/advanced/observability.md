@@ -164,6 +164,29 @@ class CustomTracer implements Tracer {
 }
 ```
 
+## Live Agent Status Metrics
+
+Fred tracks active agent invocations with Effect's built-in `Metric` registry.
+The existing `ObservabilityService.exportMetricsOtel()` path includes these
+metrics using native OpenTelemetry gauge, cumulative sum, and histogram shapes:
+
+| Metric | Kind | Attributes | Meaning |
+| --- | --- | --- | --- |
+| `fred_agents_running` | gauge | none | Agent invocations currently running |
+| `fred_agent_runs_started_total` | counter | `agentId` | Agent invocations started |
+| `fred_agent_runs_completed_total` | counter | `agentId`, `exit` | Agent invocations completed |
+| `fred_agent_run_duration_ms` | histogram | `agentId`, `exit` | Invocation duration in milliseconds |
+
+`exit` is one of `success`, `failure`, or `interrupted`; defects are reported
+as failures. Workflow, session, run, and fiber identifiers remain available in
+live status snapshots but are deliberately excluded from metric attributes to
+avoid unbounded cardinality.
+
+The running gauge returns to zero and the live snapshot clears after success,
+typed failure, defect, or fiber interruption. This makes interruption cleanup a
+useful production health signal: a non-zero gauge should represent live work,
+not leaked status entries.
+
 ## Performance Considerations
 
 - **No-op tracer**: Zero overhead when tracing is disabled

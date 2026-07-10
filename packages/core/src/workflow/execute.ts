@@ -208,7 +208,10 @@ const executeHandoff = Effect.fn('WorkflowExecutor.executeHandoff')(function* (
     handoffChain: [...chain, sourceAgentId],
   });
 
-  const result = yield* target.processMessage(context.input, context.history).pipe(
+  const result = yield* target.processMessage(context.input, context.history, {
+    workflowId: workflow.id,
+    sessionId: context.conversationId,
+  }).pipe(
     Effect.mapError((cause) => nodeFailure(workflow.id, sourceAgentId, cause, true)),
   );
   if (isHandoffSignal(result)) {
@@ -244,7 +247,10 @@ function runNodeBody(
       const history = workflow.source === 'v1' && options.sequentialVisibility === false
         ? []
         : context.history;
-      return agent.processMessage(message, history).pipe(
+      return agent.processMessage(message, history, {
+        workflowId: workflow.id,
+        sessionId: context.conversationId,
+      }).pipe(
         Effect.mapError((cause) => nodeFailure(workflow.id, node.id, cause, true)),
         Effect.flatMap((result) =>
           isHandoffSignal(result)

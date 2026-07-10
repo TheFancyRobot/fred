@@ -92,6 +92,16 @@ export class SessionOperationError extends Schema.TaggedError<SessionOperationEr
 ) {}
 
 /**
+ * Error reading the live agent status snapshot.
+ */
+export class StatusReadError extends Schema.TaggedError<StatusReadError>()(
+  'StatusReadError',
+  {
+    message: Schema.String,
+  },
+) {}
+
+/**
  * Error for invalid CLI arguments or options.
  */
 export class InvalidArgumentError extends Schema.TaggedError<InvalidArgumentError>()(

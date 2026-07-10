@@ -103,6 +103,20 @@ export interface SessionTelemetry {
   outputTokenCount: number;
 }
 
+export interface TuiAgentRunInfo {
+  readonly fiberId: string;
+  readonly agentId: string;
+  readonly workflowId?: string;
+  readonly sessionId?: string;
+  readonly state:
+    | 'starting'
+    | 'calling_model'
+    | 'streaming'
+    | 'running_tool'
+    | 'paused';
+  readonly startedAt: number;
+}
+
 export type CommandPaletteScope = FocusablePaneId;
 
 export interface PluginSlashCommandState {
@@ -183,6 +197,9 @@ export interface TuiState {
   transcript: SessionTranscript;
   streaming: StreamingState;
   telemetry: SessionTelemetry;
+  agentStatus: {
+    runs: ReadonlyArray<TuiAgentRunInfo>;
+  };
   commandPalette: CommandPaletteState;
   input: {
     text: string;
@@ -258,6 +275,9 @@ export function createInitialTuiStateWithPlugins(
       sessionCostUsd: 0,
       inputTokenCount: 0,
       outputTokenCount: 0,
+    },
+    agentStatus: {
+      runs: [],
     },
     commandPalette: {
       isOpen: false,
@@ -1427,6 +1447,18 @@ export function clearStreamingAssistant(state: TuiState, nowMs = Date.now()): Tu
 
 export function setSystemNotice(state: TuiState, notice: string | null): TuiState {
   return { ...state, systemNotice: notice?.trim() || null };
+}
+
+export function applyAgentStatusSnapshot(
+  state: TuiState,
+  runs: ReadonlyArray<TuiAgentRunInfo>,
+): TuiState {
+  return {
+    ...state,
+    agentStatus: {
+      runs: runs.map((run) => ({ ...run })),
+    },
+  };
 }
 
 export function appendUserMessage(state: TuiState, content: string, nowMs = Date.now()): TuiState {

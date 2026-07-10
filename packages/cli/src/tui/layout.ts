@@ -16,6 +16,9 @@ import {
 } from '@opentui/core';
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
+import { sanitizeForTerminalDisplay } from '../runtime/terminal-sanitize.js';
+
+export { sanitizeForTerminalDisplay } from '../runtime/terminal-sanitize.js';
 
 const INPUT_CURSOR_INDICATOR = '█';
 const INPUT_ACCENT_GLYPH = '▎';
@@ -26,24 +29,6 @@ const MAX_SERIALIZE_DEPTH = 4;
 const MAX_SERIALIZE_ITEMS = 20;
 const MAX_SERIALIZE_NODES = 120;
 const RUNNING_EXCERPT_CHAR_LIMIT = 100;
-
-/**
- * Strip terminal control sequences before rendering untrusted content.
- * Keeps newlines/tabs/carriage returns so layout remains readable.
- */
-export function sanitizeForTerminalDisplay(text: string): string {
-  return text
-    // OSC (e.g. OSC52), DCS/PM/APC payloads, CSI, and simple ESC sequences.
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\x9b[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\x1b[@-_]/g, '')
-    // Strip remaining C0/C1 controls except tab/newline/carriage-return.
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
-}
 
 function truncateText(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 3))}...`;
@@ -694,14 +679,45 @@ export function renderStatusContent(state: TuiState, options: StatusRenderOption
   const maxWidth = options.maxWidth ?? 120;
   const dim = options.dim ?? false;
 
-  // Build badge-based status line (no telemetry)
+  const agentStatus = renderAgentStatusSummary(state.agentStatus.runs, maxWidth);
   const badges = buildStatusBadges(state);
-  const statusText = joinBadgesWithTruncation(badges, maxWidth);
+  const shortcuts = joinBadgesWithTruncation(badges, maxWidth);
+  const fullStatus = state.agentStatus.runs.length > 0
+    ? `${agentStatus}  ${shortcuts}`
+    : `${shortcuts}  ${agentStatus}`;
+  const statusText = fullStatus.length <= maxWidth
+    ? fullStatus
+    : state.agentStatus.runs.length > 0
+      ? truncateStatus(`A${state.agentStatus.runs.length}  ${shortcuts}`, maxWidth)
+      : shortcuts;
 
   return {
     lines: [statusText],
     dim,
   };
+}
+
+const truncateStatus = (text: string, maxWidth: number): string => {
+  if (maxWidth <= 0) return '';
+  if (text.length <= maxWidth) return text;
+  if (maxWidth <= 3) return text.slice(0, maxWidth);
+  return `${text.slice(0, maxWidth - 3).trimEnd()}...`;
+};
+
+/** Render active agent count plus concise per-agent state detail. */
+export function renderAgentStatusSummary(
+  runs: TuiState['agentStatus']['runs'],
+  maxWidth = 120,
+): string {
+  const count = `Agents ${runs.length}`;
+  if (runs.length === 0) return truncateStatus(count, maxWidth);
+
+  const details = runs.map((run) => {
+    const agentId = truncateText(sanitizeForTerminalDisplay(run.agentId), 20);
+    return `${agentId}:${run.state}`;
+  }).join(', ');
+
+  return truncateStatus(`${count} | ${details}`, maxWidth);
 }
 
 /**

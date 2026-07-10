@@ -38,6 +38,7 @@ import {
   MessageRouterServiceLiveWithConfig,
 } from './routing/service';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
+import { AgentStatusService, AgentStatusServiceLive } from './observability/status';
 import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
 import type { RoutingConfig } from './routing/types';
@@ -63,7 +64,8 @@ export type FredServices =
   | IntentRouterService
   | MessageRouterService
   | SessionService
-  | ObservabilityService;
+  | ObservabilityService
+  | AgentStatusService;
 
 /**
  * Fred runtime type with all services
@@ -242,10 +244,17 @@ const CheckpointServiceLive = Layer.effect(
  * Base layers with no external dependencies
  * Wave 1: ToolRegistry, HookManager, Observability
  */
+const agentStatusLayer = AgentStatusServiceLive;
+const hookManagerLayer = HookManagerServiceLive.pipe(
+  Layer.provide(agentStatusLayer),
+  Layer.provide(ObservabilityServiceLive)
+);
+
 const baseLayer = Layer.mergeAll(
   ToolRegistryServiceLive,
-  HookManagerServiceLive,
-  ObservabilityServiceLive
+  hookManagerLayer,
+  ObservabilityServiceLive,
+  agentStatusLayer
 );
 
 /**
@@ -262,7 +271,7 @@ const coreLayer = Layer.mergeAll(
  * ToolGate layer depends on ToolRegistry
  */
 const toolGateLayer = ToolGateServiceLive.pipe(
-  Layer.provide(ToolRegistryServiceLive)
+  Layer.provide(baseLayer)
 );
 
 /**
@@ -289,7 +298,7 @@ const subagentLayer = SubagentServiceLive;
 const defaultRouterLayer = MessageRouterServiceLive;
 
 /**
- * Complete Fred layers - all 14 services composed
+ * Complete Fred layers - all services composed
  *
  * Dependency graph:
  * ```
@@ -337,7 +346,7 @@ export const makeFredLayers = (
     Layer.provide(selectedAgentLayer),
     Layer.provide(ExecutorServiceLive),
     Layer.provide(GraphExecutorServiceLive),
-    Layer.provide(HookManagerServiceLive),
+    Layer.provide(hookManagerLayer),
     Layer.provide(CheckpointServiceLive),
     Layer.provide(pauseLayer)
   );
@@ -498,4 +507,6 @@ export {
   MessageRouterServiceLiveWithConfig,
   ObservabilityService,
   ObservabilityServiceLive,
+  AgentStatusService,
+  AgentStatusServiceLive,
 };

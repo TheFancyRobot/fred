@@ -95,6 +95,7 @@ describe('Effect runtime boundary guards', () => {
   const cliBoundaryFiles = new Set([
     'commands/chat.ts',
     'commands/run.ts',
+    'commands/status.ts',
     'commands/session.ts',
     'commands/validate.ts',
     'commands/intent.ts',

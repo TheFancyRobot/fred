@@ -10,9 +10,9 @@ export type { ActionType, Action, Intent, IntentMatch } from './intent/intent';
 
 // ─── Agent Types ────────────────────────────────────────────────────────────
 export type {
-  AIPlatform, AgentConfig, AgentOutputRetryPolicy, AgentPrompt,
+  AIPlatform, AgentConfig, AgentInvocationMetadata, AgentOutputRetryPolicy, AgentPrompt,
   AgentPromptVariable, AgentTemplatePrompt, AgentBamlPrompt,
-  ToolRetryPolicy, RetryDiagnostics, AgentInstance, AnyAgentConfig,
+  AgentStreamOptions, ToolRetryPolicy, RetryDiagnostics, AgentInstance, AnyAgentConfig,
   AnyAgentInstance, AgentMessage, AgentResponse,
 } from './agent/agent';
 export { hasRetryDiagnostics, type ErrorWithRetryDiagnostics } from './agent/agent';
@@ -322,6 +322,18 @@ export type {
   RunRecord, HookEvent as ObservabilityHookEvent, StepSpan, ToolUsage, ModelUsage,
   MetricsSnapshot, OtelMetricsExport,
 } from './observability/service';
+export {
+  AgentRunAnnotationRef,
+  AgentStatusService,
+  AgentStatusServiceLive,
+  trackAgentRun,
+  type AgentRunAnnotation,
+  type AgentRunInfo,
+  type AgentRunState,
+  type AgentStatusListener,
+  type AgentStatusSnapshot,
+  type AgentStatusUnsubscribe,
+} from './observability/status';
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 export { sanitizeError } from './utils/validation';
@@ -356,7 +368,7 @@ export {
   type FredLayerOptions,
   type FredRuntime,
   type FredServices,
-  // Service tags + Live layers (all 14 FredServices members)
+  // Service tags + Live layers
   ToolRegistryService,
   ToolRegistryServiceLive,
   ToolGateService,

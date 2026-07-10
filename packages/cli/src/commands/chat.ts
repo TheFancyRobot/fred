@@ -792,6 +792,9 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
               streamTimeoutMode: 'patient',
               patienceMessage: DEFAULT_PATIENCE_MESSAGES,
               patienceIntervalMs: 15_000,
+              agentStatus: {
+                subscribe: (listener) => fred.subscribeAgentStatus(listener),
+              },
             }
           ),
         catch: (error) =>
