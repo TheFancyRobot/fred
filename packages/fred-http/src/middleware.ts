@@ -9,9 +9,9 @@ import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import { RateLimiter } from './rate-limiter';
 import {
-  DEFAULT_SECURITY_CONFIG,
   isLocalRequest,
   matchOrigin,
+  resolveServerSecurityConfig,
   type ServerSecurityConfig,
 } from './security';
 
@@ -114,8 +114,7 @@ const makeSecurityMiddleware = (
   });
 
 export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
-  const config: ServerSecurityConfig = { ...DEFAULT_SECURITY_CONFIG, ...options.security };
-  const token = options.security?.authToken === undefined
+  const environmentToken = options.security?.authToken === undefined
     ? Config.option(Config.redacted('FRED_DEV_SERVER_TOKEN')).pipe(
         Effect.map(Option.map(Redacted.value)),
         Effect.map(Option.getOrUndefined),
@@ -124,13 +123,19 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
 
   return HttpApiBuilder.middleware(
     Effect.gen(function* () {
-      const authToken = yield* token;
+      const configuredEnvironmentToken = yield* environmentToken;
+      const resolved = resolveServerSecurityConfig(options.security, configuredEnvironmentToken);
+      if (resolved.generatedAuthToken !== undefined) {
+        yield* Effect.logWarning('Generated Fred HTTP auth token', {
+          authToken: resolved.generatedAuthToken,
+        });
+      }
+      const config = resolved.config;
       const limiter = yield* Effect.acquireRelease(
         Effect.sync(() => new RateLimiter(config.rateLimitMaxRequests, config.rateLimitWindowMs)),
         (resource) => Effect.sync(() => resource.dispose()),
       );
-      return makeSecurityMiddleware(config, options.trustProxy ?? false, authToken, limiter);
+      return makeSecurityMiddleware(config, options.trustProxy ?? false, config.authToken, limiter);
     }),
   );
 };
-

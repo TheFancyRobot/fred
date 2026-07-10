@@ -35,56 +35,56 @@ const DEFAULT_SUBAGENT_ENV_ALLOWLIST = [
   'USERPROFILE',
 ] as const;
 
-const CAPTURE_PROCESS_SOURCE = String.raw`
+export const CAPTURE_PROCESS_SOURCE = String.raw`
+const { spawn } = require('node:child_process');
+const { open, writeFile } = require('node:fs/promises');
 const [stdoutPath, stderrPath, maxOutputArg, command, ...args] = process.argv.slice(1);
 const maxOutputBytes = Number(maxOutputArg);
 
 const capture = async (stream, path) => {
-  const reader = stream.getReader();
-  const chunks = [];
+  const file = await open(path, 'w');
   let capturedBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (capturedBytes >= maxOutputBytes) continue;
-    const chunk = value.subarray(0, maxOutputBytes - capturedBytes);
-    chunks.push(chunk);
-    capturedBytes += chunk.byteLength;
+  try {
+    for await (const value of stream) {
+      if (capturedBytes >= maxOutputBytes) continue;
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      const captured = chunk.subarray(0, maxOutputBytes - capturedBytes);
+      await file.write(captured);
+      capturedBytes += captured.byteLength;
+    }
+  } finally {
+    await file.close();
   }
-  const output = new Uint8Array(capturedBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  await Bun.write(path, output);
 };
 
 const main = async () => {
   if (!stdoutPath || !stderrPath || !command || !Number.isFinite(maxOutputBytes)) {
     process.exit(2);
   }
-  const input = await new Response(Bun.stdin.stream()).arrayBuffer();
-  const child = Bun.spawn([command, ...args], {
+  const child = spawn(command, args, {
     cwd: process.cwd(),
     env: process.env,
-    stdin: 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
-  if (input.byteLength > 0) child.stdin.write(input);
-  child.stdin.end();
+  child.stdin.on('error', () => {});
+  process.stdin.pipe(child.stdin);
+  const exited = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (exitCode, signal) => resolve(exitCode ?? (signal ? 1 : 0)));
+  });
   const [exitCode] = await Promise.all([
-    child.exited,
+    exited,
     capture(child.stdout, stdoutPath),
     capture(child.stderr, stderrPath),
   ]);
-  process.exit(exitCode);
+  process.exitCode = exitCode;
 };
 
-await main().catch(async (cause) => {
-  if (stderrPath) await Bun.write(stderrPath, cause instanceof Error ? cause.stack ?? cause.message : String(cause));
-  process.exit(1);
+main().catch(async (cause) => {
+  if (stderrPath) {
+    await writeFile(stderrPath, cause instanceof Error ? cause.stack ?? cause.message : String(cause));
+  }
+  process.exitCode = 1;
 });
 `;
 
@@ -691,13 +691,32 @@ function signalProcess(
     return;
   }
 
-  if (process.platform !== 'win32') {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall through to direct child kill.
-    }
+  if (process.platform === 'win32') {
+    const force = signal === 'SIGKILL' || signal === 9;
+    const taskkill = spawn('taskkill.exe', [
+      '/PID',
+      String(child.pid),
+      '/T',
+      ...(force ? ['/F'] : []),
+    ], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    taskkill.once('error', () => {
+      try {
+        child.kill(signal);
+      } catch {
+        // Best effort; process may have already exited.
+      }
+    });
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, signal);
+    return;
+  } catch {
+    // Fall through to direct child kill.
   }
 
   try {

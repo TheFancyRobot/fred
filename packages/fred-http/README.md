@@ -23,6 +23,9 @@ const fred = withHttp(await createFred(), {
 });
 const server = await fred.server.listen({ port: 3000 });
 console.log(server.url);
+// Auth is required by default. If no token was configured, Fred generates one
+// and exposes it on the handle so local clients can authenticate.
+console.log(server.authToken);
 
 // Closes the HTTP-owned child scope, then the core Fred client.
 await fred.shutdown();

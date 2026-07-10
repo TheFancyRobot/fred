@@ -96,10 +96,23 @@ export const FredMessageHandlersLive = HttpApiBuilder.group(
       )
       .handle('chat', ({ headers, payload }) =>
         Effect.gen(function* () {
+          const sessionId = resolveSessionId(headers['x-session-id'], payload.conversation_id);
+          if (payload.stream === true) {
+            const used = yield* useSession(sessionId, Effect.void);
+            return yield* jsonWithSession(
+              {
+                success: false,
+                error: 'Streaming is not implemented for /chat; use /v1/chat/completions instead',
+              },
+              used.sessionId,
+              501,
+            );
+          }
+
           const processor = yield* MessageProcessorService;
           const messages = payload.messages ?? [{ role: 'user' as const, content: payload.message ?? '' }];
           const used = yield* useSession(
-            resolveSessionId(headers['x-session-id'], payload.conversation_id),
+            sessionId,
             Effect.either(processor.processChatMessage(chatMessages(messages))),
           );
           if (Either.isLeft(used.result)) {

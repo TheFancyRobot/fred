@@ -6,6 +6,7 @@ import {
   serverAddress,
   type FredHttpServerLayerOptions,
 } from './layers/server';
+import { resolveServerSecurityConfig } from './security';
 
 export class ServerAlreadyRunningError extends Schema.TaggedError<ServerAlreadyRunningError>()(
   'ServerAlreadyRunningError',
@@ -31,6 +32,8 @@ export interface FredHttpServerHandle {
   readonly hostname: string;
   readonly port: number;
   readonly url: string;
+  /** Token required by the default authenticated server; generated when callers do not provide one. */
+  readonly authToken?: string;
   close(): Promise<void>;
 }
 
@@ -50,6 +53,11 @@ const squash = (cause: Cause.Cause<unknown>): Error => {
 };
 
 export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredWithHttp => {
+  const resolvedSecurity = resolveServerSecurityConfig(options.security);
+  const serverOptions: WithHttpOptions = {
+    ...options,
+    security: resolvedSecurity.config,
+  };
   let state: 'idle' | 'starting' | 'running' | 'closed' = 'idle';
   let serverScope: Scope.CloseableScope | undefined;
   let handle: FredHttpServerHandle | undefined;
@@ -75,7 +83,7 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
     serverScope = scope;
     try {
       const layer = FredHttpServerLive({
-        ...options,
+        ...serverOptions,
         port: listenOptions.port,
         hostname: listenOptions.hostname,
       });
@@ -87,6 +95,9 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
       const address = serverAddress(server);
       const nextHandle: FredHttpServerHandle = {
         ...address,
+        ...(resolvedSecurity.config.requireAuth && resolvedSecurity.config.authToken !== undefined
+          ? { authToken: resolvedSecurity.config.authToken }
+          : {}),
         close: stop,
       };
       handle = nextHandle;

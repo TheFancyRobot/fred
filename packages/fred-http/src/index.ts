@@ -1,6 +1,6 @@
 export { startServer, ServerApp } from './server';
-export { DEFAULT_SECURITY_CONFIG } from './security';
-export type { ServerSecurityConfig } from './security';
+export { DEFAULT_SECURITY_CONFIG, resolveServerSecurityConfig } from './security';
+export type { ResolvedServerSecurityConfig, ServerSecurityConfig } from './security';
 export { createFredHttpApp } from './app-builder';
 export type {
   FredHttpRouteVisibility,

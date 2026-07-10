@@ -15,6 +15,18 @@ afterEach(async () => {
 });
 
 describe('withHttp', () => {
+  test('generates and exposes a usable auth token for the secure default', async () => {
+    const fred = withHttp(await createFred());
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    expect(handle.authToken).toBeTruthy();
+    expect((await fetch(`${handle.url}/health`)).status).toBe(401);
+    expect((await fetch(`${handle.url}/health`, {
+      headers: { authorization: `Bearer ${handle.authToken}` },
+    })).status).toBe(200);
+  });
+
   test('returns a non-mutating enhanced view backed by the same Fred runtime', async () => {
     const core = await createFred();
     const fred = withHttp(core, { security: { requireAuth: false } });

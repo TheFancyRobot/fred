@@ -108,4 +108,20 @@ describe('FredHttpServerLive security middleware', () => {
       },
     });
   });
+
+  test('rejects unsupported simple-chat streaming with the declared 501 response', async () => {
+    const handle = await start({ security: { requireAuth: false } });
+    const response = await fetch(`${handle.url}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'stream this', stream: true }),
+    });
+
+    expect(response.status).toBe(501);
+    expect(response.headers.get('x-session-id')).toBeTruthy();
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Streaming is not implemented for /chat; use /v1/chat/completions instead',
+    });
+  });
 });
