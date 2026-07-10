@@ -77,19 +77,22 @@ export const decodeProcessMessageInput = <S extends SchemaTypes.Schema.AnyNoCont
   agentId: string,
   schema: S,
   message: string,
-): Effect.Effect<DecodedAgentInput<SchemaTypes.Schema.Type<S> | string>, AgentInputValidationError> =>
-  decodeAgentInput(agentId, schema, message).pipe(
-    Effect.catchAll((rawError) => {
-      if (!isStructuredProcessMessage(message)) {
-        return Effect.succeed({ value: message, message });
-      }
+): Effect.Effect<DecodedAgentInput<SchemaTypes.Schema.Type<S> | string>, AgentInputValidationError> => {
+  const recover = (
+    rawError: AgentInputValidationError
+  ): Effect.Effect<DecodedAgentInput<SchemaTypes.Schema.Type<S> | string>, AgentInputValidationError> => {
+    if (!isStructuredProcessMessage(message)) {
+      return Effect.succeed({ value: message, message });
+    }
 
-      const candidate = parseProcessMessageInput(message);
-      return candidate === message
-        ? Effect.fail(rawError)
-        : decodeAgentInput(agentId, schema, candidate);
-    }),
-  );
+    const candidate = parseProcessMessageInput(message);
+    return candidate === message
+      ? Effect.fail(rawError)
+      : decodeAgentInput(agentId, schema, candidate);
+  };
+
+  return Effect.catchAll(decodeAgentInput(agentId, schema, message), recover);
+};
 
 /** Validate a direct `run()` value on the schema's Type side, then encode it. */
 export const validateAgentInput = <S extends SchemaTypes.Schema.AnyNoContext>(
