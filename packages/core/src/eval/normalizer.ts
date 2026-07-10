@@ -33,24 +33,27 @@ export interface NormalizationCheckpoint {
   snapshot: Record<string, unknown>;
 }
 
+type NormalizableResponse = AgentResponse | {
+  content: string;
+  output?: unknown;
+  role?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export interface NormalizeRunRecordInput {
   runRecord: RunRecord;
   environment: EvalEnvironmentMetadata;
   message?: string;
-  response?: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> };
+  response?: NormalizableResponse;
   routing?: EvalRoutingArtifact;
   checkpoints?: NormalizationCheckpoint[];
 }
 
-function getResponseRole(
-  response: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> }
-): string | undefined {
+function getResponseRole(response: NormalizableResponse): string | undefined {
   return 'role' in response ? response.role : undefined;
 }
 
-function getResponseMetadata(
-  response: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> }
-): Record<string, unknown> {
+function getResponseMetadata(response: NormalizableResponse): Record<string, unknown> {
   if ('metadata' in response && response.metadata) {
     return response.metadata;
   }
@@ -229,6 +232,7 @@ export function normalizeRunRecord(input: NormalizeRunRecordInput): EvaluationAr
     routing: input.routing ?? { method: 'unknown' },
     response: {
       content: response.content,
+      output: toDeterministicValue(response.output),
       role: getResponseRole(response),
       metadata: toDeterministicValue(sanitizeVolatile(getResponseMetadata(response)) as Record<string, unknown>),
     },
@@ -335,6 +339,7 @@ export function normalizeLegacyGoldenTrace(input: NormalizeLegacyTraceInput): Ev
     routing: toDeterministicValue(sanitizeVolatile(trace.trace.routing) as EvalRoutingArtifact),
     response: {
       content: trace.trace.response.content,
+      output: toDeterministicValue(trace.trace.response.output),
       metadata: toDeterministicValue(sanitizeVolatile(trace.trace.response) as Record<string, unknown>),
     },
     steps,

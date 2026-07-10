@@ -15,7 +15,7 @@
     }
   },
   "trace": {
-    "message": "I need a refund for my subscription",
+    "message": "{\"customerId\":\"cust_123\",\"subscriptionId\":\"sub_pro_2026\",\"reason\":\"The subscription renewed after cancellation.\"}",
     "spans": [
       {
         "name": "routing",
@@ -61,6 +61,12 @@
     ],
     "response": {
       "content": "I can process your refund request right away.",
+      "output": {
+        "decision": "approve",
+        "refundAmount": 49,
+        "currency": "USD",
+        "explanation": "The renewal is eligible under the cancellation policy."
+      },
       "metadata": {
         "agentId": "billing",
         "confidence": 0.99

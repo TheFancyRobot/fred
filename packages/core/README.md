@@ -121,6 +121,44 @@ await fred.createAgent({
 Prompts support ETA templating for expressions, conditionals, loops, and partials.
 See the [Examples](#examples) section for end-to-end patterns.
 
+### Typed prompts and agent I/O
+
+`systemMessage` accepts plain text, an explicit ETA template, or a BAML prompt
+reference. BAML references require `@fancyrobot/fred-baml` and a
+`BamlPromptSourceLayer`; core never imports generated BAML clients.
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+const Input = Schema.Struct({ question: Schema.String });
+const Output = Schema.Struct({ answer: Schema.String, confidence: Schema.Number });
+
+const agent = await fred.createAgent({
+  id: 'typed-answer',
+  platform: 'openai',
+  model: 'gpt-4o-mini',
+  systemMessage: {
+    template: 'Answer as a concise <%= vars.role %>.',
+    variables: { role: 'researcher' },
+  },
+  input: Input,
+  output: Output,
+  outputRetry: { maxRetries: 1 },
+});
+
+const response = await Effect.runPromise(
+  agent.run({ question: 'What is Effect?' }),
+);
+console.log(response.output?.answer);
+```
+
+`input` and `output` are programmatic Effect Schemas; YAML and Markdown cannot
+serialize live schema values. Output schemas must encode to objects; scalar and
+array roots are rejected at agent creation. `outputRetry` retries only malformed
+structured model output, not provider, network, or tool failures. Structured
+agents use validated `processMessage` fallback events instead of exposing
+unvalidated incremental JSON through `streamMessage`.
+
 ## Tools
 
 ### Effect Schema (recommended)

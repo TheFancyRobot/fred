@@ -1,14 +1,27 @@
 import { Fred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
+import { Effect } from 'effect';
+import { billingAgentConfig, type RefundRequest } from './typed-agent';
 
 async function main() {
   const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  try {
+    await fred.useProvider('openrouter', {
+      modelDefaults: { model: 'openrouter/free' },
+    });
 
-  const response = await fred.processMessage('I need a refund for my subscription');
-  console.log('Response:', response?.content);
+    const agent = await fred.registerAgent(billingAgentConfig);
+    const request = {
+      customerId: 'cust_123',
+      subscriptionId: 'sub_pro_2026',
+      reason: 'The subscription renewed after cancellation.',
+    } satisfies RefundRequest;
 
-  await fred.shutdown();
+    const response = await Effect.runPromise(agent.run(request));
+    console.log('Validated refund decision:', response.output);
+  } finally {
+    await fred.shutdown();
+  }
 }
 
 main().catch(console.error);

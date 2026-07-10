@@ -335,12 +335,41 @@ export const IntentConfigSchema = Schema.Struct(
   passthrough,
 );
 
+export const AgentPromptVariableSchema = Schema.Union(
+  Schema.String,
+  Schema.Number,
+  Schema.Boolean,
+);
+
+export const AgentTemplatePromptSchema = Schema.Struct({
+  template: Schema.String,
+  variables: Schema.Record({
+    key: Schema.String,
+    value: AgentPromptVariableSchema,
+  }),
+  baml: Schema.optional(Schema.Never),
+});
+
+export const AgentBamlPromptSchema = Schema.Struct({
+  baml: Schema.Struct({
+    function: Schema.String,
+  }),
+  template: Schema.optional(Schema.Never),
+  variables: Schema.optional(Schema.Never),
+});
+
+export const AgentPromptSchema = Schema.Union(
+  Schema.String,
+  AgentTemplatePromptSchema,
+  AgentBamlPromptSchema,
+);
+
 export const AgentConfigSchema = Schema.Struct(
   {
     id: Schema.optional(Schema.String),
     platform: Schema.optional(Schema.String),
     model: Schema.optional(Schema.String),
-    systemMessage: Schema.optional(Schema.String),
+    systemMessage: Schema.optional(AgentPromptSchema),
   },
   passthrough,
 );

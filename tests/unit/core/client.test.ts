@@ -6,7 +6,7 @@
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { Effect, Runtime } from 'effect';
+import { Cause, Effect, Exit, Runtime } from 'effect';
 import {
   createFred,
   FredClientClosedError,
@@ -18,6 +18,7 @@ import {
   ProviderRegistryService,
   ToolRegistryService,
 } from '../../../packages/core/src/services';
+import { PromptResolutionError } from '../../../packages/core/src/agent/errors';
 import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
@@ -66,6 +67,27 @@ describe('createFred client', () => {
 
     expect(await client.agents.remove('client-agent')).toBe(true);
     expect((await client.agents.list()).map((a) => a.id)).not.toContain('client-agent');
+  });
+
+  it('wires createFred template configuration into agent prompt resolution', async () => {
+    const client = track(await createFred({ template: {} }));
+    await registerMockProvider(client);
+    const agent = await client.agents.register({
+      id: 'client-template-agent',
+      platform: 'mock',
+      model: 'mock-model',
+      systemMessage: {
+        template: '<%= vars.role( %>',
+        variables: { role: 'helper' },
+      },
+    });
+
+    const exit = await Effect.runPromiseExit(agent.processMessage('hello'));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Cause.squash(exit.cause)).toBeInstanceOf(PromptResolutionError);
+    }
   });
 
   it('runtime escape hatch shares state with the client sub-APIs', async () => {

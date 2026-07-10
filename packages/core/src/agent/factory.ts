@@ -1,12 +1,36 @@
-import { Cause, Effect, Layer, Option, Runtime, Stream } from 'effect';
+import { Cause, Effect, Either, Layer, Option, Runtime, Schedule, Stream } from 'effect';
 import * as Schema from 'effect/Schema';
+import type * as SchemaTypes from 'effect/Schema';
 import * as AST from 'effect/SchemaAST';
 import { Tool as EffectTool, Toolkit, LanguageModel, Prompt } from '@effect/ai';
 import { BunContext } from '@effect/platform-bun';
 import { FetchHttpClient } from '@effect/platform';
 import type { StreamEvent } from '../stream/events';
-import type { AgentConfig, AgentMessage, AgentResponse, RetryDiagnostics, ToolRetryPolicy } from './agent';
+import type {
+  AgentConfig,
+  AgentMessage,
+  AgentPromptVariable,
+  AgentResponse,
+  RetryDiagnostics,
+  ToolRetryPolicy,
+} from './agent';
 import { hasRetryDiagnostics, normalizeToolChoice } from './agent';
+import {
+  AgentInputValidationError,
+  AgentOutputValidationError,
+  PromptResolutionError,
+} from './errors';
+import {
+  DefaultPromptSourceService,
+  type PromptSourceService as PromptSourceServiceApi,
+} from './prompt-source';
+import {
+  decodeProcessMessageInput,
+  decodeStringAgentInput,
+  validateAgentInput,
+  validateStringAgentInput,
+  type DecodedAgentInput,
+} from './io';
 import type { ProviderDefinition } from '../platform/provider';
 import type { Tool as FredTool } from '../tool/tool';
 import { createHandoffTool } from '../tool/handoff';
@@ -281,13 +305,40 @@ type TemplateEngineLike = {
 const isTemplateVariableValue = (value: unknown): value is string | number | boolean =>
   typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
+const schemaEncodesObject = (schema: Schema.Schema.AnyNoContext): boolean => {
+  const visit = (ast: AST.AST, seen: Set<AST.AST>): boolean => {
+    const encoded = AST.encodedAST(ast);
+    if (seen.has(encoded)) {
+      return false;
+    }
+    seen.add(encoded);
+
+    if (AST.isTypeLiteral(encoded)) {
+      return true;
+    }
+    if (AST.isUnion(encoded)) {
+      return encoded.types.length > 0
+        && encoded.types.every((member) => visit(member, new Set(seen)));
+    }
+    if (AST.isSuspend(encoded)) {
+      return visit(encoded.f(), seen);
+    }
+    return false;
+  };
+
+  return visit(schema.ast, new Set());
+};
+
 const getAgentTemplateVars = (
-  config: AgentConfig,
-  globalVars: Record<string, string | number | boolean>
+  config: Pick<AgentConfig, 'id' | 'model' | 'platform' | 'temperature' | 'maxTokens'> & {
+    readonly vars?: unknown;
+  },
+  globalVars: Record<string, string | number | boolean>,
+  sourceVariables: Readonly<Record<string, AgentPromptVariable>> = {}
 ): Record<string, string | number | boolean> => {
   const candidate = (config as AgentConfig & { vars?: unknown }).vars;
   if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
-    return globalVars;
+    return { ...globalVars, ...sourceVariables };
   }
 
   const merged: Record<string, string | number | boolean> = { ...globalVars };
@@ -297,7 +348,7 @@ const getAgentTemplateVars = (
     }
   }
 
-  return merged;
+  return { ...merged, ...sourceVariables };
 };
 
 export class AgentFactory {
@@ -325,10 +376,16 @@ export class AgentFactory {
   private templateCustomNamespaces: Record<string, unknown> = {};
   private envAllowlist: string[] = [...DEFAULT_ENV_ALLOWLIST];
   private templateFredConfig: Partial<FrameworkConfig> = {};
+  private promptSourceService: PromptSourceServiceApi;
 
-  constructor(toolRegistry: ToolRegistryLike, tracer?: Tracer) {
+  constructor(
+    toolRegistry: ToolRegistryLike,
+    tracer?: Tracer,
+    promptSourceService: PromptSourceServiceApi = DefaultPromptSourceService
+  ) {
     this.toolRegistry = toolRegistry;
     this.tracer = tracer;
+    this.promptSourceService = promptSourceService;
   }
 
   setToolRegistry(toolRegistry: ToolRegistryLike): void {
@@ -353,6 +410,10 @@ export class AgentFactory {
 
   setTemplateFredConfig(config: Partial<FrameworkConfig>): void {
     this.templateFredConfig = { ...config };
+  }
+
+  setPromptSourceService(service: PromptSourceServiceApi): void {
+    this.promptSourceService = service;
   }
 
   setDefaultSystemMessage(systemMessage?: string): void {
@@ -489,22 +550,40 @@ export class AgentFactory {
     }
   }
 
-  createAgent(
-    config: AgentConfig,
+  createAgent<
+    InputSchema extends SchemaTypes.Schema.AnyNoContext = typeof Schema.String,
+    OutputSchema extends SchemaTypes.Schema.AnyNoContext = typeof Schema.Unknown,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>,
     provider: ProviderDefinition
   ): Effect.Effect<{
-    processMessage: (message: string, messages?: AgentMessage[], runtimeOptions?: AgentRuntimeOptions) => Effect.Effect<AgentResponse, Error>;
-    streamMessage: (
+    run: (
+      input: SchemaTypes.Schema.Type<InputSchema>,
+      messages?: AgentMessage[],
+      runtimeOptions?: AgentRuntimeOptions
+    ) => Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error>;
+    processMessage: (
+      message: string,
+      messages?: AgentMessage[],
+      runtimeOptions?: AgentRuntimeOptions
+    ) => Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error>;
+    streamMessage?: (
       message: string,
       messages?: AgentMessage[],
       options?: { threadId?: string }
     ) => Stream.Stream<StreamEvent, unknown, any>;
   }, Error> {
     return Effect.gen(this, function* () {
-    const resolvedSystemMessage = config.systemMessage ?? this.defaultSystemMessage ?? '';
+    const resolvedPromptSource = config.systemMessage ?? this.defaultSystemMessage ?? '';
 
-    if (!resolvedSystemMessage) {
+    if (!resolvedPromptSource) {
       yield* Effect.fail(new Error(`Agent "${config.id}" must have a systemMessage`));
+    }
+
+    if (config.output && !schemaEncodesObject(config.output)) {
+      yield* Effect.fail(new Error(
+        `Agent "${config.id}" output schema must encode to an object for structured generation`,
+      ));
     }
 
     const modelEffect = provider.getModel(config.model, {
@@ -980,43 +1059,94 @@ export class AgentFactory {
     // Create set of available tool names for history filtering
     const availableToolNames = new Set(effectTools.map((tool) => tool.name));
 
-    // Load the system message template
-    const systemMessageTemplate = loadPromptFile(resolvedSystemMessage, undefined, false);
+    const renderPromptTemplate = (
+      sourceTemplate: string,
+      sourceVariables: Readonly<Record<string, AgentPromptVariable>>,
+      source: 'string' | 'template'
+    ): Effect.Effect<string, PromptResolutionError> =>
+      Effect.try({
+        try: () => {
+          const systemMessageTemplate = loadPromptFile(sourceTemplate, undefined, false);
+          if (!containsEtaSyntax(systemMessageTemplate) || !this.templateEngine) {
+            return { systemMessageTemplate };
+          }
 
-    // Helper function to resolve system message with current variable values
-    const resolveSystemMessage = (): Effect.Effect<string, Error> => {
-      if (!containsEtaSyntax(systemMessageTemplate)) {
-        return Effect.succeed(systemMessageTemplate);
-      }
+          const globalVars = this.globalVariablesResolver ? this.globalVariablesResolver() : {};
+          const templateVars = getAgentTemplateVars(config, globalVars, sourceVariables);
+          const filteredEnv = filterEnvVars(
+            process.env as Record<string, string | undefined>,
+            this.envAllowlist,
+          );
+          const bodyContext = buildBodyContext(
+            templateVars,
+            filteredEnv,
+            config,
+            this.templateFredConfig,
+            this.templateCustomNamespaces,
+          );
 
-      if (!this.templateEngine) {
-        return Effect.succeed(systemMessageTemplate);
-      }
+          return { systemMessageTemplate, bodyContext };
+        },
+        catch: (cause) => new PromptResolutionError({
+          agentId: config.id,
+          source,
+          message:
+            `Failed to prepare prompt template for agent "${config.id}" ` +
+            `(agent:${config.id}): ${cause instanceof Error ? cause.message : String(cause)}`,
+          cause,
+        }),
+      }).pipe(
+        Effect.flatMap(({ systemMessageTemplate, bodyContext }) => {
+          if (!bodyContext || !this.templateEngine) {
+            return Effect.succeed(systemMessageTemplate);
+          }
 
-      const globalVars = this.globalVariablesResolver ? this.globalVariablesResolver() : {};
-      const templateVars = getAgentTemplateVars(config, globalVars);
-      const filteredEnv = filterEnvVars(process.env as Record<string, string | undefined>, this.envAllowlist);
-      const bodyContext = buildBodyContext(
-        templateVars,
-        filteredEnv,
-        config,
-        this.templateFredConfig,
-        this.templateCustomNamespaces
+          return this.templateEngine.resolveBody(
+            systemMessageTemplate,
+            bodyContext,
+            `agent:${config.id}`,
+          ).pipe(
+            Effect.mapError((error) => {
+              const message = error instanceof Error ? error.message : String(error);
+              return new PromptResolutionError({
+                agentId: config.id,
+                source,
+                message: `Failed to resolve prompt template for agent "${config.id}" (agent:${config.id}): ${message}`,
+                cause: error,
+              });
+            }),
+          );
+        }),
       );
 
-      return this.templateEngine.resolveBody(systemMessageTemplate, bodyContext, `agent:${config.id}`).pipe(
-        Effect.mapError((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          return new Error(`Failed to resolve system message template for agent "${config.id}" (agent:${config.id}): ${message}`);
-        })
-      );
-    };
+    // Resolve on every invocation so global/template values remain dynamic.
+    const resolveSystemMessage = (input: unknown): Effect.Effect<string, Error> =>
+      this.promptSourceService.resolve(resolvedPromptSource, {
+        agentId: config.id,
+        input,
+        renderTemplate: renderPromptTemplate,
+      });
 
-    const processMessage = (
+    const decodeProcessMessageCandidate = (
+      message: string
+    ): Effect.Effect<DecodedAgentInput<unknown>, AgentInputValidationError> =>
+      config.input
+        ? decodeProcessMessageInput(config.id, config.input, message)
+        : decodeStringAgentInput(config.id, message);
+
+    const validateInputCandidate = (
+      input: unknown
+    ): Effect.Effect<DecodedAgentInput<unknown>, AgentInputValidationError> =>
+      config.input
+        ? validateAgentInput(config.id, config.input, input)
+        : validateStringAgentInput(config.id, input);
+
+    const executeMessage = (
+      decodedInput: unknown,
       message: string,
       previousMessages: AgentMessage[] = [],
       runtimeOptions?: AgentRuntimeOptions
-    ): Effect.Effect<AgentResponse, Error> => {
+    ): Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error> => {
       const self = this;
 
       return Effect.gen(function* () {
@@ -1067,7 +1197,7 @@ export class AgentFactory {
           const runtimeAvailableToolNames = new Set(allowedEffectTools.map((tool) => tool.name));
 
           // Resolve system message with current variable values
-          const resolvedSystemMsg = yield* resolveSystemMessage();
+          const resolvedSystemMsg = yield* resolveSystemMessage(decodedInput);
 
           // Normalize all messages
           const normalizedMessages = normalizeMessages([
@@ -1124,6 +1254,83 @@ export class AgentFactory {
             );
           };
 
+          const runStructuredStep = (
+            stepMessages: Prompt.MessageEncoded[]
+          ): Effect.Effect<any, Error> => {
+            if (!config.output) {
+              return Effect.fail(new Error(`Agent "${config.id}" has no output schema`));
+            }
+
+            const maxRetries = Math.max(0, Math.floor(config.outputRetry?.maxRetries ?? 1));
+            let attempts = 0;
+            const generate = Effect.suspend(() => {
+              attempts += 1;
+              const generateOptions = {
+                prompt: Prompt.make(stepMessages),
+                schema: config.output,
+                objectName: config.id,
+                temperature: config.temperature,
+              } as unknown as Parameters<typeof LanguageModel.generateObject>[0];
+              const program = LanguageModel.generateObject(generateOptions);
+
+              return Effect.provide(
+                program as Effect.Effect<any, any, any>,
+                fullLayer as any
+              ) as Effect.Effect<any, any, never>;
+            });
+
+            return generate.pipe(
+              Effect.retry(
+                Schedule.recurs(maxRetries).pipe(
+                  Schedule.whileInput(
+                    (error: unknown) =>
+                      typeof error === 'object' &&
+                      error !== null &&
+                      '_tag' in error &&
+                      error._tag === 'MalformedOutput'
+                  )
+                )
+              ),
+              Effect.mapError((error: unknown) => {
+                if (
+                  typeof error === 'object' &&
+                  error !== null &&
+                  '_tag' in error &&
+                  error._tag === 'MalformedOutput'
+                ) {
+                  return new AgentOutputValidationError({
+                    agentId: config.id,
+                    attempts,
+                    maxRetries,
+                    message:
+                      `Structured output validation failed for agent "${config.id}" ` +
+                      `after ${attempts} attempt${attempts === 1 ? '' : 's'}.`,
+                    cause: error,
+                  });
+                }
+
+                return error instanceof Error ? error : new Error(String(error));
+              })
+            );
+          };
+
+          const structuredContent = (result: { readonly text?: unknown; readonly value: unknown }): string => {
+            if (typeof result.text === 'string' && result.text.length > 0) {
+              return result.text;
+            }
+
+            if (!config.output) {
+              return String(result.value);
+            }
+
+            const encoded = Schema.encodeUnknownEither(
+              Schema.parseJson(
+                config.output as Schema.Schema<unknown, unknown, never>,
+              ),
+            )(result.value);
+            return Either.isRight(encoded) ? encoded.right : String(result.value);
+          };
+
           let currentMessages = promptMessages;
           const allToolCalls: NonNullable<AgentResponse['toolCalls']> = [];
           const usage = {
@@ -1132,15 +1339,27 @@ export class AgentFactory {
             totalTokens: 0,
           };
           let content = '';
+          let latestStepText = '';
+          let latestStepTextIsInHistory = false;
+          let structuredOutput: SchemaTypes.Schema.Type<OutputSchema> | undefined;
+          let hasStructuredOutput = false;
 
-          for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
+          if (config.output && allowedEffectTools.length === 0) {
+            const result = yield* runStructuredStep(promptMessages);
+            content = structuredContent(result);
+            structuredOutput = result.value as SchemaTypes.Schema.Type<OutputSchema>;
+            hasStructuredOutput = true;
+            appendUsage(usage, result.usage);
+          } else for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
             const result: any = yield* runGenerationStep(
               currentMessages,
               stepIndex === 0 ? config.toolChoice : undefined
             );
 
-            if (typeof result.text === 'string' && result.text.length > 0) {
-              content += result.text;
+            latestStepText = typeof result.text === 'string' ? result.text : '';
+            latestStepTextIsInHistory = false;
+            if (latestStepText.length > 0) {
+              content += latestStepText;
             }
 
             appendUsage(usage, result.usage);
@@ -1207,6 +1426,36 @@ export class AgentFactory {
             }
 
             currentMessages = buildNextStepMessages(currentMessages, result.text ?? '', resolvableToolCalls, stepToolResults);
+            latestStepTextIsInHistory = true;
+          }
+
+          // A handoff is control flow. The target agent validates its own output.
+          const handoffCall = allToolCalls.find((call: any) => call.toolId === 'handoff_to_agent');
+          if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result) {
+            return {
+              content,
+              toolCalls: allToolCalls,
+              usage,
+              handoff: handoffCall.result as HandoffResult,
+            };
+          }
+
+          if (config.output && !hasStructuredOutput) {
+            const finalMessages = normalizeMessages([
+              ...currentMessages,
+              ...(!latestStepTextIsInHistory && latestStepText.trim().length > 0
+                ? [{ role: 'assistant' as const, content: latestStepText }]
+                : []),
+              {
+                role: 'user',
+                content: 'Return the final answer in the required structured format.',
+              },
+            ]);
+            const result = yield* runStructuredStep(finalMessages);
+            content = structuredContent(result);
+            structuredOutput = result.value as SchemaTypes.Schema.Type<OutputSchema>;
+            hasStructuredOutput = true;
+            appendUsage(usage, result.usage);
           }
 
           // Annotate model span with token counts
@@ -1246,21 +1495,11 @@ export class AgentFactory {
             );
           }
 
-          // Check for handoff
-          const handoffCall = allToolCalls.find((call: any) => call.toolId === 'handoff_to_agent');
-          if (handoffCall && handoffCall.result && typeof handoffCall.result === 'object' && 'type' in handoffCall.result) {
-            return {
-              content,
-              toolCalls: allToolCalls,
-              usage,
-              handoff: handoffCall.result as HandoffResult,
-            };
-          }
-
           const finalContent = content.trim().length > 0 ? content : synthesizeToolOnlyContent(allToolCalls);
 
           return {
             content: finalContent,
+            ...(hasStructuredOutput ? { output: structuredOutput } : {}),
             toolCalls: allToolCalls,
             usage,
           };
@@ -1291,6 +1530,34 @@ export class AgentFactory {
       });
     };
 
+    const run = (
+      input: SchemaTypes.Schema.Type<InputSchema>,
+      previousMessages: AgentMessage[] = [],
+      runtimeOptions?: AgentRuntimeOptions
+    ): Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error> => {
+      const decoded = validateInputCandidate(input);
+
+      return decoded.pipe(
+        Effect.flatMap(({ value, message }) =>
+          executeMessage(value, message, previousMessages, runtimeOptions)
+        )
+      );
+    };
+
+    const processMessage = (
+      message: string,
+      previousMessages: AgentMessage[] = [],
+      runtimeOptions?: AgentRuntimeOptions
+    ): Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error> => {
+      const decoded = decodeProcessMessageCandidate(message);
+
+      return decoded.pipe(
+        Effect.flatMap(({ value, message: encodedMessage }) =>
+          executeMessage(value, encodedMessage, previousMessages, runtimeOptions)
+        )
+      );
+    };
+
     const streamMessage = (
       message: string,
       previousMessages: AgentMessage[] = [],
@@ -1302,15 +1569,16 @@ export class AgentFactory {
       const messageId = `msg_${startedAt}_${Math.random().toString(36).slice(2, 6)}`;
       const threadId = options?.threadId;
 
-      // Resolve system message (now returns Effect), then build the stream
+      // Resolve and validate input before any stream/provider work begins.
       const buildStream = Effect.gen(function* () {
-        const resolvedSystemMsg = yield* resolveSystemMessage();
+        const decoded = yield* decodeProcessMessageCandidate(message);
+        const resolvedSystemMsg = yield* resolveSystemMessage(decoded.value);
 
         // Normalize all messages
         const normalizedMessages = normalizeMessages([
           { role: 'system', content: resolvedSystemMsg },
           ...previousMessages,
-          { role: 'user', content: message },
+          { role: 'user', content: decoded.message },
         ]);
 
         // Filter history to only include tool calls available to this agent
@@ -1387,7 +1655,7 @@ export class AgentFactory {
           runId,
           threadId,
           input: {
-            message,
+            message: decoded.message,
             previousMessages: [...previousMessages],
           },
           startedAt,
@@ -1537,7 +1805,11 @@ export class AgentFactory {
       return Stream.unwrap(buildStream);
     };
 
-    return { processMessage, streamMessage };
+    return {
+      run,
+      processMessage,
+      streamMessage: config.output ? undefined : streamMessage,
+    };
     });
   }
 }

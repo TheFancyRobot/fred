@@ -92,7 +92,9 @@ Routing priority: **Agent utterances → Intents → Default agent**
 
 ## System Messages
 
-System messages define the agent's personality and behavior. You can use either string content or file paths to markdown files:
+System messages define the agent's personality and behavior. `systemMessage`
+accepts plain strings (including markdown paths), Eta templates with local
+variables, or BAML prompt functions:
 
 ```typescript
 // String content
@@ -101,12 +103,37 @@ systemMessage: 'You are a friendly and helpful assistant.'
 // Markdown file path (relative to config file or current working directory)
 systemMessage: './prompts/my-agent.md'
 
-// Expert in a domain
-systemMessage: 'You are an expert software engineer specializing in TypeScript and AI.'
+// Eta template with programmatic variables
+systemMessage: {
+  template: 'You are a <%= vars.specialty %> specialist. Be <%= vars.tone %>.',
+  variables: { specialty: 'billing', tone: 'concise' },
+}
 
-// Specific role
-systemMessage: 'You are a customer support agent. Be professional and empathetic.'
+// Requires BamlPromptSourceLayer at the runtime boundary
+systemMessage: { baml: { function: 'BuildSupportPrompt' } }
 ```
+
+String and template forms are handled by core. A BAML source without an adapter
+fails with installation and layer-composition guidance.
+
+### BAML Prompt Layer
+
+`@fancyrobot/fred-baml` stays independent of your generated client. Supply a
+renderer and pass its layer to the Fred runtime:
+
+```typescript
+import { makeFredRuntimeLayer } from '@fancyrobot/fred';
+import { BamlPromptSourceLayer } from '@fancyrobot/fred-baml';
+
+const promptSourceLayer = BamlPromptSourceLayer(
+  ({ functionName, input }) => generatedPromptRenderer(functionName, input),
+);
+
+const fredLayer = makeFredRuntimeLayer({ promptSourceLayer });
+```
+
+The renderer receives `{ functionName, agentId, input }`; `input` is the
+decoded value when the agent has an input schema.
 
 ### Markdown System Prompts
 
@@ -177,12 +204,53 @@ await fred.createAgent({
 
 ## Using Agents
 
+### Typed Input and Output
+
+Effect Schemas validate direct input and request provider-backed structured
+output:
+
+```typescript
+import { Effect, Schema } from 'effect';
+
+const Request = Schema.Struct({ question: Schema.String });
+const Answer = Schema.Struct({ answer: Schema.String, confidence: Schema.Number });
+
+const agent = await fred.createAgent({
+  id: 'typed-support',
+  platform: 'openai',
+  model: 'gpt-4.1-mini',
+  systemMessage: 'Answer support questions.',
+  input: Request,
+  output: Answer,
+  outputRetry: { maxRetries: 1 },
+});
+
+const response = await Effect.runPromise(
+  agent.run({ question: 'Can I change plans?' }),
+);
+
+console.log(response.output?.confidence);
+```
+
+`input` and `output` are programmatic-only: Effect Schemas are runtime values
+and cannot be represented in YAML or JSON. Output schemas must encode to an
+object; scalar and array roots are rejected when the agent is created.
+`outputRetry.maxRetries` is the number of additional attempts (default `1`)
+and retries only malformed structured output. It does not retry provider,
+network, or tool failures.
+
+Structured generation is validated before delivery. Through
+`fred.streamMessage()`, schema-backed agents therefore use a synthetic stream:
+there are no partial JSON tokens, and the decoded object appears on the final
+`run-end.result.output`. Validation failures terminate the stream without a
+successful invalid result.
+
 ### Direct Agent Access
 
 ```typescript
 const agent = fred.getAgent('my-agent');
 if (agent) {
-  const response = await agent.processMessage('Hello!');
+  const response = await Effect.runPromise(agent.processMessage('Hello!'));
 }
 ```
 
@@ -223,7 +291,9 @@ const response = await fred.processMessage('Hello!');
 Agents return responses with content and optional tool calls:
 
 ```typescript
-const response = await agent.processMessage('Calculate 10 * 5');
+const response = await Effect.runPromise(
+  agent.processMessage('Calculate 10 * 5'),
+);
 
 console.log(response.content);  // "The result is 50"
 console.log(response.toolCalls); // Array of tool calls if any
@@ -242,7 +312,9 @@ Example of multi-step tool usage:
 
 ```typescript
 // Agent can call multiple tools in sequence automatically
-const response = await agent.processMessage('Get the weather in NYC, then convert the temperature to Celsius');
+const response = await Effect.runPromise(
+  agent.processMessage('Get the weather in NYC, then convert the temperature to Celsius'),
+);
 // The agent will:
 // 1. Call weather tool
 // 2. Get result
@@ -386,4 +458,3 @@ MCP server connection failures are handled gracefully:
 - Explore [Tools](tools.md)
 - Check [Default Agent](default-agent.md)
 - See [MCP Server Integration Example](../examples/mcp-server-integration.md)
-

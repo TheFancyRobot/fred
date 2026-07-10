@@ -25,6 +25,7 @@ export interface EvalRoutingArtifact {
 
 export interface EvalResponseArtifact {
   content: string;
+  output?: unknown;
   role?: string;
   metadata?: Record<string, unknown>;
 }

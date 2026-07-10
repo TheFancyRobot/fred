@@ -44,7 +44,7 @@ export const buildFrontmatterContext = (
 export const buildBodyContext = (
   globalVars: Record<string, VariableValue>,
   filteredEnv: Record<string, string>,
-  agentConfig: AgentConfig,
+  agentConfig: Pick<AgentConfig, 'id' | 'model' | 'platform' | 'temperature' | 'maxTokens'>,
   fredConfig: Partial<FrameworkConfig>,
   customNamespaces: Record<string, unknown> = {}
 ): BodyContext => ({

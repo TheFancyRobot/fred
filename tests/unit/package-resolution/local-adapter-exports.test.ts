@@ -29,6 +29,7 @@ describe('local adapter package exports', () => {
 
     expect(typeof root.initFredBamlRuntime).toBe('function');
     expect(typeof root.createBamlTool).toBe('function');
+    expect(typeof root.BamlPromptSourceLayer).toBe('function');
     expect(typeof testing.createStubBamlRuntime).toBe('function');
     expect(typeof testing.loadStubBamlClient).toBe('function');
   });
@@ -147,7 +148,11 @@ describe('local adapter package exports', () => {
       writeFileSync(
         join(tempDir, 'src', 'index.ts'),
         `import { Schema } from 'effect';\n` +
-          `import { createBamlTool } from '@fancyrobot/fred-baml';\n\n` +
+          `import { makeFredRuntimeLayer } from '@fancyrobot/fred';\n` +
+          `import { BamlPromptSourceLayer, createBamlTool } from '@fancyrobot/fred-baml';\n\n` +
+          `const promptSourceLayer = BamlPromptSourceLayer(async ({ functionName }) => \`prompt:\${functionName}\`);\n` +
+          `const runtimeLayer = makeFredRuntimeLayer({ promptSourceLayer });\n` +
+          `void runtimeLayer;\n\n` +
           `const tool = createBamlTool({\n` +
           `  id: 'summarize',\n` +
           `  description: 'Summarize text via BAML',\n` +

@@ -8,7 +8,7 @@ Golden traces capture the complete execution of an agent run, including:
 
 - **Message**: The input message
 - **Spans**: All tracing spans with timing and attributes
-- **Response**: The agent's response
+- **Response**: The agent's text plus optional decoded structured `output`
 - **Tool Calls**: All tool invocations with arguments and results
 - **Handoffs**: Agent-to-agent transfers
 - **Routing**: How the message was routed to the agent
@@ -33,6 +33,10 @@ Golden traces are versioned JSON files with the format:
     "spans": [...],
     "response": {
       "content": "Hello! How can I help?",
+      "output": {
+        "intent": "greeting",
+        "confidence": 0.99
+      },
       "toolCalls": [...]
     },
     "toolCalls": [...],
@@ -47,6 +51,40 @@ Golden traces are versioned JSON files with the format:
 ```
 
 Files are named: `trace-v1.0.0-{hash}.json`
+
+## Typed Agent Golden Traces
+
+For schema-backed agents, keep the decoded `AgentResponse.output` in the golden
+trace and assert its semantic fields with `response.pathEquals`:
+
+```typescript
+import { runTestCases, type TestCase } from '@fancyrobot/fred/eval';
+
+const cases: TestCase[] = [{
+  name: 'refund decision',
+  traceFile: 'refund.golden.json',
+  assertions: [{
+    type: 'response',
+    pathEquals: {
+      'output.decision': 'approve',
+      'output.currency': 'USD',
+    },
+  }],
+}];
+
+const results = await runTestCases(cases, 'test/golden-traces');
+```
+
+Golden fixtures remain deterministic and require no live model. For stronger
+contract coverage, decode the fixture input and `trace.trace.response.output`
+with the same Effect Schemas used by the agent. The complete implementation is
+in `examples/09-evaluation-harness-golden-traces`.
+
+Schema-backed agents validate their complete provider response before it is
+published. When called through `fred.streamMessage()`, Fred uses validated
+synthetic streaming: the final `run-end` event contains decoded output at
+`result.output`, while malformed data fails instead of being emitted as a
+successful partial JSON stream.
 
 ## Recording Golden Traces
 

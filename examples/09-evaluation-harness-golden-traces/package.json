@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
-    "@fancyrobot/fred-openrouter": "workspace:*"
+    "@fancyrobot/fred-baml": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*",
+    "effect": "^3.21.0"
   }
 }

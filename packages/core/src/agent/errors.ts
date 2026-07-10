@@ -1,4 +1,4 @@
-import { Data } from 'effect';
+import { Data, Schema } from 'effect';
 
 export const getAgentNotFoundMessage = (id: string): string => `Agent \"${id}\" was not found`;
 export const getAgentAlreadyExistsMessage = (id: string): string => `Agent \"${id}\" is already registered`;
@@ -38,6 +38,45 @@ export class AgentExecutionError extends Data.TaggedError("AgentExecutionError")
   readonly cause?: unknown;
 }> {}
 
+/** Raised before provider/tool execution when an agent input fails its schema. */
+export class AgentInputValidationError extends Schema.TaggedError<AgentInputValidationError>(
+  '@fancyrobot/fred/AgentInputValidationError'
+)('AgentInputValidationError', {
+  agentId: Schema.String,
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+/** Raised after malformed structured output retries are exhausted. */
+export class AgentOutputValidationError extends Schema.TaggedError<AgentOutputValidationError>(
+  '@fancyrobot/fred/AgentOutputValidationError'
+)('AgentOutputValidationError', {
+  agentId: Schema.String,
+  attempts: Schema.Number,
+  maxRetries: Schema.Number,
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+/** Raised when a BAML prompt is used without the fred-baml adapter layer. */
+export class MissingPromptSourceAdapterError extends Schema.TaggedError<MissingPromptSourceAdapterError>(
+  '@fancyrobot/fred/MissingPromptSourceAdapterError'
+)('MissingPromptSourceAdapterError', {
+  agentId: Schema.String,
+  functionName: Schema.String,
+  message: Schema.String,
+}) {}
+
+/** Raised when a configured prompt source cannot be rendered. */
+export class PromptResolutionError extends Schema.TaggedError<PromptResolutionError>(
+  '@fancyrobot/fred/PromptResolutionError'
+)('PromptResolutionError', {
+  agentId: Schema.String,
+  source: Schema.Literal('string', 'template', 'baml'),
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
 /**
  * Error thrown when parsing or validating an agent markdown file fails.
  */
@@ -54,4 +93,8 @@ export type AgentError =
   | AgentAlreadyExistsError
   | AgentCreationError
   | AgentExecutionError
+  | AgentInputValidationError
+  | AgentOutputValidationError
+  | MissingPromptSourceAdapterError
+  | PromptResolutionError
   | AgentFileParseError;

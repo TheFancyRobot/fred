@@ -12,8 +12,15 @@
  */
 
 import { Effect, Runtime, Stream } from 'effect';
+import type * as Schema from 'effect/Schema';
 import type { Intent } from './intent/intent';
-import type { AgentConfig, AgentInstance, AgentMessage, AgentResponse } from './agent/agent';
+import type {
+  AgentConfig,
+  AgentInstance,
+  AgentMessage,
+  AgentResponse,
+  AnyAgentInstance,
+} from './agent/agent';
 import type { PipelineConfig, PipelineInstance } from './pipeline';
 import type { AnyPipelineConfig } from './pipeline/pipeline';
 import { isPipelineConfigV2 } from './pipeline/pipeline';
@@ -393,7 +400,12 @@ export abstract class FredBase {
 
   // --- Agent Management ---
 
-  async createAgent(config: AgentConfig): Promise<AgentInstance> {
+  async createAgent<
+    InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+    OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>
+  ): Promise<AgentInstance<InputSchema, OutputSchema>> {
     return this.runEffect(
       Effect.flatMap(AgentService, (s) => s.createAgent(config)),
       `Failed to create agent: ${config.id}`
@@ -425,15 +437,20 @@ export abstract class FredBase {
     );
   }
 
-  async registerAgent(config: AgentConfig): Promise<AgentInstance> {
+  async registerAgent<
+    InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+    OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>
+  ): Promise<AgentInstance<InputSchema, OutputSchema>> {
     return this.createAgent(config);
   }
 
-  getAgent(id: string): AgentInstance | undefined {
+  getAgent(id: string): AnyAgentInstance | undefined {
     return this.runSync(Effect.flatMap(AgentService, (s) => s.getAgentOptional(id)));
   }
 
-  getAgents(): AgentInstance[] {
+  getAgents(): AnyAgentInstance[] {
     return this.runSync(Effect.flatMap(AgentService, (s) => s.getAllAgents()));
   }
 

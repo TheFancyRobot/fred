@@ -127,6 +127,31 @@ tools:
     strict: false  # Optional: Enable strict validation (AI SDK v6)
 ```
 
+Agent prompts also support serializable template and BAML references:
+
+```yaml
+agents:
+  - id: templated-agent
+    platform: openai
+    model: gpt-4o-mini
+    systemMessage:
+      template: You are a <%= vars.role %>.
+      variables:
+        role: billing specialist
+
+  - id: baml-agent
+    platform: openai
+    model: gpt-4o-mini
+    systemMessage:
+      baml:
+        function: BuildBillingPrompt
+```
+
+The BAML form requires `BamlPromptSourceLayer` when constructing the runtime.
+Typed agent `input` and `output` fields are different: they hold live Effect
+Schema values and are therefore programmatic-only; YAML and JSON cannot define
+them without a future named-schema registry.
+
 ### Loading Config
 
 ```typescript
@@ -242,4 +267,3 @@ fred.setDefaultAgent('default-agent');
 - Learn about [Agents](guides/agents.md)
 - Explore [Intents](guides/intents.md)
 - Check [API Reference](../api-reference/fred-class.md)
-

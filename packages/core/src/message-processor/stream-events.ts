@@ -126,6 +126,7 @@ export function generateSyntheticStreamEvents(
     durationMs: finishedAt - idGen.startedAt,
     result: {
       content: ctx.response.content,
+      ...('output' in ctx.response ? { output: ctx.response.output } : {}),
       toolCalls: ctx.response.toolCalls,
       usage: ctx.response.usage,
     },
