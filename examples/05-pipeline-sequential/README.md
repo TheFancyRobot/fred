@@ -1,10 +1,11 @@
 # 05 - Pipeline: Sequential Orchestration with Checkpointing
 
-This example builds a step-based pipeline with `PipelineBuilder`, mixes agent and function steps, pauses for human input, and resumes from a checkpoint. Agent definitions live in `agents/*.md`, while pipeline runtime logic stays in TypeScript.
+This example first runs a small native `defineWorkflow()` sequence, then builds a checkpointed step pipeline with `PipelineBuilder`, mixes agent and function steps, pauses for human input, and resumes from a checkpoint. Both definitions use the same WorkflowIR executor.
 
 ## What you'll learn
 
 - Build a V2 step pipeline with `PipelineBuilder`
+- Define and execute WorkflowIR directly with `defineWorkflow()`
 - Load agent definitions from markdown files via `initializeFromConfig('./config.yaml')`
 - Combine agent steps and function steps in one workflow
 - Trigger a pause for human input and resume execution

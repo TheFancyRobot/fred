@@ -174,6 +174,25 @@ export {
 
 // ─── Workflow Types ─────────────────────────────────────────────────────────
 export type { Workflow } from './workflow/manager';
+export type {
+  WorkflowIR,
+  WorkflowSource,
+  IRNode,
+  IREdge,
+  EdgeGuard,
+  JoinPolicy,
+} from './workflow/ir';
+export {
+  defineWorkflow,
+  compileWorkflow,
+  compilePipelineV1,
+  compilePipelineV2,
+  compileGraphWorkflow,
+  isWorkflowIR,
+} from './workflow/compile';
+export type { CompilableWorkflow } from './workflow/compile';
+export { validateWorkflowIR, WorkflowValidationError } from './workflow/validate';
+export type { WorkflowExecutionResult, WorkflowExecutionOptions } from './workflow/execute';
 
 // ─── Subagents ───────────────────────────────────────────────────────────────
 export type {

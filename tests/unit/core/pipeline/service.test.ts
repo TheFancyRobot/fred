@@ -290,6 +290,27 @@ describe('PipelineService', () => {
       );
       expect(result._tag).toBe('Failure');
     });
+
+    test('rejects an id already registered by another workflow dialect', async () => {
+      const result = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          yield* service.defineWorkflow({
+            id: 'cross-dialect-duplicate',
+            entry: 'native-step',
+            nodes: [{ id: 'native-step', kind: 'function', fn: () => 'native' }],
+            edges: [],
+            source: 'native',
+          });
+          yield* service.createPipelineV2({
+            id: 'cross-dialect-duplicate',
+            steps: [{ name: 'v2-step', type: 'function', fn: () => 'v2' }],
+          });
+        }).pipe(Effect.provide(TestLayer))
+      );
+
+      expect(result._tag).toBe('Failure');
+    });
   });
 
   describe('getPipelineV2', () => {

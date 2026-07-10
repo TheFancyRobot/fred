@@ -53,6 +53,13 @@ export * from './errors';
 // Layers and composition
 export * from './layers';
 
+// Unified workflow primitive and executor
+export * from '../workflow/ir';
+export * from '../workflow/compile';
+export * from '../workflow/validate';
+export * from '../workflow/errors';
+export * from '../workflow/execute';
+
 // Re-export Effect for convenience
 // Users often need these alongside Fred services
 export { Effect, Layer, Context, Ref, Fiber, Scope, Stream } from 'effect';

@@ -22,6 +22,8 @@ import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipel
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
 import type { GraphExecutionResult } from '../../../packages/core/src/pipeline/graph-executor';
+import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
+import type { WorkflowExecutionResult } from '../../../packages/core/src/workflow/execute';
 import { createMockProvider } from '../helpers/mock-provider';
 import { createMockStorage } from '../helpers/mock-storage';
 
@@ -117,6 +119,26 @@ describe('createFred client', () => {
     const result = (await client.workflows.run('client-v2-pipeline', 'hello')) as PipelineResult;
     expect(result.success).toBe(true);
     expect(result.finalOutput).toBe('echo:hello');
+  });
+
+  it('workflows sub-API defines and runs native WorkflowIR directly', async () => {
+    const client = track(await createFred());
+    await client.workflows.define(defineWorkflow({
+      id: 'client-native-workflow',
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function', fn: (context) => `native:${context.input}` },
+      ],
+      edges: [],
+    }));
+
+    const result = (await client.workflows.run(
+      'client-native-workflow',
+      'hello',
+    )) as WorkflowExecutionResult;
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('completed');
+    expect(result.finalOutput).toBe('native:hello');
   });
 
   it('workflows.run accepts a sessionId and stays transparent to execution', async () => {

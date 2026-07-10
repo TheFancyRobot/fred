@@ -70,6 +70,22 @@ export interface IRNodeBase {
   readonly contextView?: 'accumulated' | 'isolated';
   /** Join behavior when multiple edges lead into this node. Default: run when reached. */
   readonly join?: JoinPolicy;
+  /**
+   * Compiler-generated nodes participate in execution but are omitted from the
+   * public output map. This is used to lower nested V2 conditionals without
+   * leaking their implementation details into `PipelineContext.outputs`.
+   */
+  readonly internal?: boolean;
+  /**
+   * Whether the executor records this node's return value. Fork shims are real
+   * traversal points (and remain observable in `executedNodes`) but intentionally
+   * do not create an output entry, matching the legacy graph contract.
+   */
+  readonly recordOutput?: boolean;
+  /** Source step index for checkpoint/resume compatibility with V2 pipelines. */
+  readonly sourceIndex?: number;
+  /** Optional semantic role for observability; this is metadata, not a node kind. */
+  readonly role?: 'fork' | 'join' | 'condition' | 'condition-result';
 }
 
 /** Executes a registered agent; the agent sees the incoming message + history. */
@@ -146,6 +162,8 @@ export interface WorkflowIR {
   readonly checkpoint?: CheckpointConfig;
   /** Lifecycle hooks (carried from pipeline/graph `hooks`). */
   readonly hooks?: PipelineHooks;
+  /** V2 error policy. Defaults to true, matching `PipelineConfigV2.failFast`. */
+  readonly failFast?: boolean;
   /** Agent handoff constraints (source agent id -> allowed target agent ids). */
   readonly handoffs?: Readonly<Record<string, readonly string[]>>;
   /** Source architecture this IR was compiled from. */

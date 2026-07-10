@@ -22,7 +22,9 @@ import {
 } from './services';
 import { TemplateEngine, TemplateEngineLive } from './template';
 import { FredBase } from './facade';
-import { executeGraphWorkflowViaRuntime } from './client';
+import { executeGraphWorkflowViaRuntime, executeWorkflowViaRuntime } from './client';
+import type { CompilableWorkflow } from './workflow/compile';
+import type { WorkflowExecutionResult } from './workflow/execute';
 
 /**
  * Fred - Main class for building AI agents
@@ -224,6 +226,31 @@ export class Fred extends FredBase {
 
   // --- Graph Workflow Execution ---
 
+  /** Register V1, V2, graph, or native WorkflowIR through the unified registry. */
+  async defineWorkflow(config: CompilableWorkflow): Promise<void> {
+    await this.runEffect(
+      Effect.flatMap(PipelineService, (service) => service.defineWorkflow(config)),
+      `Failed to define workflow: ${config.id}`,
+    );
+  }
+
+  /** Execute any registered workflow and return the canonical unified result. */
+  async executeWorkflow(
+    id: string,
+    input: string,
+    options?: { conversationId?: string },
+  ): Promise<WorkflowExecutionResult> {
+    const runtime = await this.ensureRuntime();
+    const workflow = await this.runEffect(
+      Effect.flatMap(PipelineService, (service) => service.getWorkflowIR(id)),
+      `Workflow not found: ${id}`,
+    );
+    return executeWorkflowViaRuntime(runtime, workflow, input, {
+      ...options,
+      tracer: this.tracer,
+    });
+  }
+
   async executeGraphWorkflow(
     id: string,
     input: string,
@@ -351,6 +378,7 @@ export {
   createFred,
   FredClientClosedError,
   executeGraphWorkflowViaRuntime,
+  executeWorkflowViaRuntime,
   type FredClient,
   type CreateFredOptions,
   type WorkflowDefinition,

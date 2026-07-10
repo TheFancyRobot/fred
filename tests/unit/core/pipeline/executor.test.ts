@@ -84,6 +84,28 @@ async function runExecutor(
 }
 
 describe('ExecutorService - run id and checkpoint behavior', () => {
+  it('returns a failed result when failFast is disabled', async () => {
+    const result = await runExecutor({
+      id: 'non-fail-fast',
+      failFast: false,
+      steps: [{
+        name: 'fails',
+        type: 'function',
+        fn: () => {
+          throw new Error('expected failure');
+        },
+      }],
+    }, 'test input', {
+      agentManager: createMockAgentManager(),
+      runId: 'run-failed',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toBe('expected failure');
+    expect(result.runId).toBe('run-failed');
+  });
+
   it('generates runId and returns it in result', async () => {
     const result = await runExecutor(createSimplePipelineConfig(1), 'test input', {
       agentManager: createMockAgentManager(),

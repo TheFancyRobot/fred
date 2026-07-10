@@ -4,8 +4,9 @@ import type {
   PipelineInstance,
   PipelineConfigV2
 } from './pipeline';
+import { isPipelineConfigV2 } from './pipeline';
 import type { PipelineResult } from './executor';
-import type { GraphWorkflowConfig } from './graph';
+import { isGraphWorkflowConfig, type GraphWorkflowConfig } from './graph';
 import type { GraphExecutionResult } from './graph-executor';
 import type { GraphWorkflowBuilder } from './graph-builder';
 import type { AgentMessage, AgentResponse } from '../agent/agent';
@@ -43,6 +44,16 @@ import {
   GraphExecutorService,
   type GraphExecutorService as GraphExecutorServiceApi,
 } from './graph-executor';
+import {
+  compileGraphWorkflow,
+  compilePipelineV1,
+  compilePipelineV2,
+  compileWorkflow,
+  isWorkflowIR,
+  type CompilableWorkflow,
+} from '../workflow/compile';
+import type { WorkflowIR } from '../workflow/ir';
+import { executeWorkflowEffect } from '../workflow/execute';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -86,6 +97,17 @@ export interface PipelineService {
    * Clear all pipelines (V1, V2, and graph)
    */
   clear(): Effect.Effect<void>;
+
+  /** Register any workflow dialect through the single IR compile path. */
+  defineWorkflow(
+    config: CompilableWorkflow,
+  ): Effect.Effect<void, PipelineAlreadyExistsError | PipelineExecutionError | GraphValidationError>;
+
+  /** Get the canonical compiled representation for any registered workflow. */
+  getWorkflowIR(id: string): Effect.Effect<WorkflowIR, PipelineNotFoundError>;
+
+  /** Check the unified workflow registry. */
+  hasWorkflowIR(id: string): Effect.Effect<boolean>;
 
   /**
    * Execute a V1 pipeline
@@ -231,6 +253,8 @@ class PipelineServiceImpl implements PipelineService {
     private pipelines: Ref.Ref<Map<string, PipelineInstance>>,
     private pipelinesV2: Ref.Ref<Map<string, PipelineConfigV2>>,
     private graphWorkflows: Ref.Ref<Map<string, GraphWorkflowConfig>>,
+    private workflows: Ref.Ref<Map<string, WorkflowIR>>,
+    private v1DeprecationWarned: Ref.Ref<boolean>,
     private agentService: AgentService,
     private executorService: ExecutorServiceApi,
     private graphExecutorService: GraphExecutorServiceApi,
@@ -246,6 +270,13 @@ class PipelineServiceImpl implements PipelineService {
   createPipeline(config: PipelineConfig): Effect.Effect<PipelineInstance, PipelineAlreadyExistsError | PipelineExecutionError> {
     const self = this;
     return Effect.gen(function* () {
+      const warned = yield* Ref.get(self.v1DeprecationWarned);
+      if (!warned) {
+        yield* Ref.set(self.v1DeprecationWarned, true);
+        yield* Effect.logWarning(
+          'PipelineConfig V1 is deprecated; prefer defineWorkflow() or PipelineConfigV2.',
+        );
+      }
       // Validate ID using Effect.try
       yield* Effect.try({
         try: () => validateId(config.id, 'Pipeline ID'),
@@ -257,7 +288,8 @@ class PipelineServiceImpl implements PipelineService {
       });
 
       const pipelines = yield* Ref.get(self.pipelines);
-      if (pipelines.has(config.id)) {
+      const workflows = yield* Ref.get(self.workflows);
+      if (pipelines.has(config.id) || workflows.has(config.id)) {
         return yield* Effect.fail(new PipelineAlreadyExistsError({ id: config.id }));
       }
 
@@ -299,6 +331,11 @@ class PipelineServiceImpl implements PipelineService {
       const newPipelines = new Map(pipelines);
       newPipelines.set(config.id, instance);
       yield* Ref.set(self.pipelines, newPipelines);
+      yield* Ref.update(self.workflows, (workflows) => {
+        const next = new Map(workflows);
+        next.set(config.id, compilePipelineV1(config));
+        return next;
+      });
 
       return instance;
     });
@@ -339,6 +376,13 @@ class PipelineServiceImpl implements PipelineService {
       const newPipelines = new Map(pipelines);
       const removed = newPipelines.delete(id);
       yield* Ref.set(self.pipelines, newPipelines);
+      if (removed) {
+        yield* Ref.update(self.workflows, (workflows) => {
+          const next = new Map(workflows);
+          next.delete(id);
+          return next;
+        });
+      }
       return removed;
     });
   }
@@ -357,7 +401,49 @@ class PipelineServiceImpl implements PipelineService {
       yield* Ref.set(self.pipelines, new Map());
       yield* Ref.set(self.pipelinesV2, new Map());
       yield* Ref.set(self.graphWorkflows, new Map());
+      yield* Ref.set(self.workflows, new Map());
     });
+  }
+
+  defineWorkflow(
+    config: CompilableWorkflow,
+  ): Effect.Effect<void, PipelineAlreadyExistsError | PipelineExecutionError | GraphValidationError> {
+    const self = this;
+    if (isGraphWorkflowConfig(config)) return self.registerGraphWorkflow(config);
+    if (!isWorkflowIR(config)) {
+      if (isPipelineConfigV2(config)) return self.createPipelineV2(config);
+      return Effect.asVoid(self.createPipeline(config));
+    }
+
+    return Effect.gen(function* () {
+      const workflows = yield* Ref.get(self.workflows);
+      if (workflows.has(config.id)) {
+        return yield* new PipelineAlreadyExistsError({ id: config.id });
+      }
+      const workflow = yield* Effect.try({
+        try: () => compileWorkflow(config),
+        catch: (error) => new GraphValidationError({
+          workflowId: config.id,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      });
+      const next = new Map(workflows);
+      next.set(workflow.id, workflow);
+      yield* Ref.set(self.workflows, next);
+    });
+  }
+
+  getWorkflowIR(id: string): Effect.Effect<WorkflowIR, PipelineNotFoundError> {
+    const self = this;
+    return Effect.gen(function* () {
+      const workflow = (yield* Ref.get(self.workflows)).get(id);
+      if (!workflow) return yield* new PipelineNotFoundError({ id });
+      return workflow;
+    });
+  }
+
+  hasWorkflowIR(id: string): Effect.Effect<boolean> {
+    return Ref.get(this.workflows).pipe(Effect.map((workflows) => workflows.has(id)));
   }
 
   executePipeline(
@@ -380,40 +466,21 @@ class PipelineServiceImpl implements PipelineService {
         }))
       );
 
-      let currentMessage = message;
-      let currentHistory = [...previousMessages];
-      let finalResponse: AgentResponse | null = null;
-
-      for (let i = 0; i < pipeline.config.agents.length; i++) {
-        const agentRef = pipeline.config.agents[i];
-        const agentId = typeof agentRef === 'string' ? agentRef : agentRef.id;
-
-        const agent = yield* self.agentService.getAgent(agentId).pipe(
-          Effect.mapError(() => new PipelineExecutionError({
-            pipelineId,
-            step: i,
-            cause: new Error(`Agent not found: ${agentId}`)
-          }))
-        );
-
-        // Process message with proper Effect wrapping
-        const response = yield* self.processAgentMessage(
-          agent,
-          currentMessage,
-          options?.sequentialVisibility !== false ? currentHistory : [],
+      const workflow = compilePipelineV1(pipeline.config);
+      const result = yield* executeWorkflowEffect(workflow, message, {
+        agentManager: self.createExecutorAgentManager(),
+        conversationId: options?.conversationId,
+        history: options?.sequentialVisibility === false ? [] : previousMessages,
+        sequentialVisibility: options?.sequentialVisibility,
+      }).pipe(
+        Effect.mapError((error) => new PipelineExecutionError({
           pipelineId,
-          i
-        );
+          step: workflow.nodes.find((node) => node.id === error.nodeId)?.sourceIndex ?? 0,
+          cause: error.cause,
+        })),
+      );
 
-        currentHistory.push({ role: 'user', content: currentMessage });
-        if (response.content) {
-          currentHistory.push({ role: 'assistant', content: response.content });
-        }
-        currentMessage = response.content;
-        finalResponse = response;
-      }
-
-      if (!finalResponse) {
+      if (!result.finalResponse) {
         return yield* Effect.fail(new PipelineExecutionError({
           pipelineId,
           step: 0,
@@ -421,27 +488,8 @@ class PipelineServiceImpl implements PipelineService {
         }));
       }
 
-      return finalResponse;
+      return result.finalResponse;
     });
-  }
-
-  /**
-   * Effect-wrapped agent message processing
-   */
-  private processAgentMessage(
-    agent: { processMessage: (message: string, history?: AgentMessage[]) => Effect.Effect<AgentResponse, Error> },
-    message: string,
-    history: AgentMessage[],
-    pipelineId: string,
-    step: number
-  ): Effect.Effect<AgentResponse, PipelineExecutionError> {
-    return agent.processMessage(message, history).pipe(
-      Effect.mapError((error) => new PipelineExecutionError({
-        pipelineId,
-        step,
-        cause: error,
-      }))
-    );
   }
 
   matchPipelineByUtterance(
@@ -538,12 +586,18 @@ class PipelineServiceImpl implements PipelineService {
       });
 
       const pipelines = yield* Ref.get(self.pipelinesV2);
-      if (pipelines.has(config.id)) {
+      const workflows = yield* Ref.get(self.workflows);
+      if (pipelines.has(config.id) || workflows.has(config.id)) {
         return yield* Effect.fail(new PipelineAlreadyExistsError({ id: config.id }));
       }
       const newPipelines = new Map(pipelines);
       newPipelines.set(config.id, config);
       yield* Ref.set(self.pipelinesV2, newPipelines);
+      yield* Ref.update(self.workflows, (workflows) => {
+        const next = new Map(workflows);
+        next.set(config.id, compilePipelineV2(config));
+        return next;
+      });
     });
   }
 
@@ -947,7 +1001,8 @@ class PipelineServiceImpl implements PipelineService {
       });
 
       const workflows = yield* Ref.get(self.graphWorkflows);
-      if (workflows.has(config.id)) {
+      const compiled = yield* Ref.get(self.workflows);
+      if (workflows.has(config.id) || compiled.has(config.id)) {
         return yield* Effect.fail(new GraphValidationError({
           workflowId: config.id,
           message: `Graph workflow already exists: ${config.id}`
@@ -966,6 +1021,11 @@ class PipelineServiceImpl implements PipelineService {
       const newWorkflows = new Map(workflows);
       newWorkflows.set(config.id, config);
       yield* Ref.set(self.graphWorkflows, newWorkflows);
+      yield* Ref.update(self.workflows, (compiled) => {
+        const next = new Map(compiled);
+        next.set(config.id, compileGraphWorkflow(config));
+        return next;
+      });
     });
   }
 
@@ -1054,11 +1114,15 @@ export const PipelineServiceLive = Layer.effect(
     const pipelines = yield* Ref.make(new Map<string, PipelineInstance>());
     const pipelinesV2 = yield* Ref.make(new Map<string, PipelineConfigV2>());
     const graphWorkflows = yield* Ref.make(new Map<string, GraphWorkflowConfig>());
+    const workflows = yield* Ref.make(new Map<string, WorkflowIR>());
+    const v1DeprecationWarned = yield* Ref.make(false);
 
     return new PipelineServiceImpl(
       pipelines,
       pipelinesV2,
       graphWorkflows,
+      workflows,
+      v1DeprecationWarned,
       agentService,
       executorService,
       graphExecutorService,

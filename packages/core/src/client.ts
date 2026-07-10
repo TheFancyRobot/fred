@@ -24,18 +24,19 @@
 import { Cause, Data, Effect, Exit, Layer, Runtime, Scope } from 'effect';
 import type { AgentConfig, AgentInstance, AgentResponse } from './agent/agent';
 import type { AnyPipelineConfig } from './pipeline/pipeline';
-import { isPipelineConfigV2 } from './pipeline/pipeline';
-import type { PipelineConfig } from './pipeline';
 import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
-import { executeGraphWorkflowEffect } from './pipeline/graph-executor';
 import type { AgentManagerLike, HookManagerLike, PipelineResult } from './pipeline/executor';
 import type {
   GraphValidationError,
   PipelineAlreadyExistsError,
   PipelineExecutionError,
 } from './pipeline/errors';
-import type { HookType } from './hooks';
+import type { WorkflowIR } from './workflow/ir';
+import {
+  executeWorkflowEffect,
+  type WorkflowExecutionResult,
+} from './workflow/execute';
 import type { Tool } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
 import type { ProviderConfig, ProviderDefinition } from './platform/provider';
@@ -63,50 +64,29 @@ import type { SessionHandle } from './context/session-service';
 import { resolveAmbientConversationId } from './context/session-service';
 import { TemplateEngine, TemplateEngineLive } from './template';
 
-/**
- * Execute a registered graph workflow against an existing Fred runtime.
- *
- * Bridges the Effect-native graph executor to the Promise world: builds the
- * Promise-shaped agent/hook adapters the executor expects, and mirrors the
- * legacy error-to-result conversion (execution failures become a
- * `success: false` result instead of a rejection).
- */
-export async function executeGraphWorkflowViaRuntime(
+/** Execute an already-compiled workflow against an existing Fred runtime. */
+export async function executeWorkflowViaRuntime(
   runtime: FredRuntime,
-  id: string,
+  workflow: WorkflowIR,
   input: string,
   options: { conversationId?: string; tracer?: Tracer } = {}
-): Promise<GraphExecutionResult> {
-  const configExit = await Runtime.runPromise(runtime)(
-    Effect.exit(Effect.flatMap(PipelineService, (s) => s.getGraphWorkflow(id)))
-  );
-  if (Exit.isFailure(configExit)) {
-    throw new Error(`Graph workflow not found: ${id}`);
-  }
-  const config = configExit.value;
-
+): Promise<WorkflowExecutionResult> {
   const agents = await Runtime.runPromise(runtime)(
     Effect.flatMap(AgentService, (s) => s.getAllAgents())
   );
 
   const agentMap = new Map(agents.map((agent) => [agent.id, agent]));
   const agentManager: AgentManagerLike = {
-    getAgent: (agentId: string) => {
-      const agent = agentMap.get(agentId);
-      if (!agent) {
-        throw new Error(`Agent not found: ${agentId}`);
-      }
-      return agent;
-    },
+    getAgent: (agentId: string) => agentMap.get(agentId),
     hasAgent: (agentId: string) => agentMap.has(agentId),
   };
 
   const hookManager = await Runtime.runPromise(runtime)(
     Effect.map(HookManagerService, (hooks): HookManagerLike => ({
       executeHooks: (hookName, event) =>
-        Runtime.runPromise(runtime)(hooks.executeHooks(hookName as HookType, event)).then(() => undefined),
+        Runtime.runPromise(runtime)(hooks.executeHooks(hookName, event)).then(() => undefined),
       executeHooksAndMerge: (hookName, event) =>
-        Runtime.runPromise(runtime)(hooks.executeHooksAndMerge(hookName as HookType, event)),
+        Runtime.runPromise(runtime)(hooks.executeHooksAndMerge(hookName, event)),
     }))
   ).catch(() => undefined);
 
@@ -116,39 +96,31 @@ export async function executeGraphWorkflowViaRuntime(
     resolveAmbientConversationId(options.conversationId)
   );
 
-  const graphOptions = {
+  const executionOptions = {
     agentManager,
     hookManager,
     tracer: options.tracer,
     conversationId,
   };
 
-  // Use the Effect-native path with the Fred runtime instead of the deprecated
-  // function which uses Effect.runCallback without a runtime, causing hangs
-  // when graph nodes call back into Runtime.runPromise.
-  //
-  // When a conversation/session id is resolved, bind it as the ambient session
-  // for the whole graph run so session-aware nodes (and any nested
-  // MessageProcessorService.processMessage) observe it through the environment —
-  // matching the v1/v2 pipeline paths in workflows.run.
-  const graphEffect = executeGraphWorkflowEffect(config, input, graphOptions);
+  const workflowEffect = executeWorkflowEffect(workflow, input, executionOptions);
   const scoped = conversationId
     ? Effect.flatMap(SessionService, (session) =>
-        session.withSession(conversationId, graphEffect)
+        session.withSession(conversationId, workflowEffect)
       )
-    : graphEffect;
+    : workflowEffect;
   const exit = await Runtime.runPromise(runtime)(Effect.exit(scoped));
 
   if (Exit.isSuccess(exit)) {
     return exit.value;
   }
 
-  // Mirror the deprecated function's error-to-result conversion
   const error = Cause.squash(exit.cause);
   return {
     success: false,
+    status: 'failed',
     context: {
-      pipelineId: config.id,
+      pipelineId: workflow.id,
       input,
       outputs: {},
       history: [],
@@ -157,6 +129,31 @@ export async function executeGraphWorkflowViaRuntime(
     outputs: {},
     executedNodes: [],
     error: error instanceof Error ? error : new Error(String(error)),
+    runId: crypto.randomUUID(),
+  };
+}
+
+/** Compatibility helper for the legacy graph-specific Promise entrypoint. */
+export async function executeGraphWorkflowViaRuntime(
+  runtime: FredRuntime,
+  id: string,
+  input: string,
+  options: { conversationId?: string; tracer?: Tracer } = {},
+): Promise<GraphExecutionResult> {
+  const workflowExit = await Runtime.runPromise(runtime)(
+    Effect.exit(Effect.flatMap(PipelineService, (service) => service.getWorkflowIR(id))),
+  );
+  if (Exit.isFailure(workflowExit)) throw new Error(`Graph workflow not found: ${id}`);
+  const workflow = workflowExit.value;
+  if (workflow.source !== 'graph') throw new Error(`Graph workflow not found: ${id}`);
+  const result = await executeWorkflowViaRuntime(runtime, workflow, input, options);
+  return {
+    success: result.success,
+    context: result.context,
+    outputs: result.outputs,
+    executedNodes: result.executedNodes,
+    error: result.error,
+    abortedBy: result.abortedBy,
   };
 }
 
@@ -181,7 +178,7 @@ export interface CreateFredOptions {
 }
 
 /** A workflow definition: a V1 pipeline, a V2 pipeline, or a graph workflow. */
-export type WorkflowDefinition = AnyPipelineConfig | GraphWorkflowConfig;
+export type WorkflowDefinition = AnyPipelineConfig | GraphWorkflowConfig | WorkflowIR;
 
 /** Failures workflows.define can produce across the three workflow kinds. */
 export type WorkflowDefineError =
@@ -190,7 +187,11 @@ export type WorkflowDefineError =
   | GraphValidationError;
 
 /** Result of workflows.run — shape depends on the workflow kind. */
-export type WorkflowRunResult = AgentResponse | PipelineResult | GraphExecutionResult;
+export type WorkflowRunResult =
+  | AgentResponse
+  | PipelineResult
+  | GraphExecutionResult
+  | WorkflowExecutionResult;
 
 export interface FredClient {
   readonly agents: {
@@ -234,9 +235,6 @@ export interface FredClient {
   /** Release all resources. Idempotent; further client calls reject with FredClientClosedError. */
   shutdown(): Promise<void>;
 }
-
-const isGraphWorkflowConfig = (config: WorkflowDefinition): config is GraphWorkflowConfig =>
-  'nodes' in config;
 
 /**
  * Create a Fred client with an initialized Effect runtime.
@@ -306,53 +304,50 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     workflows: {
       define: (config) =>
         run(
-          Effect.flatMap(PipelineService, (s): Effect.Effect<void, WorkflowDefineError> => {
-            if (isGraphWorkflowConfig(config)) {
-              return s.registerGraphWorkflow(config);
-            }
-            if (isPipelineConfigV2(config)) {
-              return s.createPipelineV2(config);
-            }
-            return Effect.asVoid(s.createPipeline(config as PipelineConfig));
-          })
+          Effect.flatMap(
+            PipelineService,
+            (service): Effect.Effect<void, WorkflowDefineError> => service.defineWorkflow(config),
+          ),
         ),
       run: async (id, input, runOptions) => {
         // The session id (explicit `conversationId` wins over the `sessionId`
         // alias). When present it becomes the ambient session for the run and
         // the persistence key; when absent the run is stateless.
         const sessionId = runOptions?.conversationId ?? runOptions?.sessionId;
-        const execOptions = sessionId ? { conversationId: sessionId } : undefined;
-
-        const kind = await run(
-          Effect.flatMap(PipelineService, (s) =>
-            Effect.all({
-              graph: s.hasGraphWorkflow(id),
-              v2: s.hasPipelineV2(id),
-            })
-          )
+        const workflow = await run(
+          Effect.flatMap(PipelineService, (service) => service.getWorkflowIR(id)),
         );
-        if (kind.graph) {
-          if (closed) {
-            throw new FredClientClosedError({ message: 'FredClient has been shut down' });
-          }
-          return executeGraphWorkflowViaRuntime(runtime, id, input, {
-            conversationId: sessionId,
-            tracer: options.tracer,
-          });
+        const result = await executeWorkflowViaRuntime(runtime, workflow, input, {
+          conversationId: sessionId,
+          tracer: options.tracer,
+        });
+        switch (workflow.source) {
+          case 'v1':
+            if (!result.finalResponse) throw new Error(`Workflow did not produce a response: ${id}`);
+            return result.finalResponse;
+          case 'v2':
+            return {
+              success: result.success,
+              status: result.status,
+              context: result.context,
+              finalOutput: result.finalOutput,
+              error: result.error,
+              abortedBy: result.abortedBy,
+              runId: result.runId,
+              pauseRequest: result.pauseRequest,
+            } satisfies PipelineResult;
+          case 'graph':
+            return {
+              success: result.success,
+              context: result.context,
+              outputs: result.outputs,
+              executedNodes: result.executedNodes,
+              error: result.error,
+              abortedBy: result.abortedBy,
+            } satisfies GraphExecutionResult;
+          default:
+            return result;
         }
-
-        const exec: Effect.Effect<WorkflowRunResult, PipelineExecutionError, PipelineService> =
-          kind.v2
-            ? Effect.flatMap(PipelineService, (s) => s.executePipelineV2(id, input, execOptions))
-            : Effect.flatMap(PipelineService, (s) => s.executePipeline(id, input, [], execOptions));
-
-        // Bind the ambient session for the whole run so nested agents/functions
-        // observe it through the environment without manual threading.
-        const scoped = sessionId
-          ? Effect.flatMap(SessionService, (session) => session.withSession(sessionId, exec))
-          : exec;
-
-        return run(scoped);
       },
     },
 
