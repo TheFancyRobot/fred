@@ -53,11 +53,19 @@ function getResponseRole(response: NormalizableResponse): string | undefined {
   return 'role' in response ? response.role : undefined;
 }
 
-function getResponseMetadata(response: NormalizableResponse): Record<string, unknown> {
-  if ('metadata' in response && response.metadata) {
-    return response.metadata;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function getResponseMetadata(response: unknown): Record<string, unknown> {
+  if (!isRecord(response) || !isRecord(response.metadata)) {
+    return {};
   }
-  return {};
+  return response.metadata;
+}
+
+function getSanitizedResponseMetadata(response: unknown): Record<string, unknown> {
+  const metadata = sanitizeVolatile(getResponseMetadata(response));
+  return isRecord(metadata) ? metadata : {};
 }
 
 export interface NormalizeLegacyTraceInput {
@@ -234,7 +242,7 @@ export function normalizeRunRecord(input: NormalizeRunRecordInput): EvaluationAr
       content: response.content,
       output: toDeterministicValue(response.output),
       role: getResponseRole(response),
-      metadata: toDeterministicValue(sanitizeVolatile(getResponseMetadata(response)) as Record<string, unknown>),
+      metadata: toDeterministicValue(getSanitizedResponseMetadata(response)),
     },
     steps,
     toolCalls,
@@ -340,7 +348,7 @@ export function normalizeLegacyGoldenTrace(input: NormalizeLegacyTraceInput): Ev
     response: {
       content: trace.trace.response.content,
       output: toDeterministicValue(trace.trace.response.output),
-      metadata: toDeterministicValue(sanitizeVolatile(trace.trace.response) as Record<string, unknown>),
+      metadata: toDeterministicValue(getSanitizedResponseMetadata(trace.trace.response)),
     },
     steps,
     toolCalls,

@@ -168,6 +168,35 @@ describe('AgentFactory typed input and output', () => {
     expect(providerCalls).toBe(1);
   });
 
+  it('keeps processMessage conversational for object-shaped typed agents', async () => {
+    let providerCalls = 0;
+    activeSpies.push(
+      spyOn(LanguageModel, 'generateText').mockImplementation(() => {
+        providerCalls += 1;
+        return Effect.succeed({
+          text: 'routed',
+          toolCalls: [],
+          toolResults: [],
+          usage: {},
+        } as any) as any;
+      }),
+    );
+    const agent = await Effect.runPromise(factory.createAgent({
+      id: 'routed-typed-agent',
+      platform: 'openai',
+      model: 'gpt-4',
+      systemMessage: 'Handle routed conversational messages.',
+      input: Schema.Struct({ requestId: Schema.String }),
+    }, makeProvider()));
+
+    const response = await Effect.runPromise(
+      agent.processMessage('I need a refund'),
+    );
+
+    expect(response.content).toBe('routed');
+    expect(providerCalls).toBe(1);
+  });
+
   it('rejects output schemas that do not encode to an object', async () => {
     const exit = await Effect.runPromiseExit(factory.createAgent({
       id: 'scalar-output-agent',

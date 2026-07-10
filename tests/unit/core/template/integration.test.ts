@@ -56,6 +56,17 @@ describe('template integration', () => {
     expect(system).toBe('You are a plain assistant.');
   });
 
+  test('treats template prompt object text as literal even when it looks like a Markdown path', async () => {
+    const system = await captureSystemPrompt({
+      id: 'literal-template-path-agent',
+      platform: 'openai',
+      model: 'gpt-4o-mini',
+      systemMessage: { template: '/outside-the-project/prompt.md' },
+    });
+
+    expect(system).toBe('/outside-the-project/prompt.md');
+  });
+
   test('maps prompt file loading failures to PromptResolutionError', async () => {
     const agent = await Effect.runPromise(factory.createAgent({
       id: 'invalid-prompt-path',

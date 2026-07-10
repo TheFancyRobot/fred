@@ -33,15 +33,33 @@ export const PromptSourceService = Context.GenericTag<PromptSourceService>(
   '@fancyrobot/fred/PromptSourceService'
 );
 
-export const isAgentTemplatePrompt = (source: AgentPrompt): source is AgentTemplatePrompt =>
-  typeof source === 'object' && source !== null && 'template' in source;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export const isAgentBamlPrompt = (source: AgentPrompt): source is AgentBamlPrompt =>
-  typeof source === 'object' && source !== null && 'baml' in source;
+const isPromptVariable = (value: unknown): value is AgentPromptVariable =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+const isPromptVariables = (
+  value: unknown
+): value is Readonly<Record<string, AgentPromptVariable>> | undefined =>
+  value === undefined || (isRecord(value) && Object.values(value).every(isPromptVariable));
+
+export const isAgentTemplatePrompt = (source: unknown): source is AgentTemplatePrompt =>
+  isRecord(source) &&
+  typeof source.template === 'string' &&
+  !('baml' in source) &&
+  isPromptVariables(source.variables);
+
+export const isAgentBamlPrompt = (source: unknown): source is AgentBamlPrompt =>
+  isRecord(source) &&
+  isRecord(source.baml) &&
+  typeof source.baml.function === 'string' &&
+  !('template' in source) &&
+  !('variables' in source);
 
 /** Resolve the source forms owned by core. Adapters delegate to this helper. */
 export const resolveDefaultPromptSource = (
-  source: AgentPrompt,
+  source: unknown,
   context: PromptSourceContext
 ): Effect.Effect<string, PromptSourceError> => {
   if (typeof source === 'string') {
@@ -49,16 +67,25 @@ export const resolveDefaultPromptSource = (
   }
 
   if (isAgentTemplatePrompt(source)) {
-    return context.renderTemplate(source.template, source.variables, 'template');
+    return context.renderTemplate(source.template, source.variables ?? {}, 'template');
   }
 
-  return Effect.fail(new MissingPromptSourceAdapterError({
+  if (isAgentBamlPrompt(source)) {
+    return Effect.fail(new MissingPromptSourceAdapterError({
+      agentId: context.agentId,
+      functionName: source.baml.function,
+      message:
+        `Agent "${context.agentId}" uses BAML prompt function "${source.baml.function}", ` +
+        'but no BAML prompt adapter is configured. Install @fancyrobot/fred-baml ' +
+        'and provide BamlPromptSourceLayer.',
+    }));
+  }
+
+  const sourceKind = isRecord(source) && 'baml' in source ? 'baml' : 'template';
+  return Effect.fail(new PromptResolutionError({
     agentId: context.agentId,
-    functionName: source.baml.function,
-    message:
-      `Agent "${context.agentId}" uses BAML prompt function "${source.baml.function}", ` +
-      'but no BAML prompt adapter is configured. Install @fancyrobot/fred-baml ' +
-      'and provide BamlPromptSourceLayer.',
+    source: sourceKind,
+    message: `Agent "${context.agentId}" has an invalid ${sourceKind} prompt source.`,
   }));
 };
 

@@ -102,6 +102,12 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
             },
           },
           {
+            id: 'variable-free-template',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: { template: 'You are helpful.' },
+          },
+          {
             id: 'baml',
             platform: 'openai',
             model: 'gpt-4',
@@ -263,7 +269,6 @@ describe('FrameworkConfigSchema — clearly-invalid inputs are rejected', () => 
 
   it('rejects malformed template and BAML prompt sources', () => {
     const invalidPrompts = [
-      { template: 'Missing variables' },
       { template: 'Invalid variable', variables: { nested: { value: 'nope' } } },
       { template: 42, variables: {} },
       { baml: {} },

@@ -177,6 +177,17 @@ describe('evaluation recording determinism', () => {
   });
 
   test('converts legacy golden trace shape and strips wall-clock fields', () => {
+    const legacyResponse = {
+      content: 'legacy response',
+      output: {
+        classification: 'legacy',
+        timestamp: '2026-07-09T12:00:00.000Z',
+      },
+      metadata: {
+        provider: 'legacy-provider',
+        timestamp: 1700000,
+      },
+    };
     const legacyTrace: GoldenTrace = {
       version: '1.0',
       metadata: {
@@ -201,13 +212,7 @@ describe('evaluation recording determinism', () => {
             status: { code: 'ok' },
           },
         ],
-        response: {
-          content: 'legacy response',
-          output: {
-            classification: 'legacy',
-            timestamp: '2026-07-09T12:00:00.000Z',
-          },
-        },
+        response: legacyResponse,
         toolCalls: [
           {
             toolId: 'search',
@@ -249,6 +254,9 @@ describe('evaluation recording determinism', () => {
       classification: 'legacy',
       timestamp: '2026-07-09T12:00:00.000Z',
     });
+    expect(artifact.response.metadata).toEqual({ provider: 'legacy-provider' });
+    expect(artifact.response.metadata.content).toBeUndefined();
+    expect(artifact.response.metadata.output).toBeUndefined();
   });
 
   test('produces byte-stable artifacts for equivalent traces', () => {

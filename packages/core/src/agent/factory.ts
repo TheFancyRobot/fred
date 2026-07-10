@@ -1066,7 +1066,9 @@ export class AgentFactory {
     ): Effect.Effect<string, PromptResolutionError> =>
       Effect.try({
         try: () => {
-          const systemMessageTemplate = loadPromptFile(sourceTemplate, undefined, false);
+          const systemMessageTemplate = source === 'string'
+            ? loadPromptFile(sourceTemplate, undefined, false)
+            : sourceTemplate;
           if (!containsEtaSyntax(systemMessageTemplate) || !this.templateEngine) {
             return { systemMessageTemplate };
           }

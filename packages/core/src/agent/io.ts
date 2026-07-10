@@ -9,6 +9,11 @@ export interface DecodedAgentInput<A> {
 
 const JsonText = Schema.parseJson(Schema.Unknown);
 
+const isStructuredProcessMessage = (message: string): boolean => {
+  const trimmed = message.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+};
+
 const serializeEncodedInput = (input: unknown): string => {
   if (typeof input === 'string') {
     return input;
@@ -72,9 +77,13 @@ export const decodeProcessMessageInput = <S extends SchemaTypes.Schema.AnyNoCont
   agentId: string,
   schema: S,
   message: string,
-): Effect.Effect<DecodedAgentInput<SchemaTypes.Schema.Type<S>>, AgentInputValidationError> =>
+): Effect.Effect<DecodedAgentInput<SchemaTypes.Schema.Type<S> | string>, AgentInputValidationError> =>
   decodeAgentInput(agentId, schema, message).pipe(
     Effect.catchAll((rawError) => {
+      if (!isStructuredProcessMessage(message)) {
+        return Effect.succeed({ value: message, message });
+      }
+
       const candidate = parseProcessMessageInput(message);
       return candidate === message
         ? Effect.fail(rawError)

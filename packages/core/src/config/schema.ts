@@ -343,10 +343,10 @@ export const AgentPromptVariableSchema = Schema.Union(
 
 export const AgentTemplatePromptSchema = Schema.Struct({
   template: Schema.String,
-  variables: Schema.Record({
+  variables: Schema.optional(Schema.Record({
     key: Schema.String,
     value: AgentPromptVariableSchema,
-  }),
+  })),
   baml: Schema.optional(Schema.Never),
 });
 

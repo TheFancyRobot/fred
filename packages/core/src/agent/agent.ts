@@ -8,7 +8,7 @@ export type AgentPromptVariable = string | number | boolean;
 
 export interface AgentTemplatePrompt {
   readonly template: string;
-  readonly variables: Readonly<Record<string, AgentPromptVariable>>;
+  readonly variables?: Readonly<Record<string, AgentPromptVariable>>;
 }
 
 export interface AgentBamlPrompt {
