@@ -16,6 +16,7 @@ import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
 import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import {
+  type AgentRunState,
   type AgentStatusSnapshot,
   type AgentStatusUnsubscribe,
   AgentStatusService,
@@ -637,6 +638,82 @@ describe('AgentStatusService', () => {
       );
     } finally {
       generateSpy.mockRestore();
+    }
+  });
+
+  test('seeds stream status before the first model event and skips repeated token transitions', async () => {
+    const streamSpy = spyOn(LanguageModel, 'streamText');
+
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const status = yield* AgentStatusService;
+          const modelStarted = yield* Deferred.make<void>();
+          const releaseModel = yield* Deferred.make<void>();
+          const transitions: AgentRunState[] = [];
+          const observedStatus = {
+            ...status,
+            transition: (state: AgentRunState) =>
+              Effect.sync(() => transitions.push(state)).pipe(
+                Effect.zipRight(status.transition(state)),
+              ),
+          };
+
+          streamSpy.mockImplementation(() =>
+            Stream.fromEffect(
+              Deferred.succeed(modelStarted, undefined).pipe(
+                Effect.zipRight(Deferred.await(releaseModel)),
+                Effect.as(Response.textDeltaPart({ id: 'text-1', delta: 'one' })),
+              ),
+            ).pipe(
+              Stream.concat(Stream.make(
+                Response.textDeltaPart({ id: 'text-1', delta: ' two' }),
+                Response.textDeltaPart({ id: 'text-1', delta: ' three' }),
+                Response.finishPart({
+                  reason: 'stop',
+                  usage: new Response.Usage({
+                    inputTokens: 1,
+                    outputTokens: 3,
+                    totalTokens: 4,
+                  }),
+                }),
+              )),
+            )
+          );
+
+          const factory = new AgentFactory(createMockToolRegistry());
+          factory.setAgentStatusService(observedStatus);
+          const agent = yield* factory.createAgent({
+            id: 'factory-stream-status-agent',
+            platform: 'mock',
+            model: 'mock-model',
+            systemMessage: 'Track this streaming invocation.',
+          }, {
+            ...createMockProvider('mock'),
+            getModel: () => Effect.succeed(Model.make('mock', Layer.empty)),
+          });
+
+          const invocation = yield* agent.streamMessage('hello', [], {
+            workflowId: 'workflow-stream',
+            sessionId: 'session-stream',
+          }).pipe(Stream.runDrain, Effect.fork);
+
+          yield* Deferred.await(modelStarted);
+          expect(yield* status.snapshot).toMatchObject([{
+            agentId: 'factory-stream-status-agent',
+            workflowId: 'workflow-stream',
+            sessionId: 'session-stream',
+            state: 'calling_model',
+          }]);
+
+          yield* Deferred.succeed(releaseModel, undefined);
+          yield* Fiber.join(invocation);
+          expect(transitions).toEqual(['streaming']);
+          expect(yield* status.snapshot).toEqual([]);
+        }).pipe(Effect.provide(AgentStatusServiceLive)),
+      );
+    } finally {
+      streamSpy.mockRestore();
     }
   });
 

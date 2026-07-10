@@ -65,6 +65,32 @@ describe('status command', () => {
     expect(captured.stderr).toEqual([]);
   });
 
+  test('sanitizes identifiers before measuring and rendering the human table', async () => {
+    const captured = captureIO();
+    const unsafeRuns: AgentStatusSnapshot = [{
+      ...activeRuns[0]!,
+      agentId: 'research\u001b[31mer',
+      workflowId: 'workflow\u001b]52;c;Y2xpcGJvYXJk\u0007safe',
+      sessionId: 'session\nwrapped',
+      fiberId: '#7\u009b31m',
+    }];
+
+    const exitCode = await handleStatusCommand([], {}, {
+      fred: { getAgentStatus: async () => unsafeRuns },
+      io: captured.io,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(captured.stdout[0]).toContain('researcher');
+    expect(captured.stdout[0]).toContain('workflowsafe');
+    expect(captured.stdout[0]).toContain('session wrapped');
+    expect(captured.stdout[0]).toContain('#7');
+    expect(captured.stdout[0]).not.toContain('\u001b');
+    expect(captured.stdout[0]).not.toContain('\u009b');
+    expect(captured.stdout[0]?.split('\n')).toHaveLength(5);
+    expect(captured.stderr).toEqual([]);
+  });
+
   test('reads an injected Fred runtime while a run is active', async () => {
     const fred = await Fred.create();
     const started = await Effect.runPromise(Deferred.make<void>());

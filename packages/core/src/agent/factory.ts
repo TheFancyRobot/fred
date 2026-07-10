@@ -54,6 +54,7 @@ import type { FrameworkConfig } from '../config/types';
 import { createSubagentExecutionContext, withSubagentExecutionContext } from '../subagent/context';
 import {
   type AgentRunAnnotation,
+  type AgentRunState,
   type AgentStatusService,
   trackAgentRun,
   trackAgentStream,
@@ -1869,28 +1870,32 @@ export class AgentFactory {
         return stream;
       }
 
-      const annotation = makeRunAnnotation(options);
-      const withTransitions = Stream.unwrap(
-        transitionAgentRun(agentStatusService, annotation, 'calling_model').pipe(
-          Effect.as(
-            stream.pipe(
-              Stream.tap((event) => {
-                switch (event.type) {
-                  case 'token':
-                    return transitionAgentRun(agentStatusService, annotation, 'streaming');
-                  case 'tool-call':
-                    return transitionAgentRun(agentStatusService, annotation, 'running_tool');
-                  case 'tool-result':
-                  case 'tool-error':
-                    return transitionAgentRun(agentStatusService, annotation, 'calling_model');
-                  default:
-                    return Effect.void;
-                }
-              })
-            )
-          )
-        )
-      );
+      const annotation: AgentRunAnnotation = {
+        ...makeRunAnnotation(options),
+        state: 'calling_model',
+      };
+      const withTransitions = Stream.unwrap(Effect.sync(() => {
+        let currentState: AgentRunState = 'calling_model';
+
+        return stream.pipe(
+          Stream.tap((event) => {
+            const nextState: AgentRunState | undefined = event.type === 'token'
+              ? 'streaming'
+              : event.type === 'tool-call'
+                ? 'running_tool'
+                : event.type === 'tool-result' || event.type === 'tool-error'
+                  ? 'calling_model'
+                  : undefined;
+
+            if (nextState === undefined || nextState === currentState) {
+              return Effect.void;
+            }
+
+            currentState = nextState;
+            return transitionAgentRun(agentStatusService, annotation, nextState);
+          })
+        );
+      }));
       return trackAgentStream(annotation)(withTransitions);
     };
 

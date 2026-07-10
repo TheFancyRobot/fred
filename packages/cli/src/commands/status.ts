@@ -7,6 +7,7 @@
 
 import { Fred, type AgentRunInfo } from '@fancyrobot/fred';
 import { Effect } from 'effect';
+import { sanitizeForTerminalTableCell } from '../runtime/terminal-sanitize.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
 import { StatusReadError } from './errors.js';
 
@@ -27,14 +28,17 @@ const DEFAULT_IO: StatusCommandIO = {
 
 const formatTable = (runs: ReadonlyArray<AgentRunInfo>): string => {
   const headers = ['AGENT', 'STATE', 'WORKFLOW', 'SESSION', 'FIBER', 'STARTED'];
-  const rows = runs.map((run) => [
-    run.agentId,
-    run.state,
-    run.workflowId ?? '-',
-    run.sessionId ?? '-',
-    run.fiberId,
-    new Date(run.startedAt).toISOString(),
-  ]);
+  const rows = runs.map((run) => {
+    const cells: string[] = [
+      run.agentId,
+      run.state,
+      run.workflowId ?? '-',
+      run.sessionId ?? '-',
+      run.fiberId,
+      new Date(run.startedAt).toISOString(),
+    ];
+    return cells.map(sanitizeForTerminalTableCell);
+  });
   const widths = headers.map((header, index) =>
     Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
   );

@@ -16,6 +16,9 @@ import {
 } from '@opentui/core';
 import type { TuiTheme } from './theme.js';
 import type { TuiState, ToolBlockState } from './state.js';
+import { sanitizeForTerminalDisplay } from '../runtime/terminal-sanitize.js';
+
+export { sanitizeForTerminalDisplay } from '../runtime/terminal-sanitize.js';
 
 const INPUT_CURSOR_INDICATOR = '█';
 const INPUT_ACCENT_GLYPH = '▎';
@@ -26,24 +29,6 @@ const MAX_SERIALIZE_DEPTH = 4;
 const MAX_SERIALIZE_ITEMS = 20;
 const MAX_SERIALIZE_NODES = 120;
 const RUNNING_EXCERPT_CHAR_LIMIT = 100;
-
-/**
- * Strip terminal control sequences before rendering untrusted content.
- * Keeps newlines/tabs/carriage returns so layout remains readable.
- */
-export function sanitizeForTerminalDisplay(text: string): string {
-  return text
-    // OSC (e.g. OSC52), DCS/PM/APC payloads, CSI, and simple ESC sequences.
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\x9b[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\x1b[@-_]/g, '')
-    // Strip remaining C0/C1 controls except tab/newline/carriage-return.
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
-}
 
 function truncateText(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 3))}...`;
