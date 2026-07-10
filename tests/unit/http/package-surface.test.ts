@@ -11,4 +11,11 @@ describe('fred-http package surface', () => {
     expect(httpPkg.DEFAULT_SECURITY_CONFIG).toBeDefined()
     expect(typeof httpPkg.createFredHttpApp).toBe('function')
   })
+
+  it('exports the schema-first HttpApi and docs surface', () => {
+    expect(httpPkg.FredHttpApi).toBeDefined()
+    expect(httpPkg.FredOpenApiSpec).toBeDefined()
+    expect(httpPkg.FredOpenApiLayer).toBeDefined()
+    expect(httpPkg.FredDocsLayer).toBeDefined()
+  })
 })

@@ -8,3 +8,16 @@ export type {
   CreateFredHttpAppOptions,
   FredHttpApp,
 } from './app-builder';
+export {
+  FRED_DOCS_PATH,
+  FRED_OPENAPI_PATH,
+  FredAdminApi,
+  FredHttpApi,
+  FredDocsLayer,
+  FredMessageApi,
+  FredOpenAiApi,
+  FredOpenApiLayer,
+  FredOpenApiSpec,
+} from './api';
+export * from './api/errors';
+export * from './api/schemas';
