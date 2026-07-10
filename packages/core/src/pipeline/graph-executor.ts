@@ -10,7 +10,10 @@ import type { AgentManagerLike, ExecutorOptions, HookManagerLike } from './execu
 import type { BranchCondition, GraphEdge, GraphWorkflowConfig } from './graph';
 import type { Tracer } from '../tracing';
 import { compileGraphWorkflow } from '../workflow/compile';
-import { executeWorkflowEffect } from '../workflow/execute';
+import {
+  executeWorkflowEffect,
+  type WorkflowExecutionResult,
+} from '../workflow/execute';
 
 export interface GraphExecutionResult {
   success: boolean;
@@ -109,30 +112,14 @@ export function executeGraphWorkflowEffect(
     pipelineManager: options.pipelineManager,
     conversationId: options.conversationId,
   }).pipe(
-    Effect.map((result): GraphExecutionResult => ({
+    Effect.map((result: WorkflowExecutionResult): GraphExecutionResult => ({
       success: result.success,
       context: result.context,
       outputs: result.outputs,
       executedNodes: result.executedNodes,
+      error: result.error,
       abortedBy: result.abortedBy,
     })),
-    Effect.catchTag('WorkflowNodeExecutionError', (error) => {
-      const cause = toError(error.cause);
-      return Effect.succeed({
-        success: false,
-        context: {
-          pipelineId: config.id,
-          input,
-          outputs: {},
-          history: [],
-          metadata: {},
-          conversationId: options.conversationId,
-        },
-        outputs: {},
-        executedNodes: [],
-        error: cause,
-      });
-    }),
   );
 }
 

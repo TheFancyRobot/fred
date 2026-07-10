@@ -121,6 +121,33 @@ describe('createFred client', () => {
     expect(result.finalOutput).toBe('echo:hello');
   });
 
+  it('resolves registered subworkflows through the public workflow runtime', async () => {
+    const client = track(await createFred());
+    await client.workflows.define({
+      id: 'client-child-workflow',
+      steps: [{
+        type: 'function',
+        name: 'child-result',
+        fn: (context) => `child:${context.input}`,
+      }],
+    });
+    await client.workflows.define({
+      id: 'client-parent-workflow',
+      steps: [{
+        type: 'pipeline',
+        name: 'nested',
+        pipelineId: 'client-child-workflow',
+      }],
+    });
+
+    const result = (await client.workflows.run(
+      'client-parent-workflow',
+      'hello',
+    )) as PipelineResult;
+    expect(result.success).toBe(true);
+    expect(result.finalOutput).toBe('child:hello');
+  });
+
   it('workflows sub-API defines and runs native WorkflowIR directly', async () => {
     const client = track(await createFred());
     await client.workflows.define(defineWorkflow({

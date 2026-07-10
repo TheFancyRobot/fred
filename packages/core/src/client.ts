@@ -33,8 +33,10 @@ import type {
   PipelineExecutionError,
 } from './pipeline/errors';
 import type { WorkflowIR } from './workflow/ir';
+import { WorkflowNodeExecutionError } from './workflow/errors';
 import {
   executeWorkflowEffect,
+  type WorkflowExecutionOptions,
   type WorkflowExecutionResult,
 } from './workflow/execute';
 import type { Tool } from './tool/tool';
@@ -89,6 +91,7 @@ export async function executeWorkflowViaRuntime(
         Runtime.runPromise(runtime)(hooks.executeHooksAndMerge(hookName, event)),
     }))
   ).catch(() => undefined);
+  const pipelineService = await Runtime.runPromise(runtime)(PipelineService);
 
   // Resolve the conversation id: explicit wins, otherwise fall back to the
   // ambient session so an ambient-only graph run still binds to it.
@@ -96,11 +99,33 @@ export async function executeWorkflowViaRuntime(
     resolveAmbientConversationId(options.conversationId)
   );
 
-  const executionOptions = {
+  const workflowResolver = (workflowId: string, nestedInput: string) =>
+    Effect.gen(function* () {
+      const nestedWorkflow = yield* pipelineService.getWorkflowIR(workflowId);
+      const nestedResult: WorkflowExecutionResult = yield* executeWorkflowEffect(
+        nestedWorkflow,
+        nestedInput,
+        executionOptions,
+      );
+      if (!nestedResult.success) {
+        const cause = nestedResult.error ?? `Nested workflow "${workflowId}" did not complete`;
+        return yield* new WorkflowNodeExecutionError({
+          workflowId,
+          nodeId: nestedResult.failedNodeId ?? nestedWorkflow.entry,
+          message: cause instanceof Error ? cause.message : cause,
+          cause,
+          retryable: true,
+        });
+      }
+      return nestedResult.finalResponse ?? nestedResult.finalOutput;
+    });
+
+  const executionOptions: WorkflowExecutionOptions = {
     agentManager,
     hookManager,
     tracer: options.tracer,
     conversationId,
+    workflowResolver,
   };
 
   const workflowEffect = executeWorkflowEffect(workflow, input, executionOptions);

@@ -25,6 +25,7 @@ describe('workflow compilers', () => {
         {
           name: 'branch',
           type: 'conditional',
+          retry: { maxRetries: 2, backoffMs: 1 },
           condition: (context) => context.input === 'yes',
           whenTrue: [{ name: 'yes', type: 'function', fn: () => 'accepted' }],
           whenFalse: [{ name: 'no', type: 'function', fn: () => 'declined' }],
@@ -36,7 +37,25 @@ describe('workflow compilers', () => {
     expect(ir.source).toBe('v2');
     expect(ir.nodes.every((node) => ['agent', 'function', 'subworkflow'].includes(node.kind))).toBe(true);
     expect(ir.nodes.filter((node) => node.internal).length).toBe(3);
-    expect(findNode(ir, 'branch')?.role).toBe('condition-result');
+    const conditionNode = ir.nodes.find((node) => node.role === 'condition');
+    const resultNode = findNode(ir, 'branch');
+    expect(conditionNode?.hookPolicy).toBe('before');
+    expect(resultNode?.role).toBe('condition-result');
+    expect(resultNode?.hookPolicy).toBe('after');
+    expect(ir.nodes.filter((node) => node.internal && !node.role).every(
+      (node) => node.hookPolicy === 'none',
+    )).toBe(true);
+    expect(ir.retryScopes).toEqual([
+      expect.objectContaining({
+        entry: conditionNode?.id,
+        exit: 'branch',
+        retry: { maxRetries: 2, backoffMs: 1 },
+      }),
+    ]);
+    expect(ir.retryScopes?.[0]?.nodeIds).toEqual(expect.arrayContaining([
+      conditionNode?.id,
+      'branch',
+    ]));
     expect(ir.edges.some((edge) => edge.when?.type === 'predicate')).toBe(true);
     expect(outEdges(ir, 'branch')).toEqual([{ from: 'branch', to: 'finish' }]);
   });

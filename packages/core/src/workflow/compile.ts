@@ -12,7 +12,7 @@ import type { PipelineStep } from '../pipeline/steps';
 import type { AnyGraphNode, GraphWorkflowConfig } from '../pipeline/graph';
 import { isGraphWorkflowConfig } from '../pipeline/graph';
 import { validateGraphWorkflow } from '../pipeline/graph-validator';
-import type { IREdge, IRNode, WorkflowIR } from './ir';
+import type { IREdge, IRNode, WorkflowIR, WorkflowRetryScope } from './ir';
 import { validateWorkflowIR } from './validate';
 
 interface Fragment {
@@ -24,6 +24,7 @@ interface Fragment {
 
 interface V2CompileState {
   readonly usedIds: Set<string>;
+  readonly retryScopes: WorkflowRetryScope[];
   nextInternalId(label: string): string;
 }
 
@@ -32,6 +33,7 @@ function createV2CompileState(config: PipelineConfigV2): V2CompileState {
   let sequence = 0;
   return {
     usedIds,
+    retryScopes: [],
     nextInternalId(label) {
       let id: string;
       do {
@@ -52,10 +54,11 @@ function compileV2Step(
   const common = {
     id,
     name: step.name,
-    retry: step.retry,
+    retry: options.internal ? undefined : step.retry,
     contextView: step.contextView,
     internal: options.internal || undefined,
     sourceIndex: options.sourceIndex,
+    hookPolicy: options.internal ? 'none' : undefined,
   } as const;
 
   switch (step.type) {
@@ -82,15 +85,18 @@ function compileV2Step(
       };
     case 'conditional': {
       const conditionId = state.nextInternalId(`${step.name}:condition`);
+      const sourceIndex = options.sourceIndex ?? 0;
+      const sourceStep = { name: step.name, type: 'conditional', index: sourceIndex } as const;
       const conditionNode: IRNode = {
         id: conditionId,
-        name: `${step.name} condition`,
+        name: step.name,
         kind: 'function',
         role: 'condition',
         internal: true,
         sourceIndex: options.sourceIndex,
         contextView: step.contextView,
-        retry: step.retry,
+        hookPolicy: options.internal ? 'none' : 'before',
+        sourceStep,
         fn: step.condition,
       };
 
@@ -121,6 +127,9 @@ function compileV2Step(
         ...common,
         kind: 'function',
         role: 'condition-result',
+        retry: undefined,
+        hookPolicy: options.internal ? 'none' : 'after',
+        sourceStep,
         fn: (context) => {
           const conditionResult = context.outputs[conditionId] === true;
           const selected = conditionResult ? trueBranch : falseBranch;
@@ -162,6 +171,18 @@ function compileV2Step(
       });
       if (trueBranch) edges.push({ from: trueBranch.exit, to: id });
       if (falseBranch) edges.push({ from: falseBranch.exit, to: id });
+
+      if (!options.internal) {
+        state.retryScopes.push({
+          id: state.nextInternalId(`${step.name}:retry-scope`),
+          entry: conditionId,
+          exit: id,
+          nodeIds: nodes.map((node) => node.id),
+          stepName: step.name,
+          sourceIndex,
+          retry: step.retry,
+        });
+      }
 
       return { entry: conditionId, exit: id, nodes, edges };
     }
@@ -211,6 +232,7 @@ export function compilePipelineV2(config: PipelineConfigV2): WorkflowIR {
     hooks: config.hooks,
     checkpoint: config.checkpoint,
     failFast: config.failFast,
+    retryScopes: state.retryScopes,
     source: 'v2',
   };
   validateWorkflowIR(ir);

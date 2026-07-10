@@ -53,7 +53,7 @@ import {
   type CompilableWorkflow,
 } from '../workflow/compile';
 import type { WorkflowIR } from '../workflow/ir';
-import { executeWorkflowEffect } from '../workflow/execute';
+import { executeWorkflowEffect, getPublicWorkflowOutputs } from '../workflow/execute';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -372,18 +372,18 @@ class PipelineServiceImpl implements PipelineService {
   removePipeline(id: string): Effect.Effect<boolean> {
     const self = this;
     return Effect.gen(function* () {
-      const pipelines = yield* Ref.get(self.pipelines);
-      const newPipelines = new Map(pipelines);
-      const removed = newPipelines.delete(id);
-      yield* Ref.set(self.pipelines, newPipelines);
-      if (removed) {
-        yield* Ref.update(self.workflows, (workflows) => {
-          const next = new Map(workflows);
-          next.delete(id);
-          return next;
+      const removeFrom = <Value>(ref: Ref.Ref<Map<string, Value>>) =>
+        Ref.modify(ref, (entries) => {
+          const next = new Map(entries);
+          const removed = next.delete(id);
+          return [removed, next] as const;
         });
-      }
-      return removed;
+
+      const removedV1 = yield* removeFrom(self.pipelines);
+      const removedV2 = yield* removeFrom(self.pipelinesV2);
+      const removedGraph = yield* removeFrom(self.graphWorkflows);
+      const removedWorkflow = yield* removeFrom(self.workflows);
+      return removedV1 || removedV2 || removedGraph || removedWorkflow;
     });
   }
 
@@ -416,6 +416,13 @@ class PipelineServiceImpl implements PipelineService {
     }
 
     return Effect.gen(function* () {
+      yield* Effect.try({
+        try: () => validateId(config.id, 'Workflow ID'),
+        catch: (error) => new GraphValidationError({
+          workflowId: config.id,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      });
       const workflows = yield* Ref.get(self.workflows);
       if (workflows.has(config.id)) {
         return yield* new PipelineAlreadyExistsError({ id: config.id });
@@ -472,13 +479,15 @@ class PipelineServiceImpl implements PipelineService {
         conversationId: options?.conversationId,
         history: options?.sequentialVisibility === false ? [] : previousMessages,
         sequentialVisibility: options?.sequentialVisibility,
-      }).pipe(
-        Effect.mapError((error) => new PipelineExecutionError({
+      });
+
+      if (!result.success && result.status === 'failed') {
+        return yield* Effect.fail(new PipelineExecutionError({
           pipelineId,
-          step: workflow.nodes.find((node) => node.id === error.nodeId)?.sourceIndex ?? 0,
-          cause: error.cause,
-        })),
-      );
+          step: workflow.nodes.find((node) => node.id === result.failedNodeId)?.sourceIndex ?? 0,
+          cause: result.error ?? new Error('Pipeline execution failed'),
+        }));
+      }
 
       if (!result.finalResponse) {
         return yield* Effect.fail(new PipelineExecutionError({
@@ -802,11 +811,13 @@ class PipelineServiceImpl implements PipelineService {
       // Special case: if mode is 'skip' and startStep equals pipeline length,
       // the pipeline has completed all steps - return completed result
       if (mode === 'skip' && startStep === config.steps.length) {
+        const workflow = compilePipelineV2(config);
+        const outputs = getPublicWorkflowOutputs(workflow, checkpoint.context.outputs);
         return {
           success: true,
           status: 'completed',
-          context: checkpoint.context,
-          finalOutput: checkpoint.context.outputs,
+          context: { ...checkpoint.context, outputs },
+          finalOutput: outputs,
           runId,
           resumedFromStep: checkpoint.step,
         } as ResumeResult;

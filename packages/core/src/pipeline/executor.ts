@@ -134,25 +134,19 @@ export function executePipelineV2Effect(
   options: ExtendedExecutionOptions,
 ): Effect.Effect<PipelineResult, PipelineExecutionError> {
   const workflow = compilePipelineV2(config);
-  return executeWorkflowEffect(workflow, input, toWorkflowOptions(options)).pipe(
-    Effect.map(toPipelineResult),
-    Effect.catchTag('WorkflowNodeExecutionError', (error) => {
-      const step = workflow.nodes.find((node) => node.id === error.nodeId)?.sourceIndex ?? 0;
-      const pipelineError = new PipelineExecutionError({
-        pipelineId: config.id,
-        step,
-        cause: toError(error.cause),
-      });
-      if (config.failFast === false) {
-        return Effect.succeed({
-          success: false,
-          status: 'failed' as const,
-          context: fallbackContext(config, input, options),
-          error: toError(error.cause),
-          runId: options.runId,
-        });
+  const runId = options.runId ?? options.checkpointManager?.generateRunId() ?? crypto.randomUUID();
+  const executionOptions = { ...options, runId };
+  return executeWorkflowEffect(workflow, input, toWorkflowOptions(executionOptions)).pipe(
+    Effect.flatMap((result) => {
+      if (!result.success && result.status === 'failed' && config.failFast !== false) {
+        const step = workflow.nodes.find((node) => node.id === result.failedNodeId)?.sourceIndex ?? 0;
+        return Effect.fail(new PipelineExecutionError({
+          pipelineId: config.id,
+          step,
+          cause: result.error ?? new Error('Pipeline execution failed'),
+        }));
       }
-      return Effect.fail(pipelineError);
+      return Effect.succeed(toPipelineResult(result));
     }),
   );
 }
@@ -167,16 +161,18 @@ export async function executePipelineV2(
   input: string,
   options: ExtendedExecutionOptions,
 ): Promise<PipelineResult> {
+  const runId = options.runId ?? options.checkpointManager?.generateRunId() ?? crypto.randomUUID();
+  const executionOptions = { ...options, runId };
   return new Promise((resolve, reject) => {
     Effect.runCallback(
-      executePipelineV2Effect(config, input, options).pipe(
+      executePipelineV2Effect(config, input, executionOptions).pipe(
         Effect.catchTag('PipelineExecutionError', (error) =>
           Effect.succeed({
             success: false,
             status: 'failed' as const,
-            context: fallbackContext(config, input, options),
+            context: fallbackContext(config, input, executionOptions),
             error: toError(error.cause),
-            runId: options.runId,
+            runId,
           }),
         ),
       ),

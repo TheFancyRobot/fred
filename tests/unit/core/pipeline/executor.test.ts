@@ -88,22 +88,29 @@ describe('ExecutorService - run id and checkpoint behavior', () => {
     const result = await runExecutor({
       id: 'non-fail-fast',
       failFast: false,
-      steps: [{
-        name: 'fails',
-        type: 'function',
-        fn: () => {
-          throw new Error('expected failure');
+      steps: [
+        {
+          name: 'completed',
+          type: 'function',
+          fn: () => 'partial result',
         },
-      }],
+        {
+          name: 'fails',
+          type: 'function',
+          fn: () => {
+            throw new Error('expected failure');
+          },
+        },
+      ],
     }, 'test input', {
       agentManager: createMockAgentManager(),
-      runId: 'run-failed',
     });
 
     expect(result.success).toBe(false);
     expect(result.status).toBe('failed');
     expect(result.error?.message).toBe('expected failure');
-    expect(result.runId).toBe('run-failed');
+    expect(result.context.outputs.completed).toBe('partial result');
+    expect(result.runId).toBeDefined();
   });
 
   it('generates runId and returns it in result', async () => {
@@ -137,6 +144,30 @@ describe('ExecutorService - run id and checkpoint behavior', () => {
 
     expect(result.success).toBe(true);
     expect(checkpointManager.saveCheckpoint).toHaveBeenCalledTimes(3);
+  });
+
+  it('checkpoints a conditional once with its internal resume state intact', async () => {
+    const checkpointManager = createMockCheckpointManager();
+    const result = await runExecutor({
+      id: 'conditional-checkpoint',
+      steps: [{
+        name: 'choice',
+        type: 'conditional',
+        condition: () => true,
+        whenTrue: [{ name: 'yes', type: 'function', fn: () => 'accepted' }],
+        whenFalse: [{ name: 'no', type: 'function', fn: () => 'declined' }],
+      }],
+    }, 'input', {
+      agentManager: createMockAgentManager(),
+      checkpointManager,
+    });
+
+    expect(result.success).toBe(true);
+    expect(checkpointManager.saveCheckpoint).toHaveBeenCalledTimes(1);
+    const saved = checkpointManager.saveCheckpoint.mock.calls[0]![0];
+    expect(saved.context.outputs.choice).toEqual(result.finalOutput);
+    expect(Object.keys(saved.context.outputs).some((key) => key.startsWith('__fred:'))).toBe(true);
+    expect(Object.keys(result.context.outputs).some((key) => key.startsWith('__fred:'))).toBe(false);
   });
 
   it('does not write checkpoint when checkpoint config disables it', async () => {
@@ -194,6 +225,48 @@ describe('ExecutorService - step execution flows', () => {
     expect(result.success).toBe(true);
     expect(result.finalOutput).toBe('ok');
     expect(attempts).toBe(3);
+  });
+
+  it('retries an entire conditional branch through the parent retry policy', async () => {
+    let conditionRuns = 0;
+    let firstBranchRuns = 0;
+    let flakyBranchRuns = 0;
+    const result = await runExecutor({
+      id: 'conditional-retry',
+      steps: [{
+        name: 'choice',
+        type: 'conditional',
+        retry: { maxRetries: 1, backoffMs: 1 },
+        condition: () => {
+          conditionRuns++;
+          return true;
+        },
+        whenTrue: [
+          {
+            name: 'first-branch-step',
+            type: 'function',
+            fn: () => {
+              firstBranchRuns++;
+              return 'first';
+            },
+          },
+          {
+            name: 'flaky-branch-step',
+            type: 'function',
+            fn: () => {
+              flakyBranchRuns++;
+              if (flakyBranchRuns === 1) throw new Error('transient branch failure');
+              return 'recovered';
+            },
+          },
+        ],
+      }],
+    }, 'input', { agentManager: createMockAgentManager() });
+
+    expect(result.success).toBe(true);
+    expect(conditionRuns).toBe(2);
+    expect(firstBranchRuns).toBe(2);
+    expect(flakyBranchRuns).toBe(2);
   });
 
   it('handles conditional and pipeline-ref steps', async () => {
@@ -267,6 +340,88 @@ describe('ExecutorService - hooks, pause, abort, and resume', () => {
     expect(result.success).toBe(false);
     expect(result.status).toBe('aborted');
     expect(result.abortedBy).toBe('beforeStep hook');
+  });
+
+  it('emits one public hook lifecycle for a compiled conditional', async () => {
+    const stepEvents: Array<{ hookName: string; event: any }> = [];
+    const hookManager = {
+      executeHooks: mock(async () => {}),
+      executeHooksAndMerge: mock(async (hookName: string, event: any) => {
+        if (hookName === 'beforeStep' || hookName === 'afterStep') {
+          stepEvents.push({ hookName, event });
+        }
+        return {};
+      }),
+    };
+    const result = await runExecutor({
+      id: 'conditional-hooks',
+      steps: [{
+        name: 'choice',
+        type: 'conditional',
+        condition: () => true,
+        whenTrue: [
+          { name: 'first', type: 'function', fn: () => 'one' },
+          { name: 'second', type: 'function', fn: () => 'two' },
+        ],
+      }],
+    }, 'input', {
+      agentManager: createMockAgentManager(),
+      hookManager,
+    });
+
+    expect(result.success).toBe(true);
+    expect(stepEvents.map(({ hookName }) => hookName)).toEqual(['beforeStep', 'afterStep']);
+    const afterEvent = stepEvents[1]!.event;
+    expect(afterEvent.data.step).toEqual({ name: 'choice', type: 'conditional', index: 0 });
+    expect(afterEvent.data.context.outputs.choice).toEqual(result.finalOutput);
+    expect(Object.keys(afterEvent.data.context.outputs).some(
+      (key) => key.startsWith('__fred:'),
+    )).toBe(false);
+  });
+
+  it('does not retry a conditional when its afterStep hook fails', async () => {
+    let conditionRuns = 0;
+    let branchRuns = 0;
+    let errorHookRuns = 0;
+    const hookManager = {
+      executeHooks: mock(async () => {}),
+      executeHooksAndMerge: mock(async (hookName: string) => {
+        if (hookName === 'afterStep') throw new Error('after hook failed');
+        if (hookName === 'onStepError') errorHookRuns++;
+        return {};
+      }),
+    };
+    const result = await runExecutor({
+      id: 'conditional-hook-failure',
+      failFast: false,
+      steps: [{
+        name: 'choice',
+        type: 'conditional',
+        retry: { maxRetries: 1, backoffMs: 1 },
+        condition: () => {
+          conditionRuns++;
+          return true;
+        },
+        whenTrue: [{
+          name: 'branch',
+          type: 'function',
+          fn: () => {
+            branchRuns++;
+            return 'done';
+          },
+        }],
+      }],
+    }, 'input', {
+      agentManager: createMockAgentManager(),
+      hookManager,
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toBe('after hook failed');
+    expect(result.context.outputs.choice).toBeDefined();
+    expect(conditionRuns).toBe(1);
+    expect(branchRuns).toBe(1);
+    expect(errorHookRuns).toBe(0);
   });
 
   it('pauses when a step returns a pause request and persists paused checkpoint', async () => {

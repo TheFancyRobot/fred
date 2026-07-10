@@ -56,6 +56,24 @@ export type JoinPolicy =
     }
   | { readonly type: 'any' };
 
+/** Which source-level step hooks a lowered node is responsible for emitting. */
+export type WorkflowHookPolicy = 'all' | 'before' | 'after' | 'none';
+
+/**
+ * A compiler-lowered execution region that must retry as one source step.
+ * V2 conditionals use this to keep their condition and selected branch inside
+ * the parent step's retry boundary without introducing a conditional node kind.
+ */
+export interface WorkflowRetryScope {
+  readonly id: string;
+  readonly entry: string;
+  readonly exit: string;
+  readonly nodeIds: readonly string[];
+  readonly stepName: string;
+  readonly sourceIndex: number;
+  readonly retry?: RetryConfig;
+}
+
 /** Fields common to every executable node. */
 export interface IRNodeBase {
   /** Unique node identifier; keys this node's output in `context.outputs`. */
@@ -86,6 +104,14 @@ export interface IRNodeBase {
   readonly sourceIndex?: number;
   /** Optional semantic role for observability; this is metadata, not a node kind. */
   readonly role?: 'fork' | 'join' | 'condition' | 'condition-result';
+  /** Hook lifecycle responsibility for compiler-lowered source steps. */
+  readonly hookPolicy?: WorkflowHookPolicy;
+  /** Source-level step metadata used when compiler-generated nodes emit hooks. */
+  readonly sourceStep?: {
+    readonly name: string;
+    readonly type: string;
+    readonly index: number;
+  };
 }
 
 /** Executes a registered agent; the agent sees the incoming message + history. */
@@ -164,6 +190,8 @@ export interface WorkflowIR {
   readonly hooks?: PipelineHooks;
   /** V2 error policy. Defaults to true, matching `PipelineConfigV2.failFast`. */
   readonly failFast?: boolean;
+  /** Source-level retry regions introduced while lowering structured control flow. */
+  readonly retryScopes?: readonly WorkflowRetryScope[];
   /** Agent handoff constraints (source agent id -> allowed target agent ids). */
   readonly handoffs?: Readonly<Record<string, readonly string[]>>;
   /** Source architecture this IR was compiled from. */
