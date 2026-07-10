@@ -15,7 +15,12 @@ import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import { ContextStorageService, ContextStorageServiceLive } from './context/service';
 import { SessionService, SessionServiceLive } from './context/session-service';
-import { AgentService, AgentServiceLive } from './agent/service';
+import { AgentService, AgentServiceLive, makeAgentServiceLive } from './agent/service';
+import {
+  DefaultPromptSourceLayer,
+  PromptSourceService,
+  type PromptSourceService as PromptSourceServiceApi,
+} from './agent/prompt-source';
 import { WorkflowService, WorkflowServiceLive } from './workflow/service';
 import { CheckpointService } from './pipeline/checkpoint/service';
 import { CheckpointNotFoundError } from './pipeline/errors';
@@ -46,6 +51,7 @@ export type FredServices =
   | HookManagerService
   | ProviderRegistryService
   | ContextStorageService
+  | PromptSourceServiceApi
   | AgentService
   | WorkflowService
   | CheckpointService
@@ -270,61 +276,7 @@ const pauseLayer = PauseServiceLive.pipe(
  * Agent layer depends on Tool and Provider
  * Wave 3: AgentService
  */
-const agentLayer = AgentServiceLive.pipe(
-  Layer.provide(baseLayer),
-  Layer.provide(toolGateLayer),
-  Layer.provide(ProviderRegistryServiceLive)
-);
-
-/**
- * Workflow layer depends on Agent service for validation warnings.
- */
-const workflowLayer = WorkflowServiceLive.pipe(
-  Layer.provide(agentLayer)
-);
-
-/**
- * Pipeline layer depends on Agent, Hook, Checkpoint, Pause
- * Wave 4: PipelineService
- */
-const pipelineLayer = PipelineServiceLive.pipe(
-  Layer.provide(agentLayer),
-  Layer.provide(ExecutorServiceLive),
-  Layer.provide(GraphExecutorServiceLive),
-  Layer.provide(HookManagerServiceLive),
-  Layer.provide(CheckpointServiceLive),
-  Layer.provide(pauseLayer)
-);
-
-/**
- * MessageProcessor layer depends on Agent, Pipeline, Context
- * Wave 5: MessageProcessorService
- *
- * Note: Optional services (IntentMatcherService, IntentRouterService, MessageRouterService)
- * can be provided separately when needed. These wrap non-Effect classes and are typically
- * configured by the Fred orchestrator class.
- */
-const messageProcessorLayer = MessageProcessorServiceLive.pipe(
-  Layer.provide(agentLayer),
-  Layer.provide(pipelineLayer),
-  Layer.provide(ContextStorageServiceLive),
-  // Provide the ambient session so the processor can resolve conversation
-  // history from SessionService.current. Same const as the top-level
-  // SessionServiceLive in FredLayers, so layer memoization builds it once and
-  // the FiberRef is shared — withSession set on the runtime is observed here.
-  Layer.provide(SessionServiceLive)
-);
-
 const subagentLayer = SubagentServiceLive;
-
-/**
- * Standalone intent layers.
- * Wave 6: IntentMatcherService, IntentRouterService
- */
-const intentLayer = Layer.mergeAll(
-  IntentMatcherServiceLive,
-  IntentRouterServiceLive.pipe(Layer.provide(agentLayer))
-);
 
 /**
  * Default MessageRouterService for base FredLayers.
@@ -368,22 +320,58 @@ const defaultRouterLayer = MessageRouterServiceLive;
  * MessageRouterService (Wave 6 - default no-op)
  * ```
  */
-export const FredLayers = Layer.mergeAll(
-  baseLayer,
-  toolGateLayer,
-  coreLayer,
-  pauseLayer,
-  agentLayer,
-  workflowLayer,
-  pipelineLayer,
-  messageProcessorLayer,
-  subagentLayer,
-  intentLayer,
-  defaultRouterLayer,
-  // Ambient session context (Phase 62). Scoped: owns a FiberRef built once per
-  // runtime. `open` uses ContextStorageService (Wave 2), provided by coreLayer.
-  SessionServiceLive
-);
+export const makeFredLayers = (
+  promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer
+) => {
+  const selectedAgentLayer = makeAgentServiceLive(promptSourceLayer).pipe(
+    Layer.provide(baseLayer),
+    Layer.provide(toolGateLayer),
+    Layer.provide(ProviderRegistryServiceLive)
+  );
+
+  const selectedWorkflowLayer = WorkflowServiceLive.pipe(
+    Layer.provide(selectedAgentLayer)
+  );
+
+  const selectedPipelineLayer = PipelineServiceLive.pipe(
+    Layer.provide(selectedAgentLayer),
+    Layer.provide(ExecutorServiceLive),
+    Layer.provide(GraphExecutorServiceLive),
+    Layer.provide(HookManagerServiceLive),
+    Layer.provide(CheckpointServiceLive),
+    Layer.provide(pauseLayer)
+  );
+
+  const selectedMessageProcessorLayer = MessageProcessorServiceLive.pipe(
+    Layer.provide(selectedAgentLayer),
+    Layer.provide(selectedPipelineLayer),
+    Layer.provide(ContextStorageServiceLive),
+    Layer.provide(SessionServiceLive)
+  );
+
+  const selectedIntentLayer = Layer.mergeAll(
+    IntentMatcherServiceLive,
+    IntentRouterServiceLive.pipe(Layer.provide(selectedAgentLayer))
+  );
+
+  return Layer.mergeAll(
+    baseLayer,
+    toolGateLayer,
+    coreLayer,
+    pauseLayer,
+    promptSourceLayer,
+    selectedAgentLayer,
+    selectedWorkflowLayer,
+    selectedPipelineLayer,
+    selectedMessageProcessorLayer,
+    subagentLayer,
+    selectedIntentLayer,
+    defaultRouterLayer,
+    SessionServiceLive
+  );
+};
+
+export const FredLayers = makeFredLayers();
 
 /**
  * Build Fred layers with a config-driven MessageRouterService.
@@ -392,24 +380,29 @@ export const FredLayers = Layer.mergeAll(
  * config-driven MessageRouterService. Layer.merge gives the second (right)
  * layer priority, so the config-driven router replaces the no-op default.
  */
-export const makeFredLayersWithLeafRouting = (routerConfig: RoutingConfig) =>
+export const makeFredLayersWithLeafRouting = (
+  routerConfig: RoutingConfig,
+  promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer
+) =>
   Layer.merge(
-    FredLayers,
+    makeFredLayers(promptSourceLayer),
     MessageRouterServiceLiveWithConfig(routerConfig)
   );
 
 export interface FredLayerOptions {
   routingConfig?: RoutingConfig;
   observabilityLayers?: ObservabilityLayers;
+  promptSourceLayer?: Layer.Layer<PromptSourceServiceApi, never, never>;
 }
 
 /**
  * Compose Fred layers from runtime options.
  */
 export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Layer<FredServices> => {
+  const promptSourceLayer = options.promptSourceLayer ?? DefaultPromptSourceLayer;
   const base = options.routingConfig
-    ? makeFredLayersWithLeafRouting(options.routingConfig)
-    : FredLayers;
+    ? makeFredLayersWithLeafRouting(options.routingConfig, promptSourceLayer)
+    : makeFredLayers(promptSourceLayer);
 
   if (!options.observabilityLayers) {
     return base;
@@ -481,6 +474,8 @@ export {
   ContextStorageServiceLive,
   SessionService,
   SessionServiceLive,
+  PromptSourceService,
+  DefaultPromptSourceLayer,
   AgentService,
   AgentServiceLive,
   WorkflowService,

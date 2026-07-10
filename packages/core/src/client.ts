@@ -22,7 +22,13 @@
  */
 
 import { Cause, Data, Effect, Exit, Layer, Runtime, Scope } from 'effect';
-import type { AgentConfig, AgentInstance, AgentResponse } from './agent/agent';
+import type * as Schema from 'effect/Schema';
+import type {
+  AgentConfig,
+  AgentInstance,
+  AgentResponse,
+  AnyAgentInstance,
+} from './agent/agent';
 import type { AnyPipelineConfig } from './pipeline/pipeline';
 import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
@@ -50,6 +56,7 @@ import type { ContextStorage, SessionDetails, SessionSummary } from './context/c
 import { buildSessionDetails } from './context/session';
 import {
   makeFredRuntimeLayer,
+  type FredLayerOptions,
   type FredRuntime,
   type FredServices,
   ToolRegistryService,
@@ -200,6 +207,8 @@ export interface CreateFredOptions {
   template?: TemplateConfig;
   /** Persistent conversation storage adapter (e.g. SQLite/Postgres). */
   storage?: ContextStorage;
+  /** Prompt adapter layer used while constructing AgentService. */
+  promptSourceLayer?: FredLayerOptions['promptSourceLayer'];
 }
 
 /** A workflow definition: a V1 pipeline, a V2 pipeline, or a graph workflow. */
@@ -220,9 +229,14 @@ export type WorkflowRunResult =
 
 export interface FredClient {
   readonly agents: {
-    register(config: AgentConfig): Promise<AgentInstance>;
+    register<
+      InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+      OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+    >(
+      config: AgentConfig<InputSchema, OutputSchema>
+    ): Promise<AgentInstance<InputSchema, OutputSchema>>;
     remove(id: string): Promise<boolean>;
-    list(): Promise<AgentInstance[]>;
+    list(): Promise<AnyAgentInstance[]>;
   };
   readonly workflows: {
     define(config: WorkflowDefinition): Promise<void>;
@@ -271,23 +285,27 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       observabilityLayers: options.observability
         ? buildObservabilityLayers(options.observability)
         : undefined,
+      promptSourceLayer: options.promptSourceLayer,
     }),
     TemplateEngineLive({ ...options.template, basePath: process.cwd() })
   ) as Layer.Layer<FredServices | TemplateEngine>;
 
   const scope = Effect.runSync(Scope.make());
-  const runtime = (await Effect.runPromise(
+  const clientRuntime = (await Effect.runPromise(
     Scope.extend(Layer.toRuntime(layer), scope)
-  )) as FredRuntime;
+  )) as Runtime.Runtime<FredServices | TemplateEngine>;
 
   // One-time service initialization, mirroring the Fred facade defaults.
-  await Runtime.runPromise(runtime)(
+  await Runtime.runPromise(clientRuntime)(
     Effect.gen(function* () {
       const tools = yield* ToolRegistryService;
+      const agentService = yield* AgentService;
+      const templateEngine = yield* TemplateEngine;
       yield* tools.registerTool(createCalculatorTool() as unknown as Tool);
 
+      yield* agentService.setTemplateEngine(templateEngine);
+
       if (options.tracer) {
-        const agentService = yield* AgentService;
         const processor = yield* MessageProcessorService;
         yield* agentService.setTracer(options.tracer);
         yield* processor.updateConfig({ tracer: options.tracer });
@@ -299,6 +317,8 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       }
     })
   );
+
+  const runtime = clientRuntime as FredRuntime;
 
   let closed = false;
 

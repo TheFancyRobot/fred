@@ -10,10 +10,29 @@ export type { ActionType, Action, Intent, IntentMatch } from './intent/intent';
 
 // ─── Agent Types ────────────────────────────────────────────────────────────
 export type {
-  AIPlatform, AgentConfig, ToolRetryPolicy, RetryDiagnostics,
-  AgentInstance, AgentMessage, AgentResponse,
+  AIPlatform, AgentConfig, AgentOutputRetryPolicy, AgentPrompt,
+  AgentPromptVariable, AgentTemplatePrompt, AgentBamlPrompt,
+  ToolRetryPolicy, RetryDiagnostics, AgentInstance, AnyAgentConfig,
+  AnyAgentInstance, AgentMessage, AgentResponse,
 } from './agent/agent';
 export { hasRetryDiagnostics, type ErrorWithRetryDiagnostics } from './agent/agent';
+export {
+  AgentInputValidationError,
+  AgentOutputValidationError,
+  MissingPromptSourceAdapterError,
+  PromptResolutionError,
+} from './agent/errors';
+export {
+  PromptSourceService,
+  DefaultPromptSourceService,
+  DefaultPromptSourceLayer,
+  PromptSourceServiceLive,
+  isAgentTemplatePrompt,
+  isAgentBamlPrompt,
+  resolveDefaultPromptSource,
+  type PromptSourceContext,
+  type PromptSourceError,
+} from './agent/prompt-source';
 
 // ─── Tool Types ─────────────────────────────────────────────────────────────
 export {
@@ -328,6 +347,7 @@ export type { StreamResult, TokenUsage, StreamStatus, ToolCallInfo } from './str
 export {
   // Layer composition
   FredLayers,
+  makeFredLayers,
   makeFredLayersWithLeafRouting,
   makeFredRuntimeLayer,
   createFredRuntime,

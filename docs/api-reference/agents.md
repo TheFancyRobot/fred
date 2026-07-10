@@ -5,9 +5,12 @@ API reference for agent configuration and management.
 ## AgentConfig
 
 ```typescript
-interface AgentConfig {
+interface AgentConfig<InputSchema, OutputSchema> {
   id: string;                    // Unique agent identifier
-  systemMessage: string;         // System message (string or file path to .md file)
+  systemMessage?:
+    | string
+    | { template: string; variables: Record<string, string | number | boolean> }
+    | { baml: { function: string } };
   platform: AIPlatform;          // AI platform ('openai', 'groq', etc.)
   model: string;                 // Model identifier
   tools?: string[];              // Array of tool IDs
@@ -17,8 +20,21 @@ interface AgentConfig {
   maxSteps?: number;             // Maximum tool loop steps (default: 20)
   toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: string }; // Tool usage control
   mcpServers?: MCPServerConfig[]; // MCP servers to connect to
+  input?: InputSchema;           // Programmatic Effect Schema
+  output?: OutputSchema;         // Programmatic Effect Schema
+  outputRetry?: {
+    maxRetries?: number;         // Additional malformed-output attempts (default: 1)
+  };
 }
 ```
+
+`input` and `output` accept Effect Schema values and therefore are available to
+programmatic TypeScript configuration only. They are not YAML/JSON fields.
+`output` must encode to an object schema; scalar and array roots are rejected
+when the agent is created.
+`outputRetry.maxRetries` counts additional attempts and applies only to
+`MalformedOutput`; provider, network, and tool failures are not retried by this
+setting.
 
 **Note**: Fred uses AI SDK v6's `ToolLoopAgent` internally, which automatically handles tool execution loops. The `maxSteps` option controls how many steps the agent can take (each step is one generation: text or tool call). The `toolChoice` option controls how the agent uses available tools.
 
@@ -48,13 +64,17 @@ interface MCPServerConfig {
 ## AgentInstance
 
 ```typescript
-interface AgentInstance {
+interface AgentInstance<InputSchema, OutputSchema> {
   id: string;
-  config: AgentConfig;
+  config: AgentConfig<InputSchema, OutputSchema>;
+  run: (
+    input: Schema.Type<InputSchema>,
+    messages?: AgentMessage[]
+  ) => Effect.Effect<AgentResponse<Schema.Type<OutputSchema>>, Error>;
   processMessage: (
     message: string,
     messages?: AgentMessage[]
-  ) => Promise<AgentResponse>;
+  ) => Effect.Effect<AgentResponse<Schema.Type<OutputSchema>>, Error>;
 }
 ```
 
@@ -70,8 +90,9 @@ interface AgentMessage {
 ## AgentResponse
 
 ```typescript
-interface AgentResponse {
+interface AgentResponse<Output = unknown> {
   content: string;
+  output?: Output;               // Decoded value for schema-backed agents
   toolCalls?: Array<{
     toolId: string;
     args: Record<string, any>;
@@ -85,6 +106,11 @@ interface AgentResponse {
   };
 }
 ```
+
+Schema-backed agents validate the complete object before returning. Routed
+streaming uses validated synthetic events for these agents; the decoded value
+is available on the final `run-end.result.output`, not as incremental JSON
+tokens.
 
 ## AIPlatform
 
@@ -138,9 +164,11 @@ await fred.createAgent({
 ### Using an Agent
 
 ```typescript
+import { Effect } from 'effect';
+
 const agent = fred.getAgent('my-agent');
 if (agent) {
-  const response = await agent.processMessage('Hello!');
+  const response = await Effect.runPromise(agent.processMessage('Hello!'));
   console.log(response.content);
 }
 ```
@@ -161,4 +189,3 @@ await fred.createAgent({
   tools: ['tool1', 'tool2'],
 });
 ```
-

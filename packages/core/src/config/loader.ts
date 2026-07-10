@@ -265,9 +265,9 @@ export function extractAgents(config: FrameworkConfig, basePath?: string): Agent
   if (basePath && agents.length > 0) {
     return agents.map(agent => ({
       ...agent,
-      systemMessage: agent.systemMessage
+      systemMessage: typeof agent.systemMessage === 'string'
         ? loadPromptFile(agent.systemMessage, basePath, false)
-        : defaultSystemMessage ?? '',
+        : agent.systemMessage ?? defaultSystemMessage ?? '',
     }));
   }
 
@@ -300,7 +300,7 @@ function isPathWithinSandbox(filePath: string, sandboxDir: string): boolean {
 export function validateNoAmbiguousPromptFiles(configAgents: AgentConfig[], basePath?: string): void {
   for (const agent of configAgents) {
     const systemMessage = agent.systemMessage;
-    if (!systemMessage || !systemMessage.toLowerCase().endsWith('.md')) {
+    if (typeof systemMessage !== 'string' || !systemMessage.toLowerCase().endsWith('.md')) {
       continue;
     }
 
@@ -419,9 +419,9 @@ export function extractPipelines(config: FrameworkConfig, basePath?: string): Pi
       // Pass allowAbsolutePaths=false to prevent absolute path attacks
       return {
         ...agentRef,
-        systemMessage: agentRef.systemMessage
+        systemMessage: typeof agentRef.systemMessage === 'string'
           ? loadPromptFile(agentRef.systemMessage, basePath, false)
-          : defaultSystemMessage ?? '',
+          : agentRef.systemMessage ?? defaultSystemMessage ?? '',
       };
     }),
   }));

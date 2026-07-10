@@ -29,6 +29,12 @@ function createTrace(): GoldenTrace {
       ],
       response: {
         content: 'I can help reset your password quickly.',
+        output: {
+          resolution: {
+            action: 'reset-password',
+            confidence: 0.97,
+          },
+        },
         usage: {
           totalTokens: 42,
         },
@@ -77,6 +83,8 @@ describe('eval assertions', () => {
         type: 'response',
         pathEquals: {
           'usage.totalTokens': 42,
+          'output.resolution.action': 'reset-password',
+          'output.resolution.confidence': 0.97,
         },
         text: 'I can help you reset your password quickly.',
         semanticThreshold: 0.8,

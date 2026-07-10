@@ -16,6 +16,8 @@ import {
 import { EvaluationService, EvaluationServiceLive } from '../../../../packages/core/src/eval/service';
 import { FileTraceStorageLive, TraceStorageService } from '../../../../packages/core/src/eval/storage';
 import type { GoldenTrace } from '../../../../packages/core/src/eval/golden-trace';
+import { GoldenTraceRecorder } from '../../../../packages/core/src/eval/recorder';
+import { NoOpTracer } from '../../../../packages/core/src/tracing/noop-tracer';
 
 describe('evaluation recording determinism', () => {
   let tempDirectory = '';
@@ -59,7 +61,13 @@ describe('evaluation recording determinism', () => {
 
       return yield* evaluation.record(runId, {
         message: 'How do I configure eval recording?',
-        response: { content: 'Use fred.eval.record(runId).' },
+        response: {
+          content: 'Use fred.eval.record(runId).',
+          output: {
+            command: 'fred.eval.record',
+            options: { persist: true },
+          },
+        },
         routing: {
           method: 'intent.matching',
           intentId: 'support.intent',
@@ -91,9 +99,30 @@ describe('evaluation recording determinism', () => {
     expect(artifact.environment.environment).toBe('test');
     expect(artifact.environment.fredVersion).toBe('0.3.0-test');
     expect(artifact.environment.gitCommit).toBe('abc1234');
+    expect(artifact.response.output).toEqual({
+      command: 'fred.eval.record',
+      options: { persist: true },
+    });
     expect(artifact.steps.length).toBe(1);
     expect(artifact.steps[0]?.metadata.traceId).toBeUndefined();
     expect(artifact.steps[0]?.metadata.timestamp).toBeUndefined();
+  });
+
+  test('preserves structured output in golden traces', () => {
+    const recorder = new GoldenTraceRecorder(new NoOpTracer());
+
+    recorder.recordResponse({
+      content: '{"category":"support"}',
+      output: {
+        category: 'support',
+        details: { priority: 2 },
+      },
+    });
+
+    expect(recorder.toGoldenTrace().trace.response.output).toEqual({
+      category: 'support',
+      details: { priority: 2 },
+    });
   });
 
   test('derives stable ids and relative timings', async () => {
@@ -148,6 +177,17 @@ describe('evaluation recording determinism', () => {
   });
 
   test('converts legacy golden trace shape and strips wall-clock fields', () => {
+    const legacyResponse = {
+      content: 'legacy response',
+      output: {
+        classification: 'legacy',
+        timestamp: '2026-07-09T12:00:00.000Z',
+      },
+      metadata: {
+        provider: 'legacy-provider',
+        timestamp: 1700000,
+      },
+    };
     const legacyTrace: GoldenTrace = {
       version: '1.0',
       metadata: {
@@ -172,7 +212,7 @@ describe('evaluation recording determinism', () => {
             status: { code: 'ok' },
           },
         ],
-        response: { content: 'legacy response' },
+        response: legacyResponse,
         toolCalls: [
           {
             toolId: 'search',
@@ -210,6 +250,13 @@ describe('evaluation recording determinism', () => {
     expect(artifact.toolCalls[0]?.timing.offsetMs).toBe(2);
     expect(artifact.routing.agentId).toBe('fallback');
     expect(artifact.response.content).toBe('legacy response');
+    expect(artifact.response.output).toEqual({
+      classification: 'legacy',
+      timestamp: '2026-07-09T12:00:00.000Z',
+    });
+    expect(artifact.response.metadata).toEqual({ provider: 'legacy-provider' });
+    expect(artifact.response.metadata.content).toBeUndefined();
+    expect(artifact.response.metadata.output).toBeUndefined();
   });
 
   test('produces byte-stable artifacts for equivalent traces', () => {

@@ -45,6 +45,30 @@ describe('validateFrameworkConfig — valid configs', () => {
       }),
     ).toHaveLength(0);
   });
+
+  it('treats template and BAML prompt objects as configured system messages', () => {
+    expect(
+      validate({
+        agents: [
+          {
+            id: 'template',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: {
+              template: 'Hello <%= vars.name %>',
+              variables: { name: 'Ada' },
+            },
+          },
+          {
+            id: 'baml',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: { baml: { function: 'BuildAgentPrompt' } },
+          },
+        ],
+      }),
+    ).toHaveLength(0);
+  });
 });
 
 describe('validateFrameworkConfig — required fields', () => {

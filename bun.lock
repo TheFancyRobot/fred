@@ -109,7 +109,9 @@
       "name": "@fancyrobot/fred-example-09-evaluation",
       "dependencies": {
         "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-baml": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
+        "effect": "^3.21.0",
       },
     },
     "examples/10-config-driven-yaml": {

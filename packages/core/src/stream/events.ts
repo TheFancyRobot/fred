@@ -150,6 +150,8 @@ export interface RunEndEvent extends StreamEventBase {
   durationMs: number;
   result: {
     content: string;
+    /** Decoded structured value for schema-backed agents. */
+    output?: unknown;
     toolCalls?: Array<{
       toolId: string;
       args: Record<string, unknown>;

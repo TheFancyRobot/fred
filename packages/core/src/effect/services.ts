@@ -43,7 +43,17 @@ export {
 export {
   AgentService,
   AgentServiceLive,
+  AgentServiceLayer,
+  makeAgentServiceLive,
 } from '../agent/service';
+
+export {
+  PromptSourceService,
+  DefaultPromptSourceService,
+  DefaultPromptSourceLayer,
+  PromptSourceServiceLive,
+  resolveDefaultPromptSource,
+} from '../agent/prompt-source';
 
 export {
   WorkflowService,
@@ -110,6 +120,7 @@ export {
 // Aggregate exports
 export {
   FredLayers,
+  makeFredLayers,
   makeFredLayersWithLeafRouting,
   makeFredRuntimeLayer,
   createFredRuntime,

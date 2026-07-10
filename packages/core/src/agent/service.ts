@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Ref } from 'effect';
-import type { AgentConfig, AgentInstance } from './agent';
+import type * as Schema from 'effect/Schema';
+import type { AgentConfig, AgentInstance, AnyAgentInstance } from './agent';
 import type { ProviderDefinition } from '../platform/provider';
 import {
   AgentNotFoundError,
@@ -18,6 +19,11 @@ import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
 import type { TemplateEngine } from '../template/engine';
 import type { FrameworkConfig } from '../config/types';
+import {
+  DefaultPromptSourceLayer,
+  PromptSourceService,
+  type PromptSourceService as PromptSourceServiceApi,
+} from './prompt-source';
 
 /**
  * AgentService interface for Effect-based agent lifecycle management
@@ -26,17 +32,22 @@ export interface AgentService {
   /**
    * Create an agent from configuration
    */
-  createAgent(config: AgentConfig): Effect.Effect<AgentInstance, AgentCreationError | AgentAlreadyExistsError>;
+  createAgent<
+    InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+    OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>
+  ): Effect.Effect<AgentInstance<InputSchema, OutputSchema>, AgentCreationError | AgentAlreadyExistsError>;
 
   /**
    * Get an agent by ID
    */
-  getAgent(id: string): Effect.Effect<AgentInstance, AgentNotFoundError>;
+  getAgent(id: string): Effect.Effect<AnyAgentInstance, AgentNotFoundError>;
 
   /**
    * Get an agent by ID (returns undefined if not found)
    */
-  getAgentOptional(id: string): Effect.Effect<AgentInstance | undefined>;
+  getAgentOptional(id: string): Effect.Effect<AnyAgentInstance | undefined>;
 
   /**
    * Check if an agent exists
@@ -51,7 +62,7 @@ export interface AgentService {
   /**
    * Get all agents
    */
-  getAllAgents(): Effect.Effect<AgentInstance[]>;
+  getAllAgents(): Effect.Effect<AnyAgentInstance[]>;
 
   /**
    * Clear all agents
@@ -112,10 +123,11 @@ class AgentServiceImpl implements AgentService {
   private defaultSystemMessage?: string;
 
   constructor(
-    private agents: Ref.Ref<Map<string, AgentInstance>>,
+    private agents: Ref.Ref<Map<string, AnyAgentInstance>>,
     private toolRegistryService: typeof ToolRegistryService.Service,
     private providerRegistryService: typeof ProviderRegistryService.Service,
     private toolGateService: typeof ToolGateService.Service,
+    private promptSourceService: PromptSourceServiceApi,
     private tracer?: Tracer
   ) {
     const emptyRegistry: ToolRegistryLike = {
@@ -124,11 +136,16 @@ class AgentServiceImpl implements AgentService {
       hasTool: () => false,
       registerTool: () => {},
     };
-    this.factory = new AgentFactory(emptyRegistry, tracer);
+    this.factory = new AgentFactory(emptyRegistry, tracer, promptSourceService);
     this.factory.setToolGateService(toolGateService);
   }
 
-  createAgent(config: AgentConfig): Effect.Effect<AgentInstance, AgentCreationError | AgentAlreadyExistsError> {
+  createAgent<
+    InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+    OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>
+  ): Effect.Effect<AgentInstance<InputSchema, OutputSchema>, AgentCreationError | AgentAlreadyExistsError> {
     const self = this;
     return Effect.gen(function* () {
       const agents = yield* Ref.get(self.agents);
@@ -168,12 +185,13 @@ class AgentServiceImpl implements AgentService {
 
       const agentProcessor = yield* self.createAgentFromFactory(resolvedConfig, providerDef);
 
-      const instance: AgentInstance = {
+      const instance: AgentInstance<InputSchema, OutputSchema> = {
         id: config.id,
         config: resolvedConfig,
+        run: agentProcessor.run,
         processMessage: agentProcessor.processMessage,
         streamMessage: agentProcessor.streamMessage,
-      } as AgentInstance;
+      };
 
       const inserted = yield* self.registerIfAbsent(instance);
       if (!inserted) {
@@ -187,7 +205,7 @@ class AgentServiceImpl implements AgentService {
     });
   }
 
-  private registerIfAbsent(instance: AgentInstance): Effect.Effect<boolean> {
+  private registerIfAbsent(instance: AnyAgentInstance): Effect.Effect<boolean> {
     const self = this;
     return Ref.modify(self.agents, (agents) => {
       if (agents.has(instance.id)) {
@@ -236,10 +254,17 @@ class AgentServiceImpl implements AgentService {
   /**
    * Effect-wrapped agent creation from factory
    */
-  private createAgentFromFactory(
-    config: AgentConfig,
+  private createAgentFromFactory<
+    InputSchema extends Schema.Schema.AnyNoContext,
+    OutputSchema extends Schema.Schema.AnyNoContext,
+  >(
+    config: AgentConfig<InputSchema, OutputSchema>,
     providerDef: ProviderDefinition
-  ): Effect.Effect<{ processMessage: AgentInstance['processMessage']; streamMessage: AgentInstance['streamMessage'] }, AgentCreationError> {
+  ): Effect.Effect<{
+    run: AgentInstance<InputSchema, OutputSchema>['run'];
+    processMessage: AgentInstance<InputSchema, OutputSchema>['processMessage'];
+    streamMessage?: Exclude<AgentInstance<InputSchema, OutputSchema>['streamMessage'], undefined>;
+  }, AgentCreationError> {
     return this.factory.createAgent(config, providerDef).pipe(
       Effect.mapError((cause) =>
         new AgentCreationError({
@@ -251,7 +276,7 @@ class AgentServiceImpl implements AgentService {
     );
   }
 
-  getAgent(id: string): Effect.Effect<AgentInstance, AgentNotFoundError> {
+  getAgent(id: string): Effect.Effect<AnyAgentInstance, AgentNotFoundError> {
     const self = this;
     return Effect.gen(function* () {
       const agents = yield* Ref.get(self.agents);
@@ -266,7 +291,7 @@ class AgentServiceImpl implements AgentService {
     });
   }
 
-  getAgentOptional(id: string): Effect.Effect<AgentInstance | undefined> {
+  getAgentOptional(id: string): Effect.Effect<AnyAgentInstance | undefined> {
     const self = this;
     return Effect.gen(function* () {
       const agents = yield* Ref.get(self.agents);
@@ -307,7 +332,7 @@ class AgentServiceImpl implements AgentService {
     );
   }
 
-  getAllAgents(): Effect.Effect<AgentInstance[]> {
+  getAllAgents(): Effect.Effect<AnyAgentInstance[]> {
     const self = this;
     return Effect.gen(function* () {
       const agents = yield* Ref.get(self.agents);
@@ -480,13 +505,27 @@ class AgentServiceImpl implements AgentService {
 /**
  * Live layer providing AgentService with dependencies on ToolRegistryService and ProviderRegistryService
  */
-export const AgentServiceLive = Layer.effect(
+export const AgentServiceLayer = Layer.effect(
   AgentService,
   Effect.gen(function* () {
-    const agents = yield* Ref.make(new Map<string, AgentInstance>());
+    const agents = yield* Ref.make(new Map<string, AnyAgentInstance>());
     const toolRegistryService = yield* ToolRegistryService;
     const providerRegistryService = yield* ProviderRegistryService;
     const toolGateService = yield* ToolGateService;
-    return new AgentServiceImpl(agents, toolRegistryService, providerRegistryService, toolGateService);
+    const promptSourceService = yield* PromptSourceService;
+    return new AgentServiceImpl(
+      agents,
+      toolRegistryService,
+      providerRegistryService,
+      toolGateService,
+      promptSourceService
+    );
   })
 );
+
+export const makeAgentServiceLive = (
+  promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer
+) => AgentServiceLayer.pipe(Layer.provide(promptSourceLayer));
+
+/** Default AgentService using core string/template prompt resolution. */
+export const AgentServiceLive = makeAgentServiceLive();

@@ -17,7 +17,12 @@ export class EvaluationTraceNotFoundError extends Data.TaggedError('EvaluationTr
 
 export interface EvaluationRecordOptions {
   message?: string;
-  response?: { content: string; role?: string; metadata?: Record<string, unknown> };
+  response?: {
+    content: string;
+    output?: unknown;
+    role?: string;
+    metadata?: Record<string, unknown>;
+  };
   routing?: EvalRoutingArtifact;
   environment?: Partial<EvalEnvironmentMetadata>;
 }

@@ -6,7 +6,7 @@
  * public legacy contract.
  */
 import { Cause, Context, Effect, Exit, Layer } from 'effect';
-import type { AgentInstance, AgentMessage, AgentResponse } from '../agent/agent';
+import type { AgentMessage, AgentResponse, AnyAgentInstance } from '../agent/agent';
 import { normalizeMessages } from '../messages';
 import type { Tracer } from '../tracing';
 import type { HookEvent, HookType } from '../hooks/types';
@@ -23,7 +23,7 @@ import {
 
 /** Minimal agent manager interface retained for public compatibility. */
 export interface AgentManagerLike {
-  getAgent(id: string): AgentInstance | undefined;
+  getAgent(id: string): AnyAgentInstance | undefined;
   hasAgent(id: string): boolean;
 }
 

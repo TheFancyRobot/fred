@@ -87,6 +87,38 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
     );
   });
 
+  it('agents accept string, template, and BAML prompt sources', () => {
+    expectAccepted(
+      {
+        agents: [
+          { id: 'plain', platform: 'openai', model: 'gpt-4', systemMessage: 'Plain prompt' },
+          {
+            id: 'template',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: {
+              template: 'Hello <%= vars.name %>',
+              variables: { name: 'Ada', attempts: 3, verbose: true },
+            },
+          },
+          {
+            id: 'variable-free-template',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: { template: 'You are helpful.' },
+          },
+          {
+            id: 'baml',
+            platform: 'openai',
+            model: 'gpt-4',
+            systemMessage: { baml: { function: 'BuildAgentPrompt' } },
+          },
+        ],
+      },
+      'agent prompt sources',
+    );
+  });
+
   it('intents with actions and extra fields', () => {
     expectAccepted(
       {
@@ -233,5 +265,20 @@ describe('FrameworkConfigSchema — clearly-invalid inputs are rejected', () => 
     expect(decode({ routing: { defaultAgent: 'assistant' } })._tag).toBe('Left');
     // an empty rules array is still valid (default-agent-only routing)
     expect(decode({ routing: { defaultAgent: 'assistant', rules: [] } })._tag).toBe('Right');
+  });
+
+  it('rejects malformed template and BAML prompt sources', () => {
+    const invalidPrompts = [
+      { template: 'Invalid variable', variables: { nested: { value: 'nope' } } },
+      { template: 42, variables: {} },
+      { baml: {} },
+      { baml: { function: 42 } },
+      { template: 'Ambiguous', variables: {}, baml: { function: 'BuildPrompt' } },
+      { unknownPrompt: 'nope' },
+    ];
+
+    for (const systemMessage of invalidPrompts) {
+      expect(decode({ agents: [{ systemMessage }] })._tag).toBe('Left');
+    }
   });
 });

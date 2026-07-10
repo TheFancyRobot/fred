@@ -51,6 +51,26 @@ describe('validateParsedConfig — passthrough & losslessness', () => {
     expect(out).toBe(input as never);
     expect((out as Record<string, unknown>).customExtension).toEqual({ keep: 'me' });
   });
+
+  it('preserves template and BAML prompt objects by identity', () => {
+    const templatePrompt = {
+      template: 'Hello <%= vars.name %>',
+      variables: { name: 'Ada', attempts: 2, verbose: true },
+    } as const;
+    const bamlPrompt = { baml: { function: 'BuildAgentPrompt' } } as const;
+    const input = {
+      agents: [
+        { id: 'template', platform: 'openai', model: 'gpt-4', systemMessage: templatePrompt },
+        { id: 'baml', platform: 'openai', model: 'gpt-4', systemMessage: bamlPrompt },
+      ],
+    };
+
+    const out = validateParsedConfig(input);
+
+    expect(out).toBe(input);
+    expect(out.agents?.[0]?.systemMessage).toBe(templatePrompt);
+    expect(out.agents?.[1]?.systemMessage).toBe(bamlPrompt);
+  });
 });
 
 describe('validateParsedConfig — aggregated errors', () => {

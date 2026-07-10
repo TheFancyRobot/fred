@@ -3,6 +3,7 @@ import { Effect, Layer } from 'effect';
 import { LanguageModel } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
+import { PromptResolutionError } from '../../../../packages/core/src/agent/errors';
 import { createMockProvider } from '../../helpers/mock-provider';
 import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 import { TemplateEngine, TemplateEngineLive } from '../../../../packages/core/src/template/engine';
@@ -53,6 +54,37 @@ describe('template integration', () => {
     });
 
     expect(system).toBe('You are a plain assistant.');
+  });
+
+  test('treats template prompt object text as literal even when it looks like a Markdown path', async () => {
+    const system = await captureSystemPrompt({
+      id: 'literal-template-path-agent',
+      platform: 'openai',
+      model: 'gpt-4o-mini',
+      systemMessage: { template: '/outside-the-project/prompt.md' },
+    });
+
+    expect(system).toBe('/outside-the-project/prompt.md');
+  });
+
+  test('maps prompt file loading failures to PromptResolutionError', async () => {
+    const agent = await Effect.runPromise(factory.createAgent({
+      id: 'invalid-prompt-path',
+      platform: 'openai',
+      model: 'gpt-4o-mini',
+      systemMessage: '/outside-the-project/prompt.md',
+    }, provider as any));
+
+    const result = await Effect.runPromise(Effect.either(agent.processMessage('hello')));
+
+    expect(result._tag).toBe('Left');
+    if (result._tag === 'Right') {
+      throw new Error('Expected prompt resolution to fail');
+    }
+    expect(result.left).toBeInstanceOf(PromptResolutionError);
+    expect(result.left.agentId).toBe('invalid-prompt-path');
+    expect(result.left.source).toBe('string');
+    expect(result.left.message).toContain('Absolute paths are not allowed');
   });
 
   test('resolves ETA vars namespace in systemMessage', async () => {
@@ -347,14 +379,28 @@ describe('template integration (real ETA engine)', () => {
     process.env.OPENAI_API_KEY = 'sk-secret';
 
     try {
-      await expect(
-        captureSystemPrompt({
-          id: 'env-secret',
-          platform: 'openai',
-          model: 'gpt-4o-mini',
-          systemMessage: 'key=<%= env.OPENAI_API_KEY %>',
-        })
-      ).rejects.toThrow('Failed to resolve system message template');
+      const agent = await Effect.runPromise(
+        factory.createAgent(
+          {
+            id: 'env-secret',
+            platform: 'openai',
+            model: 'gpt-4o-mini',
+            systemMessage: 'key=<%= env.OPENAI_API_KEY %>',
+          },
+          provider as any,
+        ),
+      );
+      const result = await Effect.runPromise(Effect.either(agent.processMessage('hello')));
+
+      expect(result._tag).toBe('Left');
+      if (result._tag === 'Right') {
+        throw new Error('Expected prompt resolution to fail');
+      }
+
+      expect(result.left).toBeInstanceOf(PromptResolutionError);
+      expect(result.left.agentId).toBe('env-secret');
+      expect(result.left.source).toBe('string');
+      expect(result.left.message).toContain('Undefined template value: env.OPENAI_API_KEY');
     } finally {
       if (originalApiKey === undefined) {
         delete process.env.OPENAI_API_KEY;

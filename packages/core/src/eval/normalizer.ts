@@ -33,28 +33,39 @@ export interface NormalizationCheckpoint {
   snapshot: Record<string, unknown>;
 }
 
+type NormalizableResponse = AgentResponse | {
+  content: string;
+  output?: unknown;
+  role?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export interface NormalizeRunRecordInput {
   runRecord: RunRecord;
   environment: EvalEnvironmentMetadata;
   message?: string;
-  response?: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> };
+  response?: NormalizableResponse;
   routing?: EvalRoutingArtifact;
   checkpoints?: NormalizationCheckpoint[];
 }
 
-function getResponseRole(
-  response: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> }
-): string | undefined {
+function getResponseRole(response: NormalizableResponse): string | undefined {
   return 'role' in response ? response.role : undefined;
 }
 
-function getResponseMetadata(
-  response: AgentResponse | { content: string; role?: string; metadata?: Record<string, unknown> }
-): Record<string, unknown> {
-  if ('metadata' in response && response.metadata) {
-    return response.metadata;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function getResponseMetadata(response: unknown): Record<string, unknown> {
+  if (!isRecord(response) || !isRecord(response.metadata)) {
+    return {};
   }
-  return {};
+  return response.metadata;
+}
+
+function getSanitizedResponseMetadata(response: unknown): Record<string, unknown> {
+  const metadata = sanitizeVolatile(getResponseMetadata(response));
+  return isRecord(metadata) ? metadata : {};
 }
 
 export interface NormalizeLegacyTraceInput {
@@ -229,8 +240,9 @@ export function normalizeRunRecord(input: NormalizeRunRecordInput): EvaluationAr
     routing: input.routing ?? { method: 'unknown' },
     response: {
       content: response.content,
+      output: toDeterministicValue(response.output),
       role: getResponseRole(response),
-      metadata: toDeterministicValue(sanitizeVolatile(getResponseMetadata(response)) as Record<string, unknown>),
+      metadata: toDeterministicValue(getSanitizedResponseMetadata(response)),
     },
     steps,
     toolCalls,
@@ -335,7 +347,8 @@ export function normalizeLegacyGoldenTrace(input: NormalizeLegacyTraceInput): Ev
     routing: toDeterministicValue(sanitizeVolatile(trace.trace.routing) as EvalRoutingArtifact),
     response: {
       content: trace.trace.response.content,
-      metadata: toDeterministicValue(sanitizeVolatile(trace.trace.response) as Record<string, unknown>),
+      output: toDeterministicValue(trace.trace.response.output),
+      metadata: toDeterministicValue(getSanitizedResponseMetadata(trace.trace.response)),
     },
     steps,
     toolCalls,

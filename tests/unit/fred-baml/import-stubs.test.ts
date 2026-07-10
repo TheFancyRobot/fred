@@ -8,6 +8,7 @@ describe('fred-baml API stubs', () => {
     expect(typeof mod.createBamlTool).toBe('function');
     expect(typeof mod.initFredBamlRuntime).toBe('function');
     expect(typeof mod.BamlAgent).toBe('object');
+    expect(typeof mod.BamlPromptSourceLayer).toBe('function');
     expect(typeof mod.createStubBamlRuntime).toBe('function');
     expect(typeof mod.loadStubBamlClient).toBe('function');
     expect(typeof mod.MissingBamlClientError).toBe('function');

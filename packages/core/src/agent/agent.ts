@@ -1,7 +1,29 @@
 import type { Action } from '../intent/intent';
 import type { Prompt } from '@effect/ai';
 import type { Effect, Stream } from 'effect';
+import type * as Schema from 'effect/Schema';
 import type { StreamEvent } from '../stream/events';
+
+export type AgentPromptVariable = string | number | boolean;
+
+export interface AgentTemplatePrompt {
+  readonly template: string;
+  readonly variables?: Readonly<Record<string, AgentPromptVariable>>;
+}
+
+export interface AgentBamlPrompt {
+  readonly baml: {
+    readonly function: string;
+  };
+}
+
+/**
+ * Prompt sources supported by core agents.
+ *
+ * BAML sources are resolved by an adapter-provided PromptSourceService. Core
+ * intentionally does not import or inspect generated BAML clients.
+ */
+export type AgentPrompt = string | AgentTemplatePrompt | AgentBamlPrompt;
 
 export type AgentToolChoice =
   | 'auto'
@@ -53,9 +75,17 @@ export type AIPlatform =
 /**
  * Agent configuration
  */
-export interface AgentConfig {
+export interface AgentOutputRetryPolicy {
+  /** Number of additional generation attempts after malformed output. */
+  readonly maxRetries?: number;
+}
+
+export interface AgentConfig<
+  InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+  OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+> {
   id: string;
-  systemMessage?: string;
+  systemMessage?: AgentPrompt;
   platform: AIPlatform;
   model: string; // Model identifier (e.g., 'gpt-4', 'llama-3.1-70b-versatile', 'claude-3-opus')
   tools?: string[]; // Array of tool IDs to assign to this agent
@@ -69,6 +99,12 @@ export interface AgentConfig {
   toolTimeout?: number; // Timeout for tool execution in milliseconds (default: 300000 = 5 minutes)
   persistHistory?: boolean; // Whether to persist conversation history for this agent (default: true)
   toolRetry?: ToolRetryPolicy; // Retry policy for tool execution
+  /** Programmatic-only schema used to validate and encode direct agent input. */
+  input?: InputSchema;
+  /** Programmatic-only schema used for provider-backed structured output. */
+  output?: OutputSchema;
+  /** Retry policy applied only to malformed structured model output. */
+  outputRetry?: AgentOutputRetryPolicy;
 }
 
 /**
@@ -146,10 +182,22 @@ export function normalizeToolChoice(toolChoice: AgentToolChoice | undefined): Pr
 /**
  * Agent instance (created from config)
  */
-export interface AgentInstance {
+export interface AgentInstance<
+  InputSchema extends Schema.Schema.AnyNoContext = typeof Schema.String,
+  OutputSchema extends Schema.Schema.AnyNoContext = typeof Schema.Unknown,
+> {
   id: string;
-  config: AgentConfig;
-  processMessage: (message: string, messages?: AgentMessage[]) => Effect.Effect<AgentResponse, Error>;
+  config: AgentConfig<InputSchema, OutputSchema>;
+  /** Validate and execute a typed input directly. */
+  run: (
+    input: Schema.Schema.Type<InputSchema>,
+    messages?: AgentMessage[]
+  ) => Effect.Effect<AgentResponse<Schema.Schema.Type<OutputSchema>>, Error>;
+  /** Compatibility entrypoint for routed and conversational string messages. */
+  processMessage: (
+    message: string,
+    messages?: AgentMessage[]
+  ) => Effect.Effect<AgentResponse<Schema.Schema.Type<OutputSchema>>, Error>;
   // Stream has error and requirements channels - actual types vary by implementation
   streamMessage?: (
     message: string,
@@ -157,6 +205,16 @@ export interface AgentInstance {
     options?: { threadId?: string }
   ) => Stream.Stream<StreamEvent, unknown, any>;
 }
+
+/** Type-erased forms used by heterogeneous runtime registries and ID lookup. */
+export type AnyAgentConfig = AgentConfig<
+  Schema.Schema.AnyNoContext,
+  Schema.Schema.AnyNoContext
+>;
+export type AnyAgentInstance = AgentInstance<
+  Schema.Schema.AnyNoContext,
+  Schema.Schema.AnyNoContext
+>;
 
 /**
  * Message to send to an agent
@@ -167,8 +225,10 @@ export type AgentMessage = Prompt.MessageEncoded;
 /**
  * Agent response
  */
-export interface AgentResponse {
+export interface AgentResponse<Output = unknown> {
   content: string;
+  /** Decoded value when the agent has an output Effect Schema. */
+  output?: Output;
   toolCalls?: Array<{
     toolId: string;
     args: Record<string, any>;
