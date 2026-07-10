@@ -73,5 +73,39 @@ describe('FredHttpServerLive security middleware', () => {
     const second = await fred.server.listen({ port: first.port });
     expect(second.port).toBe(first.port);
   });
-});
 
+  test('normalizes a wildcard bind address to a usable client hostname', async () => {
+    const fred = withHttp(await createFred(), { security: { requireAuth: false } });
+    clients.push(fred);
+    const handle = await fred.server.listen({ hostname: '0.0.0.0' });
+
+    expect(handle.hostname).toBe('127.0.0.1');
+    expect(handle.url).toBe(`http://127.0.0.1:${handle.port}`);
+    expect((await fetch(`${handle.url}/health`)).status).toBe(200);
+  });
+
+  test('returns an OpenAI-style 400 when no user message is present', async () => {
+    const handle = await start({ security: { requireAuth: false } });
+    const response = await fetch(`${handle.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-session-id': 'invalid-request-session',
+      },
+      body: JSON.stringify({
+        model: 'fred-test',
+        messages: [{ role: 'assistant', content: 'No user message here' }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('x-session-id')).toBe('invalid-request-session');
+    expect(await response.json()).toEqual({
+      error: {
+        message: 'At least one user message is required',
+        type: 'invalid_request_error',
+        code: 'missing_user_message',
+      },
+    });
+  });
+});

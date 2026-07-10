@@ -4,8 +4,7 @@ import { MessageProcessorService } from '@fancyrobot/fred/effect';
 import { Effect, Either } from 'effect';
 import { FredHttpApi } from '../api';
 import { lastUserMessage } from './message';
-import { resolveSessionId, useSession, useSessionStream } from './session';
-import { withSessionHeader } from './session';
+import { resolveSessionId, useSession, useSessionStream, withSessionHeader } from './session';
 import { encodeOpenAiSse, openAiSseResponse } from './sse';
 
 export const FredOpenAiHandlersLive = HttpApiBuilder.group(
@@ -14,19 +13,31 @@ export const FredOpenAiHandlersLive = HttpApiBuilder.group(
   (handlers) =>
     handlers.handle('chatCompletions', ({ headers, payload }) =>
       Effect.gen(function* () {
-        const processor = yield* MessageProcessorService;
         const sessionId = resolveSessionId(headers['x-session-id'], payload.conversation_id);
         const message = lastUserMessage(payload.messages);
         const model = payload.model ?? 'fred-agent';
 
         if (message === undefined) {
-          return yield* Effect.dieMessage('Validated chat request did not contain a user message');
+          const response = HttpServerResponse.unsafeJson({
+            error: {
+              message: 'At least one user message is required',
+              type: 'invalid_request_error',
+              code: 'missing_user_message',
+            },
+          }, { status: 400 });
+          return yield* Effect.succeed(
+            sessionId === undefined ? response : withSessionHeader(response, sessionId),
+          );
         }
+        // TypeScript does not retain generator narrowing across `yield*`; the
+        // undefined branch has already returned the 400 response above.
+        const userMessage = message ?? '';
+        const processor = yield* MessageProcessorService;
 
         if (payload.stream === true) {
           const used = yield* useSessionStream(
             sessionId,
-            processor.streamMessage(message),
+            processor.streamMessage(userMessage),
           );
           const chunks = toOpenAIStream(used.stream, { model });
           return openAiSseResponse(encodeOpenAiSse(chunks), used.sessionId);

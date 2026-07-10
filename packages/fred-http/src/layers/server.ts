@@ -34,7 +34,7 @@ export const serverAddress = (server: HttpServer.HttpServer) => {
   }
   const hostname = server.address.hostname === '0.0.0.0' ? '127.0.0.1' : server.address.hostname;
   return {
-    hostname: server.address.hostname,
+    hostname,
     port: server.address.port,
     url: `http://${hostname}:${server.address.port}`,
   };
