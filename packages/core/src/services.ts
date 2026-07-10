@@ -38,6 +38,7 @@ import {
   MessageRouterServiceLiveWithConfig,
 } from './routing/service';
 import { ObservabilityService, ObservabilityServiceLive } from './observability/service';
+import { AgentStatusService, AgentStatusServiceLive } from './observability/status';
 import type { ObservabilityLayers } from './observability/otel';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from './pipeline/checkpoint/types';
 import type { RoutingConfig } from './routing/types';
@@ -63,7 +64,8 @@ export type FredServices =
   | IntentRouterService
   | MessageRouterService
   | SessionService
-  | ObservabilityService;
+  | ObservabilityService
+  | AgentStatusService;
 
 /**
  * Fred runtime type with all services
@@ -245,7 +247,8 @@ const CheckpointServiceLive = Layer.effect(
 const baseLayer = Layer.mergeAll(
   ToolRegistryServiceLive,
   HookManagerServiceLive,
-  ObservabilityServiceLive
+  ObservabilityServiceLive,
+  AgentStatusServiceLive
 );
 
 /**
@@ -289,7 +292,7 @@ const subagentLayer = SubagentServiceLive;
 const defaultRouterLayer = MessageRouterServiceLive;
 
 /**
- * Complete Fred layers - all 14 services composed
+ * Complete Fred layers - all services composed
  *
  * Dependency graph:
  * ```
@@ -498,4 +501,6 @@ export {
   MessageRouterServiceLiveWithConfig,
   ObservabilityService,
   ObservabilityServiceLive,
+  AgentStatusService,
+  AgentStatusServiceLive,
 };

@@ -322,6 +322,16 @@ export type {
   RunRecord, HookEvent as ObservabilityHookEvent, StepSpan, ToolUsage, ModelUsage,
   MetricsSnapshot, OtelMetricsExport,
 } from './observability/service';
+export {
+  AgentRunAnnotationRef,
+  AgentStatusService,
+  AgentStatusServiceLive,
+  trackAgentRun,
+  type AgentRunAnnotation,
+  type AgentRunInfo,
+  type AgentRunState,
+  type AgentStatusSnapshot,
+} from './observability/status';
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 export { sanitizeError } from './utils/validation';
@@ -356,7 +366,7 @@ export {
   type FredLayerOptions,
   type FredRuntime,
   type FredServices,
-  // Service tags + Live layers (all 14 FredServices members)
+  // Service tags + Live layers
   ToolRegistryService,
   ToolRegistryServiceLive,
   ToolGateService,
