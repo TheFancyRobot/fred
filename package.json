@@ -59,9 +59,9 @@
     "verify:live": "bun run scripts/verify.ts --live",
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "changeset": "changeset",
-    "docs:dev": "mkdocs serve",
-    "docs:build": "mkdocs build",
-    "docs:deploy": "mkdocs gh-deploy",
+    "docs:dev": "bun run scripts/docs.ts serve",
+    "docs:build": "bun run scripts/docs.ts build",
+    "docs:deploy": "bun run scripts/docs.ts gh-deploy",
     "prepare": "effect-language-service patch",
     "ci:version": "changeset version && bun update",
     "ci:publish": "bash scripts/publish-packages.sh"

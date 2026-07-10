@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..');
 const CLI_ENTRY = join(REPO_ROOT, 'packages/cli/src/index.ts');
+const CAPTURE_HELPER = join(import.meta.dir, 'fixtures/capture-cli.ts');
 const CLI_PACKAGE_JSON = JSON.parse(
   readFileSync(join(REPO_ROOT, 'packages/cli/package.json'), 'utf-8'),
 ) as { version?: unknown };
@@ -17,11 +18,31 @@ const TEST_PLUGIN_REQUIRES_FRED_CLI = `^${CLI_PACKAGE_JSON.version}`;
 const createdTempDirs: string[] = [];
 
 function runCli(args: string[], cwd: string) {
-  return spawnSync('bun', ['run', CLI_ENTRY, ...args], {
+  const captureDir = mkdtempSync(join(tmpdir(), 'fred-phase32-cli-output-'));
+  createdTempDirs.push(captureDir);
+  const stdoutPath = join(captureDir, 'stdout.txt');
+  const stderrPath = join(captureDir, 'stderr.txt');
+  const result = spawnSync('bun', [
+    'run',
+    CAPTURE_HELPER,
+    stdoutPath,
+    stderrPath,
     cwd,
+    'bun',
+    'run',
+    CLI_ENTRY,
+    ...args,
+  ], {
+    cwd: REPO_ROOT,
     env: process.env,
-    encoding: 'utf-8',
+    stdio: 'ignore',
   });
+
+  return {
+    status: result.status,
+    stdout: readFileSync(stdoutPath, 'utf8'),
+    stderr: readFileSync(stderrPath, 'utf8'),
+  };
 }
 
 function writePluginPackage(

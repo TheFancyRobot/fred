@@ -264,6 +264,6 @@ fred.setDefaultAgent('default-agent');
 
 ## Next Steps
 
-- Learn about [Agents](guides/agents.md)
-- Explore [Intents](guides/intents.md)
+- Learn about [Agents](../guides/agents.md)
+- Explore [Intents](../guides/intents.md)
 - Check [API Reference](../api-reference/fred-class.md)

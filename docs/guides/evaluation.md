@@ -321,4 +321,4 @@ Each handoff includes:
 
 ## Examples
 
-See the [examples directory](../../examples/) for complete evaluation examples.
+See the [examples directory](https://github.com/TheFancyRobot/fred/tree/main/examples) for complete evaluation examples.
