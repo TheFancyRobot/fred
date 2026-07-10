@@ -17,5 +17,6 @@ describe('fred-http package surface', () => {
     expect(httpPkg.FredOpenApiSpec).toBeDefined()
     expect(httpPkg.FredOpenApiLayer).toBeDefined()
     expect(httpPkg.FredDocsLayer).toBeDefined()
+    expect(httpPkg.FredHttpHandlersLive).toBeDefined()
   })
 })

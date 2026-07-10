@@ -21,3 +21,4 @@ export {
 } from './api';
 export * from './api/errors';
 export * from './api/schemas';
+export * from './handlers/index';
