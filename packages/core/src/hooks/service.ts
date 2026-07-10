@@ -112,8 +112,8 @@ export const HookManagerService = Context.GenericTag<HookManagerService>(
 class HookManagerServiceImpl implements HookManagerService {
   constructor(
     private hooks: Ref.Ref<Map<HookType, HookHandler[]>>,
-    private observability?: Context.Tag.Service<ObservabilityService>,
-    private agentStatus?: Context.Tag.Service<AgentStatusService>
+    private observability?: Context.Tag.Service<typeof ObservabilityService>,
+    private agentStatus?: Context.Tag.Service<typeof AgentStatusService>
   ) {}
 
   registerHook(type: HookType, handler: HookHandler): Effect.Effect<void> {

@@ -345,6 +345,6 @@ const makeAgentStatusLayer = Effect.gen(function* () {
   );
 });
 
-/** One independent lifecycle tracker per scoped runtime. */
+/** One independent lifecycle tracker per Fred runtime. */
 export const AgentStatusServiceLive: Layer.Layer<AgentStatusService> =
   Layer.unwrapEffect(makeAgentStatusLayer);

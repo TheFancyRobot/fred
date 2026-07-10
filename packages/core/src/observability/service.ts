@@ -7,7 +7,16 @@
  * @module src/core/observability/service
  */
 
-import { Effect, Context, Layer, Metric, Logger, LogLevel } from 'effect';
+import {
+  Effect,
+  Context,
+  Layer,
+  Metric,
+  MetricState,
+  Logger,
+  LogLevel,
+  Option,
+} from 'effect';
 import { createHash } from 'crypto';
 import type { CorrelationContext } from './context';
 import { getCurrentCorrelationContext, getCurrentSpanIds, getCorrelationContext, getSpanIds } from './context';
@@ -156,6 +165,27 @@ export interface OtelMetricsExport {
             timeUnixNano: string;
           }>;
           isMonotonic: boolean;
+          aggregationTemporality?: 'AGGREGATION_TEMPORALITY_CUMULATIVE';
+        };
+        gauge?: {
+          dataPoints: Array<{
+            attributes: Record<string, string>;
+            value: number;
+            timeUnixNano: string;
+          }>;
+        };
+        histogram?: {
+          dataPoints: Array<{
+            attributes: Record<string, string>;
+            count: number;
+            sum: number;
+            min: number;
+            max: number;
+            bucketCounts: ReadonlyArray<number>;
+            explicitBounds: ReadonlyArray<number>;
+            timeUnixNano: string;
+          }>;
+          aggregationTemporality: 'AGGREGATION_TEMPORALITY_CUMULATIVE';
         };
       }>;
     }>;
@@ -273,6 +303,24 @@ function splitMetricKey(key: string): { provider: string; model: string } {
     model: separatorIndex === -1 ? '' : key.substring(separatorIndex + 1),
   };
 }
+
+const agentStatusMetricNames = new Set([
+  'fred_agents_running',
+  'fred_agent_runs_started_total',
+  'fred_agent_runs_completed_total',
+  'fred_agent_run_duration_ms',
+]);
+
+const agentStatusMetricAttributeNames = new Set(['agentId', 'exit']);
+
+const agentStatusMetricAttributes = (
+  tags: ReadonlyArray<{ readonly key: string; readonly value: string }>
+): Record<string, string> =>
+  Object.fromEntries(
+    tags
+      .filter(({ key }) => agentStatusMetricAttributeNames.has(key))
+      .map(({ key, value }) => [key, value])
+  );
 
 /**
  * Create ObservabilityService live implementation.
@@ -672,7 +720,8 @@ export const ObservabilityServiceLive = Layer.effect(
         }),
 
       exportMetricsOtel: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          const effectMetrics = yield* Metric.snapshot;
           const timestamp = Date.now();
           const timeUnixNano = `${timestamp}000000`; // Convert to nanoseconds
 
@@ -748,6 +797,91 @@ export const ObservabilityServiceLive = Layer.effect(
               },
             });
           }
+
+          const statusMetrics = new Map<string, (typeof metrics)[number]>();
+          for (const { metricKey, metricState } of effectMetrics) {
+            if (!agentStatusMetricNames.has(metricKey.name)) continue;
+
+            const attributes = agentStatusMetricAttributes(metricKey.tags);
+            const description = Option.getOrElse(metricKey.description, () => '');
+            const current = statusMetrics.get(metricKey.name);
+
+            if (MetricState.isCounterState(metricState)) {
+              const dataPoint = {
+                attributes,
+                value: Number(metricState.count),
+                timeUnixNano,
+              };
+              if (current?.sum) {
+                current.sum.dataPoints.push(dataPoint);
+              } else {
+                statusMetrics.set(metricKey.name, {
+                  name: metricKey.name,
+                  description,
+                  sum: {
+                    dataPoints: [dataPoint],
+                    isMonotonic: true,
+                    aggregationTemporality: 'AGGREGATION_TEMPORALITY_CUMULATIVE',
+                  },
+                });
+              }
+              continue;
+            }
+
+            if (MetricState.isGaugeState(metricState)) {
+              const dataPoint = {
+                attributes,
+                value: Number(metricState.value),
+                timeUnixNano,
+              };
+              if (current?.gauge) {
+                current.gauge.dataPoints.push(dataPoint);
+              } else {
+                statusMetrics.set(metricKey.name, {
+                  name: metricKey.name,
+                  description,
+                  gauge: { dataPoints: [dataPoint] },
+                });
+              }
+              continue;
+            }
+
+            if (MetricState.isHistogramState(metricState)) {
+              let previousCount = 0;
+              const bucketCounts = metricState.buckets.map(([, count]) => {
+                const bucketCount = count - previousCount;
+                previousCount = count;
+                return bucketCount;
+              });
+              const explicitBounds = metricState.buckets
+                .slice(0, -1)
+                .map(([boundary]) => boundary);
+              const dataPoint = {
+                attributes,
+                count: metricState.count,
+                sum: metricState.sum,
+                min: metricState.min,
+                max: metricState.max,
+                bucketCounts,
+                explicitBounds,
+                timeUnixNano,
+              };
+              if (current?.histogram) {
+                current.histogram.dataPoints.push(dataPoint);
+              } else {
+                statusMetrics.set(metricKey.name, {
+                  name: metricKey.name,
+                  description,
+                  unit: 'ms',
+                  histogram: {
+                    dataPoints: [dataPoint],
+                    aggregationTemporality: 'AGGREGATION_TEMPORALITY_CUMULATIVE',
+                  },
+                });
+              }
+            }
+          }
+          metrics.push(...statusMetrics.values());
 
           return {
             resourceMetrics: [

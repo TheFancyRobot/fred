@@ -11,8 +11,10 @@ import {
   Runtime,
   Stream,
 } from 'effect';
-import { LanguageModel } from '@effect/ai';
+import { LanguageModel, Model, Response } from '@effect/ai';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
+import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
+import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import {
   type AgentStatusSnapshot,
   type AgentStatusUnsubscribe,
@@ -27,6 +29,12 @@ import {
   Fred,
 } from '../../../../packages/core/src/index';
 import { makeFredRuntimeLayer } from '../../../../packages/core/src/services';
+import {
+  ObservabilityService,
+  ObservabilityServiceLive,
+} from '../../../../packages/core/src/observability/service';
+import { compilePipelineV1 } from '../../../../packages/core/src/workflow/compile';
+import { executeWorkflowEffect } from '../../../../packages/core/src/workflow/execute';
 import { createMockProvider } from '../../helpers/mock-provider';
 import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
 
@@ -106,6 +114,141 @@ describe('AgentStatusService', () => {
         yield* Fiber.join(run);
         expect(yield* status.snapshot).toEqual([]);
       }).pipe(Effect.provide(AgentStatusServiceLive))
+    );
+  });
+
+  test('tracks three concurrent workflow executions with correlation metadata', async () => {
+    const generateSpy = spyOn(LanguageModel, 'generateText');
+
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const status = yield* AgentStatusService;
+          const release = yield* Deferred.make<void>();
+          const modelStarted = yield* Effect.all([
+            Deferred.make<void>(),
+            Deferred.make<void>(),
+            Deferred.make<void>(),
+          ]);
+          let modelCallIndex = 0;
+
+          generateSpy.mockImplementation(() => {
+            const started = modelStarted[modelCallIndex++];
+            if (!started) {
+              return Effect.dieMessage('Unexpected extra model invocation');
+            }
+            return Deferred.succeed(started, undefined).pipe(
+              Effect.zipRight(Deferred.await(release)),
+              Effect.as(new LanguageModel.GenerateTextResponse([
+                Response.textPart({ text: 'done' }),
+              ])),
+            );
+          });
+
+          const factory = new AgentFactory(createMockToolRegistry());
+          factory.setAgentStatusService(status);
+          const config = {
+            id: 'workflow-status-agent',
+            platform: 'mock',
+            model: 'mock-model',
+            systemMessage: 'Track workflow status.',
+          };
+          const createdAgent = yield* factory.createAgent(config, {
+            ...createMockProvider('mock'),
+            getModel: () => Effect.succeed(Model.make('mock', Layer.empty)),
+          });
+          const agent: AgentInstance = { ...createdAgent, id: config.id, config };
+          const agentManager: AgentManagerLike = {
+            getAgent: (id) => id === agent.id ? agent : undefined,
+            hasAgent: (id) => id === agent.id,
+          };
+          const fixtures = [
+            { workflowId: 'concurrent-workflow-1', sessionId: 'concurrent-session-1' },
+            { workflowId: 'concurrent-workflow-2', sessionId: 'concurrent-session-2' },
+            { workflowId: 'concurrent-workflow-3', sessionId: 'concurrent-session-3' },
+          ];
+
+          const fibers = yield* Effect.forEach(fixtures, ({ workflowId, sessionId }) =>
+            executeWorkflowEffect(
+              compilePipelineV1({ id: workflowId, agents: [agent.id] }),
+              `message for ${sessionId}`,
+              { agentManager, conversationId: sessionId },
+            ).pipe(Effect.fork),
+          );
+
+          yield* Effect.all(modelStarted.map(Deferred.await));
+
+          const active = yield* status.snapshot;
+          expect(active).toHaveLength(3);
+          expect(active).toEqual(expect.arrayContaining(fixtures.map(({ workflowId, sessionId }) =>
+            expect.objectContaining({
+              agentId: agent.id,
+              workflowId,
+              sessionId,
+              state: 'calling_model',
+            })
+          )));
+          expect(yield* runningAgentGaugeValue).toBe(3);
+
+          yield* Deferred.succeed(release, undefined);
+          yield* Effect.forEach(fibers, Fiber.join);
+          expect(yield* status.snapshot).toEqual([]);
+          expect(yield* runningAgentGaugeValue).toBe(0);
+        }).pipe(Effect.provide(AgentStatusServiceLive)),
+      );
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  test('cleans up snapshots and the gauge after every exit path', async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const status = yield* AgentStatusService;
+        const modes = ['success', 'failure', 'defect', 'interruption'] as const;
+
+        for (const mode of modes) {
+          const started = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const terminal = mode === 'success'
+            ? Effect.void
+            : mode === 'failure'
+              ? Effect.fail('expected typed failure')
+              : mode === 'defect'
+                ? Effect.dieMessage('expected defect')
+                : Effect.never;
+          const run = yield* trackAgentRun({
+            ...annotation,
+            runId: `exit-${mode}`,
+            agentId: `exit-agent-${mode}`,
+          })(
+            Deferred.succeed(started, undefined).pipe(
+              Effect.zipRight(Deferred.await(release)),
+              Effect.zipRight(terminal),
+            ),
+          ).pipe(Effect.fork);
+
+          yield* Deferred.await(started);
+          expect(yield* status.snapshot).toHaveLength(1);
+          expect(yield* runningAgentGaugeValue).toBe(1);
+
+          const exit = mode === 'interruption'
+            ? yield* Fiber.interrupt(run)
+            : yield* Deferred.succeed(release, undefined).pipe(
+                Effect.zipRight(Fiber.await(run)),
+              );
+
+          if (mode === 'success') {
+            expect(Exit.isSuccess(exit)).toBe(true);
+          } else if (mode === 'interruption') {
+            expect(Exit.isInterrupted(exit)).toBe(true);
+          } else {
+            expect(Exit.isFailure(exit)).toBe(true);
+          }
+          expect(yield* status.snapshot).toEqual([]);
+          expect(yield* runningAgentGaugeValue).toBe(0);
+        }
+      }).pipe(Effect.provide(AgentStatusServiceLive)),
     );
   });
 
@@ -291,6 +434,94 @@ describe('AgentStatusService', () => {
             : undefined
         ).toBe(0);
       }).pipe(Effect.provide(AgentStatusServiceLive))
+    );
+  });
+
+  test('exports live-status metrics through the existing OTLP snapshot', async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const status = yield* AgentStatusService;
+        const observability = yield* ObservabilityService;
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const exportAnnotation = {
+          ...annotation,
+          runId: 'otel-export-run',
+          agentId: 'otel-export-agent',
+        };
+        const run = yield* trackAgentRun(exportAnnotation)(
+          Deferred.succeed(started, undefined).pipe(
+            Effect.zipRight(Deferred.await(release)),
+          ),
+        ).pipe(Effect.fork);
+
+        yield* Deferred.await(started);
+        expect(yield* status.snapshot).toHaveLength(1);
+
+        const activeExport = yield* observability.exportMetricsOtel();
+        const activeMetrics = activeExport.resourceMetrics[0]?.scopeMetrics[0]?.metrics ?? [];
+        const running = activeMetrics.find(({ name }) => name === 'fred_agents_running');
+        const startedMetric = activeMetrics.find(
+          ({ name }) => name === 'fred_agent_runs_started_total',
+        );
+        const startedPoint = startedMetric?.sum?.dataPoints.find(
+          ({ attributes }) => attributes.agentId === 'otel-export-agent',
+        );
+
+        expect(running?.gauge?.dataPoints).toContainEqual({
+          attributes: {},
+          value: 1,
+          timeUnixNano: expect.any(String),
+        });
+        expect(startedPoint?.value).toBeGreaterThanOrEqual(1);
+        expect(startedPoint?.attributes).toEqual({ agentId: 'otel-export-agent' });
+
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(run);
+
+        const completedExport = yield* observability.exportMetricsOtel();
+        const completedMetrics = completedExport.resourceMetrics[0]?.scopeMetrics[0]?.metrics ?? [];
+        const completedGauge = completedMetrics.find(
+          ({ name }) => name === 'fred_agents_running',
+        );
+        const completedMetric = completedMetrics.find(
+          ({ name }) => name === 'fred_agent_runs_completed_total',
+        );
+        const durationMetric = completedMetrics.find(
+          ({ name }) => name === 'fred_agent_run_duration_ms',
+        );
+        const completedPoint = completedMetric?.sum?.dataPoints.find(
+          ({ attributes }) => attributes.agentId === 'otel-export-agent',
+        );
+        const durationPoint = durationMetric?.histogram?.dataPoints.find(
+          ({ attributes }) => attributes.agentId === 'otel-export-agent',
+        );
+
+        expect(completedGauge?.gauge?.dataPoints).toContainEqual({
+          attributes: {},
+          value: 0,
+          timeUnixNano: expect.any(String),
+        });
+        expect(completedPoint?.attributes).toEqual({
+          agentId: 'otel-export-agent',
+          exit: 'success',
+        });
+        expect(durationPoint?.attributes).toEqual({
+          agentId: 'otel-export-agent',
+          exit: 'success',
+        });
+        expect(durationPoint?.count).toBeGreaterThanOrEqual(1);
+        expect(durationPoint?.bucketCounts.length).toBe(
+          durationPoint?.explicitBounds.length === undefined
+            ? undefined
+            : durationPoint.explicitBounds.length + 1,
+        );
+      }).pipe(
+        Effect.provide(Layer.mergeAll(
+          AgentStatusServiceLive,
+          ObservabilityServiceLive,
+        )),
+      ),
     );
   });
 

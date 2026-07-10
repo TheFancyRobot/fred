@@ -8,8 +8,29 @@ The `fred` CLI provides commands for:
 - Managing AI SDK providers
 - Creating new agents
 - Creating new tools
+- Inspecting live agent runs in the current Fred runtime
 
 All commands work within your project directory and modify your project files automatically.
+
+## Live Agent Status
+
+Read a one-shot snapshot of active agent runs:
+
+```bash
+fred status
+fred status --json
+```
+
+The human-readable table includes each run's agent, state, workflow, session,
+fiber, and start time. The interactive `fred chat` TUI subscribes to the same
+status service and updates its status bar while agents start, call models,
+stream output, run tools, pause, and finish.
+
+Status is intentionally runtime-local. The command reads the `Fred` instance
+supplied to its handler; a separately launched CLI process does not attach to
+an already-running process. Use the live TUI for in-process visibility. Remote
+and cross-process status access will use the HTTP `GET /status` transport when
+that API is available.
 
 ## Provider Management
 
