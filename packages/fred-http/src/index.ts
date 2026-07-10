@@ -22,3 +22,19 @@ export {
 export * from './api/errors';
 export * from './api/schemas';
 export * from './handlers/index';
+export { FredHttpSecurityLive } from './middleware';
+export type { FredHttpSecurityOptions } from './middleware';
+export { FredHttpApiLive, FredHttpServerLive } from './layers/server';
+export type { FredHttpServerLayerOptions } from './layers/server';
+export {
+  HttpClientClosedError,
+  ServerAlreadyRunningError,
+  ServerStartError,
+  withHttp,
+} from './client';
+export type {
+  FredHttpListenOptions,
+  FredHttpServerHandle,
+  FredWithHttp,
+  WithHttpOptions,
+} from './client';
