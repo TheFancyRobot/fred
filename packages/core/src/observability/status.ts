@@ -9,6 +9,7 @@
 
 import {
   Context,
+  Deferred,
   Effect,
   Exit,
   Fiber,
@@ -16,6 +17,9 @@ import {
   FiberRef,
   HashMap,
   Layer,
+  Metric,
+  MetricBoundaries,
+  MetricLabel,
   MutableRef,
   Option,
   PubSub,
@@ -89,6 +93,7 @@ export const AgentRunAnnotationRef = FiberRef.unsafeMake<
 interface TrackedAgentRun {
   readonly runId: string;
   readonly info: AgentRunInfo;
+  readonly metricStartedAt: number;
 }
 
 type TrackedRuns = HashMap.HashMap<string, TrackedAgentRun>;
@@ -106,6 +111,25 @@ const activeAnnotation = (
   annotation: Option.Option<AgentRunAnnotation>
 ): Option.Option<AgentRunAnnotation> =>
   Option.filter(annotation, (value) => (annotationDepths.get(value) ?? 0) > 0);
+
+const agentsRunning = Metric.gauge('fred_agents_running', {
+  description: 'Number of agent invocations currently running',
+});
+const agentRunsStarted = Metric.counter('fred_agent_runs_started_total', {
+  description: 'Total agent invocations started',
+});
+const agentRunsCompleted = Metric.counter('fred_agent_runs_completed_total', {
+  description: 'Total agent invocations completed',
+});
+const agentRunDuration = Metric.histogram(
+  'fred_agent_run_duration_ms',
+  MetricBoundaries.exponential({ start: 1, factor: 2, count: 20 }),
+  'Agent invocation duration in milliseconds'
+);
+
+const agentMetricLabels = (agentId: string) => [
+  MetricLabel.make('agentId', agentId),
+];
 
 class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapshot> {
   constructor(
@@ -139,6 +163,9 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
     }
 
     const fiberId = toFiberId(fiber);
+    const current = MutableRef.get(this.runs);
+    if (HashMap.has(current, fiberId)) return;
+
     const info: AgentRunInfo = {
       fiberId,
       agentId: annotation.value.agentId,
@@ -147,24 +174,41 @@ class AgentRunSupervisor extends Supervisor.AbstractSupervisor<AgentStatusSnapsh
       state: annotation.value.state ?? 'starting',
       startedAt: annotation.value.startedAt ?? fiber.id().startTimeMillis,
     };
-    const next = HashMap.set(MutableRef.get(this.runs), fiberId, {
+    const next = HashMap.set(current, fiberId, {
       runId: annotation.value.runId,
       info,
+      metricStartedAt: Date.now(),
     });
     MutableRef.set(this.runs, next);
+    agentsRunning.unsafeModify(1, []);
+    agentRunsStarted.unsafeUpdate(1, agentMetricLabels(info.agentId));
     this.publish(toSnapshot(next));
   }
 
   onEnd<A, E>(
-    _exit: Exit.Exit<A, E>,
+    exit: Exit.Exit<A, E>,
     fiber: Fiber.RuntimeFiber<A, E>
   ): void {
     const fiberId = toFiberId(fiber);
     const current = MutableRef.get(this.runs);
-    if (!HashMap.has(current, fiberId)) return;
+    const tracked = HashMap.get(current, fiberId);
+    if (Option.isNone(tracked)) return;
 
     const next = HashMap.remove(current, fiberId);
     MutableRef.set(this.runs, next);
+    const labels = [
+      ...agentMetricLabels(tracked.value.info.agentId),
+      MetricLabel.make(
+        'exit',
+        Exit.isSuccess(exit) ? 'success' : Exit.isInterrupted(exit) ? 'interrupted' : 'failure'
+      ),
+    ];
+    agentsRunning.unsafeModify(-1, []);
+    agentRunsCompleted.unsafeUpdate(1, labels);
+    agentRunDuration.unsafeUpdate(
+      Math.max(0, Date.now() - tracked.value.metricStartedAt),
+      labels
+    );
     this.publish(toSnapshot(next));
   }
 }
@@ -181,6 +225,35 @@ export const trackAgentRun =
       Option.some(seed)
     );
   };
+
+/** Keep one supervised run root alive for the lifetime of a stream scope. */
+export const trackAgentStream =
+  (annotation: AgentRunAnnotation) =>
+  <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> =>
+    Stream.unwrapScoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        yield* trackAgentRun(annotation)(
+          Deferred.succeed(started, undefined).pipe(
+            Effect.zipRight(Effect.never)
+          )
+        ).pipe(Effect.forkScoped);
+        yield* Deferred.await(started);
+        return stream;
+      })
+    );
+
+/** Apply a transition from outside the annotated run fiber (for stream taps). */
+export const transitionAgentRun = (
+  service: AgentStatusService,
+  annotation: AgentRunAnnotation,
+  state: AgentRunState
+): Effect.Effect<void> =>
+  Effect.locally(
+    service.transition(state),
+    AgentRunAnnotationRef,
+    Option.some(annotation)
+  );
 
 const makeAgentStatusLayer = Effect.gen(function* () {
   const changes = yield* Effect.acquireRelease(

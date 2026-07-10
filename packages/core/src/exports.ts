@@ -10,9 +10,9 @@ export type { ActionType, Action, Intent, IntentMatch } from './intent/intent';
 
 // ─── Agent Types ────────────────────────────────────────────────────────────
 export type {
-  AIPlatform, AgentConfig, AgentOutputRetryPolicy, AgentPrompt,
+  AIPlatform, AgentConfig, AgentInvocationMetadata, AgentOutputRetryPolicy, AgentPrompt,
   AgentPromptVariable, AgentTemplatePrompt, AgentBamlPrompt,
-  ToolRetryPolicy, RetryDiagnostics, AgentInstance, AnyAgentConfig,
+  AgentStreamOptions, ToolRetryPolicy, RetryDiagnostics, AgentInstance, AnyAgentConfig,
   AnyAgentInstance, AgentMessage, AgentResponse,
 } from './agent/agent';
 export { hasRetryDiagnostics, type ErrorWithRetryDiagnostics } from './agent/agent';

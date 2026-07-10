@@ -244,11 +244,17 @@ const CheckpointServiceLive = Layer.effect(
  * Base layers with no external dependencies
  * Wave 1: ToolRegistry, HookManager, Observability
  */
+const agentStatusLayer = AgentStatusServiceLive;
+const hookManagerLayer = HookManagerServiceLive.pipe(
+  Layer.provide(agentStatusLayer),
+  Layer.provide(ObservabilityServiceLive)
+);
+
 const baseLayer = Layer.mergeAll(
   ToolRegistryServiceLive,
-  HookManagerServiceLive,
+  hookManagerLayer,
   ObservabilityServiceLive,
-  AgentStatusServiceLive
+  agentStatusLayer
 );
 
 /**
@@ -265,7 +271,7 @@ const coreLayer = Layer.mergeAll(
  * ToolGate layer depends on ToolRegistry
  */
 const toolGateLayer = ToolGateServiceLive.pipe(
-  Layer.provide(ToolRegistryServiceLive)
+  Layer.provide(baseLayer)
 );
 
 /**
@@ -340,7 +346,7 @@ export const makeFredLayers = (
     Layer.provide(selectedAgentLayer),
     Layer.provide(ExecutorServiceLive),
     Layer.provide(GraphExecutorServiceLive),
-    Layer.provide(HookManagerServiceLive),
+    Layer.provide(hookManagerLayer),
     Layer.provide(CheckpointServiceLive),
     Layer.provide(pauseLayer)
   );

@@ -9,7 +9,11 @@ import type { PipelineResult } from './executor';
 import { isGraphWorkflowConfig, type GraphWorkflowConfig } from './graph';
 import type { GraphExecutionResult } from './graph-executor';
 import type { GraphWorkflowBuilder } from './graph-builder';
-import type { AgentMessage, AgentResponse } from '../agent/agent';
+import type {
+  AgentInvocationMetadata,
+  AgentMessage,
+  AgentResponse,
+} from '../agent/agent';
 import type { ResumeOptions, ResumeResult } from './resume';
 import type { HumanInputResumeOptions } from './pause/types';
 import type { CheckpointStatus } from './checkpoint/types';
@@ -693,10 +697,14 @@ class PipelineServiceImpl implements PipelineService {
         return {
           id,
           config: { id } as any,
-          processMessage: (message: string, history?: AgentMessage[]) => {
+          processMessage: (
+            message: string,
+            history?: AgentMessage[],
+            metadata?: AgentInvocationMetadata
+          ) => {
             return Effect.gen(function* () {
               const agent = yield* self.agentService.getAgent(id);
-              return yield* agent.processMessage(message, history);
+              return yield* agent.processMessage(message, history, metadata);
             });
           },
         } as any;

@@ -8,9 +8,11 @@ import { FetchHttpClient } from '@effect/platform';
 import type { StreamEvent } from '../stream/events';
 import type {
   AgentConfig,
+  AgentInvocationMetadata,
   AgentMessage,
   AgentPromptVariable,
   AgentResponse,
+  AgentStreamOptions,
   RetryDiagnostics,
   ToolRetryPolicy,
 } from './agent';
@@ -50,6 +52,13 @@ import { DEFAULT_ENV_ALLOWLIST, filterEnvVars } from '../template/security';
 import type { ToolGateServiceApi, ToolGateContext } from '../tool-gate/types';
 import type { FrameworkConfig } from '../config/types';
 import { createSubagentExecutionContext, withSubagentExecutionContext } from '../subagent/context';
+import {
+  type AgentRunAnnotation,
+  type AgentStatusService,
+  trackAgentRun,
+  trackAgentStream,
+  transitionAgentRun,
+} from '../observability/status';
 
 const SUBAGENT_TIMEOUT_RESERVE_MS = 2_500;
 const STRUCTURED_OBJECT_NAME_MAX_LENGTH = 64;
@@ -293,7 +302,7 @@ export interface MCPClientMetrics {
   lastDisconnectionTime?: Date;
 }
 
-type AgentRuntimeOptions = {
+type AgentRuntimeOptions = AgentInvocationMetadata & {
   policyContext?: ToolGateContext & { conversationId?: string };
 };
 
@@ -367,6 +376,7 @@ export class AgentFactory {
   private mcpClients: Map<string, MCPClientImpl> = new Map();
   private tracer?: Tracer;
   private observabilityService?: ObservabilityServiceApi;
+  private agentStatusService?: AgentStatusService;
   private defaultSystemMessage?: string;
   private metrics: MCPClientMetrics = {
     totalConnections: 0,
@@ -433,6 +443,10 @@ export class AgentFactory {
 
   setObservabilityService(observabilityService?: ObservabilityServiceApi): void {
     this.observabilityService = observabilityService;
+  }
+
+  setAgentStatusService(agentStatusService?: AgentStatusService): void {
+    this.agentStatusService = agentStatusService;
   }
 
   private logWarning(message: string, metadata?: Record<string, unknown>): Effect.Effect<void> {
@@ -577,7 +591,7 @@ export class AgentFactory {
     streamMessage?: (
       message: string,
       messages?: AgentMessage[],
-      options?: { threadId?: string }
+      options?: AgentStreamOptions
     ) => Stream.Stream<StreamEvent, unknown, any>;
   }, Error> {
     return Effect.gen(this, function* () {
@@ -745,7 +759,9 @@ export class AgentFactory {
             Effect.flatMap((pauseSignal) => {
               if (pauseSignal) {
                 // Return pause signal immediately
-                return Effect.succeed(pauseSignal);
+                return self.agentStatusService
+                  ? self.agentStatusService.transition('paused').pipe(Effect.as(pauseSignal))
+                  : Effect.succeed(pauseSignal);
               }
               // Continue with normal tool execution
               return executeToolLogic();
@@ -939,7 +955,16 @@ export class AgentFactory {
             )
           );
 
-          return Effect.zipRight(toolAnnotation, toolExecution);
+          const agentStatusService = self.agentStatusService;
+          if (!agentStatusService) {
+            return Effect.zipRight(toolAnnotation, toolExecution);
+          }
+
+          return agentStatusService.transition('running_tool').pipe(
+            Effect.zipRight(toolAnnotation),
+            Effect.zipRight(toolExecution),
+            Effect.ensuring(agentStatusService.transition('calling_model'))
+          );
         }
       };
     };
@@ -1136,6 +1161,23 @@ export class AgentFactory {
         renderTemplate: renderPromptTemplate,
       });
 
+    const makeRunAnnotation = (
+      metadata?: AgentRuntimeOptions | AgentStreamOptions
+    ): AgentRunAnnotation => {
+      const sessionId = metadata?.sessionId
+        ?? (metadata && 'threadId' in metadata ? metadata.threadId : undefined)
+        ?? (metadata && 'policyContext' in metadata
+          ? metadata.policyContext?.conversationId
+          : undefined);
+      return {
+        runId: crypto.randomUUID(),
+        agentId: config.id,
+        workflowId: metadata?.workflowId,
+        sessionId,
+        startedAt: Date.now(),
+      };
+    };
+
     const decodeProcessMessageCandidate = (
       message: string
     ): Effect.Effect<DecodedAgentInput<unknown>, AgentInputValidationError> =>
@@ -1159,6 +1201,10 @@ export class AgentFactory {
       const self = this;
 
       return Effect.gen(function* () {
+        if (self.agentStatusService) {
+          yield* self.agentStatusService.transition('calling_model');
+        }
+
         const modelSpan = self.tracer?.startSpan('model.call', {
           kind: SpanKind.CLIENT,
           attributes: {
@@ -1546,11 +1592,14 @@ export class AgentFactory {
     ): Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error> => {
       const decoded = validateInputCandidate(input);
 
-      return decoded.pipe(
+      const execution = decoded.pipe(
         Effect.flatMap(({ value, message }) =>
           executeMessage(value, message, previousMessages, runtimeOptions)
         )
       );
+      return this.agentStatusService
+        ? trackAgentRun(makeRunAnnotation(runtimeOptions))(execution)
+        : execution;
     };
 
     const processMessage = (
@@ -1560,17 +1609,20 @@ export class AgentFactory {
     ): Effect.Effect<AgentResponse<SchemaTypes.Schema.Type<OutputSchema>>, Error> => {
       const decoded = decodeProcessMessageCandidate(message);
 
-      return decoded.pipe(
+      const execution = decoded.pipe(
         Effect.flatMap(({ value, message: encodedMessage }) =>
           executeMessage(value, encodedMessage, previousMessages, runtimeOptions)
         )
       );
+      return this.agentStatusService
+        ? trackAgentRun(makeRunAnnotation(runtimeOptions))(execution)
+        : execution;
     };
 
     const streamMessage = (
       message: string,
       previousMessages: AgentMessage[] = [],
-      options?: { threadId?: string }
+      options?: AgentStreamOptions
     ): Stream.Stream<StreamEvent, unknown, any> => {
       const self = this;
       const startedAt = Date.now();
@@ -1811,7 +1863,35 @@ export class AgentFactory {
         );
       });
 
-      return Stream.unwrap(buildStream);
+      const stream = Stream.unwrap(buildStream);
+      const agentStatusService = self.agentStatusService;
+      if (!agentStatusService) {
+        return stream;
+      }
+
+      const annotation = makeRunAnnotation(options);
+      const withTransitions = Stream.unwrap(
+        transitionAgentRun(agentStatusService, annotation, 'calling_model').pipe(
+          Effect.as(
+            stream.pipe(
+              Stream.tap((event) => {
+                switch (event.type) {
+                  case 'token':
+                    return transitionAgentRun(agentStatusService, annotation, 'streaming');
+                  case 'tool-call':
+                    return transitionAgentRun(agentStatusService, annotation, 'running_tool');
+                  case 'tool-result':
+                  case 'tool-error':
+                    return transitionAgentRun(agentStatusService, annotation, 'calling_model');
+                  default:
+                    return Effect.void;
+                }
+              })
+            )
+          )
+        )
+      );
+      return trackAgentStream(annotation)(withTransitions);
     };
 
     return {
