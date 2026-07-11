@@ -209,4 +209,4 @@ For production, consider:
 
 ## Examples
 
-See the [examples directory](../../examples/) for complete tracing examples.
+See the [examples directory](https://github.com/TheFancyRobot/fred/tree/main/examples) for complete tracing examples.

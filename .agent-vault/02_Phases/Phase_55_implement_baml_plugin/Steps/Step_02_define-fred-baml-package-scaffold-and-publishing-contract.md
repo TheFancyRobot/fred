@@ -91,3 +91,6 @@ context_summary: Advance [[02_Phases/Phase_55_implement_baml_plugin/Steps/Step_0
 - 2026-06-02 - [[05_Sessions/2026-06-02-183554-define-fred-baml-package-scaffold-and-publishing-contract-fred-baml|SESSION-2026-06-02-183554 fred-baml session for Define fred-baml package scaffold and publishing contract]] - Session created.
 - 2026-06-11 - [[05_Sessions/2026-06-11-194010-define-fred-baml-package-scaffold-and-publishing-contract-fred-baml|SESSION-2026-06-11-194010 fred-baml session for Define fred-baml package scaffold and publishing contract]] - Session created.
 <!-- AGENT-END:step-session-history -->
+- [[05_Sessions/2026-06-05-201221-define-fred-baml-package-scaffold-and-publishing-contract-fred-baml|SESSION-2026-06-05-201221 fred-baml package-resolution validation]]
+- [[05_Sessions/2026-06-06-223452-define-fred-baml-package-scaffold-and-publishing-contract-fred-baml|SESSION-2026-06-06-223452 fred-baml package-resolution validation]]
+- [[05_Sessions/2026-06-08-151842-define-fred-baml-package-scaffold-and-publishing-contract-fred-baml|SESSION-2026-06-08-151842 fred-baml sibling-consumption validation]]

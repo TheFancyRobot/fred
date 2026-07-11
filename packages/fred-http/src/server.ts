@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { BunRuntime } from '@effect/platform-bun';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { Fred } from '@fancyrobot/fred';
 import { ServerApp } from './app';
 
@@ -16,25 +16,32 @@ function parseArgs(): { configPath?: string; port: number } {
   return { configPath, port };
 }
 
-function initializeFred(fred: Fred, configPath?: string): Effect.Effect<void, Error> {
+class FredServerInitializationError extends Schema.TaggedError<FredServerInitializationError>()(
+  'FredServerInitializationError',
+  { message: Schema.String, cause: Schema.optional(Schema.String) },
+) {}
+
+const initializationError = (message: string, cause: unknown) =>
+  new FredServerInitializationError({
+    message,
+    cause: cause instanceof Error ? cause.message : String(cause),
+  });
+
+function initializeFred(fred: Fred, configPath?: string): Effect.Effect<void, FredServerInitializationError> {
   if (configPath) {
     return Effect.tryPromise({
-      try: async () => {
-        await fred.initializeFromConfig(configPath);
-        console.log(`Initialized from config: ${configPath}`);
-      },
-      catch: (error) => new Error(`Failed to load config: ${error instanceof Error ? error.message : String(error)}`)
-    });
+      try: () => fred.initializeFromConfig(configPath),
+      catch: (cause) => initializationError('Failed to load config', cause),
+    }).pipe(Effect.tap(() => Effect.log(`Initialized from config: ${configPath}`)));
   }
 
   return Effect.tryPromise({
-    try: async () => {
-      await fred.registerDefaultProviders();
-      console.log('No config file provided. Using default providers.');
-      console.log('Register agents, intents, and tools programmatically or provide a config file.');
-    },
-    catch: (error) => new Error(`Failed to register providers: ${error instanceof Error ? error.message : String(error)}`)
-  });
+    try: () => fred.registerDefaultProviders(),
+    catch: (cause) => initializationError('Failed to register providers', cause),
+  }).pipe(
+    Effect.tap(() => Effect.log('No config file provided. Using default providers.')),
+    Effect.tap(() => Effect.log('Register agents, intents, and tools programmatically or provide a config file.')),
+  );
 }
 
 const program = Effect.gen(function* () {
@@ -52,9 +59,9 @@ const program = Effect.gen(function* () {
   return yield* Effect.never;
 }).pipe(
   Effect.scoped,
+  Effect.tapError((error) => Effect.logError('Failed to start server', error)),
   Effect.catchAll((error) =>
     Effect.sync(() => {
-      console.error('Failed to start server:', error);
       process.exit(1);
     })
   )
@@ -66,23 +73,23 @@ if (import.meta.main) {
 
 export { ServerApp } from './app';
 
+/**
+ * @deprecated Prefer `withHttp(await createFred()).server.listen()`.
+ * This development entrypoint remains for one release.
+ */
 export function startServer(options?: { configPath?: string; port?: number }): void {
   const serverProgram = Effect.gen(function* () {
     const fred = new Fred();
 
     if (options?.configPath) {
       yield* Effect.tryPromise({
-        try: async () => {
-          await fred.initializeFromConfig(options.configPath!);
-        },
-        catch: (error) => new Error(`Failed to load config: ${error instanceof Error ? error.message : String(error)}`)
+        try: () => fred.initializeFromConfig(options.configPath!),
+        catch: (cause) => initializationError('Failed to load config', cause),
       });
     } else {
       yield* Effect.tryPromise({
-        try: async () => {
-          await fred.registerDefaultProviders();
-        },
-        catch: (error) => new Error(`Failed to register providers: ${error instanceof Error ? error.message : String(error)}`)
+        try: () => fred.registerDefaultProviders(),
+        catch: (cause) => initializationError('Failed to register providers', cause),
       });
     }
 
@@ -95,9 +102,9 @@ export function startServer(options?: { configPath?: string; port?: number }): v
     return yield* Effect.never;
   }).pipe(
     Effect.scoped,
+    Effect.tapError((error) => Effect.logError('Failed to start server', error)),
     Effect.catchAll((error) =>
       Effect.sync(() => {
-        console.error('Failed to start server:', error);
         process.exit(1);
       })
     )

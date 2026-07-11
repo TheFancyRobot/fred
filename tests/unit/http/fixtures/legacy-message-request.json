@@ -1,0 +1,7 @@
+{
+  "message": "Route this message",
+  "options": {
+    "useSemanticMatching": true,
+    "semanticThreshold": 0.8
+  }
+}

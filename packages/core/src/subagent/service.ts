@@ -1,4 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Context, Effect, Either, Layer, Ref } from 'effect';
 import {
   SubagentAlreadyExistsError,
@@ -31,6 +34,59 @@ const DEFAULT_SUBAGENT_ENV_ALLOWLIST = [
   'LOCALAPPDATA',
   'USERPROFILE',
 ] as const;
+
+export const CAPTURE_PROCESS_SOURCE = String.raw`
+const { spawn } = require('node:child_process');
+const { open, writeFile } = require('node:fs/promises');
+const [stdoutPath, stderrPath, maxOutputArg, command, ...args] = process.argv.slice(1);
+const maxOutputBytes = Number(maxOutputArg);
+
+const capture = async (stream, path) => {
+  const file = await open(path, 'w');
+  let capturedBytes = 0;
+  try {
+    for await (const value of stream) {
+      if (capturedBytes >= maxOutputBytes) continue;
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      const captured = chunk.subarray(0, maxOutputBytes - capturedBytes);
+      await file.write(captured);
+      capturedBytes += captured.byteLength;
+    }
+  } finally {
+    await file.close();
+  }
+};
+
+const main = async () => {
+  if (!stdoutPath || !stderrPath || !command || !Number.isFinite(maxOutputBytes)) {
+    process.exit(2);
+  }
+  const child = spawn(command, args, {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdin.on('error', () => {});
+  process.stdin.pipe(child.stdin);
+  const exited = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (exitCode, signal) => resolve(exitCode ?? (signal ? 1 : 0)));
+  });
+  const [exitCode] = await Promise.all([
+    exited,
+    capture(child.stdout, stdoutPath),
+    capture(child.stderr, stderrPath),
+  ]);
+  process.exitCode = exitCode;
+};
+
+main().catch(async (cause) => {
+  if (stderrPath) {
+    await writeFile(stderrPath, cause instanceof Error ? cause.stack ?? cause.message : String(cause));
+  }
+  process.exitCode = 1;
+});
+`;
 
 export type SubagentStatus = 'idle' | 'running' | 'failed' | 'destroyed';
 
@@ -98,7 +154,7 @@ export interface ExecuteSubagentResult {
 interface InternalSubagentRecord extends SubagentInfo {
   readonly env?: Record<string, string>;
   readonly destroyConfig?: SpawnSubagentOptions['destroy'];
-  readonly currentProcess?: ChildProcessWithoutNullStreams;
+  readonly currentProcess?: ChildProcess;
   readonly currentProcessController?: ManagedProcessController;
 }
 
@@ -114,6 +170,17 @@ interface ManagedProcessController {
     readonly signal?: NodeJS.Signals | number;
     readonly graceMs?: number;
   }) => Promise<void>;
+}
+
+interface ProcessOutputCollector {
+  readonly stdout: () => string;
+  readonly stderr: () => string;
+  readonly dispose: () => void;
+}
+
+interface SpawnedChild {
+  readonly child: ChildProcess;
+  readonly output: ProcessOutputCollector;
 }
 
 export interface SubagentService {
@@ -236,7 +303,8 @@ class SubagentServiceImpl implements SubagentService {
         },
       }));
 
-      const child = yield* self.spawnChild(record, commandArgs, options.stdin);
+      const spawned = yield* self.spawnChild(record, commandArgs, options.stdin, maxOutputChars);
+      const { child, output } = spawned;
       const controller = createManagedProcessController(child);
       const executionContext = getCurrentSubagentExecutionContext();
 
@@ -266,10 +334,13 @@ class SubagentServiceImpl implements SubagentService {
             subagentId: id,
             command,
             timeoutMs,
-            maxOutputChars,
             terminationGraceMs,
+            output,
           }),
-          () => Effect.promise(() => controller.terminate({ graceMs: terminationGraceMs })),
+          () => Effect.promise(async () => {
+            await controller.terminate({ graceMs: terminationGraceMs });
+            output.dispose();
+          }),
         ),
       );
       const result: ExecutionResult = Either.isLeft(resultEither)
@@ -322,7 +393,13 @@ class SubagentServiceImpl implements SubagentService {
       const cleanupArgs = record.destroyConfig?.cleanupArgs ?? [];
       if (cleanupArgs.length > 0) {
         const cleanupCommandArgs = [...record.args, ...cleanupArgs];
-        const cleanupChild = yield* self.spawnChild(record, cleanupCommandArgs, undefined);
+        const cleanupSpawned = yield* self.spawnChild(
+          record,
+          cleanupCommandArgs,
+          undefined,
+          DEFAULT_OUTPUT_PREVIEW_CHARS,
+        );
+        const cleanupChild = cleanupSpawned.child;
         const cleanupController = createManagedProcessController(cleanupChild);
         const cleanupCommand = formatCommand(record.command, cleanupCommandArgs);
         const cleanupResult = yield* Effect.either(
@@ -334,10 +411,13 @@ class SubagentServiceImpl implements SubagentService {
               subagentId: id,
               command: cleanupCommand,
               timeoutMs: record.destroyConfig?.cleanupTimeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
-              maxOutputChars: DEFAULT_OUTPUT_PREVIEW_CHARS,
               terminationGraceMs: DEFAULT_TERMINATION_GRACE_MS,
+              output: cleanupSpawned.output,
             }),
-            () => Effect.promise(() => cleanupController.terminate({ graceMs: DEFAULT_TERMINATION_GRACE_MS })),
+            () => Effect.promise(async () => {
+              await cleanupController.terminate({ graceMs: DEFAULT_TERMINATION_GRACE_MS });
+              cleanupSpawned.output.dispose();
+            }),
           ),
         );
 
@@ -398,21 +478,39 @@ class SubagentServiceImpl implements SubagentService {
     record: InternalSubagentRecord,
     args: readonly string[],
     stdin?: string,
-  ): Effect.Effect<ChildProcessWithoutNullStreams, SubagentExecutionError> {
+    maxOutputChars: number = DEFAULT_OUTPUT_PREVIEW_CHARS,
+  ): Effect.Effect<SpawnedChild, SubagentExecutionError> {
     return Effect.try({
       try: () => {
-        const child = spawn(record.command, [...args], {
-          cwd: record.cwd,
-          env: buildSubagentEnv(record.env),
-          stdio: ['pipe', 'pipe', 'pipe'],
-          detached: process.platform !== 'win32',
-        });
+        const captureDir = mkdtempSync(join(tmpdir(), 'fred-subagent-output-'));
+        const stdoutPath = join(captureDir, 'stdout.txt');
+        const stderrPath = join(captureDir, 'stderr.txt');
+        let child: ChildProcess;
 
-        if (stdin !== undefined) {
-          child.stdin.write(stdin);
+        try {
+          child = spawn(process.execPath, [
+            '-e',
+            CAPTURE_PROCESS_SOURCE,
+            stdoutPath,
+            stderrPath,
+            String(maxOutputChars),
+            record.command,
+            ...args,
+          ], {
+            cwd: record.cwd,
+            env: buildSubagentEnv(record.env),
+            stdio: ['pipe', 'ignore', 'ignore'],
+            detached: process.platform !== 'win32',
+          });
+        } catch (cause) {
+          rmSync(captureDir, { recursive: true, force: true });
+          throw cause;
         }
-        child.stdin.end();
-        return child;
+
+        const output = createFileOutputCollector(captureDir, stdoutPath, stderrPath, maxOutputChars);
+        if (stdin !== undefined) child.stdin?.write(stdin);
+        child.stdin?.end();
+        return { child, output };
       },
       catch: (cause) => new SubagentExecutionError({
         subagentId: record.id,
@@ -527,7 +625,7 @@ function resolveExecutionTimeout(options: ExecuteSubagentOptions): number {
 }
 
 function createManagedProcessController(
-  child: ChildProcessWithoutNullStreams,
+  child: ChildProcess,
 ): ManagedProcessController {
   let closed = false;
   let terminatePromise: Promise<void> | undefined;
@@ -586,20 +684,39 @@ function createManagedProcessController(
 }
 
 function signalProcess(
-  child: ChildProcessWithoutNullStreams,
+  child: ChildProcess,
   signal: NodeJS.Signals | number,
 ): void {
   if (!child.pid) {
     return;
   }
 
-  if (process.platform !== 'win32') {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall through to direct child kill.
-    }
+  if (process.platform === 'win32') {
+    const force = signal === 'SIGKILL' || signal === 9;
+    const taskkill = spawn('taskkill.exe', [
+      '/PID',
+      String(child.pid),
+      '/T',
+      ...(force ? ['/F'] : []),
+    ], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    taskkill.once('error', () => {
+      try {
+        child.kill(signal);
+      } catch {
+        // Best effort; process may have already exited.
+      }
+    });
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, signal);
+    return;
+  } catch {
+    // Fall through to direct child kill.
   }
 
   try {
@@ -609,20 +726,45 @@ function signalProcess(
   }
 }
 
+function createFileOutputCollector(
+  captureDir: string,
+  stdoutPath: string,
+  stderrPath: string,
+  maxOutputChars: number,
+): ProcessOutputCollector {
+  let disposed = false;
+
+  return {
+    stdout: () => readCapturedOutput(stdoutPath, maxOutputChars),
+    stderr: () => readCapturedOutput(stderrPath, maxOutputChars),
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      rmSync(captureDir, { recursive: true, force: true });
+    },
+  };
+}
+
+function readCapturedOutput(path: string, maxOutputChars: number): string {
+  try {
+    return readFileSync(path, 'utf8').slice(0, maxOutputChars);
+  } catch {
+    return '';
+  }
+}
+
 function waitForProcess(options: {
-  readonly child: ChildProcessWithoutNullStreams;
+  readonly child: ChildProcess;
   readonly controller: ManagedProcessController;
   readonly subagentId: string;
   readonly command: string;
   readonly timeoutMs: number;
-  readonly maxOutputChars: number;
   readonly terminationGraceMs: number;
+  readonly output: ProcessOutputCollector;
 }): Effect.Effect<WaitForProcessSuccess, SubagentExecutionError | SubagentTimeoutError> {
-  const { child, controller, subagentId, command, timeoutMs, maxOutputChars, terminationGraceMs } = options;
+  const { child, controller, subagentId, command, timeoutMs, terminationGraceMs, output } = options;
 
   return Effect.async<WaitForProcessSuccess, SubagentExecutionError | SubagentTimeoutError>((resume) => {
-    let stdout = '';
-    let stderr = '';
     let settled = false;
     let timedOut = false;
 
@@ -641,25 +783,17 @@ function waitForProcess(options: {
       subagentId,
       command,
       timeoutMs,
-      stdoutPreview: trimPreview(stdout),
-      stderrPreview: trimPreview(stderr),
+      stdoutPreview: trimPreview(output.stdout()),
+      stderrPreview: trimPreview(output.stderr()),
     });
-
-    const onStdout = (chunk: string | Buffer) => {
-      stdout = appendOutput(stdout, chunk.toString(), maxOutputChars);
-    };
-
-    const onStderr = (chunk: string | Buffer) => {
-      stderr = appendOutput(stderr, chunk.toString(), maxOutputChars);
-    };
 
     const onError = (cause: Error) => {
       finish(Effect.fail(new SubagentExecutionError({
         subagentId,
         command,
         message: cause.message,
-        stdoutPreview: trimPreview(stdout),
-        stderrPreview: trimPreview(stderr),
+        stdoutPreview: trimPreview(output.stdout()),
+        stderrPreview: trimPreview(output.stderr()),
         cause,
       })));
     };
@@ -673,8 +807,8 @@ function waitForProcess(options: {
       if (exitCode === 0) {
         finish(Effect.succeed({
           pid: child.pid,
-          stdout,
-          stderr,
+          stdout: output.stdout(),
+          stderr: output.stderr(),
           exitCode,
           signal,
         }));
@@ -687,8 +821,8 @@ function waitForProcess(options: {
         message: `Subagent process exited with code ${exitCode ?? 'null'}${signal ? ` (${signal})` : ''}`,
         exitCode,
         signal,
-        stdoutPreview: trimPreview(stdout),
-        stderrPreview: trimPreview(stderr),
+        stdoutPreview: trimPreview(output.stdout()),
+        stderrPreview: trimPreview(output.stderr()),
       })));
     };
 
@@ -704,8 +838,8 @@ function waitForProcess(options: {
             subagentId,
             command,
             message: cause instanceof Error ? cause.message : String(cause),
-            stdoutPreview: trimPreview(stdout),
-            stderrPreview: trimPreview(stderr),
+            stdoutPreview: trimPreview(output.stdout()),
+            stderrPreview: trimPreview(output.stderr()),
             cause,
           })));
         });
@@ -713,14 +847,11 @@ function waitForProcess(options: {
 
     const cleanup = () => {
       clearTimeout(timeoutId);
-      child.stdout.off('data', onStdout);
-      child.stderr.off('data', onStderr);
+      output.dispose();
       child.off('error', onError);
       child.off('close', onClose);
     };
 
-    child.stdout.on('data', onStdout);
-    child.stderr.on('data', onStderr);
     child.once('error', onError);
     child.once('close', onClose);
   });
@@ -752,15 +883,6 @@ function toPublicRecord(record: InternalSubagentRecord): SubagentInfo {
         }
       : undefined,
   };
-}
-
-function appendOutput(current: string, chunk: string, maxOutputChars: number): string {
-  if (current.length >= maxOutputChars) {
-    return current;
-  }
-
-  const remaining = maxOutputChars - current.length;
-  return current + chunk.slice(0, remaining);
 }
 
 function trimPreview(text: string | undefined): string | undefined {

@@ -87,6 +87,7 @@ export {
   MessageProcessorService,
   MessageProcessorServiceLive,
 } from '../message-processor/service';
+export type { MessageProcessorError } from '../message-processor/service';
 
 export {
   SubagentService,

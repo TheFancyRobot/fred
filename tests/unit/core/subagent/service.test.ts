@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { Fred } from '../../../../packages/core/src/index';
 import { FredLayers, SubagentService } from '../../../../packages/core/src/services';
+import { CAPTURE_PROCESS_SOURCE } from '../../../../packages/core/src/subagent/service';
 import { createSubagentExecutionContext, withSubagentExecutionContext } from '../../../../packages/core/src/subagent/context';
 
 function isProcessRunning(pid: number): boolean {
@@ -17,6 +19,33 @@ function isProcessRunning(pid: number): boolean {
 }
 
 describe('SubagentService', () => {
+  test('capture wrapper runs under Node without Bun globals', async () => {
+    const node = Bun.which('node');
+    if (!node) throw new Error('Node is required for the cross-runtime capture test');
+    const tempDir = await mkdtemp(join(tmpdir(), 'fred-subagent-node-capture-'));
+    const stdoutPath = join(tempDir, 'stdout.txt');
+    const stderrPath = join(tempDir, 'stderr.txt');
+
+    try {
+      const result = spawnSync(node, [
+        '-e',
+        CAPTURE_PROCESS_SOURCE,
+        stdoutPath,
+        stderrPath,
+        '4000',
+        node,
+        '-e',
+        'process.stdout.write("node-capture"); process.stderr.write("node-error");',
+      ], { encoding: 'utf8' });
+
+      expect(result.status).toBe(0);
+      expect(await readFile(stdoutPath, 'utf8')).toBe('node-capture');
+      expect(await readFile(stderrPath, 'utf8')).toBe('node-error');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test('FredLayers provides SubagentService', async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

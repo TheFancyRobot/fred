@@ -17,6 +17,7 @@ const EXPECTED_EXAMPLES = [
   '11-mcp-integration',
   '12-cli-and-tui',
   '13-multi-agent-workflows',
+  '14-http-layer',
 ] as const;
 
 const examplesDir = path.resolve(__dirname, '../../../examples');

@@ -1,0 +1,1561 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Fred OpenAPI surface keeps the complete generated document deterministic 1`] = `
+{
+  "components": {
+    "schemas": {
+      "AgentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string",
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/JsonValue",
+          },
+          "output": {
+            "$ref": "#/components/schemas/JsonValue",
+          },
+          "routingExplanation": {
+            "$ref": "#/components/schemas/JsonValue",
+          },
+          "toolCalls": {
+            "items": {
+              "$ref": "#/components/schemas/JsonValue",
+            },
+            "type": "array",
+          },
+          "usage": {
+            "additionalProperties": false,
+            "properties": {
+              "inputTokens": {
+                "$ref": "#/components/schemas/NonNegativeInt",
+              },
+              "outputTokens": {
+                "$ref": "#/components/schemas/NonNegativeInt",
+              },
+              "totalTokens": {
+                "$ref": "#/components/schemas/NonNegativeInt",
+              },
+            },
+            "required": [],
+            "type": "object",
+          },
+        },
+        "required": [
+          "content",
+        ],
+        "type": "object",
+      },
+      "AgentRunInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string",
+          },
+          "fiberId": {
+            "type": "string",
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/SessionId",
+          },
+          "startedAt": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "calling_model",
+              "streaming",
+              "running_tool",
+              "paused",
+            ],
+            "type": "string",
+          },
+          "workflowId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "fiberId",
+          "agentId",
+          "state",
+          "startedAt",
+        ],
+        "type": "object",
+      },
+      "AgentStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRunInfo",
+            },
+            "type": "array",
+          },
+          "success": {
+            "enum": [
+              true,
+            ],
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "success",
+          "data",
+          "count",
+        ],
+        "type": "object",
+      },
+      "ChatCompletionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "deprecated": true,
+            "description": "Deprecated; prefer X-Session-Id.",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "maxLength(256)",
+            "type": "string",
+          },
+          "max_tokens": {
+            "$ref": "#/components/schemas/Int",
+            "description": "a number between 1 and 1000000",
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "between(1, 1000000)",
+          },
+          "messages": {
+            "description": "an array of at most 1000 item(s)",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage",
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "maxItems(1000)",
+            "type": "array",
+          },
+          "model": {
+            "description": "a string at most 256 character(s) long",
+            "maxLength": 256,
+            "title": "maxLength(256)",
+            "type": "string",
+          },
+          "stream": {
+            "type": "boolean",
+          },
+          "temperature": {
+            "description": "a number between 0 and 2",
+            "maximum": 2,
+            "minimum": 0,
+            "title": "between(0, 2)",
+            "type": "number",
+          },
+        },
+        "required": [
+          "messages",
+        ],
+        "type": "object",
+      },
+      "ChatCompletionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                      ],
+                      "type": "string",
+                    },
+                    {
+                      "type": "null",
+                    },
+                  ],
+                },
+                "index": {
+                  "$ref": "#/components/schemas/NonNegativeInt",
+                },
+                "message": {
+                  "$ref": "#/components/schemas/ChatMessage",
+                },
+              },
+              "required": [
+                "index",
+                "message",
+                "finish_reason",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "created": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "id": {
+            "type": "string",
+          },
+          "model": {
+            "type": "string",
+          },
+          "object": {
+            "enum": [
+              "chat.completion",
+            ],
+            "type": "string",
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ChatCompletionUsage",
+          },
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices",
+        ],
+        "type": "object",
+      },
+      "ChatCompletionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "completion_tokens": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "prompt_tokens": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "total_tokens": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+        ],
+        "type": "object",
+      },
+      "ChatMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "description": "a string at most 1000000 character(s) long",
+                "maxLength": 1000000,
+                "title": "maxLength(1000000)",
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "name": {
+            "description": "a string at most 256 character(s) long",
+            "maxLength": 256,
+            "title": "maxLength(256)",
+            "type": "string",
+          },
+          "role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool",
+            ],
+            "type": "string",
+          },
+          "tool_call_id": {
+            "description": "a string at most 256 character(s) long",
+            "maxLength": 256,
+            "title": "maxLength(256)",
+            "type": "string",
+          },
+          "tool_calls": {
+            "description": "an array of at most 1000 item(s)",
+            "items": {
+              "$ref": "#/components/schemas/ToolCall",
+            },
+            "maxItems": 1000,
+            "title": "maxItems(1000)",
+            "type": "array",
+          },
+        },
+        "required": [
+          "role",
+          "content",
+        ],
+        "type": "object",
+      },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+            ],
+            "type": "string",
+          },
+          "timestamp": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "status",
+          "timestamp",
+        ],
+        "type": "object",
+      },
+      "HttpApiDecodeError": {
+        "additionalProperties": false,
+        "description": "The request did not match the expected schema",
+        "properties": {
+          "_tag": {
+            "enum": [
+              "HttpApiDecodeError",
+            ],
+            "type": "string",
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue",
+            },
+            "type": "array",
+          },
+          "message": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "issues",
+          "message",
+          "_tag",
+        ],
+        "type": "object",
+      },
+      "Int": {
+        "description": "an integer",
+        "title": "int",
+        "type": "integer",
+      },
+      "Issue": {
+        "additionalProperties": false,
+        "description": "Represents an error encountered while parsing a value to match the schema",
+        "properties": {
+          "_tag": {
+            "description": "The tag identifying the type of parse issue",
+            "enum": [
+              "Pointer",
+              "Unexpected",
+              "Missing",
+              "Composite",
+              "Refinement",
+              "Transformation",
+              "Type",
+              "Forbidden",
+            ],
+            "type": "string",
+          },
+          "message": {
+            "description": "A descriptive message explaining the issue",
+            "type": "string",
+          },
+          "path": {
+            "description": "The path to the property where the issue occurred",
+            "items": {
+              "$ref": "#/components/schemas/PropertyKey",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "_tag",
+          "path",
+          "message",
+        ],
+        "type": "object",
+      },
+      "JsonValue": {
+        "anyOf": [
+          {
+            "type": "null",
+          },
+          {
+            "type": "boolean",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "string",
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/JsonValue",
+            },
+            "type": "array",
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue",
+            },
+            "properties": {},
+            "required": [],
+            "type": "object",
+          },
+        ],
+      },
+      "ListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "$ref": "#/components/schemas/NonNegativeInt",
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/JsonValue",
+            },
+            "type": "array",
+          },
+          "success": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "success",
+          "data",
+          "count",
+        ],
+        "type": "object",
+      },
+      "MessageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "description": "a string at most 1000000 character(s) long",
+            "maxLength": 1000000,
+            "minLength": 1,
+            "title": "maxLength(1000000)",
+            "type": "string",
+          },
+          "options": {
+            "additionalProperties": false,
+            "properties": {
+              "semanticThreshold": {
+                "description": "a number between 0 and 1",
+                "maximum": 1,
+                "minimum": 0,
+                "title": "between(0, 1)",
+                "type": "number",
+              },
+              "useSemanticMatching": {
+                "type": "boolean",
+              },
+            },
+            "required": [],
+            "type": "object",
+          },
+        },
+        "required": [
+          "message",
+        ],
+        "type": "object",
+      },
+      "MessageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AgentResponse",
+          },
+          "error": {
+            "type": "string",
+          },
+          "success": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "success",
+        ],
+        "type": "object",
+      },
+      "NonNegativeInt": {
+        "description": "an integer",
+        "minimum": 0,
+        "title": "int",
+        "type": "integer",
+      },
+      "PropertyKey": {
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "additionalProperties": false,
+            "description": "an object to be decoded into a globally shared symbol",
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "symbol",
+                ],
+                "type": "string",
+              },
+              "key": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "_tag",
+              "key",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "SessionId": {
+        "description": "Printable ASCII session identifier. Control characters are rejected.",
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[\\x20-\\x7e]+$",
+        "title": "maxLength(256)",
+        "type": "string",
+      },
+      "SimpleChatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "deprecated": true,
+            "description": "Deprecated; prefer X-Session-Id.",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "maxLength(256)",
+            "type": "string",
+          },
+          "message": {
+            "description": "a string at most 1000000 character(s) long",
+            "maxLength": 1000000,
+            "minLength": 1,
+            "title": "maxLength(1000000)",
+            "type": "string",
+          },
+          "messages": {
+            "description": "an array of at most 1000 item(s)",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage",
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "maxItems(1000)",
+            "type": "array",
+          },
+          "stream": {
+            "type": "boolean",
+          },
+        },
+        "required": [],
+        "type": "object",
+      },
+      "ToolCall": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+          },
+          "tool_call": {
+            "additionalProperties": false,
+            "properties": {
+              "arguments": {
+                "description": "a string at most 100000 character(s) long",
+                "maxLength": 100000,
+                "title": "maxLength(100000)",
+                "type": "string",
+              },
+              "name": {
+                "description": "a string at most 256 character(s) long",
+                "maxLength": 256,
+                "title": "maxLength(256)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+              "arguments",
+            ],
+            "type": "object",
+          },
+          "type": {
+            "enum": [
+              "tool_call",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "type",
+          "tool_call",
+        ],
+        "type": "object",
+      },
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "scheme": "bearer",
+        "type": "http",
+      },
+    },
+  },
+  "info": {
+    "description": "HTTP contracts for Fred agents, status, and chat.",
+    "title": "Fred HTTP API",
+    "version": "1.0.0-alpha.0",
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/agents": {
+      "get": {
+        "operationId": "admin.agents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse",
+                },
+              },
+            },
+            "description": "ListResponse",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpApiDecodeError",
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "admin",
+        ],
+      },
+    },
+    "/chat": {
+      "post": {
+        "operationId": "message.chat",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-session-id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SessionId",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleChatRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse",
+                },
+              },
+            },
+            "description": "ChatCompletionResponse",
+            "headers": {
+              "X-Session-Id": {
+                "description": "The session used for this request.",
+                "schema": {
+                  "maxLength": 256,
+                  "type": "string",
+                },
+              },
+            },
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HttpApiDecodeError",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                        },
+                        "success": {
+                          "enum": [
+                            false,
+                          ],
+                          "type": "boolean",
+                        },
+                      },
+                      "required": [
+                        "success",
+                        "error",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "message",
+        ],
+      },
+    },
+    "/health": {
+      "get": {
+        "operationId": "admin.health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse",
+                },
+              },
+            },
+            "description": "HealthResponse",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpApiDecodeError",
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "admin",
+        ],
+      },
+    },
+    "/intents": {
+      "get": {
+        "operationId": "admin.intents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse",
+                },
+              },
+            },
+            "description": "ListResponse",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpApiDecodeError",
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "admin",
+        ],
+      },
+    },
+    "/message": {
+      "post": {
+        "operationId": "message.message",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-session-id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SessionId",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse",
+                },
+              },
+            },
+            "description": "MessageResponse",
+            "headers": {
+              "X-Session-Id": {
+                "description": "The session used for this request.",
+                "schema": {
+                  "maxLength": 256,
+                  "type": "string",
+                },
+              },
+            },
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HttpApiDecodeError",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                        },
+                        "success": {
+                          "enum": [
+                            false,
+                          ],
+                          "type": "boolean",
+                        },
+                      },
+                      "required": [
+                        "success",
+                        "error",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "success": {
+                      "enum": [
+                        false,
+                      ],
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "success",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "message",
+        ],
+      },
+    },
+    "/status": {
+      "get": {
+        "operationId": "admin.status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusResponse",
+                },
+              },
+            },
+            "description": "AgentStatusResponse",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpApiDecodeError",
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "admin",
+        ],
+      },
+    },
+    "/tools": {
+      "get": {
+        "operationId": "admin.tools",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse",
+                },
+              },
+            },
+            "description": "ListResponse",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpApiDecodeError",
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "admin",
+        ],
+      },
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "operationId": "openai.chatCompletions",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-session-id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SessionId",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse",
+                },
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "OpenAI-compatible server-sent events when stream=true.",
+                  "type": "string",
+                },
+              },
+            },
+            "description": "ChatCompletionResponse",
+            "headers": {
+              "X-Session-Id": {
+                "description": "The session used for this request.",
+                "schema": {
+                  "maxLength": 256,
+                  "type": "string",
+                },
+              },
+            },
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HttpApiDecodeError",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                            },
+                            "message": {
+                              "type": "string",
+                            },
+                            "type": {
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "message",
+                            "type",
+                          ],
+                          "type": "object",
+                        },
+                      },
+                      "required": [
+                        "error",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+            },
+            "description": "The request did not match the expected schema",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                        "type": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "message",
+                        "type",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                        "type": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "message",
+                        "type",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                        "type": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "message",
+                        "type",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                        "type": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "message",
+                        "type",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                        "type": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "message",
+                        "type",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Error",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "tags": [
+          "openai",
+        ],
+      },
+    },
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "admin",
+    },
+    {
+      "name": "openai",
+    },
+    {
+      "name": "message",
+    },
+  ],
+}
+`;

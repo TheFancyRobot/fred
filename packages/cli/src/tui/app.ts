@@ -2097,7 +2097,9 @@ export class FredTuiApp {
 
     // Streaming incremental update: update existing CodeRenderable in place
     if (
-      this.activeStreamingMdId
+      !forceTranscriptRefresh
+      && transcriptFingerprint === this.lastTranscriptFingerprint
+      && this.activeStreamingMdId
       && this.state.streaming.isStreaming
       && messages.length === this.lastRenderedMessageCount
       && messages.length > 0

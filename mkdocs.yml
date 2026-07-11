@@ -7,6 +7,12 @@ repo_name: fred
 repo_url: https://github.com/TheFancyRobot/fred
 edit_uri: edit/main/docs/
 
+exclude_docs: |
+  README.md
+  idea_refinement/**
+  plans/**
+  superpowers/**
+
 theme:
   name: material
   palette:
@@ -65,6 +71,8 @@ nav:
     - guides/default-agent.md
     - guides/context-management.md
     - guides/hooks.md
+    - guides/evaluation.md
+    - guides/observability.md
     - guides/chat-api.md
     - guides/dev-chat.md
     - guides/cli.md
@@ -84,10 +92,16 @@ nav:
   - Advanced:
     - advanced/custom-providers.md
     - advanced/custom-tools.md
+    - advanced/observability.md
+    - advanced/flox-integration.md
     - advanced/deployment.md
+  - Migration:
+    - migration/v0.2.5.md
 
 plugins:
   - search
   - git-revision-date-localized:
       enable_creation_date: true
-
+      exclude:
+        - idea_refinement/**
+        - plans/**

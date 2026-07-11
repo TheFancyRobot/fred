@@ -30,21 +30,6 @@ export interface OpenAIChatChunk {
     };
     finish_reason: string | null;
   }>;
-}
-
-export interface OpenAIChatFinal {
-  id: string;
-  object: 'chat.completion';
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: {
-      role: 'assistant';
-      content: string;
-    };
-    finish_reason: string;
-  }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -52,7 +37,7 @@ export interface OpenAIChatFinal {
   };
 }
 
-type OpenAIChunk = OpenAIChatChunk | OpenAIChatFinal;
+type OpenAIChunk = OpenAIChatChunk;
 
 const encodeToolArguments = (input: Record<string, unknown>): string => {
   try {
@@ -74,16 +59,15 @@ const mapUsage = (usage?: { inputTokens?: number; outputTokens?: number; totalTo
   };
 };
 
-export const toOpenAIStream = (
-  events: Stream.Stream<StreamEvent>,
+export const toOpenAIStream = <E extends Error, R>(
+  events: Stream.Stream<StreamEvent, E, R>,
   options: OpenAIStreamOptions
-): Stream.Stream<OpenAIChunk, Error> => {
+): Stream.Stream<OpenAIChunk, E | Error, R> => {
   const now = options.now ?? (() => Date.now());
   const created = Math.floor(now() / 1000);
   let chunkId = '';
   let finishReason = 'stop';
-  let finalContent = '';
-  let usage: OpenAIChatFinal['usage'];
+  let usage: OpenAIChatChunk['usage'];
 
   const withTimeout = options.timeoutMs
     ? events.pipe(Stream.timeoutFail(() => new Error('Stream timeout'), options.timeoutMs))
@@ -133,7 +117,6 @@ export const toOpenAIStream = (
             ],
           });
         case 'token':
-          finalContent = event.accumulated;
           if (!event.delta) {
             return Stream.empty;
           }
@@ -185,16 +168,13 @@ export const toOpenAIStream = (
         case 'run-end':
           return Stream.succeed<OpenAIChunk>({
             id: chunkId || `chatcmpl-${event.runId}`,
-            object: 'chat.completion',
+            object: 'chat.completion.chunk',
             created,
             model: options.model,
             choices: [
               {
                 index: 0,
-                message: {
-                  role: 'assistant',
-                  content: event.result.content ?? finalContent,
-                },
+                delta: {},
                 finish_reason: finishReason,
               },
             ],

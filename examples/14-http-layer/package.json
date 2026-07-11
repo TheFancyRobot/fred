@@ -1,0 +1,16 @@
+{
+  "name": "@fancyrobot/fred-example-14-http-layer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "client": "bun run src/client.ts",
+    "smoke": "bun run src/smoke.ts"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-http": "workspace:*",
+    "@fancyrobot/fred-openrouter": "workspace:*",
+    "openai": "^6.46.0"
+  }
+}

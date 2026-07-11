@@ -19,6 +19,31 @@ export const DEFAULT_SECURITY_CONFIG: ServerSecurityConfig = {
   rateLimitWindowMs: 60_000,
 };
 
+export interface ResolvedServerSecurityConfig {
+  readonly config: ServerSecurityConfig;
+  readonly generatedAuthToken?: string;
+}
+
+export function resolveServerSecurityConfig(
+  overrides: Partial<ServerSecurityConfig> = {},
+  environmentToken: string | undefined = process.env.FRED_DEV_SERVER_TOKEN,
+): ResolvedServerSecurityConfig {
+  const config: ServerSecurityConfig = { ...DEFAULT_SECURITY_CONFIG, ...overrides };
+  const authToken = config.authToken ?? environmentToken;
+
+  if (!config.requireAuth || authToken !== undefined) {
+    return {
+      config: authToken === undefined ? config : { ...config, authToken },
+    };
+  }
+
+  const generatedAuthToken = crypto.randomUUID();
+  return {
+    config: { ...config, authToken: generatedAuthToken },
+    generatedAuthToken,
+  };
+}
+
 export function isLocalRequest(ip: string): boolean {
   return ip === '127.0.0.1' || ip === '::1';
 }
