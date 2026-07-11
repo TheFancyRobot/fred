@@ -178,6 +178,37 @@ describe('withHttp', () => {
     expect(JSON.stringify(spec.paths['/workflows/streamed']?.post?.responses)).toContain('text/event-stream');
   });
 
+  test('emits paused as the terminal SSE event for a paused workflow', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'paused-streamed',
+      entry: 'approval',
+      nodes: [{
+        id: 'approval',
+        kind: 'function',
+        fn: () => ({ pause: true, prompt: 'Approve?' }),
+      }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: { requireAuth: false },
+      workflowEndpoints: { 'paused-streamed': { stream: true, auth: false } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const response = await fetch(`${handle.url}/workflows/paused-streamed`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify('input'),
+    });
+    const body = await response.text();
+
+    expect(body).toContain('"event":"paused"');
+    expect(body).toContain('"status":"paused"');
+    expect(body).not.toContain('"event":"completed"');
+  });
+
   test('releases an SSE request when the consumer disconnects mid-workflow', async () => {
     const core = await createFred();
     await core.workflows.define(defineWorkflow({

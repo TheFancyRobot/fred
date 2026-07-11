@@ -50,6 +50,9 @@
   "peerDependencies": {
     "effect": "^3.21.0"
   },
+  "optionalDependencies": {
+    "pg": "^8.22.0"
+  },
   "devDependencies": {
     "effect": "^3.21.0",
     "@types/bun": "latest"

@@ -306,7 +306,11 @@ const sseResponse = (fred: FredClient, endpoint: ResolvedWorkflowEndpoint, input
           sseEvent('node-completed', { workflowId: endpoint.descriptor.id, index }),
         );
         const envelope = workflowExecutionEnvelope(endpoint.descriptor.id, result);
-        const terminal = envelope.status === 'failed' ? 'failed' : 'completed';
+        const terminal = envelope.status === 'failed'
+          ? 'failed'
+          : envelope.status === 'paused'
+            ? 'paused'
+            : 'completed';
         return Stream.fromIterable([...nodeEvents, sseEvent(terminal, envelope)]);
       }),
       Effect.catchTags({
