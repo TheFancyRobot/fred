@@ -40,7 +40,7 @@ async function main() {
     id: 'native-sequential-preflight',
     entry: 'normalize',
     nodes: [
-      { id: 'normalize', kind: 'function', fn: (ctx) => ctx.input.trim() },
+      { id: 'normalize', kind: 'function', fn: (ctx) => String(ctx.input).trim() },
       { id: 'label', kind: 'function', fn: (ctx) => `ready:${ctx.outputs.normalize}` },
     ],
     edges: [{ from: 'normalize', to: 'label' }],
