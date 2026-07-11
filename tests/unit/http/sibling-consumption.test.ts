@@ -46,6 +46,7 @@ import { createFredHttpApp } from '@fancyrobot/fred-http';
 const fred = new Fred();
 const app = createFredHttpApp({
   fred,
+  getClientIp: () => '203.0.113.10',
   security: { requireAuth: false },
   routes: [
     {

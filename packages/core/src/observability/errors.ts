@@ -139,13 +139,98 @@ export interface RedactionContext {
   errorClass?: ErrorClass;
 }
 
+export interface SecretRedactionOptions {
+  readonly headers?: readonly string[];
+  readonly paths?: readonly string[];
+  readonly replacement?: string;
+}
+
+const DEFAULT_SECRET_HEADERS = [
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+] as const;
+
+const DEFAULT_SECRET_PATHS = [
+  'apiKey',
+  'authToken',
+  'token',
+  'secret',
+  'password',
+  'headers.authorization',
+  'headers.cookie',
+] as const;
+
+const normalizeFieldName = (value: string): string => value.toLowerCase().replace(/[-_]/g, '');
+
+const redactSecretText = (value: string, replacement: string): string => value
+  .replace(/\bBearer\s+[^\s,;]+/gi, `Bearer ${replacement}`)
+  .replace(/\bfred_[A-Za-z0-9_-]{8,64}\.[A-Za-z0-9_-]{32,}\b/g, replacement)
+  .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, replacement)
+  .replace(/\b((?:OPENAI|ANTHROPIC|GOOGLE|GROQ|MISTRAL|DEEPSEEK)_API_KEY\s*[=:]\s*)[^\s,;]+/gi, `$1${replacement}`);
+
+const pathMatches = (candidate: readonly string[], configured: readonly string[]): boolean => {
+  const segments = configured.map((path) => path.split('.'));
+  return segments.some((path) => path.length === candidate.length
+    && path.every((segment, index) => segment === '*' || segment === candidate[index]));
+};
+
+/**
+ * Returns a non-mutating copy with secret-shaped fields, configured dot paths,
+ * arrays, Error values, and known token formats redacted.
+ */
+export function redactSecrets(
+  payload: unknown,
+  options: SecretRedactionOptions = {},
+): unknown {
+  const replacement = options.replacement ?? '[REDACTED]';
+  const headers = new Set([...DEFAULT_SECRET_HEADERS, ...(options.headers ?? [])].map(normalizeFieldName));
+  const paths = [...DEFAULT_SECRET_PATHS, ...(options.paths ?? [])];
+  const seen = new WeakMap<object, unknown>();
+
+  const visit = (value: unknown, path: readonly string[]): unknown => {
+    if (typeof value === 'string') return redactSecretText(value, replacement);
+    if (typeof value !== 'object' || value === null) return value;
+    const cached = seen.get(value);
+    if (cached !== undefined) return cached;
+
+    if (Array.isArray(value)) {
+      const copy: unknown[] = [];
+      seen.set(value, copy);
+      value.forEach((item, index) => copy.push(visit(item, [...path, String(index)])));
+      return copy;
+    }
+
+    const copy: Record<string, unknown> = {};
+    seen.set(value, copy);
+    if (value instanceof Error) {
+      copy.name = value.name;
+      copy.message = redactSecretText(value.message, replacement);
+      if (value.cause !== undefined) copy.cause = visit(value.cause, [...path, 'cause']);
+    }
+    for (const [key, item] of Object.entries(value)) {
+      const nextPath = [...path, key];
+      const normalized = normalizeFieldName(key);
+      const secretField = headers.has(normalized)
+        || /(?:apikey|authtoken|accesstoken|refreshtoken|secret|password|cookie)$/.test(normalized)
+        || pathMatches(nextPath, paths);
+      copy[key] = secretField ? replacement : visit(item, nextPath);
+    }
+    return copy;
+  };
+
+  return visit(payload, []);
+}
+
 /**
  * Default redaction filter: removes request/response bodies unless debug level.
  */
 export function defaultRedactionFilter(payload: unknown, context: RedactionContext): unknown | null {
-  // At debug level, allow everything
+  // Debug payloads remain useful, but secret material is never emitted.
   if (context.logLevel === LogLevel.Debug || context.logLevel === LogLevel.Trace) {
-    return payload;
+    return redactSecrets(payload);
   }
 
   // For request/response payloads, redact at info level and above
@@ -155,16 +240,17 @@ export function defaultRedactionFilter(payload: unknown, context: RedactionConte
 
   // For errors, allow message but redact details unless debug
   if (context.payloadType === 'error' && typeof payload === 'object' && payload !== null) {
-    const error = payload as any;
+    const error = redactSecrets(payload);
+    const safeError = typeof error === 'object' && error !== null ? error : {};
     return {
-      message: error.message,
-      name: error.name,
+      message: Reflect.get(safeError, 'message'),
+      name: Reflect.get(safeError, 'name'),
       // Stack only at debug level
     };
   }
 
   // Metadata can pass through
-  return payload;
+  return redactSecrets(payload);
 }
 
 /**
@@ -177,9 +263,8 @@ export function redact(
 ): unknown {
   try {
     return filter(payload, context);
-  } catch (err) {
-    // Redaction failed - return safe placeholder
-    console.warn('[Redaction] Failed to redact payload:', err);
+  } catch {
+    // Redaction failure must fail closed without logging the source value or cause.
     return '[REDACTION_ERROR]';
   }
 }
@@ -198,26 +283,37 @@ export function attachErrorToSpan(
 ): void {
   const errorClass = options?.errorClass ?? classifyError(error);
   const spanStatus = errorClassToSpanStatus(errorClass);
+  const safeMessage = redactSecrets(error.message);
+  const message = typeof safeMessage === 'string' ? safeMessage : '[REDACTED]';
 
   // Set span status
-  span.setStatus(spanStatus, error.message);
+  span.setStatus(spanStatus, message);
 
   // Add error attributes
   span.setAttributes({
     'error.class': errorClass,
     'error.type': error.name,
-    'error.message': error.message,
+    'error.message': message,
   });
 
   // Add custom metadata if provided
   if (options?.metadata) {
-    // Cast to span-compatible attribute type
-    span.setAttributes(options.metadata as Record<string, string | number | boolean | string[] | number[] | boolean[]>);
+    const redacted = redactSecrets(options.metadata);
+    const safeMetadata = typeof redacted === 'object' && redacted !== null
+      ? Object.fromEntries(Object.entries(redacted).filter((entry): entry is [string, string | number | boolean | string[] | number[] | boolean[]] => {
+          const value = entry[1];
+          return typeof value === 'string'
+            || typeof value === 'number'
+            || typeof value === 'boolean'
+            || (Array.isArray(value) && value.every((item) => ['string', 'number', 'boolean'].includes(typeof item)));
+        }))
+      : {};
+    span.setAttributes(safeMetadata);
   }
 
   // Record exception event (includes stack trace)
   if (options?.includeStack !== false) {
-    span.recordException(error);
+    span.recordException(new Error(message, { cause: error.cause }));
   }
 }
 
@@ -235,7 +331,7 @@ export function logError(
   const errorClass = options?.errorClass ?? classifyError(error);
   const logLevel = errorClassToLogLevel(errorClass);
 
-  const logData = {
+  const logData: Record<string, unknown> = {
     errorClass,
     errorType: error.name,
     errorMessage: error.message,
@@ -245,26 +341,33 @@ export function logError(
   // Include stack only at debug level or if explicitly requested
   const includeStack = options?.includeStack ?? false;
   if (includeStack) {
-    (logData as any).stack = error.stack;
+    logData.stack = error.stack;
   }
+
+  const redactedData = redactSecrets(logData);
+  const safeLogData = typeof redactedData === 'object' && redactedData !== null
+    ? Object.fromEntries(Object.entries(redactedData))
+    : { errorClass, errorType: error.name, errorMessage: '[REDACTED]' };
+  const redactedMessage = redactSecrets(error.message);
+  const message = typeof redactedMessage === 'string' ? redactedMessage : '[REDACTED]';
 
   // Log at appropriate level
   switch (logLevel) {
     case LogLevel.Warning:
-      return Effect.logWarning(error.message).pipe(
-        Effect.annotateLogs(logData)
+      return Effect.logWarning(message).pipe(
+        Effect.annotateLogs(safeLogData)
       );
     case LogLevel.Error:
-      return Effect.logError(error.message).pipe(
-        Effect.annotateLogs(logData)
+      return Effect.logError(message).pipe(
+        Effect.annotateLogs(safeLogData)
       );
     case LogLevel.Fatal:
-      return Effect.logFatal(error.message).pipe(
-        Effect.annotateLogs(logData)
+      return Effect.logFatal(message).pipe(
+        Effect.annotateLogs(safeLogData)
       );
     default:
-      return Effect.logInfo(error.message).pipe(
-        Effect.annotateLogs(logData)
+      return Effect.logInfo(message).pipe(
+        Effect.annotateLogs(safeLogData)
       );
   }
 }

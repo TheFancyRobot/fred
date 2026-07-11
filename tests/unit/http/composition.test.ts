@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Fred } from '@fancyrobot/fred';
-import { createFredHttpApp } from '../../../packages/fred-http/src/index';
+import { Effect } from 'effect';
+import { createFredHttpApp as createFredHttpAppBase } from '../../../packages/fred-http/src/index';
+import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
+
+type CreateFredHttpAppOptions = Parameters<typeof createFredHttpAppBase>[0];
+const createFredHttpApp = (options: CreateFredHttpAppOptions) => createFredHttpAppBase({
+  getClientIp: () => '203.0.113.10',
+  ...options,
+});
 
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
@@ -160,6 +168,78 @@ describe('createFredHttpApp', () => {
     expect(second.headers.get('Retry-After')).toBe('1');
   });
 
+  it('fails closed instead of sharing one limiter bucket when client identity is unavailable', async () => {
+    const fred = new Fred();
+    const app = createFredHttpAppBase({
+      fred,
+      security: { requireAuth: false },
+      routes: [{
+        method: 'GET',
+        path: '/anonymous',
+        visibility: 'public',
+        handler: () => new Response('pong', { status: 200 }),
+      }],
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/anonymous'));
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('Service Unavailable');
+  });
+
+  it('keeps anonymous limiter buckets isolated by trusted client IP', async () => {
+    const fred = new Fred();
+    const app = createFredHttpAppBase({
+      fred,
+      getClientIp: (request) => request.headers.get('x-test-client-ip') ?? undefined,
+      security: {
+        requireAuth: false,
+        rateLimitMaxRequests: 1,
+        rateLimitWindowMs: 1_000,
+      },
+      routes: [{
+        method: 'GET',
+        path: '/isolated',
+        visibility: 'public',
+        handler: () => new Response('pong', { status: 200 }),
+      }],
+    });
+    createdApps.push(app);
+    const request = (ip: string) => app.fetch(new Request('http://localhost/isolated', {
+      headers: { 'x-test-client-ip': ip },
+    }));
+
+    expect((await request('203.0.113.1')).status).toBe(200);
+    expect((await request('203.0.113.2')).status).toBe(200);
+    expect((await request('203.0.113.1')).status).toBe(429);
+  });
+
+  it('shares key-first rate-limit semantics with the compatibility adapter', async () => {
+    const fred = new Fred();
+    const apiKeyStore = makeMemoryApiKeyStore();
+    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
+    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
+    await Effect.runPromise(Effect.all([
+      apiKeyStore.insert(first.record),
+      apiKeyStore.insert(second.record),
+    ]));
+    const app = createFredHttpApp({
+      fred,
+      apiKeyStore,
+      getClientIp: () => '203.0.113.1',
+    });
+    createdApps.push(app);
+
+    const request = (token: string) => app.fetch(new Request('http://localhost/health', {
+      headers: { authorization: `Bearer ${token}` },
+    }));
+    expect((await request(first.token)).status).toBe(200);
+    expect((await request(second.token)).status).toBe(200);
+    const limited = await request(first.token);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Retry-After')).toBe('1');
+  });
+
   it('reflects custom route methods in CORS preflight responses', async () => {
     const fred = new Fred();
     const app = createFredHttpApp({
@@ -190,5 +270,94 @@ describe('createFredHttpApp', () => {
     expect(response.status).toBe(204);
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
+  });
+
+  it('enforces compatibility body limits at the boundary and sanitizes rejection', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, maxRequestBodySize: 4 },
+      routes: [{
+        method: 'POST',
+        path: '/bounded',
+        visibility: 'public',
+        handler: (request) => request.text().then((body) => new Response(body)),
+      }],
+    });
+    createdApps.push(app);
+
+    const boundary = await app.fetch(new Request('http://localhost/bounded', {
+      method: 'POST',
+      body: '1234',
+    }));
+    expect(boundary.status).toBe(200);
+    expect(await boundary.text()).toBe('1234');
+
+    const oversized = await app.fetch(new Request('http://localhost/bounded', {
+      method: 'POST',
+      body: '12345',
+    }));
+    expect(oversized.status).toBe(413);
+    expect(await oversized.json()).toEqual({ success: false, error: 'Request body too large' });
+  });
+
+  it('stops reading a chunked compatibility request once it exceeds the body limit', async () => {
+    const fred = new Fred();
+    let pulls = 0;
+    let handled = false;
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, maxRequestBodySize: 4 },
+      routes: [{
+        method: 'POST',
+        path: '/chunked-bounded',
+        visibility: 'public',
+        handler: () => {
+          handled = true;
+          return new Response('unexpected');
+        },
+      }],
+    });
+    createdApps.push(app);
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) controller.enqueue(new TextEncoder().encode('1234'));
+        else if (pulls === 2) controller.enqueue(new TextEncoder().encode('5'));
+        else controller.close();
+      },
+    }, { highWaterMark: 0 });
+    const response = await app.fetch(new Request('http://localhost/chunked-bounded', {
+      method: 'POST',
+      body,
+    }));
+
+    expect(response.status).toBe(413);
+    expect(handled).toBe(false);
+    expect(pulls).toBe(2);
+  });
+
+  it('times out compatibility handlers, aborts their signal, and returns a sanitized response', async () => {
+    const fred = new Fred();
+    let aborted = false;
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, requestTimeoutSeconds: 1 },
+      routes: [{
+        method: 'GET',
+        path: '/slow',
+        visibility: 'public',
+        handler: (request) => new Promise<Response>(() => {
+          request.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+        }),
+      }],
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/slow'));
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ success: false, error: 'Request timed out' });
+    expect(aborted).toBe(true);
   });
 });

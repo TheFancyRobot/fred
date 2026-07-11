@@ -39,7 +39,12 @@ import type {
   PipelineExecutionError,
 } from './pipeline/errors';
 import type { WorkflowIR } from './workflow/ir';
-import { WorkflowNodeExecutionError } from './workflow/errors';
+import {
+  WorkflowInputValidationError,
+  WorkflowNodeExecutionError,
+  WorkflowOutputValidationError,
+} from './workflow/errors';
+import type { WorkflowDescriptor } from './workflow/contracts';
 import {
   executeWorkflowEffect,
   type WorkflowExecutionOptions,
@@ -77,7 +82,7 @@ import { TemplateEngine, TemplateEngineLive } from './template';
 export async function executeWorkflowViaRuntime(
   runtime: FredRuntime,
   workflow: WorkflowIR,
-  input: string,
+  input: unknown,
   options: { conversationId?: string; tracer?: Tracer } = {}
 ): Promise<WorkflowExecutionResult> {
   const agents = await Runtime.runPromise(runtime)(
@@ -106,14 +111,19 @@ export async function executeWorkflowViaRuntime(
     resolveAmbientConversationId(options.conversationId)
   );
 
-  const workflowResolver = (workflowId: string, nestedInput: string) =>
+  const workflowResolver = (workflowId: string, nestedInput: unknown) =>
     Effect.gen(function* () {
       const nestedWorkflow = yield* pipelineService.getWorkflowIR(workflowId);
-      const nestedResult: WorkflowExecutionResult = yield* executeWorkflowEffect(
-        nestedWorkflow,
-        nestedInput,
-        executionOptions,
-      );
+      const nestedResult: WorkflowExecutionResult = yield* Effect.tryPromise({
+        try: () => executeWorkflowViaRuntime(runtime, nestedWorkflow, nestedInput, options),
+        catch: (cause) => new WorkflowNodeExecutionError({
+          workflowId,
+          nodeId: nestedWorkflow.entry,
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+          retryable: true,
+        }),
+      });
       if (!nestedResult.success) {
         const cause = nestedResult.error ?? `Nested workflow "${workflowId}" did not complete`;
         return yield* new WorkflowNodeExecutionError({
@@ -148,6 +158,12 @@ export async function executeWorkflowViaRuntime(
   }
 
   const error = Cause.squash(exit.cause);
+  if (
+    error instanceof WorkflowInputValidationError ||
+    error instanceof WorkflowOutputValidationError
+  ) {
+    throw error;
+  }
   return {
     success: false,
     status: 'failed',
@@ -240,6 +256,8 @@ export interface FredClient {
   };
   readonly workflows: {
     define(config: WorkflowDefinition): Promise<void>;
+    list(): Promise<readonly WorkflowDescriptor[]>;
+    describe(id: string): Promise<WorkflowDescriptor>;
     /**
      * Run a workflow. When a session is given (`sessionId`, or the legacy
      * `conversationId` alias), it is bound as the ambient session for the whole
@@ -252,7 +270,7 @@ export interface FredClient {
      */
     run(
       id: string,
-      input: string,
+      input: unknown,
       options?: { conversationId?: string; sessionId?: string }
     ): Promise<WorkflowRunResult>;
   };
@@ -354,6 +372,9 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             (service): Effect.Effect<void, WorkflowDefineError> => service.defineWorkflow(config),
           ),
         ),
+      list: () => run(Effect.flatMap(PipelineService, (service) => service.listWorkflows())),
+      describe: (id) =>
+        run(Effect.flatMap(PipelineService, (service) => service.describeWorkflow(id))),
       run: async (id, input, runOptions) => {
         // The session id (explicit `conversationId` wins over the `sessionId`
         // alias). When present it becomes the ambient session for the run and
@@ -375,6 +396,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
               success: result.success,
               status: result.status,
               context: result.context,
+              executedNodes: result.executedNodes,
               finalOutput: result.finalOutput,
               error: result.error,
               abortedBy: result.abortedBy,

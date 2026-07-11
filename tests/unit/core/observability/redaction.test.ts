@@ -12,6 +12,8 @@ import {
   errorClassToSpanStatus,
   errorClassToLogLevel,
   redact,
+  redactSecrets,
+  logError,
   defaultRedactionFilter,
   type RedactionContext,
 } from '../../../../packages/core/src/observability/errors';
@@ -20,7 +22,7 @@ import {
   getEffectiveLogLevel,
   type VerbosityOverrides,
 } from '../../../../packages/core/src/observability/otel';
-import { LogLevel } from 'effect';
+import { Effect, HashMap, Logger, LogLevel } from 'effect';
 
 describe('Error Classification', () => {
   test('should classify timeout errors as RETRYABLE', () => {
@@ -114,7 +116,7 @@ describe('Error to Log Level Mapping', () => {
 });
 
 describe('Default Redaction Filter', () => {
-  test('should allow all payloads at debug level', () => {
+  test('should keep debug payloads while redacting secret fields', () => {
     const context: RedactionContext = {
       payloadType: 'request',
       source: 'tool',
@@ -124,10 +126,10 @@ describe('Default Redaction Filter', () => {
     const payload = { apiKey: 'secret', data: 'sensitive' };
     const result = defaultRedactionFilter(payload, context);
 
-    expect(result).toEqual(payload);
+    expect(result).toEqual({ apiKey: '[REDACTED]', data: 'sensitive' });
   });
 
-  test('should allow all payloads at trace level', () => {
+  test('should keep trace payloads while redacting secret fields', () => {
     const context: RedactionContext = {
       payloadType: 'response',
       source: 'provider',
@@ -137,7 +139,7 @@ describe('Default Redaction Filter', () => {
     const payload = { token: 'secret', content: 'private' };
     const result = defaultRedactionFilter(payload, context);
 
-    expect(result).toEqual(payload);
+    expect(result).toEqual({ token: '[REDACTED]', content: 'private' });
   });
 
   test('should redact request payloads at info level', () => {
@@ -197,6 +199,61 @@ describe('Default Redaction Filter', () => {
     const result = defaultRedactionFilter(payload, context);
 
     expect(result).toEqual(payload);
+  });
+});
+
+describe('Secret Redaction', () => {
+  test('redacts headers, provider keys, nested paths, arrays, errors, and token text without mutation', () => {
+    const error = new Error('request used Bearer generated-secret');
+    const payload = {
+      headers: {
+        Authorization: 'Bearer generated-secret',
+        Cookie: 'session=secret',
+      },
+      providers: [{ openaiApiKey: 'sk-1234567890abcdefghijklmnop', label: 'primary' }],
+      account: { credentials: { privateValue: 'hidden' } },
+      error,
+      annotation: 'fred_abcdefgh.abcdefghijklmnopqrstuvwxyzABCDEFGH123456',
+    };
+
+    const result = redactSecrets(payload, {
+      paths: ['account.credentials.privateValue'],
+      headers: ['x-custom-secret'],
+    });
+
+    expect(result).toEqual({
+      headers: {
+        Authorization: '[REDACTED]',
+        Cookie: '[REDACTED]',
+      },
+      providers: [{ openaiApiKey: '[REDACTED]', label: 'primary' }],
+      account: { credentials: { privateValue: '[REDACTED]' } },
+      error: { name: 'Error', message: 'request used Bearer [REDACTED]' },
+      annotation: '[REDACTED]',
+    });
+    expect(payload.headers.Authorization).toBe('Bearer generated-secret');
+    expect(payload.account.credentials.privateValue).toBe('hidden');
+  });
+
+  test('removes secret material from captured log messages and annotations', async () => {
+    const captured: unknown[] = [];
+    const logger = Logger.make((options) => {
+      captured.push({
+        message: options.message,
+        annotations: Object.fromEntries(HashMap.toEntries(options.annotations)),
+      });
+    });
+    const token = 'fred_abcdefgh.abcdefghijklmnopqrstuvwxyzABCDEFGH123456';
+
+    await Effect.runPromise(logError(
+      new Error(`provider failed with Bearer ${token}`),
+      { metadata: { Authorization: `Bearer ${token}`, openaiApiKey: 'sk-1234567890abcdefghijklmnop' } },
+    ).pipe(Effect.provide(Logger.replace(Logger.defaultLogger, logger))));
+
+    const serialized = JSON.stringify(captured);
+    expect(serialized).not.toContain(token);
+    expect(serialized).not.toContain('sk-1234567890abcdefghijklmnop');
+    expect(serialized).toContain('[REDACTED]');
   });
 });
 

@@ -6,7 +6,7 @@
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { Cause, Effect, Exit, Runtime } from 'effect';
+import { Cause, Effect, Exit, Runtime, Schema } from 'effect';
 import {
   createFred,
   FredClientClosedError,
@@ -25,6 +25,10 @@ import type { PipelineResult } from '../../../packages/core/src/pipeline/executo
 import type { GraphExecutionResult } from '../../../packages/core/src/pipeline/graph-executor';
 import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
 import type { WorkflowExecutionResult } from '../../../packages/core/src/workflow/execute';
+import {
+  WorkflowInputValidationError,
+  WorkflowOutputValidationError,
+} from '../../../packages/core/src/workflow/errors';
 import { createMockProvider } from '../helpers/mock-provider';
 import { createMockStorage } from '../helpers/mock-storage';
 
@@ -141,6 +145,7 @@ describe('createFred client', () => {
     const result = (await client.workflows.run('client-v2-pipeline', 'hello')) as PipelineResult;
     expect(result.success).toBe(true);
     expect(result.finalOutput).toBe('echo:hello');
+    expect(result.executedNodes).toHaveLength(1);
   });
 
   it('resolves registered subworkflows through the public workflow runtime', async () => {
@@ -188,6 +193,115 @@ describe('createFred client', () => {
     expect(result.success).toBe(true);
     expect(result.status).toBe('completed');
     expect(result.finalOutput).toBe('native:hello');
+  });
+
+  it('discovers immutable transport-neutral descriptors for every workflow source', async () => {
+    const client = track(await createFred());
+    await registerMockProvider(client);
+    await client.agents.register({
+      id: 'descriptor-agent',
+      platform: 'mock',
+      model: 'mock-model',
+      systemMessage: 'Descriptor test',
+    } as any);
+
+    await client.workflows.define({ id: 'descriptor-v1', agents: ['descriptor-agent'] });
+    await client.workflows.define({
+      id: 'descriptor-v2',
+      steps: [{ type: 'function', name: 'done', fn: () => 'done' }],
+    });
+    await client.workflows.define({
+      id: 'descriptor-graph',
+      type: 'graph',
+      entryNode: 'done',
+      nodes: [{ id: 'done', type: 'function', fn: () => 'done' }],
+      edges: [],
+    });
+    const input = Schema.Struct({ name: Schema.String });
+    const output = Schema.Struct({ greeting: Schema.String });
+    await client.workflows.define(defineWorkflow({
+      id: 'descriptor-native',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => ({ greeting: 'hello' }) }],
+      edges: [],
+      input,
+      output,
+    }));
+
+    const descriptors = await client.workflows.list();
+    expect(Object.isFrozen(descriptors)).toBe(true);
+    expect(descriptors.map(({ id, source }) => ({ id, source }))).toEqual([
+      { id: 'descriptor-v1', source: 'v1' },
+      { id: 'descriptor-v2', source: 'v2' },
+      { id: 'descriptor-graph', source: 'graph' },
+      { id: 'descriptor-native', source: 'native' },
+    ]);
+    expect(descriptors.every(Object.isFrozen)).toBe(true);
+    expect('nodes' in descriptors[0]!).toBe(false);
+
+    const native = await client.workflows.describe('descriptor-native');
+    expect(native.input).toBe(input);
+    expect(native.output).toBe(output);
+    expect(Object.isFrozen(native)).toBe(true);
+    await expect(client.workflows.describe('descriptor-missing')).rejects.toMatchObject({
+      _tag: 'PipelineNotFoundError',
+    });
+  });
+
+  it('decodes typed workflow input and validates typed public output', async () => {
+    const client = track(await createFred());
+    let executions = 0;
+    await client.workflows.define(defineWorkflow({
+      id: 'typed-workflow',
+      entry: 'greet',
+      nodes: [{
+        id: 'greet',
+        kind: 'function',
+        fn: (context) => {
+          executions += 1;
+          const name = typeof context.input === 'object' && context.input !== null &&
+            'name' in context.input && typeof context.input.name === 'string'
+            ? context.input.name
+            : 'unknown';
+          return { greeting: `Hello, ${name}` };
+        },
+      }],
+      edges: [],
+      input: Schema.Struct({ name: Schema.String }),
+      output: Schema.Struct({ greeting: Schema.String }),
+    }));
+
+    const result = await client.workflows.run('typed-workflow', { name: 'Ada' });
+    expect(result).toMatchObject({ finalOutput: { greeting: 'Hello, Ada' } });
+    expect(executions).toBe(1);
+
+    const rejectedSecret = 'must-not-appear-in-diagnostics';
+    try {
+      await client.workflows.run('typed-workflow', { name: 42, secret: rejectedSecret });
+      throw new Error('Expected typed workflow input validation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkflowInputValidationError);
+      if (!(error instanceof WorkflowInputValidationError)) throw error;
+      expect(error.issues).toEqual(['name']);
+      expect(error.message).not.toContain(rejectedSecret);
+    }
+    expect(executions).toBe(1);
+  });
+
+  it('rejects invalid typed workflow output with a distinct tagged error', async () => {
+    const client = track(await createFred());
+    await client.workflows.define(defineWorkflow({
+      id: 'invalid-output-workflow',
+      entry: 'invalid',
+      nodes: [{ id: 'invalid', kind: 'function', fn: () => ({ greeting: 42 }) }],
+      edges: [],
+      input: Schema.String,
+      output: Schema.Struct({ greeting: Schema.String }),
+    }));
+
+    await expect(
+      client.workflows.run('invalid-output-workflow', 'hello'),
+    ).rejects.toBeInstanceOf(WorkflowOutputValidationError);
   });
 
   it('workflows.run accepts a sessionId and stays transparent to execution', async () => {
@@ -334,5 +448,13 @@ describe('createFred client', () => {
       expect(error).toBeInstanceOf(FredClientClosedError);
       expect((error as FredClientClosedError)._tag).toBe('FredClientClosedError');
     }
+  });
+
+  it('workflow discovery rejects after client shutdown', async () => {
+    const client = await createFred();
+    await client.shutdown();
+
+    await expect(client.workflows.list()).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.workflows.describe('anything')).rejects.toBeInstanceOf(FredClientClosedError);
   });
 });

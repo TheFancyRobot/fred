@@ -156,6 +156,14 @@
         "openai": "^6.46.0",
       },
     },
+    "examples/15-http-workflows": {
+      "name": "@fancyrobot/fred-example-15-http-workflows",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-http": "workspace:*",
+        "effect": "^3.21.0",
+      },
+    },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
       "version": "0.5.1-alpha.0",
@@ -176,6 +184,9 @@
       "devDependencies": {
         "@types/bun": "latest",
         "effect": "^3.21.0",
+      },
+      "optionalDependencies": {
+        "pg": "^8.22.0",
       },
       "peerDependencies": {
         "effect": "^3.21.0",
@@ -521,6 +532,8 @@
     "@fancyrobot/fred-example-13-multi-agent-workflows": ["@fancyrobot/fred-example-13-multi-agent-workflows@workspace:examples/13-multi-agent-workflows"],
 
     "@fancyrobot/fred-example-14-http-layer": ["@fancyrobot/fred-example-14-http-layer@workspace:examples/14-http-layer"],
+
+    "@fancyrobot/fred-example-15-http-workflows": ["@fancyrobot/fred-example-15-http-workflows@workspace:examples/15-http-workflows"],
 
     "@fancyrobot/fred-google": ["@fancyrobot/fred-google@workspace:packages/provider-google"],
 

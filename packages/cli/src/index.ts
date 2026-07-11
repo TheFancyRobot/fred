@@ -19,6 +19,7 @@ import { handleRouteCommand } from './commands/route';
 import { handleMcpCommand } from './commands/mcp';
 import { handleValidateCommand } from './commands/validate';
 import { handleStatusCommand } from './commands/status';
+import { handleKeysCommand } from './commands/keys';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import {
   AggregatedPluginValidationError,
@@ -56,6 +57,13 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'conversation-id',
   'conversationId',
   'threshold',
+  'sqlite',
+  'postgres',
+  'scope',
+  'scopes',
+  'id',
+  'rate-limit-max',
+  'rate-limit-window-ms',
 ]);
 
 const BUILTIN_COMMANDS = new Set([
@@ -79,6 +87,7 @@ const BUILTIN_COMMANDS = new Set([
   'route',
   'mcp',
   'validate',
+  'keys',
 ]);
 
 const PLUGIN_VALIDATION_EXIT_CODE = 12;
@@ -168,6 +177,9 @@ Commands:
   mcp status <id>         Show MCP server connection health
   validate                Compile-check markdown agent templates
                           --preview        Show resolved output previews
+  keys create             Create a scoped API key in durable storage
+                          --sqlite <path> | --postgres <url>
+                          --scopes <a,b>   Optional comma-separated scopes
   session                 Manage saved chat sessions
   session list             List sessions (table or --json)
   session show <id>        Show a session transcript
@@ -206,6 +218,7 @@ Examples:
   fred mcp status filesystem-server
   fred validate
   fred validate --preview
+  fred keys create --sqlite ./fred.db --scopes workflows:run
   fred session list
   fred session list --json
   fred session show conv_123
@@ -332,6 +345,10 @@ async function main(): Promise<void> {
 
       case 'validate':
         exitCode = await handleValidateCommand(commandArgs, options);
+        break;
+
+      case 'keys':
+        exitCode = await handleKeysCommand(commandArgs, options);
         break;
 
 

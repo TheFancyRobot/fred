@@ -212,6 +212,18 @@ export {
 export type { CompilableWorkflow } from './workflow/compile';
 export { validateWorkflowIR, WorkflowValidationError } from './workflow/validate';
 export type { WorkflowExecutionResult, WorkflowExecutionOptions } from './workflow/execute';
+export type { WorkflowDescriptor } from './workflow/contracts';
+export {
+  describeWorkflow,
+  workflowInputSchema,
+  workflowOutputSchema,
+  decodeWorkflowInput,
+  validateWorkflowOutput,
+} from './workflow/contracts';
+export {
+  WorkflowInputValidationError,
+  WorkflowOutputValidationError,
+} from './workflow/errors';
 
 // ─── Subagents ───────────────────────────────────────────────────────────────
 export type {

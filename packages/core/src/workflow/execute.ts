@@ -9,7 +9,12 @@ import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { IRNode, WorkflowIR } from './ir';
 import { findNode, inEdges, outEdges } from './ir';
-import { WorkflowNodeExecutionError } from './errors';
+import {
+  WorkflowInputValidationError,
+  WorkflowNodeExecutionError,
+  WorkflowOutputValidationError,
+} from './errors';
+import { decodeWorkflowInput, validateWorkflowOutput } from './contracts';
 
 export interface WorkflowExecutionOptions {
   readonly agentManager: AgentManagerLike;
@@ -22,7 +27,7 @@ export interface WorkflowExecutionOptions {
   };
   readonly workflowResolver?: (
     workflowId: string,
-    input: string,
+    input: unknown,
   ) => Effect.Effect<unknown, unknown>;
   readonly checkpointManager?: CheckpointManager;
   readonly conversationId?: string;
@@ -56,9 +61,12 @@ export interface WorkflowExecutionResult {
 export interface WorkflowExecutorService {
   readonly execute: (
     workflow: WorkflowIR,
-    input: string,
+    input: unknown,
     options: WorkflowExecutionOptions,
-  ) => Effect.Effect<WorkflowExecutionResult>;
+  ) => Effect.Effect<
+    WorkflowExecutionResult,
+    WorkflowInputValidationError | WorkflowOutputValidationError
+  >;
 }
 
 export const WorkflowExecutorService =
@@ -98,6 +106,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function agentResponseContent(value: unknown): string | undefined {
   return isRecord(value) && typeof value.content === 'string' ? value.content : undefined;
+}
+
+/** Convert structured workflow input only when it crosses a conversational string boundary. */
+export function workflowInputToMessage(input: unknown): string {
+  if (typeof input === 'string') return input;
+  try {
+    const serialized = JSON.stringify(input);
+    return serialized ?? String(input);
+  } catch {
+    return String(input);
+  }
 }
 
 export function getPublicWorkflowOutputs(
@@ -208,7 +227,7 @@ const executeHandoff = Effect.fn('WorkflowExecutor.executeHandoff')(function* (
     handoffChain: [...chain, sourceAgentId],
   });
 
-  const result = yield* target.processMessage(context.input, context.history, {
+  const result = yield* target.processMessage(workflowInputToMessage(context.input), context.history, {
     workflowId: workflow.id,
     sessionId: context.conversationId,
   }).pipe(
@@ -281,7 +300,7 @@ function runNodeBody(
         );
       }
       return Effect.tryPromise({
-        try: () => nested.execute(context.input),
+        try: () => nested.execute(workflowInputToMessage(context.input)),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     }
@@ -601,9 +620,10 @@ const saveCheckpoint = Effect.fn('WorkflowExecutor.saveCheckpoint')(function* (
 
 export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(function* (
   workflow: WorkflowIR,
-  input: string,
+  input: unknown,
   options: WorkflowExecutionOptions,
 ) {
+  const decodedInput = yield* decodeWorkflowInput(workflow, input);
   const runId = options.runId ?? options.checkpointManager?.generateRunId() ?? crypto.randomUUID();
   const restored = options.restoredContext;
   const restoredOutputs = { ...(restored?.outputs ?? {}) };
@@ -617,7 +637,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       }
     : {
         pipelineId: workflow.id,
-        input,
+        input: decodedInput,
         outputs: {},
         history: [...(options.history ?? [])],
         metadata: {},
@@ -644,7 +664,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
     : [workflow.entry];
   let finalOutput: unknown;
   let finalResponse: AgentResponse | undefined;
-  let currentMessage = context.input;
+  let currentMessage = workflowInputToMessage(context.input);
   const retryAttempts = new Map<string, number>();
 
   const workflowSpan = options.tracer?.startSpan(
@@ -756,7 +776,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             context,
             runtimeOutputs,
             options,
-            workflow.source === 'v1' ? currentMessage : context.input,
+            workflow.source === 'v1' ? currentMessage : workflowInputToMessage(context.input),
             runId,
             skipBeforeHooks,
           )).pipe(Effect.map((outcome) => ({ node, outcome })));
@@ -975,6 +995,12 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       });
     }
 
+    const validatedFinalOutput = yield* validateWorkflowOutput(workflow, finalOutput).pipe(
+      Effect.tapError((error) => Effect.sync(() => {
+        workflowSpan?.setStatus('error', error.message);
+        workflowSpan?.end();
+      })),
+    );
     workflowSpan?.setStatus('ok');
     workflowSpan?.end();
     return {
@@ -983,7 +1009,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       context,
       outputs: context.outputs,
       executedNodes,
-      finalOutput,
+      finalOutput: validatedFinalOutput,
       finalResponse,
       runId,
     } satisfies WorkflowExecutionResult;

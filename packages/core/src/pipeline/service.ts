@@ -32,6 +32,10 @@ import {
   type ResumeError
 } from './errors';
 import { AgentService } from '../agent/service';
+import {
+  WorkflowInputValidationError,
+  WorkflowOutputValidationError,
+} from '../workflow/errors';
 import { HookManagerService } from '../hooks/service';
 import { resolveAmbientConversationId } from '../context/session-service';
 import { CheckpointService } from './checkpoint/service';
@@ -57,7 +61,12 @@ import {
   type CompilableWorkflow,
 } from '../workflow/compile';
 import type { WorkflowIR } from '../workflow/ir';
-import { executeWorkflowEffect, getPublicWorkflowOutputs } from '../workflow/execute';
+import { describeWorkflow, type WorkflowDescriptor } from '../workflow/contracts';
+import {
+  executeWorkflowEffect,
+  getPublicWorkflowOutputs,
+  workflowInputToMessage,
+} from '../workflow/execute';
 
 /**
  * PipelineService interface for Effect-based pipeline management
@@ -109,6 +118,12 @@ export interface PipelineService {
 
   /** Get the canonical compiled representation for any registered workflow. */
   getWorkflowIR(id: string): Effect.Effect<WorkflowIR, PipelineNotFoundError>;
+
+  /** List immutable transport-neutral descriptors from the canonical registry. */
+  listWorkflows(): Effect.Effect<readonly WorkflowDescriptor[]>;
+
+  /** Describe one registered workflow without exposing its executable IR. */
+  describeWorkflow(id: string): Effect.Effect<WorkflowDescriptor, PipelineNotFoundError>;
 
   /** Check the unified workflow registry. */
   hasWorkflowIR(id: string): Effect.Effect<boolean>;
@@ -453,6 +468,16 @@ class PipelineServiceImpl implements PipelineService {
     });
   }
 
+  listWorkflows(): Effect.Effect<readonly WorkflowDescriptor[]> {
+    return Ref.get(this.workflows).pipe(
+      Effect.map((workflows) => Object.freeze([...workflows.values()].map(describeWorkflow))),
+    );
+  }
+
+  describeWorkflow(id: string): Effect.Effect<WorkflowDescriptor, PipelineNotFoundError> {
+    return this.getWorkflowIR(id).pipe(Effect.map(describeWorkflow));
+  }
+
   hasWorkflowIR(id: string): Effect.Effect<boolean> {
     return Ref.get(this.workflows).pipe(Effect.map((workflows) => workflows.has(id)));
   }
@@ -483,7 +508,15 @@ class PipelineServiceImpl implements PipelineService {
         conversationId: options?.conversationId,
         history: options?.sequentialVisibility === false ? [] : previousMessages,
         sequentialVisibility: options?.sequentialVisibility,
-      });
+      }).pipe(
+        Effect.mapError((error: WorkflowInputValidationError | WorkflowOutputValidationError) =>
+          new PipelineExecutionError({
+            pipelineId,
+            step: 0,
+            cause: error,
+          })
+        ),
+      );
 
       if (!result.success && result.status === 'failed') {
         return yield* Effect.fail(new PipelineExecutionError({
@@ -852,7 +885,11 @@ class PipelineServiceImpl implements PipelineService {
         restoredContext: checkpoint.context,
       };
 
-      const result = yield* self.executorService.executePipelineV2(config, checkpoint.context.input, executorOptions).pipe(
+      const result = yield* self.executorService.executePipelineV2(
+        config,
+        workflowInputToMessage(checkpoint.context.input),
+        executorOptions,
+      ).pipe(
         Effect.mapError((error) => new PipelineExecutionError({
           pipelineId: checkpoint.pipelineId,
           step: startStep,
@@ -977,7 +1014,11 @@ class PipelineServiceImpl implements PipelineService {
         restoredContext: enrichedContext,
       };
 
-      const result = yield* self.executorService.executePipelineV2(config, enrichedContext.input, executorOptions).pipe(
+      const result = yield* self.executorService.executePipelineV2(
+        config,
+        workflowInputToMessage(enrichedContext.input),
+        executorOptions,
+      ).pipe(
         Effect.mapError((error) => new PipelineExecutionError({
           pipelineId: checkpoint.pipelineId,
           step: startStep,

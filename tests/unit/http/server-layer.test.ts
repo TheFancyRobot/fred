@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import { createFred } from '../../../packages/core/src/client';
 import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src/client';
+import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
+import { RateLimitStoreError, type RateLimitStoreService } from '../../../packages/fred-http/src/rate-limiter';
 
 const clients: FredWithHttp[] = [];
 
@@ -48,6 +51,53 @@ describe('FredHttpServerLive security middleware', () => {
     expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
   });
 
+  test('uses API key identity before IP and honors per-key policy overrides', async () => {
+    const apiKeyStore = makeMemoryApiKeyStore();
+    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
+    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
+    await Effect.runPromise(Effect.all([
+      apiKeyStore.insert(first.record),
+      apiKeyStore.insert(second.record),
+    ]));
+    const handle = await start({
+      apiKeyStore,
+      trustProxy: true,
+      security: { rateLimitMaxRequests: 100, rateLimitWindowMs: 60_000 },
+    });
+
+    const request = (token: string, ip: string) => fetch(`${handle.url}/health`, {
+      headers: { authorization: `Bearer ${token}`, 'x-forwarded-for': ip },
+    });
+    expect((await request(first.token, '203.0.113.1')).status).toBe(200);
+    expect((await request(second.token, '203.0.113.1')).status).toBe(200);
+    const limited = await request(first.token, '203.0.113.2');
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  test('fails closed with a sanitized 503 while the rate-limit store is unavailable', async () => {
+    let available = false;
+    const store: RateLimitStoreService = {
+      backend: 'memory',
+      initialize: Effect.void,
+      consume: () => available
+        ? Effect.succeed({ allowed: true, retryAfterMs: 0, remaining: 1, resetAt: Date.now() + 1_000 })
+        : Effect.fail(new RateLimitStoreError({ operation: 'consume', message: 'secret database detail' })),
+      prune: () => Effect.succeed(0),
+      close: Effect.void,
+    };
+    const handle = await start({
+      rateLimitStore: store,
+      security: { requireAuth: false },
+    });
+
+    const unavailable = await fetch(`${handle.url}/health`);
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.text()).toBe('Service Unavailable');
+    available = true;
+    expect((await fetch(`${handle.url}/health`)).status).toBe(200);
+  });
+
   test('ignores proxy headers unless trustProxy is enabled', async () => {
     const untrusted = await start({
       security: { allowLocalRequestsWithoutAuth: true },
@@ -63,6 +113,68 @@ describe('FredHttpServerLive security middleware', () => {
     expect((await fetch(`${trusted.url}/health`, {
       headers: { 'x-forwarded-for': '203.0.113.10' },
     })).status).toBe(401);
+  });
+
+  test('never uses a malformed forwarded address as a limiter identity', async () => {
+    const keys: string[] = [];
+    const store: RateLimitStoreService = {
+      backend: 'memory',
+      initialize: Effect.void,
+      consume: (input) => {
+        keys.push(input.key);
+        return Effect.succeed({
+          allowed: true,
+          retryAfterMs: 0,
+          remaining: 1,
+          resetAt: Date.now() + 1_000,
+        });
+      },
+      prune: () => Effect.succeed(0),
+      close: Effect.void,
+    };
+    const handle = await start({
+      trustProxy: true,
+      rateLimitStore: store,
+      security: { requireAuth: false },
+    });
+
+    expect((await fetch(`${handle.url}/health`, {
+      headers: { 'x-forwarded-for': 'not-an-ip' },
+    })).status).toBe(200);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).not.toBe('ip:not-an-ip');
+    expect(keys[0]).not.toBe('ip:unknown');
+  });
+
+  test('adds CORS only for allowed origins on 401, 429, and success responses', async () => {
+    const handle = await start({
+      security: {
+        authToken: 'cors-secret',
+        corsAllowedOrigins: ['https://allowed.example'],
+        rateLimitMaxRequests: 1,
+      },
+    });
+    const allowedHeaders = { origin: 'https://allowed.example' };
+    const unauthorized = await fetch(`${handle.url}/health`, { headers: allowedHeaders });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+
+    const authenticatedHeaders = {
+      ...allowedHeaders,
+      authorization: 'Bearer cors-secret',
+    };
+    const success = await fetch(`${handle.url}/health`, { headers: authenticatedHeaders });
+    expect(success.status).toBe(200);
+    expect(success.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+    const limited = await fetch(`${handle.url}/health`, { headers: authenticatedHeaders });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+
+    const disallowed = await fetch(`${handle.url}/health`, {
+      headers: { origin: 'https://blocked.example' },
+    });
+    expect(disallowed.status).toBe(401);
+    expect(disallowed.headers.get('access-control-allow-origin')).toBeNull();
   });
 
   test('releases the listener so its bound port can be reused', async () => {
@@ -107,6 +219,21 @@ describe('FredHttpServerLive security middleware', () => {
         code: 'missing_user_message',
       },
     });
+  });
+
+  test('rejects oversized listener requests without echoing their body', async () => {
+    const handle = await start({
+      security: { requireAuth: false, maxRequestBodySize: 64 },
+    });
+    const secret = 'must-not-appear-'.repeat(20);
+    const response = await fetch(`${handle.url}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: secret }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.text()).not.toContain(secret);
   });
 
   test('rejects unsupported simple-chat streaming with the declared 501 response', async () => {

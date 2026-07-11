@@ -5,13 +5,16 @@ import { Effect, Schema } from 'effect';
 import { Fred } from '@fancyrobot/fred';
 import { ServerApp } from './app';
 
-function parseArgs(): { configPath?: string; port: number } {
-  const args = process.argv.slice(2);
+export function parseArgs(args: readonly string[] = process.argv.slice(2)): { configPath?: string; port: number } {
   const configIndex = args.indexOf('--config');
   const portIndex = args.indexOf('--port');
 
   const configPath = configIndex !== -1 ? args[configIndex + 1] : undefined;
-  const port = portIndex !== -1 ? parseInt(args[portIndex + 1]) : 3000;
+  const requestedPort = portIndex === -1 ? undefined : args[portIndex + 1];
+  const parsedPort = requestedPort === undefined ? Number.NaN : Number(requestedPort);
+  const port = Number.isSafeInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65_535
+    ? parsedPort
+    : 3000;
 
   return { configPath, port };
 }

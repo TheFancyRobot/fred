@@ -181,9 +181,9 @@ export interface WorkflowIR {
   /** Entry node id — must reference a node in `nodes`. */
   readonly entry: string;
   /** Optional typed input schema. */
-  readonly input?: Schema.Schema.Any;
+  readonly input?: Schema.Schema.AnyNoContext;
   /** Optional typed output schema. */
-  readonly output?: Schema.Schema.Any;
+  readonly output?: Schema.Schema.AnyNoContext;
   /** Checkpoint/resume policy (carried from V2 `PipelineConfigV2.checkpoint`). */
   readonly checkpoint?: CheckpointConfig;
   /** Lifecycle hooks (carried from pipeline/graph `hooks`). */
