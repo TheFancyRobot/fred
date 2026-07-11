@@ -67,14 +67,34 @@ const hasRequestBody = (request: Request): boolean =>
   request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
 
 const readBoundedRequest = async (request: Request, maximumBytes: number): Promise<Request> => {
-  if (!hasRequestBody(request)) return request;
+  const requestBody = request.body;
+  if (!hasRequestBody(request) || requestBody === null) return request;
   const declaredLength = request.headers.get('content-length');
   if (declaredLength !== null && Number(declaredLength) > maximumBytes) {
     throw new RequestBodyTooLargeError({ message: 'Request body exceeds configured limit' });
   }
-  const body = await request.arrayBuffer();
-  if (body.byteLength > maximumBytes) {
-    throw new RequestBodyTooLargeError({ message: 'Request body exceeds configured limit' });
+  const reader = requestBody.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maximumBytes) {
+        await reader.cancel('Request body exceeds configured limit').catch(() => undefined);
+        throw new RequestBodyTooLargeError({ message: 'Request body exceeds configured limit' });
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
   }
   return new Request(request, { body });
 };

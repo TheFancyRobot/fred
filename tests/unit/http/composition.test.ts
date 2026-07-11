@@ -249,6 +249,43 @@ describe('createFredHttpApp', () => {
     expect(await oversized.json()).toEqual({ success: false, error: 'Request body too large' });
   });
 
+  it('stops reading a chunked compatibility request once it exceeds the body limit', async () => {
+    const fred = new Fred();
+    let pulls = 0;
+    let handled = false;
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, maxRequestBodySize: 4 },
+      routes: [{
+        method: 'POST',
+        path: '/chunked-bounded',
+        visibility: 'public',
+        handler: () => {
+          handled = true;
+          return new Response('unexpected');
+        },
+      }],
+    });
+    createdApps.push(app);
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) controller.enqueue(new TextEncoder().encode('1234'));
+        else if (pulls === 2) controller.enqueue(new TextEncoder().encode('5'));
+        else controller.close();
+      },
+    }, { highWaterMark: 0 });
+    const response = await app.fetch(new Request('http://localhost/chunked-bounded', {
+      method: 'POST',
+      body,
+    }));
+
+    expect(response.status).toBe(413);
+    expect(handled).toBe(false);
+    expect(pulls).toBe(2);
+  });
+
   it('times out compatibility handlers, aborts their signal, and returns a sanitized response', async () => {
     const fred = new Fred();
     let aborted = false;
