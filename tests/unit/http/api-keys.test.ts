@@ -111,6 +111,8 @@ describe('API key authorization', () => {
       expect((await invoke('/workflows/scoped')).status).toBe(401);
       expect((await invoke('/workflows/scoped', insufficient.token)).status).toBe(403);
       expect((await invoke('/workflows/scoped', sufficient.token)).status).toBe(200);
+      expect((await invoke('/workflows/%73coped', insufficient.token)).status).toBe(403);
+      expect((await invoke('/workflows/%73coped', sufficient.token)).status).toBe(200);
       expect((await invoke('/workflows/public')).status).toBe(200);
       expect(handle.authToken).toBeUndefined();
     } finally {

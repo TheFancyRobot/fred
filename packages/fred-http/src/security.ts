@@ -140,6 +140,19 @@ export function matchOrigin(origin: string, allowedOrigins: readonly string[]): 
   });
 }
 
+/** Canonical route key shared by endpoint registration and pre-routing security checks. */
+export function canonicalizeHttpPath(value: string): string | undefined {
+  try {
+    const pathname = new URL(value, 'http://fred.invalid').pathname;
+    return pathname
+      .split('/')
+      .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+      .join('/');
+  } catch {
+    return undefined;
+  }
+}
+
 export function checkAuth(
   ip: string,
   authHeader: string | null,

@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Fred } from '@fancyrobot/fred';
 import { Effect } from 'effect';
-import { createFredHttpApp } from '../../../packages/fred-http/src/index';
+import { createFredHttpApp as createFredHttpAppBase } from '../../../packages/fred-http/src/index';
 import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
+
+type CreateFredHttpAppOptions = Parameters<typeof createFredHttpAppBase>[0];
+const createFredHttpApp = (options: CreateFredHttpAppOptions) => createFredHttpAppBase({
+  getClientIp: () => '203.0.113.10',
+  ...options,
+});
 
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
@@ -160,6 +166,52 @@ describe('createFredHttpApp', () => {
     const second = await app.fetch(new Request('http://localhost/limited'));
     expect(second.status).toBe(429);
     expect(second.headers.get('Retry-After')).toBe('1');
+  });
+
+  it('fails closed instead of sharing one limiter bucket when client identity is unavailable', async () => {
+    const fred = new Fred();
+    const app = createFredHttpAppBase({
+      fred,
+      security: { requireAuth: false },
+      routes: [{
+        method: 'GET',
+        path: '/anonymous',
+        visibility: 'public',
+        handler: () => new Response('pong', { status: 200 }),
+      }],
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/anonymous'));
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('Service Unavailable');
+  });
+
+  it('keeps anonymous limiter buckets isolated by trusted client IP', async () => {
+    const fred = new Fred();
+    const app = createFredHttpAppBase({
+      fred,
+      getClientIp: (request) => request.headers.get('x-test-client-ip') ?? undefined,
+      security: {
+        requireAuth: false,
+        rateLimitMaxRequests: 1,
+        rateLimitWindowMs: 1_000,
+      },
+      routes: [{
+        method: 'GET',
+        path: '/isolated',
+        visibility: 'public',
+        handler: () => new Response('pong', { status: 200 }),
+      }],
+    });
+    createdApps.push(app);
+    const request = (ip: string) => app.fetch(new Request('http://localhost/isolated', {
+      headers: { 'x-test-client-ip': ip },
+    }));
+
+    expect((await request('203.0.113.1')).status).toBe(200);
+    expect((await request('203.0.113.2')).status).toBe(200);
+    expect((await request('203.0.113.1')).status).toBe(429);
   });
 
   it('shares key-first rate-limit semantics with the compatibility adapter', async () => {

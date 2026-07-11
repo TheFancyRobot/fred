@@ -20,6 +20,10 @@ import {
   type WorkflowExecutionOptions,
   type WorkflowExecutionResult,
 } from '../workflow/execute';
+import {
+  WorkflowInputValidationError,
+  WorkflowOutputValidationError,
+} from '../workflow/errors';
 
 /** Minimal agent manager interface retained for public compatibility. */
 export interface AgentManagerLike {
@@ -40,6 +44,7 @@ export interface PipelineResult {
   success: boolean;
   status?: 'completed' | 'failed' | 'paused' | 'aborted';
   context: PipelineContext;
+  executedNodes: string[];
   finalOutput?: unknown;
   error?: Error;
   abortedBy?: string;
@@ -120,6 +125,7 @@ function toPipelineResult(result: WorkflowExecutionResult): PipelineResult {
     success: result.success,
     status: result.status,
     context: result.context,
+    executedNodes: result.executedNodes,
     finalOutput: result.finalOutput,
     error: result.error,
     abortedBy: result.abortedBy,
@@ -137,6 +143,19 @@ export function executePipelineV2Effect(
   const runId = options.runId ?? options.checkpointManager?.generateRunId() ?? crypto.randomUUID();
   const executionOptions = { ...options, runId };
   return executeWorkflowEffect(workflow, input, toWorkflowOptions(executionOptions)).pipe(
+    Effect.mapError((error) => {
+      if (
+        error instanceof WorkflowInputValidationError
+        || error instanceof WorkflowOutputValidationError
+      ) {
+        return new PipelineExecutionError({
+          pipelineId: config.id,
+          step: 0,
+          cause: error,
+        });
+      }
+      return error;
+    }),
     Effect.flatMap((result) => {
       if (!result.success && result.status === 'failed' && config.failFast !== false) {
         const step = workflow.nodes.find((node) => node.id === result.failedNodeId)?.sourceIndex ?? 0;
@@ -171,6 +190,7 @@ export async function executePipelineV2(
             success: false,
             status: 'failed' as const,
             context: fallbackContext(config, input, executionOptions),
+            executedNodes: [],
             error: toError(error.cause),
             runId,
           }),

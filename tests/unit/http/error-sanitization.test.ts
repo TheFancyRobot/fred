@@ -7,6 +7,7 @@ describe('fred-http error sanitization', () => {
     const fred = new Fred();
     const app = createFredHttpApp({
       fred,
+      getClientIp: () => '203.0.113.10',
       routes: [
         {
           method: 'GET',

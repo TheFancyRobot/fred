@@ -21,6 +21,7 @@ import {
   type ApiKeyStoreService,
 } from './api-keys';
 import {
+  canonicalizeHttpPath,
   isLocalRequest,
   matchOrigin,
   resolveServerSecurityConfig,
@@ -116,8 +117,8 @@ const makeSecurityMiddleware = (
     }
 
     const ip = clientIp(request, trustProxy);
-    const path = request.url.split('?', 1)[0] ?? request.url;
-    const routeRequirement = authRequirements.get(path);
+    const path = canonicalizeHttpPath(request.url);
+    const routeRequirement = path === undefined ? undefined : authRequirements.get(path);
     const authIsOptional = routeRequirement === false
       || !config.requireAuth
       || (config.allowLocalRequestsWithoutAuth && isLocalRequest(ip));

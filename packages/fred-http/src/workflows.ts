@@ -16,6 +16,7 @@ import {
 import { Effect, Layer, Schema, Stream } from 'effect';
 import { FredHttpApi } from './api';
 import { encodeSseData } from './handlers/sse';
+import { canonicalizeHttpPath } from './security';
 
 export interface WorkflowHttpConfig {
   /** Absolute endpoint path. Defaults to `/workflows/<encoded workflow id>`. */
@@ -87,7 +88,7 @@ export const resolveWorkflowEndpoints = (
     : Object.entries(selection);
   selected.sort(([left], [right]) => left.localeCompare(right));
 
-  const occupied = new Set(RESERVED_PATHS);
+  const occupied = new Set(Array.from(RESERVED_PATHS, (path) => canonicalizeHttpPath(path) ?? path));
   return selected.map(([id, config], index) => {
     const descriptor = byId.get(id);
     if (!descriptor) {
@@ -104,14 +105,22 @@ export const resolveWorkflowEndpoints = (
         message: `Workflow "${id}" has invalid HTTP path "${path}"`,
       });
     }
-    if (occupied.has(path)) {
+    const canonicalPath = canonicalizeHttpPath(path);
+    if (canonicalPath === undefined) {
+      throw new WorkflowEndpointConfigurationError({
+        workflowId: id,
+        path,
+        message: `Workflow "${id}" has an invalid encoded HTTP path "${path}"`,
+      });
+    }
+    if (occupied.has(canonicalPath)) {
       throw new WorkflowEndpointConfigurationError({
         workflowId: id,
         path,
         message: `Workflow HTTP path "${path}" is reserved or duplicated`,
       });
     }
-    occupied.add(path);
+    occupied.add(canonicalPath);
     return {
       descriptor,
       path,

@@ -110,6 +110,8 @@ import { createFredHttpApp } from '@fancyrobot/fred-http';
 const fred = new Fred();
 const app = createFredHttpApp({
   fred,
+  // Supply the remote address from the trusted embedding runtime.
+  getClientIp: () => '127.0.0.1',
   security: { requireAuth: false },
   routes: [
     {
@@ -143,7 +145,11 @@ The package applies a shared security-first request path:
 
 Custom route failures return sanitized error payloads and should not leak raw exception details.
 
-`createFredHttpApp()` does not trust proxy headers by default. If your embedding server has a trusted client-IP source, pass `getClientIp(request)` explicitly. Only set `trustProxy: true` when the deployment boundary guarantees `x-forwarded-for` / `x-real-ip` are trustworthy.
+`createFredHttpApp()` does not trust proxy headers by default. Its limiter fails closed
+with `503 Service Unavailable` when neither an authenticated API-key identity nor a
+trusted client IP is available. Pass `getClientIp(request)` from the embedding
+runtime's remote-address metadata. Only set `trustProxy: true` when the deployment
+boundary guarantees `x-forwarded-for` / `x-real-ip` are trustworthy.
 
 Composable apps expose async `dispose()` so callers release both the web-handler
 scope and rate-limiter resources during teardown.

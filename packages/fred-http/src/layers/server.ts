@@ -12,6 +12,7 @@ import {
   type WorkflowEndpointsConfig,
 } from '../workflows';
 import {
+  canonicalizeHttpPath,
   resolveServerSecurityConfig,
   validateFredHttpRuntimeConfig,
 } from '../security';
@@ -52,7 +53,7 @@ export const FredHttpServerLive = (
   };
   const endpoints = resolveWorkflowEndpoints(workflowSnapshot, options.workflowEndpoints);
   const authRequirements = new Map(endpoints.map((endpoint) => [
-    endpoint.path,
+    canonicalizeHttpPath(endpoint.path) ?? endpoint.path,
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
   const api = buildFredHttpApi(endpoints);

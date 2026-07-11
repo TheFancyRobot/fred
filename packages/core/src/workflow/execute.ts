@@ -9,7 +9,11 @@ import type { Tracer } from '../tracing';
 import { SpanKind } from '../tracing';
 import type { IRNode, WorkflowIR } from './ir';
 import { findNode, inEdges, outEdges } from './ir';
-import { WorkflowNodeExecutionError } from './errors';
+import {
+  WorkflowInputValidationError,
+  WorkflowNodeExecutionError,
+  WorkflowOutputValidationError,
+} from './errors';
 import { decodeWorkflowInput, validateWorkflowOutput } from './contracts';
 
 export interface WorkflowExecutionOptions {
@@ -59,7 +63,10 @@ export interface WorkflowExecutorService {
     workflow: WorkflowIR,
     input: unknown,
     options: WorkflowExecutionOptions,
-  ) => Effect.Effect<WorkflowExecutionResult>;
+  ) => Effect.Effect<
+    WorkflowExecutionResult,
+    WorkflowInputValidationError | WorkflowOutputValidationError
+  >;
 }
 
 export const WorkflowExecutorService =

@@ -32,6 +32,10 @@ import {
   type ResumeError
 } from './errors';
 import { AgentService } from '../agent/service';
+import {
+  WorkflowInputValidationError,
+  WorkflowOutputValidationError,
+} from '../workflow/errors';
 import { HookManagerService } from '../hooks/service';
 import { resolveAmbientConversationId } from '../context/session-service';
 import { CheckpointService } from './checkpoint/service';
@@ -504,7 +508,15 @@ class PipelineServiceImpl implements PipelineService {
         conversationId: options?.conversationId,
         history: options?.sequentialVisibility === false ? [] : previousMessages,
         sequentialVisibility: options?.sequentialVisibility,
-      });
+      }).pipe(
+        Effect.mapError((error: WorkflowInputValidationError | WorkflowOutputValidationError) =>
+          new PipelineExecutionError({
+            pipelineId,
+            step: 0,
+            cause: error,
+          })
+        ),
+      );
 
       if (!result.success && result.status === 'failed') {
         return yield* Effect.fail(new PipelineExecutionError({

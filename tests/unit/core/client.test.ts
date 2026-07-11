@@ -145,6 +145,7 @@ describe('createFred client', () => {
     const result = (await client.workflows.run('client-v2-pipeline', 'hello')) as PipelineResult;
     expect(result.success).toBe(true);
     expect(result.finalOutput).toBe('echo:hello');
+    expect(result.executedNodes).toHaveLength(1);
   });
 
   it('resolves registered subworkflows through the public workflow runtime', async () => {

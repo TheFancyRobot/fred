@@ -168,10 +168,10 @@ const extractProxyIp = (request: Request): string | undefined => {
   return realIp && isIP(realIp) ? realIp : undefined;
 };
 
-const resolveClientIp = (request: Request, options: CreateFredHttpAppOptions): string => {
+const resolveClientIp = (request: Request, options: CreateFredHttpAppOptions): string | undefined => {
   const explicitClientIp = options.getClientIp?.(request)?.trim();
   if (explicitClientIp) return explicitClientIp;
-  return options.trustProxy ? extractProxyIp(request) ?? 'unknown' : 'unknown';
+  return options.trustProxy ? extractProxyIp(request) : undefined;
 };
 
 /**
@@ -248,7 +248,7 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
         }
         identity = result.right;
       } else if (requiresAuth) {
-        const authResult = checkAuth(clientIP, request.headers.get('Authorization'), securityConfig);
+        const authResult = checkAuth(clientIP ?? 'unknown', request.headers.get('Authorization'), securityConfig);
         if (!authResult.allowed) {
           return applyCorsHeaders(new Response('Unauthorized', { status: authResult.status ?? 401 }), origin, securityConfig, allowedCorsMethods);
         }
@@ -263,6 +263,14 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
             maxRequests: securityConfig.rateLimitMaxRequests,
             windowMs: securityConfig.rateLimitWindowMs,
           }));
+      if (identity === undefined && clientIP === undefined) {
+        return applyCorsHeaders(
+          new Response('Service Unavailable', { status: 503 }),
+          origin,
+          securityConfig,
+          allowedCorsMethods,
+        );
+      }
       const bucketKey = identity === undefined ? `ip:${clientIP}` : `key:${identity.id}`;
       const rateLimitResult = await Effect.runPromise(Effect.either(
         (await rateLimiter).consume({ key: bucketKey, policy }),

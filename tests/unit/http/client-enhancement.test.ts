@@ -178,6 +178,34 @@ describe('withHttp', () => {
     expect(JSON.stringify(spec.paths['/workflows/streamed']?.post?.responses)).toContain('text/event-stream');
   });
 
+  test('preserves V2 pipeline progress in streamed workflow lifecycle events', async () => {
+    const core = await createFred();
+    await core.workflows.define({
+      id: 'v2-streamed',
+      steps: [
+        { type: 'function', name: 'first', fn: () => 'first' },
+        { type: 'function', name: 'second', fn: () => 'second' },
+      ],
+    });
+    const fred = withHttp(core, {
+      security: { requireAuth: false },
+      workflowEndpoints: { 'v2-streamed': { stream: true, auth: false } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const response = await fetch(`${handle.url}/workflows/v2-streamed`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify('input'),
+    });
+    const body = await response.text();
+
+    expect(body.match(/"event":"node-completed"/g)).toHaveLength(2);
+    expect(body.indexOf('"event":"started"')).toBeLessThan(body.indexOf('"event":"node-completed"'));
+    expect(body.indexOf('"event":"node-completed"')).toBeLessThan(body.indexOf('"event":"completed"'));
+  });
+
   test('emits paused as the terminal SSE event for a paused workflow', async () => {
     const core = await createFred();
     await core.workflows.define(defineWorkflow({

@@ -396,6 +396,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
               success: result.success,
               status: result.status,
               context: result.context,
+              executedNodes: result.executedNodes,
               finalOutput: result.finalOutput,
               error: result.error,
               abortedBy: result.abortedBy,
