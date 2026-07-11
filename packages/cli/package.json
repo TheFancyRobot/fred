@@ -33,7 +33,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/plugin/api.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-dev --external @opentui/core --external semver",
+    "build": "bun build src/index.ts src/plugin/api.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-dev --external @fancyrobot/fred-http --external pg --external @opentui/core --external semver",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {

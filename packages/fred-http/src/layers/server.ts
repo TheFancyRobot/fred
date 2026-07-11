@@ -28,6 +28,10 @@ export const FredHttpServerLive = (
   workflowSnapshot: readonly WorkflowDescriptor[] = [],
 ) => {
   const endpoints = resolveWorkflowEndpoints(workflowSnapshot, options.workflowEndpoints);
+  const authRequirements = new Map(endpoints.map((endpoint) => [
+    endpoint.path,
+    endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
+  ] as const));
   const api = buildFredHttpApi(endpoints);
   const handlerLayers = fred === undefined
     ? FredHttpHandlersLive
@@ -38,7 +42,7 @@ export const FredHttpServerLive = (
   return HttpApiBuilder.serve().pipe(
     Layer.provide(FredDocsLayer),
     Layer.provide(FredOpenApiLayer),
-    Layer.provide(FredHttpSecurityLive(options)),
+    Layer.provide(FredHttpSecurityLive({ ...options, authRequirements })),
     Layer.provide(apiLive),
     Layer.provideMerge(BunHttpServer.layer({
       port: options.port ?? 0,

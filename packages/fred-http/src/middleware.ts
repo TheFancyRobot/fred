@@ -4,10 +4,18 @@ import {
   HttpServerResponse,
   type HttpApp,
 } from '@effect/platform';
-import { Cause, Config, Effect, Option, Redacted } from 'effect';
+import { Cause, Config, Effect, Either, Option, Redacted } from 'effect';
 import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import { RateLimiter } from './rate-limiter';
+import {
+  ApiKeyScopeError,
+  ApiKeyStoreError,
+  AuthenticatedApiKey,
+  authorizeApiKey,
+  type AuthenticatedApiKeyIdentity,
+  type ApiKeyStoreService,
+} from './api-keys';
 import {
   isLocalRequest,
   matchOrigin,
@@ -18,6 +26,8 @@ import {
 export interface FredHttpSecurityOptions {
   readonly security?: Partial<ServerSecurityConfig>;
   readonly trustProxy?: boolean;
+  readonly apiKeyStore?: ApiKeyStoreService;
+  readonly authRequirements?: ReadonlyMap<string, false | readonly string[]>;
 }
 
 const allowedMethods = ['GET', 'POST', 'OPTIONS'];
@@ -64,6 +74,8 @@ const withCors = (
   : response;
 
 const unauthorized = HttpServerResponse.text('Unauthorized', { status: 401 });
+const forbidden = HttpServerResponse.text('Forbidden', { status: 403 });
+const unavailable = HttpServerResponse.text('Service Unavailable', { status: 503 });
 
 const hasTag = (value: unknown, tag: string): boolean =>
   typeof value === 'object'
@@ -76,6 +88,8 @@ const makeSecurityMiddleware = (
   trustProxy: boolean,
   token: string | undefined,
   limiter: RateLimiter,
+  apiKeyStore: ApiKeyStoreService | undefined,
+  authRequirements: ReadonlyMap<string, false | readonly string[]>,
 ) => (app: HttpApp.Default): HttpApp.Default =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
@@ -101,14 +115,34 @@ const makeSecurityMiddleware = (
       );
     }
 
-    const authIsOptional = !config.requireAuth
+    const path = request.url.split('?', 1)[0] ?? request.url;
+    const routeRequirement = authRequirements.get(path);
+    const authIsOptional = routeRequirement === false
+      || !config.requireAuth
       || (config.allowLocalRequestsWithoutAuth && isLocalRequest(ip));
     const authorization = request.headers.authorization;
-    if (!authIsOptional && (!token || !authorization || !secureEqual(authorization, `Bearer ${token}`))) {
-      return withCors(unauthorized, origin, config);
+    let identity = Option.none<AuthenticatedApiKeyIdentity>();
+    if (!authIsOptional && apiKeyStore !== undefined) {
+      const authResult = yield* Effect.either(authorizeApiKey(
+        apiKeyStore,
+        authorization,
+        routeRequirement === undefined ? [] : routeRequirement,
+      ));
+      if (Either.isLeft(authResult)) {
+        const response = authResult.left instanceof ApiKeyScopeError
+          ? forbidden
+          : authResult.left instanceof ApiKeyStoreError
+            ? unavailable
+            : unauthorized;
+        return withCors(response, origin, config);
+      }
+      identity = Option.some(authResult.right);
+    } else if (!authIsOptional && (!token || !authorization || !secureEqual(authorization, `Bearer ${token}`))) {
+        return withCors(unauthorized, origin, config);
     }
 
     const response = yield* app.pipe(
+      Effect.provideService(AuthenticatedApiKey, identity),
       Effect.catchAllCause((cause) => {
         const failure = Cause.failureOption(cause);
         if (Option.isSome(failure) && hasTag(failure.value, 'RouteNotFound')) {
@@ -140,18 +174,24 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
   return HttpApiBuilder.middleware(
     Effect.gen(function* () {
       const configuredEnvironmentToken = yield* environmentToken;
-      const resolved = resolveServerSecurityConfig(options.security, configuredEnvironmentToken);
-      if (resolved.generatedAuthToken !== undefined) {
-        yield* Effect.logWarning('Generated Fred HTTP auth token', {
-          authToken: resolved.generatedAuthToken,
-        });
-      }
+      const resolved = resolveServerSecurityConfig(
+        options.security,
+        options.apiKeyStore === undefined ? configuredEnvironmentToken : 'api-key-store',
+      );
       const config = resolved.config;
+      if (options.apiKeyStore !== undefined) yield* options.apiKeyStore.initialize;
       const limiter = yield* Effect.acquireRelease(
         Effect.sync(() => new RateLimiter(config.rateLimitMaxRequests, config.rateLimitWindowMs)),
         (resource) => Effect.sync(() => resource.dispose()),
       );
-      return makeSecurityMiddleware(config, options.trustProxy ?? false, config.authToken, limiter);
+      return makeSecurityMiddleware(
+        config,
+        options.trustProxy ?? false,
+        options.apiKeyStore === undefined ? config.authToken : undefined,
+        limiter,
+        options.apiKeyStore,
+        options.authRequirements ?? new Map(),
+      );
     }),
   );
 };

@@ -59,7 +59,10 @@ const squash = (cause: Cause.Cause<unknown>): Error => {
 };
 
 export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredWithHttp => {
-  const resolvedSecurity = resolveServerSecurityConfig(options.security);
+  const resolvedSecurity = resolveServerSecurityConfig(
+    options.security,
+    options.apiKeyStore === undefined ? undefined : 'api-key-store',
+  );
   const serverOptions: WithHttpOptions = {
     ...options,
     security: resolvedSecurity.config,
@@ -101,7 +104,9 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
       const address = serverAddress(server);
       const nextHandle: FredHttpServerHandle = {
         ...address,
-        ...(resolvedSecurity.config.requireAuth && resolvedSecurity.config.authToken !== undefined
+        ...(options.apiKeyStore === undefined
+          && resolvedSecurity.config.requireAuth
+          && resolvedSecurity.config.authToken !== undefined
           ? { authToken: resolvedSecurity.config.authToken }
           : {}),
         close: stop,

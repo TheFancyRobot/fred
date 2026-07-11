@@ -1,6 +1,37 @@
 export { startServer, ServerApp } from './server';
 export { DEFAULT_SECURITY_CONFIG, resolveServerSecurityConfig } from './security';
 export type { ResolvedServerSecurityConfig, ServerSecurityConfig } from './security';
+export {
+  API_KEY_TABLE,
+  API_KEY_TOKEN_PREFIX,
+  ApiKeyAuthenticationError,
+  ApiKeyAuthorization,
+  ApiKeyAuthorizationLive,
+  ApiKeyDuplicateIdError,
+  ApiKeyRateLimit,
+  ApiKeyRecord,
+  ApiKeyScopeError,
+  ApiKeyStore,
+  ApiKeyStoreError,
+  ApiKeyStoreMemory,
+  ApiKeyStorePostgres,
+  ApiKeyStoreSqlite,
+  AuthenticatedApiKey,
+  authorizeApiKey,
+  generateApiKey,
+  hashApiKey,
+  makeMemoryApiKeyStore,
+  makeApiKeyAuthorization,
+  makePostgresApiKeyStore,
+  makeSqliteApiKeyStore,
+} from './api-keys';
+export type {
+  ApiKeyStoreService,
+  ApiKeyAuthorizationService,
+  AuthenticatedApiKeyIdentity,
+  GeneratedApiKey,
+  PostgresApiKeyPool,
+} from './api-keys';
 export { createFredHttpApp } from './app-builder';
 export type {
   FredHttpRouteVisibility,
