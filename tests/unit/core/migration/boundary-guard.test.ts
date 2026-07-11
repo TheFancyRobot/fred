@@ -99,6 +99,7 @@ describe('Effect runtime boundary guards', () => {
     'commands/session.ts',
     'commands/validate.ts',
     'commands/intent.ts',
+    'commands/keys.ts',
     'commands/list.ts',
     'commands/route.ts',
     'commands/mcp.ts',

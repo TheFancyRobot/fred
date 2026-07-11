@@ -26,9 +26,9 @@ A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to 
 ## Agent File Pattern (.md + YAML Frontmatter)
 
 Examples 01-13 define agents in `src/agents/*.md` files with YAML frontmatter
-and a markdown prompt body. Example 14 uses the scoped `createFred()` client
-and loads its markdown prompt explicitly so the optional HTTP boundary remains
-the focus.
+and a markdown prompt body. Examples 14-15 use the scoped `createFred()` client
+so the optional HTTP boundary and deterministic workflow transport remain the
+focus.
 
 - Agent config lives in frontmatter (`id`, `platform`, `model`, `tools`, `utterances`, etc.)
 - Agent behavior/prompt content lives in the markdown body
@@ -56,6 +56,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 | 12 | [CLI & TUI](./12-cli-and-tui/) | Use `fred chat` and `fred run` for interactive and headless config-driven workflows |
 | 13 | [Multi-Agent Workflows](./13-multi-agent-workflows/) | Combine a concierge, research swarm, notebook memory, and daily brief workflows for everyday tasks |
 | 14 | [Optional HTTP Layer](./14-http-layer/) | Add an opt-in HTTP server with auth, CORS, admin/docs routes, sessions, SSE, and OpenAI SDK compatibility |
+| 15 | [HTTP Workflows](./15-http-workflows/) | Expose typed JSON and SSE workflows with default/custom paths, scoped API keys, OpenAPI, CORS, and limits |
 
 ## Fred's Unique Capabilities Highlighted
 
@@ -65,6 +66,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 - **Golden-trace evaluation (Example 09):** First-class local assertions against recorded traces without requiring external SaaS.
 - **Coordinator + worker orchestration (Example 13):** Parallel sub-agent research, notebook memory, and reusable daily brief flows in one workspace.
 - **Optional HTTP boundary (Example 14):** Keep `createFred()` core-only while adding a secured, observable HTTP API explicitly with `withHttp()`.
+- **Declarative workflow HTTP (Example 15):** Snapshot typed workflows into JSON/SSE endpoints with explicit exposure and scoped authorization.
 
 ## ETA Template Coverage
 

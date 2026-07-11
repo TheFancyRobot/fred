@@ -6,6 +6,10 @@ For a complete runnable project—including credential-free auth/CORS/admin/docs
 smoke checks plus optional live sessions, SSE, and OpenAI SDK calls—see
 [Example 14: Optional HTTP Layer](https://github.com/TheFancyRobot/fred/tree/main/examples/14-http-layer).
 
+For typed workflow JSON/SSE endpoints, scoped API keys, custom paths, and
+durable key setup, see
+[Example 15: HTTP Workflows](https://github.com/TheFancyRobot/fred/tree/main/examples/15-http-workflows).
+
 ## Basic Server
 
 ```typescript
@@ -57,3 +61,7 @@ next major release.
 - `GET /status` - Live agent runs
 - `GET /docs` - Swagger UI
 - `GET /docs/openapi.json` - OpenAPI document
+
+When `workflowEndpoints` is enabled through `withHttp()`, the server also adds
+typed `POST /workflows/:id` routes (or configured custom paths). Workflow
+definitions are snapshotted when the listener starts.

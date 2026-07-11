@@ -133,6 +133,11 @@ const applyCorsHeaders = (
   return response;
 };
 
+const requireWebResponse = (value: unknown): Response => {
+  if (value instanceof Response) return value;
+  throw new Error('Fred HttpApi web handler returned a non-Response value');
+};
+
 const extractProxyIp = (request: Request): string | undefined => {
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
@@ -262,12 +267,14 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
         const boundedRequest = await readBoundedRequest(request, securityConfig.maxRequestBodySize);
         const response = matchedCustomRoute
           ? await withRequestTimeout(
-              (signal) => matchedCustomRoute.handler(new Request(boundedRequest, { signal })),
+              (signal) => Promise.resolve(
+                matchedCustomRoute.handler(new Request(boundedRequest, { signal })),
+              ),
               securityConfig.requestTimeoutSeconds,
             )
           : await withRequestTimeout(
-              (signal) => (async () => (await getWebHandler()).handler(
-                new Request(boundedRequest, { signal }),
+              (signal) => (async () => requireWebResponse(
+                await (await getWebHandler()).handler(new Request(boundedRequest, { signal })),
               ))(),
               securityConfig.requestTimeoutSeconds,
             );

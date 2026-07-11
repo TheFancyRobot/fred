@@ -1,0 +1,15 @@
+{
+  "name": "@fancyrobot/fred-example-15-http-workflows",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "client": "bun run src/client.ts",
+    "smoke": "bun run src/smoke.ts"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-http": "workspace:*",
+    "effect": "^3.21.0"
+  }
+}

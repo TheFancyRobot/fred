@@ -14,6 +14,9 @@ describe('fred-http package surface', () => {
     expect(typeof httpPkg.createFredHttpApp).toBe('function')
     expect(typeof httpPkg.withHttp).toBe('function')
     expect(typeof httpPkg.FredHttpServerLive).toBe('function')
+    expect(typeof httpPkg.resolveWorkflowEndpoints).toBe('function')
+    expect(typeof httpPkg.buildWorkflowHttpApi).toBe('function')
+    expect(httpPkg.WorkflowEndpointConfigurationError).toBeDefined()
   })
 
   it('exports the schema-first HttpApi and docs surface', () => {
