@@ -4,7 +4,7 @@ import {
   HttpServerResponse,
   type HttpApp,
 } from '@effect/platform';
-import { Config, Effect, Option, Redacted } from 'effect';
+import { Cause, Config, Effect, Option, Redacted } from 'effect';
 import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import { RateLimiter } from './rate-limiter';
@@ -65,6 +65,12 @@ const withCors = (
 
 const unauthorized = HttpServerResponse.text('Unauthorized', { status: 401 });
 
+const hasTag = (value: unknown, tag: string): boolean =>
+  typeof value === 'object'
+  && value !== null
+  && '_tag' in value
+  && value._tag === tag;
+
 const makeSecurityMiddleware = (
   config: ServerSecurityConfig,
   trustProxy: boolean,
@@ -103,12 +109,22 @@ const makeSecurityMiddleware = (
     }
 
     const response = yield* app.pipe(
-      Effect.catchAllCause(() =>
-        Effect.succeed(HttpServerResponse.unsafeJson(
+      Effect.catchAllCause((cause) => {
+        const failure = Cause.failureOption(cause);
+        if (Option.isSome(failure) && hasTag(failure.value, 'RouteNotFound')) {
+          return Effect.succeed(HttpServerResponse.empty({ status: 404 }));
+        }
+        if (Option.isSome(failure) && hasTag(failure.value, 'HttpApiDecodeError')) {
+          return Effect.succeed(HttpServerResponse.unsafeJson(
+            { success: false, error: 'Invalid request' },
+            { status: 400 },
+          ));
+        }
+        return Effect.succeed(HttpServerResponse.unsafeJson(
           { success: false, error: 'Request failed' },
           { status: 500 },
-        )),
-      ),
+        ));
+      }),
     );
     return withCors(response, origin, config);
   });

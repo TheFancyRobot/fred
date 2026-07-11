@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createFred } from '../../../packages/core/src/client';
+import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
+import { Schema } from 'effect';
 import {
   HttpClientClosedError,
   ServerAlreadyRunningError,
@@ -7,6 +9,7 @@ import {
   withHttp,
   type FredWithHttp,
 } from '../../../packages/fred-http/src/client';
+import { WorkflowEndpointConfigurationError } from '../../../packages/fred-http/src/workflows';
 
 const clients: FredWithHttp[] = [];
 
@@ -79,5 +82,159 @@ describe('withHttp', () => {
 
     const handle = await fred.server.listen({ port: occupiedPort });
     expect(handle.port).toBe(occupiedPort);
+  });
+
+  test('snapshots typed JSON workflow endpoints when the listener starts', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'greet',
+      entry: 'greet',
+      nodes: [{
+        id: 'greet',
+        kind: 'function',
+        fn: (context) => ({ greeting: `Hello, ${(context.input as { name: string }).name}` }),
+      }],
+      edges: [],
+      input: Schema.Struct({ name: Schema.String }),
+      output: Schema.Struct({ greeting: Schema.String }),
+    }));
+    const fred = withHttp(core, {
+      security: { requireAuth: false },
+      workflowEndpoints: true,
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const response = await fetch(`${handle.url}/workflows/greet`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Ada' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      status: 'completed',
+      workflowId: 'greet',
+      output: { greeting: 'Hello, Ada' },
+    });
+
+    const invalid = await fetch(`${handle.url}/workflows/greet`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 42, secret: 'must-not-leak' }),
+    });
+    expect(invalid.status).toBe(400);
+    const invalidBody = await invalid.text();
+    expect(invalidBody).toContain('Invalid request');
+    expect(invalidBody).not.toContain('must-not-leak');
+
+    await core.workflows.define(defineWorkflow({
+      id: 'late',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'late' }],
+      edges: [],
+    }));
+    expect((await fetch(`${handle.url}/workflows/late`, { method: 'POST' })).status).toBe(404);
+
+    const spec = await (await fetch(`${handle.url}/docs/openapi.json`)).json() as {
+      paths: Record<string, unknown>;
+      components: { schemas: Record<string, unknown> };
+    };
+    expect(spec.paths['/workflows/greet']).toBeDefined();
+    expect(JSON.stringify(spec.components.schemas)).toContain('greeting');
+  });
+
+  test('streams ordered workflow lifecycle events with one terminal event', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'streamed',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: { requireAuth: false },
+      workflowEndpoints: { streamed: { stream: true, auth: false } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const response = await fetch(`${handle.url}/workflows/streamed`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify('input'),
+    });
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const body = await response.text();
+    expect(body.indexOf('"event":"started"')).toBeLessThan(body.indexOf('"event":"node-completed"'));
+    expect(body.indexOf('"event":"node-completed"')).toBeLessThan(body.indexOf('"event":"completed"'));
+    expect(body.match(/"event":"completed"/g)).toHaveLength(1);
+    expect(body).not.toContain('kind');
+
+    const spec = await (await fetch(`${handle.url}/docs/openapi.json`)).json() as {
+      paths: Record<string, { post?: { security?: unknown[]; responses?: Record<string, unknown> } }>;
+    };
+    expect(spec.paths['/workflows/streamed']?.post?.security).toEqual([]);
+    expect(JSON.stringify(spec.paths['/workflows/streamed']?.post?.responses)).toContain('text/event-stream');
+  });
+
+  test('releases an SSE request when the consumer disconnects mid-workflow', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'cancelled-stream',
+      entry: 'slow',
+      nodes: [{
+        id: 'slow',
+        kind: 'function',
+        fn: async () => {
+          await Bun.sleep(50);
+          return 'done';
+        },
+      }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: { requireAuth: false },
+      workflowEndpoints: { 'cancelled-stream': { stream: true } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+    const response = await fetch(`${handle.url}/workflows/cancelled-stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify('input'),
+    });
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('"event":"started"');
+    await reader.cancel();
+    expect((await fetch(`${handle.url}/health`)).status).toBe(200);
+  });
+
+  test('rejects unknown, reserved, and duplicate workflow endpoint configuration before binding', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'first',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    await core.workflows.define(defineWorkflow({
+      id: 'second',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+
+    const unknown = withHttp(core, { workflowEndpoints: { missing: {} } });
+    await expect(unknown.server.listen()).rejects.toBeInstanceOf(WorkflowEndpointConfigurationError);
+
+    const reserved = withHttp(core, { workflowEndpoints: { first: { path: '/health' } } });
+    await expect(reserved.server.listen()).rejects.toBeInstanceOf(WorkflowEndpointConfigurationError);
+
+    const duplicated = withHttp(core, {
+      workflowEndpoints: { first: { path: '/run' }, second: { path: '/run' } },
+    });
+    await expect(duplicated.server.listen()).rejects.toBeInstanceOf(WorkflowEndpointConfigurationError);
+    await core.shutdown();
   });
 });

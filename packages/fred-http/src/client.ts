@@ -7,6 +7,10 @@ import {
   type FredHttpServerLayerOptions,
 } from './layers/server';
 import { resolveServerSecurityConfig } from './security';
+import {
+  WorkflowEndpointConfigurationError,
+  type WorkflowEndpointsConfig,
+} from './workflows';
 
 export class ServerAlreadyRunningError extends Schema.TaggedError<ServerAlreadyRunningError>()(
   'ServerAlreadyRunningError',
@@ -45,7 +49,9 @@ export interface FredWithHttp extends FredClient {
   shutdown(): Promise<void>;
 }
 
-export type WithHttpOptions = Omit<FredHttpServerLayerOptions, 'port' | 'hostname'>;
+export type WithHttpOptions = Omit<FredHttpServerLayerOptions, 'port' | 'hostname'> & {
+  readonly workflowEndpoints?: WorkflowEndpointsConfig;
+};
 
 const squash = (cause: Cause.Cause<unknown>): Error => {
   const error = Cause.squash(cause);
@@ -86,7 +92,7 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
         ...serverOptions,
         port: listenOptions.port,
         hostname: listenOptions.hostname,
-      });
+      }, fred, await fred.workflows.list());
       const runtimeExit = await Runtime.runPromise(fred.runtime)(
         Effect.exit(Scope.extend(Layer.toRuntime(layer), scope)),
       );
@@ -107,7 +113,7 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
       await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined);
       if (serverScope === scope) serverScope = undefined;
       state = 'idle';
-      throw cause instanceof ServerStartError
+      throw cause instanceof ServerStartError || cause instanceof WorkflowEndpointConfigurationError
         ? cause
         : new ServerStartError({ message: cause instanceof Error ? cause.message : String(cause) });
     }

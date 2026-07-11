@@ -38,3 +38,15 @@ export type {
   FredWithHttp,
   WithHttpOptions,
 } from './client';
+export {
+  buildFredHttpApi,
+  buildWorkflowHttpApi,
+  resolveWorkflowEndpoints,
+  workflowExecutionEnvelope,
+  WorkflowEndpointConfigurationError,
+} from './workflows';
+export type {
+  ResolvedWorkflowEndpoint,
+  WorkflowEndpointsConfig,
+  WorkflowHttpConfig,
+} from './workflows';
