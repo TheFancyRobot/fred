@@ -219,4 +219,56 @@ describe('createFredHttpApp', () => {
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
   });
+
+  it('enforces compatibility body limits at the boundary and sanitizes rejection', async () => {
+    const fred = new Fred();
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, maxRequestBodySize: 4 },
+      routes: [{
+        method: 'POST',
+        path: '/bounded',
+        visibility: 'public',
+        handler: (request) => request.text().then((body) => new Response(body)),
+      }],
+    });
+    createdApps.push(app);
+
+    const boundary = await app.fetch(new Request('http://localhost/bounded', {
+      method: 'POST',
+      body: '1234',
+    }));
+    expect(boundary.status).toBe(200);
+    expect(await boundary.text()).toBe('1234');
+
+    const oversized = await app.fetch(new Request('http://localhost/bounded', {
+      method: 'POST',
+      body: '12345',
+    }));
+    expect(oversized.status).toBe(413);
+    expect(await oversized.json()).toEqual({ success: false, error: 'Request body too large' });
+  });
+
+  it('times out compatibility handlers, aborts their signal, and returns a sanitized response', async () => {
+    const fred = new Fred();
+    let aborted = false;
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false, requestTimeoutSeconds: 1 },
+      routes: [{
+        method: 'GET',
+        path: '/slow',
+        visibility: 'public',
+        handler: (request) => new Promise<Response>(() => {
+          request.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+        }),
+      }],
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/slow'));
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ success: false, error: 'Request timed out' });
+    expect(aborted).toBe(true);
+  });
 });

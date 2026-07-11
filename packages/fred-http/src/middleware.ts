@@ -4,7 +4,7 @@ import {
   HttpServerResponse,
   type HttpApp,
 } from '@effect/platform';
-import { Cause, Config, Effect, Either, Layer, Option, Redacted } from 'effect';
+import { Cause, Config, Effect, Either, Layer, Option, Redacted, Schema } from 'effect';
 import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import {
@@ -34,6 +34,11 @@ export interface FredHttpSecurityOptions {
   readonly rateLimitStore?: RateLimitStoreService;
   readonly authRequirements?: ReadonlyMap<string, false | readonly string[]>;
 }
+
+class HttpRequestTimeoutError extends Schema.TaggedError<HttpRequestTimeoutError>()(
+  'HttpRequestTimeoutError',
+  { message: Schema.String },
+) {}
 
 const allowedMethods = ['GET', 'POST', 'OPTIONS'];
 const allowedHeaders = ['Content-Type', 'Authorization', 'X-Session-Id'];
@@ -81,6 +86,10 @@ const withCors = (
 const unauthorized = HttpServerResponse.text('Unauthorized', { status: 401 });
 const forbidden = HttpServerResponse.text('Forbidden', { status: 403 });
 const unavailable = HttpServerResponse.text('Service Unavailable', { status: 503 });
+const timedOut = HttpServerResponse.unsafeJson(
+  { success: false, error: 'Request timed out' },
+  { status: 504 },
+);
 
 const hasTag = (value: unknown, tag: string): boolean =>
   typeof value === 'object'
@@ -163,8 +172,15 @@ const makeSecurityMiddleware = (
 
     const response = yield* app.pipe(
       Effect.provideService(AuthenticatedApiKey, identity),
+      Effect.timeoutFail({
+        duration: `${config.requestTimeoutSeconds} seconds`,
+        onTimeout: () => new HttpRequestTimeoutError({ message: 'Request processing timed out' }),
+      }),
       Effect.catchAllCause((cause) => {
         const failure = Cause.failureOption(cause);
+        if (Option.isSome(failure) && failure.value instanceof HttpRequestTimeoutError) {
+          return Effect.succeed(timedOut);
+        }
         if (Option.isSome(failure) && hasTag(failure.value, 'RouteNotFound')) {
           return Effect.succeed(HttpServerResponse.empty({ status: 404 }));
         }

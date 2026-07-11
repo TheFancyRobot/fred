@@ -115,6 +115,68 @@ describe('FredHttpServerLive security middleware', () => {
     })).status).toBe(401);
   });
 
+  test('never uses a malformed forwarded address as a limiter identity', async () => {
+    const keys: string[] = [];
+    const store: RateLimitStoreService = {
+      backend: 'memory',
+      initialize: Effect.void,
+      consume: (input) => {
+        keys.push(input.key);
+        return Effect.succeed({
+          allowed: true,
+          retryAfterMs: 0,
+          remaining: 1,
+          resetAt: Date.now() + 1_000,
+        });
+      },
+      prune: () => Effect.succeed(0),
+      close: Effect.void,
+    };
+    const handle = await start({
+      trustProxy: true,
+      rateLimitStore: store,
+      security: { requireAuth: false },
+    });
+
+    expect((await fetch(`${handle.url}/health`, {
+      headers: { 'x-forwarded-for': 'not-an-ip' },
+    })).status).toBe(200);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).not.toBe('ip:not-an-ip');
+    expect(keys[0]).not.toBe('ip:unknown');
+  });
+
+  test('adds CORS only for allowed origins on 401, 429, and success responses', async () => {
+    const handle = await start({
+      security: {
+        authToken: 'cors-secret',
+        corsAllowedOrigins: ['https://allowed.example'],
+        rateLimitMaxRequests: 1,
+      },
+    });
+    const allowedHeaders = { origin: 'https://allowed.example' };
+    const unauthorized = await fetch(`${handle.url}/health`, { headers: allowedHeaders });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+
+    const authenticatedHeaders = {
+      ...allowedHeaders,
+      authorization: 'Bearer cors-secret',
+    };
+    const success = await fetch(`${handle.url}/health`, { headers: authenticatedHeaders });
+    expect(success.status).toBe(200);
+    expect(success.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+    const limited = await fetch(`${handle.url}/health`, { headers: authenticatedHeaders });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('access-control-allow-origin')).toBe('https://allowed.example');
+
+    const disallowed = await fetch(`${handle.url}/health`, {
+      headers: { origin: 'https://blocked.example' },
+    });
+    expect(disallowed.status).toBe(401);
+    expect(disallowed.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
   test('releases the listener so its bound port can be reused', async () => {
     const fred = withHttp(await createFred(), { security: { requireAuth: false } });
     clients.push(fred);
@@ -157,6 +219,21 @@ describe('FredHttpServerLive security middleware', () => {
         code: 'missing_user_message',
       },
     });
+  });
+
+  test('rejects oversized listener requests without echoing their body', async () => {
+    const handle = await start({
+      security: { requireAuth: false, maxRequestBodySize: 64 },
+    });
+    const secret = 'must-not-appear-'.repeat(20);
+    const response = await fetch(`${handle.url}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: secret }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.text()).not.toContain(secret);
   });
 
   test('rejects unsupported simple-chat streaming with the declared 501 response', async () => {

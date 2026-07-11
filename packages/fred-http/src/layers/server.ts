@@ -11,6 +11,10 @@ import {
   resolveWorkflowEndpoints,
   type WorkflowEndpointsConfig,
 } from '../workflows';
+import {
+  resolveServerSecurityConfig,
+  validateFredHttpRuntimeConfig,
+} from '../security';
 
 export interface FredHttpServerLayerOptions extends FredHttpSecurityOptions {
   readonly port?: number;
@@ -27,6 +31,25 @@ export const FredHttpServerLive = (
   fred?: FredClient,
   workflowSnapshot: readonly WorkflowDescriptor[] = [],
 ) => {
+  const runtimeConfig = validateFredHttpRuntimeConfig({
+    port: options.port,
+    hostname: options.hostname,
+    trustProxy: options.trustProxy,
+    apiKeyStorage: options.apiKeyStore?.backend,
+    rateLimitStorage: options.rateLimitStore?.backend,
+    security: options.security,
+  });
+  const security = resolveServerSecurityConfig(
+    runtimeConfig.security,
+    options.apiKeyStore === undefined ? undefined : 'api-key-store',
+  ).config;
+  const resolvedOptions: FredHttpServerLayerOptions = {
+    ...options,
+    port: runtimeConfig.port,
+    hostname: runtimeConfig.hostname,
+    trustProxy: runtimeConfig.trustProxy,
+    security,
+  };
   const endpoints = resolveWorkflowEndpoints(workflowSnapshot, options.workflowEndpoints);
   const authRequirements = new Map(endpoints.map((endpoint) => [
     endpoint.path,
@@ -42,13 +65,13 @@ export const FredHttpServerLive = (
   return HttpApiBuilder.serve().pipe(
     Layer.provide(FredDocsLayer),
     Layer.provide(FredOpenApiLayer),
-    Layer.provide(FredHttpSecurityLive({ ...options, authRequirements })),
+    Layer.provide(FredHttpSecurityLive({ ...resolvedOptions, authRequirements })),
     Layer.provide(apiLive),
     Layer.provideMerge(BunHttpServer.layer({
-      port: options.port ?? 0,
-      hostname: options.hostname ?? '127.0.0.1',
-      maxRequestBodySize: options.security?.maxRequestBodySize,
-      idleTimeout: options.security?.requestTimeoutSeconds,
+      port: runtimeConfig.port ?? 0,
+      hostname: runtimeConfig.hostname ?? '127.0.0.1',
+      maxRequestBodySize: security.maxRequestBodySize,
+      idleTimeout: security.requestTimeoutSeconds,
     })),
   );
 };

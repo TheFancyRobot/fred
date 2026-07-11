@@ -1,6 +1,6 @@
 import { HttpApiBuilder, HttpServer } from '@effect/platform';
 import type { Fred } from '@fancyrobot/fred';
-import { Effect, Either, Layer, Option } from 'effect';
+import { Effect, Either, Layer, Option, Schema } from 'effect';
 import { isIP } from 'node:net';
 import { FredDocsLayer, FredOpenApiLayer } from './api';
 import { FredHttpApiLive } from './layers/server';
@@ -18,8 +18,9 @@ import {
 } from './api-keys';
 import {
   checkAuth,
-  DEFAULT_SECURITY_CONFIG,
   matchOrigin,
+  resolveServerSecurityConfig,
+  validateFredHttpRuntimeConfig,
   type ServerSecurityConfig,
 } from './security';
 
@@ -51,6 +52,51 @@ interface NormalizedCustomRoute extends FredHttpCustomRoute {
   method: string;
   visibility: FredHttpRouteVisibility;
 }
+
+class RequestBodyTooLargeError extends Schema.TaggedError<RequestBodyTooLargeError>()(
+  'RequestBodyTooLargeError',
+  { message: Schema.String },
+) {}
+
+class CompatibilityRequestTimeoutError extends Schema.TaggedError<CompatibilityRequestTimeoutError>()(
+  'CompatibilityRequestTimeoutError',
+  { message: Schema.String },
+) {}
+
+const hasRequestBody = (request: Request): boolean =>
+  request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
+
+const readBoundedRequest = async (request: Request, maximumBytes: number): Promise<Request> => {
+  if (!hasRequestBody(request)) return request;
+  const declaredLength = request.headers.get('content-length');
+  if (declaredLength !== null && Number(declaredLength) > maximumBytes) {
+    throw new RequestBodyTooLargeError({ message: 'Request body exceeds configured limit' });
+  }
+  const body = await request.arrayBuffer();
+  if (body.byteLength > maximumBytes) {
+    throw new RequestBodyTooLargeError({ message: 'Request body exceeds configured limit' });
+  }
+  return new Request(request, { body });
+};
+
+const withRequestTimeout = async <A>(
+  task: (signal: AbortSignal) => Promise<A>,
+  seconds: number,
+): Promise<A> => {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new CompatibilityRequestTimeoutError({ message: 'Request processing timed out' }));
+    }, seconds * 1_000);
+  });
+  try {
+    return await Promise.race([task(controller.signal), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+};
 
 const normalizeRoutes = (routes: ReadonlyArray<FredHttpCustomRoute>): ReadonlyArray<NormalizedCustomRoute> =>
   routes.map((route) => ({
@@ -108,7 +154,16 @@ const resolveClientIp = (request: Request, options: CreateFredHttpAppOptions): s
  * This fetch adapter remains for one release for embedding and custom routes.
  */
 export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpApp {
-  const securityConfig: ServerSecurityConfig = { ...DEFAULT_SECURITY_CONFIG, ...options.security };
+  const runtimeConfig = validateFredHttpRuntimeConfig({
+    trustProxy: options.trustProxy,
+    apiKeyStorage: options.apiKeyStore?.backend,
+    rateLimitStorage: options.rateLimitStore?.backend,
+    security: options.security,
+  });
+  const securityConfig = resolveServerSecurityConfig(
+    runtimeConfig.security,
+    options.apiKeyStore === undefined ? undefined : 'api-key-store',
+  ).config;
   const customRoutes = normalizeRoutes(options.routes ?? []);
   const rateLimitStore = options.rateLimitStore ?? makeMemoryRateLimitStore();
   const rateLimiter = Effect.runPromise(makeRateLimitService(rateLimitStore));
@@ -204,11 +259,32 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
       }
 
       try {
+        const boundedRequest = await readBoundedRequest(request, securityConfig.maxRequestBodySize);
         const response = matchedCustomRoute
-          ? await matchedCustomRoute.handler(request)
-          : await (await getWebHandler()).handler(request);
+          ? await withRequestTimeout(
+              (signal) => matchedCustomRoute.handler(new Request(boundedRequest, { signal })),
+              securityConfig.requestTimeoutSeconds,
+            )
+          : await withRequestTimeout(
+              (signal) => (async () => (await getWebHandler()).handler(
+                new Request(boundedRequest, { signal }),
+              ))(),
+              securityConfig.requestTimeoutSeconds,
+            );
         return applyCorsHeaders(response, origin, securityConfig, allowedCorsMethods);
-      } catch {
+      } catch (cause) {
+        if (cause instanceof RequestBodyTooLargeError) {
+          return applyCorsHeaders(Response.json(
+            { success: false, error: 'Request body too large' },
+            { status: 413 },
+          ), origin, securityConfig, allowedCorsMethods);
+        }
+        if (cause instanceof CompatibilityRequestTimeoutError) {
+          return applyCorsHeaders(Response.json(
+            { success: false, error: 'Request timed out' },
+            { status: 504 },
+          ), origin, securityConfig, allowedCorsMethods);
+        }
         return applyCorsHeaders(Response.json(
           { success: false, error: 'Request failed' },
           { status: 500 },

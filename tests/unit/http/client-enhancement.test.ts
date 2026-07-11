@@ -210,6 +210,37 @@ describe('withHttp', () => {
     expect((await fetch(`${handle.url}/health`)).status).toBe(200);
   });
 
+  test('interrupts slow workflow requests at the configured timeout with a sanitized response', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'slow-json',
+      entry: 'slow',
+      nodes: [{
+        id: 'slow',
+        kind: 'function',
+        fn: async () => {
+          await Bun.sleep(1_500);
+          return { secret: 'late-secret-output' };
+        },
+      }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: { requireAuth: false, requestTimeoutSeconds: 1 },
+      workflowEndpoints: true,
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const response = await fetch(`${handle.url}/workflows/slow-json`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify('input'),
+    });
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ success: false, error: 'Request timed out' });
+  });
+
   test('rejects unknown, reserved, and duplicate workflow endpoint configuration before binding', async () => {
     const core = await createFred();
     await core.workflows.define(defineWorkflow({

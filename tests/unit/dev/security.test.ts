@@ -10,6 +10,8 @@ const baseConfig = (overrides: Partial<ServerSecurityConfig> = {}): ServerSecuri
   requestTimeoutSeconds: 30,
   rateLimitMaxRequests: 60,
   rateLimitWindowMs: 60_000,
+  redactHeaders: ['authorization', 'cookie'],
+  redactPaths: ['apiKey', 'token'],
   ...overrides,
 });
 

@@ -1,6 +1,20 @@
 export { startServer, ServerApp } from './server';
-export { DEFAULT_SECURITY_CONFIG, resolveServerSecurityConfig } from './security';
-export type { ResolvedServerSecurityConfig, ServerSecurityConfig } from './security';
+export {
+  DEFAULT_SECURITY_CONFIG,
+  FredHttpRuntimeConfigSchema,
+  HttpStorageBackendSchema,
+  ServerSecurityConfigSchema,
+  ServerSecurityOverridesSchema,
+  resolveServerSecurityConfig,
+  validateFredHttpRuntimeConfig,
+} from './security';
+export type {
+  FredHttpRuntimeConfig,
+  HttpStorageBackend,
+  ResolvedServerSecurityConfig,
+  ServerSecurityConfig,
+  ServerSecurityOverrides,
+} from './security';
 export {
   API_KEY_TABLE,
   API_KEY_TOKEN_PREFIX,

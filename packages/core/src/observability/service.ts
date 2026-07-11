@@ -20,6 +20,7 @@ import {
 import { createHash } from 'crypto';
 import type { CorrelationContext } from './context';
 import { getCurrentCorrelationContext, getCurrentSpanIds, getCorrelationContext, getSpanIds } from './context';
+import { redactSecrets, type SecretRedactionOptions } from './errors';
 
 /**
  * Observability service configuration.
@@ -42,6 +43,8 @@ export interface ObservabilityServiceConfig {
   pricing?: Record<string, { input: number; output: number }>;
   /** Hash payloads by default (only include raw content when explicitly flagged) */
   hashPayloads?: boolean;
+  /** Fields and dot paths that must be removed from structured log annotations. */
+  secretRedaction?: SecretRedactionOptions;
 }
 
 /**
@@ -424,28 +427,34 @@ export const ObservabilityServiceLive = Layer.effect(
             ...spanIds,
             ...options.metadata,
           };
+          const redactedLogData = redactSecrets(logData, config.secretRedaction);
+          const safeLogData = typeof redactedLogData === 'object' && redactedLogData !== null
+            ? Object.fromEntries(Object.entries(redactedLogData))
+            : {};
+          const redactedMessage = redactSecrets(options.message, config.secretRedaction);
+          const safeMessage = typeof redactedMessage === 'string' ? redactedMessage : '[REDACTED]';
 
           // Log at appropriate level with annotations
           const logEffect = (() => {
             switch (options.level) {
               case 'trace':
-                return Effect.logTrace(options.message);
+                return Effect.logTrace(safeMessage);
               case 'debug':
-                return Effect.logDebug(options.message);
+                return Effect.logDebug(safeMessage);
               case 'info':
-                return Effect.logInfo(options.message);
+                return Effect.logInfo(safeMessage);
               case 'warning':
-                return Effect.logWarning(options.message);
+                return Effect.logWarning(safeMessage);
               case 'error':
-                return Effect.logError(options.message);
+                return Effect.logError(safeMessage);
               case 'fatal':
-                return Effect.logFatal(options.message);
+                return Effect.logFatal(safeMessage);
               default:
-                return Effect.logInfo(options.message);
+                return Effect.logInfo(safeMessage);
             }
           })();
 
-          yield* logEffect.pipe(Effect.annotateLogs(logData));
+          yield* logEffect.pipe(Effect.annotateLogs(safeLogData));
         }),
 
       recordHookEvent: (hookType) =>
