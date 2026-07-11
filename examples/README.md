@@ -26,9 +26,10 @@ A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to 
 ## Agent File Pattern (.md + YAML Frontmatter)
 
 Examples 01-13 define agents in `src/agents/*.md` files with YAML frontmatter
-and a markdown prompt body. Examples 14-15 use the scoped `createFred()` client
-so the optional HTTP boundary and deterministic workflow transport remain the
-focus.
+and a markdown prompt body. Example 14 uses the scoped `createFred()` client and
+loads its markdown prompt explicitly; Example 15 keeps its deterministic
+workflow transport independent of agent initialization. Both keep the optional
+HTTP boundary explicit.
 
 - Agent config lives in frontmatter (`id`, `platform`, `model`, `tools`, `utterances`, etc.)
 - Agent behavior/prompt content lives in the markdown body
