@@ -13,7 +13,7 @@ import type { AgentMessage } from '../agent/agent';
  */
 export interface PipelineContext {
   /** Original user input message */
-  input: string;
+  input: unknown;
 
   /** Step outputs keyed by step name */
   outputs: Record<string, unknown>;
@@ -39,7 +39,7 @@ export class PipelineContextManager {
 
   constructor(options: {
     pipelineId: string;
-    input: string;
+    input: unknown;
     history?: AgentMessage[];
     conversationId?: string;
   }) {
@@ -130,7 +130,7 @@ export class PipelineContextManager {
  */
 export function createPipelineContext(options: {
   pipelineId: string;
-  input: string;
+  input: unknown;
   history?: AgentMessage[];
   conversationId?: string;
 }): PipelineContextManager {

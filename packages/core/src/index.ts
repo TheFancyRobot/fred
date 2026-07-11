@@ -284,7 +284,7 @@ export class Fred extends FredBase {
   /** Execute any registered workflow and return the canonical unified result. */
   async executeWorkflow(
     id: string,
-    input: string,
+    input: unknown,
     options?: { conversationId?: string },
   ): Promise<WorkflowExecutionResult> {
     const runtime = await this.ensureRuntime();

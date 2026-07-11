@@ -59,7 +59,7 @@ export type HandoffResult =
  */
 export interface HandoffContext {
   /** Original user input */
-  input: string;
+  input: unknown;
 
   /** Full thread history (if preserveHistory enabled) */
   history: AgentMessage[];
