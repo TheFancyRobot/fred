@@ -32,6 +32,29 @@ export type {
   GeneratedApiKey,
   PostgresApiKeyPool,
 } from './api-keys';
+export {
+  RATE_LIMIT_TABLE,
+  RateLimitDecision,
+  RateLimitPolicy,
+  RateLimitService,
+  RateLimitServiceLive,
+  RateLimitStore,
+  RateLimitStoreError,
+  RateLimitStoreMemory,
+  RateLimitStorePostgres,
+  RateLimitStoreSqlite,
+  makeMemoryRateLimitStore,
+  makePostgresRateLimitStore,
+  makeRateLimitService,
+  makeSqliteRateLimitStore,
+} from './rate-limiter';
+export type {
+  MemoryRateLimitStoreOptions,
+  PostgresRateLimitPool,
+  RateLimitConsumeInput,
+  RateLimitRequest,
+  RateLimitStoreService,
+} from './rate-limiter';
 export { createFredHttpApp } from './app-builder';
 export type {
   FredHttpRouteVisibility,

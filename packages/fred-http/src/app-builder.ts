@@ -1,10 +1,21 @@
 import { HttpApiBuilder, HttpServer } from '@effect/platform';
 import type { Fred } from '@fancyrobot/fred';
-import { Layer } from 'effect';
+import { Effect, Either, Layer, Option } from 'effect';
 import { isIP } from 'node:net';
 import { FredDocsLayer, FredOpenApiLayer } from './api';
 import { FredHttpApiLive } from './layers/server';
-import { RateLimiter } from './rate-limiter';
+import {
+  makeMemoryRateLimitStore,
+  makeRateLimitService,
+  type RateLimitStoreService,
+} from './rate-limiter';
+import {
+  ApiKeyScopeError,
+  ApiKeyStoreError,
+  authorizeApiKey,
+  type ApiKeyStoreService,
+  type AuthenticatedApiKeyIdentity,
+} from './api-keys';
 import {
   checkAuth,
   DEFAULT_SECURITY_CONFIG,
@@ -27,6 +38,8 @@ export interface CreateFredHttpAppOptions {
   routes?: ReadonlyArray<FredHttpCustomRoute>;
   trustProxy?: boolean;
   getClientIp?: (request: Request) => string | undefined;
+  apiKeyStore?: ApiKeyStoreService;
+  rateLimitStore?: RateLimitStoreService;
 }
 
 export interface FredHttpApp {
@@ -97,10 +110,9 @@ const resolveClientIp = (request: Request, options: CreateFredHttpAppOptions): s
 export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpApp {
   const securityConfig: ServerSecurityConfig = { ...DEFAULT_SECURITY_CONFIG, ...options.security };
   const customRoutes = normalizeRoutes(options.routes ?? []);
-  const rateLimiter = new RateLimiter(
-    securityConfig.rateLimitMaxRequests,
-    securityConfig.rateLimitWindowMs,
-  );
+  const rateLimitStore = options.rateLimitStore ?? makeMemoryRateLimitStore();
+  const rateLimiter = Effect.runPromise(makeRateLimitService(rateLimitStore));
+  const initialization = Effect.runPromise(options.apiKeyStore?.initialize ?? Effect.void);
   const allowedCorsMethods = getAllowedCorsMethods(customRoutes);
   let disposed = false;
   let webHandler: ReturnType<typeof HttpApiBuilder.toWebHandler> | undefined;
@@ -124,6 +136,11 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
   return {
     async fetch(request: Request): Promise<Response> {
       if (disposed) throw new Error('Fred HTTP app has been disposed');
+      try {
+        await initialization;
+      } catch {
+        return new Response('Service Unavailable', { status: 503 });
+      }
       const origin = request.headers.get('Origin');
       if (request.method === 'OPTIONS') {
         return applyCorsHeaders(new Response(null, { status: 204 }), origin, securityConfig, allowedCorsMethods);
@@ -131,21 +148,59 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
 
       const matchedCustomRoute = matchCustomRoute(request, customRoutes);
       const clientIP = resolveClientIp(request, options);
-      const rateLimitResult = rateLimiter.check(clientIP);
-      if (!rateLimitResult.allowed) {
-        const retryAfterSeconds = Math.max(1, Math.ceil((rateLimitResult.retryAfterMs ?? 0) / 1_000));
-        return applyCorsHeaders(new Response('Too Many Requests', {
-          status: 429,
-          headers: { 'Retry-After': String(retryAfterSeconds) },
-        }), origin, securityConfig, allowedCorsMethods);
-      }
-
       const requiresAuth = matchedCustomRoute ? matchedCustomRoute.visibility !== 'public' : true;
-      if (requiresAuth) {
+      let identity: AuthenticatedApiKeyIdentity | undefined;
+      if (requiresAuth && options.apiKeyStore !== undefined) {
+        const result = await Effect.runPromise(Effect.either(authorizeApiKey(
+          options.apiKeyStore,
+          request.headers.get('Authorization') ?? undefined,
+        )));
+        if (Either.isLeft(result)) {
+          const status = result.left instanceof ApiKeyScopeError
+            ? 403
+            : result.left instanceof ApiKeyStoreError
+              ? 503
+              : 401;
+          return applyCorsHeaders(new Response(
+            status === 503 ? 'Service Unavailable' : status === 403 ? 'Forbidden' : 'Unauthorized',
+            { status },
+          ), origin, securityConfig, allowedCorsMethods);
+        }
+        identity = result.right;
+      } else if (requiresAuth) {
         const authResult = checkAuth(clientIP, request.headers.get('Authorization'), securityConfig);
         if (!authResult.allowed) {
           return applyCorsHeaders(new Response('Unauthorized', { status: authResult.status ?? 401 }), origin, securityConfig, allowedCorsMethods);
         }
+      }
+
+      const policy = identity === undefined
+        ? {
+            maxRequests: securityConfig.rateLimitMaxRequests,
+            windowMs: securityConfig.rateLimitWindowMs,
+          }
+        : Option.getOrElse(identity.rateLimit, () => ({
+            maxRequests: securityConfig.rateLimitMaxRequests,
+            windowMs: securityConfig.rateLimitWindowMs,
+          }));
+      const bucketKey = identity === undefined ? `ip:${clientIP}` : `key:${identity.id}`;
+      const rateLimitResult = await Effect.runPromise(Effect.either(
+        (await rateLimiter).consume({ key: bucketKey, policy }),
+      ));
+      if (Either.isLeft(rateLimitResult)) {
+        return applyCorsHeaders(
+          new Response('Service Unavailable', { status: 503 }),
+          origin,
+          securityConfig,
+          allowedCorsMethods,
+        );
+      }
+      if (!rateLimitResult.right.allowed) {
+        const retryAfterSeconds = Math.max(1, Math.ceil(rateLimitResult.right.retryAfterMs / 1_000));
+        return applyCorsHeaders(new Response('Too Many Requests', {
+          status: 429,
+          headers: { 'Retry-After': String(retryAfterSeconds) },
+        }), origin, securityConfig, allowedCorsMethods);
       }
 
       try {
@@ -163,7 +218,7 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;
-      rateLimiter.dispose();
+      await Effect.runPromise(rateLimitStore.close);
       await webHandler?.dispose();
     },
   };

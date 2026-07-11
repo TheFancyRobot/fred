@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import { createFred } from '../../../packages/core/src/client';
 import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src/client';
+import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
+import { RateLimitStoreError, type RateLimitStoreService } from '../../../packages/fred-http/src/rate-limiter';
 
 const clients: FredWithHttp[] = [];
 
@@ -46,6 +49,53 @@ describe('FredHttpServerLive security middleware', () => {
     const limited = await fetch(`${handle.url}/health`);
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  test('uses API key identity before IP and honors per-key policy overrides', async () => {
+    const apiKeyStore = makeMemoryApiKeyStore();
+    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
+    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
+    await Effect.runPromise(Effect.all([
+      apiKeyStore.insert(first.record),
+      apiKeyStore.insert(second.record),
+    ]));
+    const handle = await start({
+      apiKeyStore,
+      trustProxy: true,
+      security: { rateLimitMaxRequests: 100, rateLimitWindowMs: 60_000 },
+    });
+
+    const request = (token: string, ip: string) => fetch(`${handle.url}/health`, {
+      headers: { authorization: `Bearer ${token}`, 'x-forwarded-for': ip },
+    });
+    expect((await request(first.token, '203.0.113.1')).status).toBe(200);
+    expect((await request(second.token, '203.0.113.1')).status).toBe(200);
+    const limited = await request(first.token, '203.0.113.2');
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  test('fails closed with a sanitized 503 while the rate-limit store is unavailable', async () => {
+    let available = false;
+    const store: RateLimitStoreService = {
+      backend: 'memory',
+      initialize: Effect.void,
+      consume: () => available
+        ? Effect.succeed({ allowed: true, retryAfterMs: 0, remaining: 1, resetAt: Date.now() + 1_000 })
+        : Effect.fail(new RateLimitStoreError({ operation: 'consume', message: 'secret database detail' })),
+      prune: () => Effect.succeed(0),
+      close: Effect.void,
+    };
+    const handle = await start({
+      rateLimitStore: store,
+      security: { requireAuth: false },
+    });
+
+    const unavailable = await fetch(`${handle.url}/health`);
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.text()).toBe('Service Unavailable');
+    available = true;
+    expect((await fetch(`${handle.url}/health`)).status).toBe(200);
   });
 
   test('ignores proxy headers unless trustProxy is enabled', async () => {

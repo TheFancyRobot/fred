@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Fred } from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import { createFredHttpApp } from '../../../packages/fred-http/src/index';
+import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
 
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
@@ -158,6 +160,32 @@ describe('createFredHttpApp', () => {
     const second = await app.fetch(new Request('http://localhost/limited'));
     expect(second.status).toBe(429);
     expect(second.headers.get('Retry-After')).toBe('1');
+  });
+
+  it('shares key-first rate-limit semantics with the compatibility adapter', async () => {
+    const fred = new Fred();
+    const apiKeyStore = makeMemoryApiKeyStore();
+    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
+    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
+    await Effect.runPromise(Effect.all([
+      apiKeyStore.insert(first.record),
+      apiKeyStore.insert(second.record),
+    ]));
+    const app = createFredHttpApp({
+      fred,
+      apiKeyStore,
+      getClientIp: () => '203.0.113.1',
+    });
+    createdApps.push(app);
+
+    const request = (token: string) => app.fetch(new Request('http://localhost/health', {
+      headers: { authorization: `Bearer ${token}` },
+    }));
+    expect((await request(first.token)).status).toBe(200);
+    expect((await request(second.token)).status).toBe(200);
+    const limited = await request(first.token);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Retry-After')).toBe('1');
   });
 
   it('reflects custom route methods in CORS preflight responses', async () => {

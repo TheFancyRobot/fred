@@ -4,10 +4,14 @@ import {
   HttpServerResponse,
   type HttpApp,
 } from '@effect/platform';
-import { Cause, Config, Effect, Either, Option, Redacted } from 'effect';
+import { Cause, Config, Effect, Either, Layer, Option, Redacted } from 'effect';
 import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
-import { RateLimiter } from './rate-limiter';
+import {
+  RateLimitService,
+  RateLimitServiceLive,
+  type RateLimitStoreService,
+} from './rate-limiter';
 import {
   ApiKeyScopeError,
   ApiKeyStoreError,
@@ -27,6 +31,7 @@ export interface FredHttpSecurityOptions {
   readonly security?: Partial<ServerSecurityConfig>;
   readonly trustProxy?: boolean;
   readonly apiKeyStore?: ApiKeyStoreService;
+  readonly rateLimitStore?: RateLimitStoreService;
   readonly authRequirements?: ReadonlyMap<string, false | readonly string[]>;
 }
 
@@ -87,7 +92,7 @@ const makeSecurityMiddleware = (
   config: ServerSecurityConfig,
   trustProxy: boolean,
   token: string | undefined,
-  limiter: RateLimiter,
+  limiter: RateLimitService,
   apiKeyStore: ApiKeyStoreService | undefined,
   authRequirements: ReadonlyMap<string, false | readonly string[]>,
 ) => (app: HttpApp.Default): HttpApp.Default =>
@@ -102,19 +107,6 @@ const makeSecurityMiddleware = (
     }
 
     const ip = clientIp(request, trustProxy);
-    const limited = limiter.check(ip);
-    if (!limited.allowed) {
-      const retryAfter = Math.max(1, Math.ceil((limited.retryAfterMs ?? 0) / 1_000));
-      return withCors(
-        HttpServerResponse.text('Too Many Requests', {
-          status: 429,
-          headers: { 'retry-after': String(retryAfter) },
-        }),
-        origin,
-        config,
-      );
-    }
-
     const path = request.url.split('?', 1)[0] ?? request.url;
     const routeRequirement = authRequirements.get(path);
     const authIsOptional = routeRequirement === false
@@ -139,6 +131,34 @@ const makeSecurityMiddleware = (
       identity = Option.some(authResult.right);
     } else if (!authIsOptional && (!token || !authorization || !secureEqual(authorization, `Bearer ${token}`))) {
         return withCors(unauthorized, origin, config);
+    }
+
+    const policy = Option.match(identity, {
+      onNone: () => ({
+        maxRequests: config.rateLimitMaxRequests,
+        windowMs: config.rateLimitWindowMs,
+      }),
+      onSome: (authenticated) => Option.getOrElse(authenticated.rateLimit, () => ({
+        maxRequests: config.rateLimitMaxRequests,
+        windowMs: config.rateLimitWindowMs,
+      })),
+    });
+    const bucketKey = Option.match(identity, {
+      onNone: () => `ip:${ip}`,
+      onSome: (authenticated) => `key:${authenticated.id}`,
+    });
+    const limited = yield* Effect.either(limiter.consume({ key: bucketKey, policy }));
+    if (Either.isLeft(limited)) return withCors(unavailable, origin, config);
+    if (!limited.right.allowed) {
+      const retryAfter = Math.max(1, Math.ceil(limited.right.retryAfterMs / 1_000));
+      return withCors(
+        HttpServerResponse.text('Too Many Requests', {
+          status: 429,
+          headers: { 'retry-after': String(retryAfter) },
+        }),
+        origin,
+        config,
+      );
     }
 
     const response = yield* app.pipe(
@@ -180,10 +200,7 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
       );
       const config = resolved.config;
       if (options.apiKeyStore !== undefined) yield* options.apiKeyStore.initialize;
-      const limiter = yield* Effect.acquireRelease(
-        Effect.sync(() => new RateLimiter(config.rateLimitMaxRequests, config.rateLimitWindowMs)),
-        (resource) => Effect.sync(() => resource.dispose()),
-      );
+      const limiter = yield* RateLimitService;
       return makeSecurityMiddleware(
         config,
         options.trustProxy ?? false,
@@ -193,5 +210,5 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
         options.authRequirements ?? new Map(),
       );
     }),
-  );
+  ).pipe(Layer.provide(RateLimitServiceLive(options.rateLimitStore)));
 };
