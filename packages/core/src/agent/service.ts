@@ -19,6 +19,7 @@ import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
 import type { TemplateEngine } from '../template/engine';
 import type { FrameworkConfig } from '../config/types';
+import type { MCPServerRegistry } from '../mcp';
 import {
   DefaultPromptSourceLayer,
   PromptSourceService,
@@ -92,6 +93,9 @@ export interface AgentService {
   setTemplateEnvAllowlist(envAllowlist: string[]): Effect.Effect<void>;
 
   setTemplateFredConfig(config: Partial<FrameworkConfig>): Effect.Effect<void>;
+
+  /** Set the client-owned MCP registry used while creating agents. */
+  setMCPServerRegistry(registry: MCPServerRegistry): Effect.Effect<void>;
 
   /**
    * Match agent by utterance
@@ -409,6 +413,12 @@ class AgentServiceImpl implements AgentService {
     const self = this;
     return Effect.sync(() => {
       self.factory.setTemplateFredConfig(config);
+    });
+  }
+
+  setMCPServerRegistry(registry: MCPServerRegistry): Effect.Effect<void> {
+    return Effect.sync(() => {
+      this.factory.setMCPServerRegistry(registry);
     });
   }
 

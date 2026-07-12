@@ -136,6 +136,7 @@ export interface CheckpointService {
    * @internal
    */
   getStorage(): Effect.Effect<CheckpointStorage>;
+
 }
 
 export const CheckpointService = Context.GenericTag<CheckpointService>(
@@ -302,6 +303,7 @@ class CheckpointServiceImpl implements CheckpointService {
   getStorage(): Effect.Effect<CheckpointStorage> {
     return Effect.succeed(this.storage);
   }
+
 }
 
 /**

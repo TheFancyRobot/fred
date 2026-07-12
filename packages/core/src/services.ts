@@ -13,7 +13,12 @@ import { ToolGateService, ToolGateServiceLive } from './tool-gate/service';
 import type { ToolGateServiceApi } from './tool-gate/types';
 import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
-import { ContextStorageService, ContextStorageServiceLive } from './context/service';
+import {
+  ContextStorageService,
+  ContextStorageServiceLive,
+  ContextStorageServiceLiveWithAdapter,
+} from './context/service';
+import type { ContextStorage } from './context/context';
 import { SessionService, SessionServiceLive } from './context/session-service';
 import { AgentService, AgentServiceLive, makeAgentServiceLive } from './agent/service';
 import {
@@ -22,7 +27,10 @@ import {
   type PromptSourceService as PromptSourceServiceApi,
 } from './agent/prompt-source';
 import { WorkflowService, WorkflowServiceLive } from './workflow/service';
-import { CheckpointService } from './pipeline/checkpoint/service';
+import {
+  CheckpointService,
+  CheckpointServiceLive as makeCheckpointServiceLive,
+} from './pipeline/checkpoint/service';
 import { CheckpointNotFoundError } from './pipeline/errors';
 import { PauseService, PauseServiceLive } from './pipeline/pause/service';
 import { PipelineService, PipelineServiceLive } from './pipeline/service';
@@ -258,27 +266,10 @@ const baseLayer = Layer.mergeAll(
 );
 
 /**
- * Core infrastructure layers
- * Wave 2: ProviderRegistry, ContextStorage, Checkpoint
- */
-const coreLayer = Layer.mergeAll(
-  ProviderRegistryServiceLive,
-  ContextStorageServiceLive,
-  CheckpointServiceLive
-);
-
-/**
  * ToolGate layer depends on ToolRegistry
  */
 const toolGateLayer = ToolGateServiceLive.pipe(
   Layer.provide(baseLayer)
-);
-
-/**
- * Pause layer depends on Checkpoint
- */
-const pauseLayer = PauseServiceLive.pipe(
-  Layer.provide(CheckpointServiceLive)
 );
 
 /**
@@ -330,8 +321,18 @@ const defaultRouterLayer = MessageRouterServiceLive;
  * ```
  */
 export const makeFredLayers = (
-  promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer
+  promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer,
+  contextStorageLayer: Layer.Layer<ContextStorageService> = ContextStorageServiceLive,
+  checkpointServiceLayer: Layer.Layer<CheckpointService> = CheckpointServiceLive,
 ) => {
+  const selectedCoreLayer = Layer.mergeAll(
+    ProviderRegistryServiceLive,
+    contextStorageLayer,
+    checkpointServiceLayer,
+  );
+  const selectedPauseLayer = PauseServiceLive.pipe(
+    Layer.provide(checkpointServiceLayer),
+  );
   const selectedAgentLayer = makeAgentServiceLive(promptSourceLayer).pipe(
     Layer.provide(baseLayer),
     Layer.provide(toolGateLayer),
@@ -347,14 +348,14 @@ export const makeFredLayers = (
     Layer.provide(ExecutorServiceLive),
     Layer.provide(GraphExecutorServiceLive),
     Layer.provide(hookManagerLayer),
-    Layer.provide(CheckpointServiceLive),
-    Layer.provide(pauseLayer)
+    Layer.provide(checkpointServiceLayer),
+    Layer.provide(selectedPauseLayer)
   );
 
   const selectedMessageProcessorLayer = MessageProcessorServiceLive.pipe(
     Layer.provide(selectedAgentLayer),
     Layer.provide(selectedPipelineLayer),
-    Layer.provide(ContextStorageServiceLive),
+    Layer.provide(contextStorageLayer),
     Layer.provide(SessionServiceLive)
   );
 
@@ -366,8 +367,8 @@ export const makeFredLayers = (
   return Layer.mergeAll(
     baseLayer,
     toolGateLayer,
-    coreLayer,
-    pauseLayer,
+    selectedCoreLayer,
+    selectedPauseLayer,
     promptSourceLayer,
     selectedAgentLayer,
     selectedWorkflowLayer,
@@ -402,6 +403,9 @@ export interface FredLayerOptions {
   routingConfig?: RoutingConfig;
   observabilityLayers?: ObservabilityLayers;
   promptSourceLayer?: Layer.Layer<PromptSourceServiceApi, never, never>;
+  storage?: ContextStorage;
+  checkpointStorage?: CheckpointStorage;
+  checkpointTtlMs?: number;
 }
 
 /**
@@ -409,9 +413,21 @@ export interface FredLayerOptions {
  */
 export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Layer<FredServices> => {
   const promptSourceLayer = options.promptSourceLayer ?? DefaultPromptSourceLayer;
+  const contextStorageLayer = options.storage
+    ? ContextStorageServiceLiveWithAdapter(options.storage)
+    : ContextStorageServiceLive;
+  const checkpointServiceLayer = options.checkpointStorage
+    ? makeCheckpointServiceLive({
+        storage: options.checkpointStorage,
+        defaultTtlMs: options.checkpointTtlMs,
+      })
+    : CheckpointServiceLive;
   const base = options.routingConfig
-    ? makeFredLayersWithLeafRouting(options.routingConfig, promptSourceLayer)
-    : makeFredLayers(promptSourceLayer);
+    ? Layer.merge(
+        makeFredLayers(promptSourceLayer, contextStorageLayer, checkpointServiceLayer),
+        MessageRouterServiceLiveWithConfig(options.routingConfig),
+      )
+    : makeFredLayers(promptSourceLayer, contextStorageLayer, checkpointServiceLayer);
 
   if (!options.observabilityLayers) {
     return base;
@@ -481,6 +497,7 @@ export {
   ProviderRegistryServiceLive,
   ContextStorageService,
   ContextStorageServiceLive,
+  ContextStorageServiceLiveWithAdapter,
   SessionService,
   SessionServiceLive,
   PromptSourceService,

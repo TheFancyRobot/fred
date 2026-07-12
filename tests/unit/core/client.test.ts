@@ -6,6 +6,9 @@
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
 import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { Cause, Effect, Exit, Runtime, Schema } from 'effect';
 import {
   createFred,
@@ -14,10 +17,12 @@ import {
 } from '../../../packages/core/src/client';
 import {
   AgentService,
+  CheckpointService,
   ContextStorageService,
   ProviderRegistryService,
   ToolRegistryService,
 } from '../../../packages/core/src/services';
+import { SqliteCheckpointStorage } from '../../../packages/core/src/pipeline/checkpoint';
 import { PromptResolutionError } from '../../../packages/core/src/agent/errors';
 import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
@@ -54,6 +59,90 @@ async function registerMockProvider(client: FredClient): Promise<void> {
 }
 
 describe('createFred client', () => {
+  it('loads validated config before returning the client', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fred-client-config-'));
+    const configPath = join(directory, 'fred.yaml');
+    const databasePath = join(directory, 'fred.db');
+    const previousDatabasePath = process.env.FRED_SQLITE_PATH;
+    process.env.FRED_SQLITE_PATH = databasePath;
+    writeFileSync(configPath, [
+      'providers:',
+      '  - id: openai',
+      'routing:',
+      '  defaultAgent: config-agent',
+      '  rules: []',
+      'agents:',
+      '  - id: config-agent',
+      '    platform: openai',
+      '    model: gpt-4o-mini',
+      '    systemMessage: Configured agent',
+      'persistence:',
+      '  adapter: sqlite',
+    ].join('\n'));
+
+    try {
+      const client = track(await createFred({ configPath }));
+      expect((await client.agents.list()).map((agent) => agent.id)).toEqual(['config-agent']);
+      const conversationId = await Runtime.runPromise(client.runtime)(Effect.gen(function* () {
+        const context = yield* ContextStorageService;
+        const id = yield* context.generateConversationId();
+        yield* context.addMessages(id, [{ role: 'user', content: 'persisted' }]);
+        return id;
+      }));
+      expect((await client.sessions.list()).map((session) => session.id)).toContain(conversationId);
+      const checkpointStorage = await Runtime.runPromise(client.runtime)(
+        Effect.flatMap(CheckpointService, (service) => service.getStorage()),
+      );
+      expect(checkpointStorage).toBeInstanceOf(SqliteCheckpointStorage);
+      await client.shutdown();
+    } finally {
+      if (previousDatabasePath === undefined) delete process.env.FRED_SQLITE_PATH;
+      else process.env.FRED_SQLITE_PATH = previousDatabasePath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('exposes service-backed message, tool, hook, template, and variable capabilities', async () => {
+    const client = track(await createFred());
+    await client.tools.register({
+      id: 'client-echo',
+      name: 'Client echo',
+      description: 'Echo input',
+      schema: { input: Schema.String, success: Schema.String },
+      execute: (input) => input,
+    });
+    expect((await client.tools.list()).map((tool) => tool.id)).toContain('client-echo');
+
+    const hook = async () => undefined;
+    await client.hooks.register('beforeMessageReceived', hook);
+    expect(await client.hooks.unregister('beforeMessageReceived', hook)).toBe(true);
+    await expect(client.messages.process('hello client')).rejects.toBeDefined();
+    await client.templates.addContext('session', () => ({ role: 'tester' }));
+    await client.variables.register('region', () => Effect.succeed('test'));
+    expect(await client.variables.snapshot()).toEqual({ region: 'test' });
+  });
+
+  it('owns lazy MCP configuration and subagent lifecycle', async () => {
+    const client = track(await createFred());
+    await client.mcp.configure([{
+      id: 'lazy-files',
+      transport: 'stdio',
+      command: 'unused',
+      lazy: true,
+    }]);
+    expect(await client.mcp.list()).toEqual(['lazy-files']);
+    expect(await client.mcp.status('lazy-files')).toBeUndefined();
+
+    const subagent = await client.subagents.spawn({
+      name: 'client-subagent',
+      command: process.execPath,
+      args: ['-e', 'process.stdout.write("ready")'],
+    });
+    const result = await client.subagents.execute(subagent.id);
+    expect(result.stdout).toBe('ready');
+    expect(await client.subagents.destroy(subagent.id)).toBe(true);
+  });
+
   it('agents sub-API registers, lists, and removes agents', async () => {
     const client = track(await createFred());
     await registerMockProvider(client);
@@ -456,5 +545,9 @@ describe('createFred client', () => {
 
     await expect(client.workflows.list()).rejects.toBeInstanceOf(FredClientClosedError);
     await expect(client.workflows.describe('anything')).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.messages.process('hello')).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.tools.list()).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.mcp.list()).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.variables.snapshot()).rejects.toBeInstanceOf(FredClientClosedError);
   });
 });
