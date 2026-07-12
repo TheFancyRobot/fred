@@ -1,10 +1,13 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,6 +53,63 @@ const INVENTORY_PATH = join(import.meta.dir, 'public-api-inventory.json');
 const inventory = JSON.parse(readFileSync(INVENTORY_PATH, 'utf8')) as InventoryEntry[];
 const packageDirs = [...new Set(inventory.map(({ packageDir }) => packageDir))].sort();
 const tempDirs: string[] = [];
+const stagedPackageDirs = new Map<string, string>();
+const declarationOnlyRuntimeTargets: Array<{ path: string; missingBeforeBuild: boolean }> = [];
+
+function removeRuntimeArtifacts(directory: string): void {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      removeRuntimeArtifacts(path);
+    } else if (/\.(?:c|m)?js(?:\.map)?$/.test(entry.name)) {
+      rmSync(path, { force: true });
+    }
+  }
+}
+
+beforeAll(() => {
+  const stageRoot = mkdtempSync(join(tmpdir(), 'fred-package-stage-'));
+  tempDirs.push(stageRoot);
+  cpSync(join(REPO_ROOT, 'tsconfig.base.json'), join(stageRoot, 'tsconfig.base.json'));
+  symlinkSync(join(REPO_ROOT, 'node_modules'), join(stageRoot, 'node_modules'), 'dir');
+
+  for (const packageDir of packageDirs) {
+    const sourceDir = join(REPO_ROOT, 'packages', packageDir);
+    const stageDir = join(stageRoot, 'packages', packageDir);
+    mkdirSync(resolve(stageDir, '..'), { recursive: true });
+    cpSync(sourceDir, stageDir, {
+      recursive: true,
+      filter: (source) => basename(source) !== 'node_modules',
+    });
+    const sourceNodeModules = join(sourceDir, 'node_modules');
+    if (existsSync(sourceNodeModules)) {
+      symlinkSync(sourceNodeModules, join(stageDir, 'node_modules'), 'dir');
+    }
+
+    // Model the canonical declarations-before-test gate in a disposable copy.
+    // Packing this stage prevents stale checkout artifacts from affecting the
+    // release contract while still exercising each package's real build.
+    const manifest = readManifest(packageDir);
+    removeRuntimeArtifacts(join(stageDir, 'dist'));
+    for (const target of Object.values(manifest.exports)) {
+      const declaration = join(stageDir, target.types);
+      if (!existsSync(declaration)) {
+        throw new Error(
+          `Declaration gate must run before package-surface tests; missing ${declaration}`,
+        );
+      }
+      const runtime = join(stageDir, target.import);
+      declarationOnlyRuntimeTargets.push({
+        path: runtime,
+        missingBeforeBuild: !existsSync(runtime),
+      });
+    }
+
+    run('bun', ['run', 'build'], stageDir);
+    stagedPackageDirs.set(packageDir, stageDir);
+  }
+}, 120_000);
 
 afterAll(() => {
   for (const tempDir of tempDirs) {
@@ -98,6 +158,7 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
   if (!result.success) {
     throw new Error(
       `${command} ${args.join(' ')} failed (${result.exitCode})\n` +
+        `cwd: ${cwd}\n` +
         `stdout:\n${stdout}\nstderr:\n${result.stderr.toString()}`,
     );
   }
@@ -107,12 +168,14 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
 function pack(packageDir: string, destination: string, dryRun: boolean): PackResult {
   const dryRunArg = dryRun ? ' --dry-run' : ' --dry-run=false';
   const resultPath = join(destination, `${packageDir}-${dryRun ? 'dry-run' : 'pack'}.json`);
+  const stageDir = stagedPackageDirs.get(packageDir);
+  if (!stageDir) throw new Error(`Package stage is missing: ${packageDir}`);
   // Invoke npm behind a shell boundary so Bun's child-process compatibility
   // mode cannot swallow npm's JSON pipe while this file runs under bun:test.
   run(
     '/bin/zsh',
     ['-lc', `unset BUN_BE_BUN; npm pack --json --pack-destination ${destination}${dryRunArg} > ${resultPath}`],
-    join(REPO_ROOT, 'packages', packageDir),
+    stageDir,
   );
   const output = readFileSync(resultPath, 'utf8');
   if (output.trim().length === 0) {
@@ -136,6 +199,14 @@ function peerVersions(manifest: PackageManifest): Array<[string, string]> {
 }
 
 describe('publishable package contract', () => {
+  test('builds pack inputs from the declarations-before-test state', () => {
+    expect(declarationOnlyRuntimeTargets.length).toBeGreaterThan(0);
+    for (const runtime of declarationOnlyRuntimeTargets) {
+      expect(runtime.missingBeforeBuild).toBe(true);
+      expect(existsSync(runtime.path)).toBe(true);
+    }
+  });
+
   test('locks independent versions, supported subpaths, declarations, and Bun runtime exports', async () => {
     for (const packageDir of packageDirs) {
       const manifest = readManifest(packageDir);
