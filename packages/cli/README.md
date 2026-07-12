@@ -53,6 +53,15 @@ Legacy programmatic consumers can temporarily import `startDevChat` from the
 package root. Provider/default-agent helpers are exported from
 `@fancyrobot/fred-cli/chat-defaults`. Prefer the `fred chat` command for new code.
 
+```ts
+import { startDevChat } from '@fancyrobot/fred-cli';
+
+await startDevChat(setup);
+```
+
+Await the returned promise so startup failures are observable and follow-up
+cleanup does not run while the chat lifecycle is still active.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Action |

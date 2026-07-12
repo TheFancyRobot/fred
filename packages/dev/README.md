@@ -23,7 +23,12 @@ import { detectAvailableProvider } from '@fancyrobot/fred-dev/chat-defaults';
 // Compatibility API, now owned by the CLI
 import { startDevChat } from '@fancyrobot/fred-cli';
 import { detectAvailableProvider } from '@fancyrobot/fred-cli/chat-defaults';
+
+await startDevChat(setup);
 ```
+
+The compatibility function returns `Promise<void>`; await it to preserve the
+chat lifecycle and observe startup failures.
 
 For normal use, prefer the command:
 

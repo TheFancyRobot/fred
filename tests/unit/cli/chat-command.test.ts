@@ -15,8 +15,7 @@ import {
 /**
  * Tests for chat command routing and launch-path behavior
  *
- * Note: We can't directly test handleChatCommand() because it calls startDevChat()
- * which uses BunRuntime.runMain and never returns. Instead, we test:
+ * Note: Interactive handleChatCommand() runs until the TUI exits. Instead, we test:
  * 1. Terminal mode detection (which drives routing)
  * 2. CLI help text includes chat command
  * 3. Command parsing handles chat case

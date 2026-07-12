@@ -108,6 +108,13 @@ describe('remaining package entrypoints: fred-dev', () => {
   });
 
   test('root and chat-defaults exports forward the CLI identities', () => {
+    const cliStartContract: (setupHook?: Parameters<typeof startDevChatFromCli>[0]) => Promise<void> =
+      startDevChatFromCli;
+    const devStartContract: (setupHook?: Parameters<typeof startDevChatFromDev>[0]) => Promise<void> =
+      startDevChatFromDev;
+
+    expect(cliStartContract).toBe(startDevChatFromCli);
+    expect(devStartContract).toBe(startDevChatFromDev);
     expect(startDevChatFromDev).toBe(startDevChatFromCli);
     expect(devProviderPackages).toBe(cliProviderPackages);
     expect(detectAvailableProviderFromDev).toBe(detectAvailableProviderFromCli);

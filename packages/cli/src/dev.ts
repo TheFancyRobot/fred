@@ -49,8 +49,7 @@ export async function loadProjectSetup(fred: Fred): Promise<void> {
 
 /**
  * Handle dev command
- * Uses BunRuntime.runMain internally via startDevChat for proper signal handling.
- * This function never returns - it runs until interrupted.
+ * Delegates to the CLI-owned chat lifecycle and resolves only when that lifecycle ends.
  */
 export async function handleDevCommand(): Promise<void> {
   console.warn("The 'fred dev' command is deprecated and will be removed in the next major release. Use 'fred chat'.");
