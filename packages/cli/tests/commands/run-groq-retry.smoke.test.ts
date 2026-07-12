@@ -6,11 +6,18 @@
  *     -> AgentFactory retry boundary (extracts _retryDiagnostics)
  *       -> run command catch block (emits structured JSON)
  *
- * No actual HTTP calls are made; errors are injected via mock Fred instances.
+ * No actual HTTP calls are made; errors are injected via mock FredClient instances.
  */
 
 import { describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import {
+  createFred,
+  type AgentConfig,
+  type AgentInstance,
+  type AgentResponse,
+  type FredClient,
+} from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import { handleRunCommand } from '../../src/commands/run';
 
 /* ------------------------------------------------------------------ */
@@ -30,20 +37,31 @@ function createCapturingIO() {
   };
 }
 
-function createMockFredWithProcessMessage(
+async function createMockFredWithProcessMessage(
   agentId: string,
-  processMessageFn: (message: string) => Promise<any>,
-): Fred {
-  const fred = new Fred();
-  (fred as any).getAgent = (id: string) =>
-    id === agentId
-      ? { id: agentId, config: { model: 'llama-3.3-70b-versatile', platform: 'groq' } }
-      : undefined;
-  (fred as any).getAgents = () => [
-    { id: agentId, config: { model: 'llama-3.3-70b-versatile', platform: 'groq' } },
-  ];
-  (fred as any).processMessage = processMessageFn;
-  return fred;
+  processMessage: (message: string) => Promise<AgentResponse>,
+): Promise<FredClient> {
+  const fred = await createFred();
+  const config: AgentConfig = {
+    id: agentId,
+    model: 'llama-3.3-70b-versatile',
+    platform: 'groq',
+  };
+  const agent: AgentInstance = {
+    id: agentId,
+    config,
+    run: () => Effect.succeed({ content: '' }),
+    processMessage: () => Effect.succeed({ content: '' }),
+  };
+  return {
+    ...fred,
+    agents: {
+      ...fred.agents,
+      get: async (id) => id === agentId ? agent : null,
+      list: async () => [agent],
+    },
+    messages: { process: processMessage },
+  };
 }
 
 function parseJsonOutput(output: string[]): Record<string, unknown> {
@@ -68,12 +86,12 @@ describe('run-groq-retry smoke tests', () => {
       lastStatusCode: 503,
       failureCategory: 'transient' as const,
     };
-    const error = new Error(
-      'HTTP request failed after 4 attempt(s) (transient)',
+    const error = Object.assign(
+      new Error('HTTP request failed after 4 attempt(s) (transient)'),
+      { _retryDiagnostics: diagnostics },
     );
-    (error as any)._retryDiagnostics = diagnostics;
 
-    const fred = createMockFredWithProcessMessage('groq-agent', async () => {
+    const fred = await createMockFredWithProcessMessage('groq-agent', async () => {
       throw error;
     });
 
@@ -90,17 +108,13 @@ describe('run-groq-retry smoke tests', () => {
     expect(doc.ok).toBe(false);
     expect(doc.error).toContain('4 attempt(s)');
 
-    const meta = doc.meta as any;
-    expect(meta).toBeDefined();
-    expect(meta.details).toBeDefined();
-    expect(meta.details.retryDiagnostics.provider).toBe('groq');
-    expect(meta.details.retryDiagnostics.retryable).toBe(true);
-    expect(meta.details.retryDiagnostics.attempts).toBe(4);
-    expect(meta.details.retryDiagnostics.maxRetries).toBe(3);
-    expect(meta.details.retryDiagnostics.lastStatusCode).toBe(503);
-    expect(meta.details.retryDiagnostics.failureCategory).toBe('transient');
-    expect(meta.details.category).toBe('transient');
-    expect(meta.details.suggestion).toContain('Retry the request');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: diagnostics,
+        category: 'transient',
+        suggestion: expect.stringContaining('Retry the request'),
+      }),
+    }));
   });
 
   test('401 non-retryable failure produces fail-fast diagnostics in JSON payload', async () => {
@@ -114,10 +128,11 @@ describe('run-groq-retry smoke tests', () => {
       lastStatusCode: 401,
       failureCategory: 'non-retryable' as const,
     };
-    const error = new Error('HTTP request failed: non-retryable 401 error');
-    (error as any)._retryDiagnostics = diagnostics;
+    const error = Object.assign(new Error('HTTP request failed: non-retryable 401 error'), {
+      _retryDiagnostics: diagnostics,
+    });
 
-    const fred = createMockFredWithProcessMessage('groq-agent', async () => {
+    const fred = await createMockFredWithProcessMessage('groq-agent', async () => {
       throw error;
     });
 
@@ -129,13 +144,13 @@ describe('run-groq-retry smoke tests', () => {
 
     expect(exitCode).toBe(1);
     const doc = parseJsonOutput(captured.output);
-    const meta = doc.meta as any;
-
-    expect(meta.details.retryDiagnostics.retryable).toBe(false);
-    expect(meta.details.retryDiagnostics.attempts).toBe(1);
-    expect(meta.details.retryDiagnostics.lastStatusCode).toBe(401);
-    expect(meta.details.category).toBe('configuration');
-    expect(meta.details.suggestion).toContain('Check API key');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: diagnostics,
+        category: 'configuration',
+        suggestion: expect.stringContaining('Check API key'),
+      }),
+    }));
   });
 
   test('429 rate-limit failure produces transient diagnostics with rate-limit category', async () => {
@@ -149,10 +164,11 @@ describe('run-groq-retry smoke tests', () => {
       lastStatusCode: 429,
       failureCategory: 'rate-limit' as const,
     };
-    const error = new Error('Rate limit exceeded after 4 attempt(s)');
-    (error as any)._retryDiagnostics = diagnostics;
+    const error = Object.assign(new Error('Rate limit exceeded after 4 attempt(s)'), {
+      _retryDiagnostics: diagnostics,
+    });
 
-    const fred = createMockFredWithProcessMessage('groq-agent', async () => {
+    const fred = await createMockFredWithProcessMessage('groq-agent', async () => {
       throw error;
     });
 
@@ -164,18 +180,19 @@ describe('run-groq-retry smoke tests', () => {
 
     expect(exitCode).toBe(1);
     const doc = parseJsonOutput(captured.output);
-    const meta = doc.meta as any;
-
-    expect(meta.details.retryDiagnostics.failureCategory).toBe('rate-limit');
-    expect(meta.details.retryDiagnostics.lastStatusCode).toBe(429);
-    expect(meta.details.category).toBe('transient');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: diagnostics,
+        category: 'transient',
+      }),
+    }));
   });
 
   test('successful request after mock retry produces no diagnostics', async () => {
     const captured = createCapturingIO();
 
     // Simulate successful response (no retries needed)
-    const fred = createMockFredWithProcessMessage('groq-agent', async () => ({
+    const fred = await createMockFredWithProcessMessage('groq-agent', async () => ({
       content: 'Hello from Groq!',
       toolCalls: [],
     }));
@@ -204,10 +221,9 @@ describe('run-groq-retry smoke tests', () => {
       lastStatusCode: 503,
       failureCategory: 'transient' as const,
     };
-    const error = new Error('Transient failure');
-    (error as any)._retryDiagnostics = diagnostics;
+    const error = Object.assign(new Error('Transient failure'), { _retryDiagnostics: diagnostics });
 
-    const fred = createMockFredWithProcessMessage('groq-agent', async () => {
+    const fred = await createMockFredWithProcessMessage('groq-agent', async () => {
       throw error;
     });
 

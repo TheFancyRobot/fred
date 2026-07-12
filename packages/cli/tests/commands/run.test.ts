@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import {
+  createFred,
+  type AgentConfig,
+  type AgentInstance,
+  type AgentResponse,
+  type FredClient,
+} from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import { handleRunCommand } from '../../src/commands/run';
 import { RUN_JSON_CHANNEL_VIOLATION_EXIT_CODE, RunJsonChannel } from '../../src/runtime/json-channel';
 
@@ -22,30 +29,41 @@ function createCapturingIO() {
 
 interface MockAgentConfig {
   id: string;
-  response?: { content: string; toolCalls?: Array<{ toolId: string; args: Record<string, any>; result?: any }> } | null;
+  response?: AgentResponse | null;
 }
 
-function createMockFred(agents: MockAgentConfig[] = []): Fred {
-  const fred = new Fred();
+const makeMockAgent = (id: string): AgentInstance => {
+  const config: AgentConfig = { id, model: 'test-model', platform: 'test' };
+  return {
+    id,
+    config,
+    run: () => Effect.succeed({ content: '' }),
+    processMessage: () => Effect.succeed({ content: '' }),
+  };
+};
+
+async function createMockFred(
+  agents: MockAgentConfig[] = [],
+  processMessage?: (message: string, options?: Parameters<FredClient['messages']['process']>[1]) => Promise<AgentResponse>,
+): Promise<FredClient> {
+  const fred = await createFred();
   const agentMap = new Map(agents.map((a) => [a.id, a]));
-
-  (fred as any).getAgent = (id: string) => {
-    const mock = agentMap.get(id);
-    if (!mock) return undefined;
-    return { id: mock.id, config: { model: 'test-model', platform: 'test' } };
+  const instances = agents.map((agent) => makeMockAgent(agent.id));
+  return {
+    ...fred,
+    agents: {
+      ...fred.agents,
+      get: async (id) => agentMap.has(id) ? makeMockAgent(id) : null,
+      list: async () => instances,
+    },
+    messages: {
+      process: processMessage ?? (async () => {
+        const first = agents[0];
+        if (!first?.response) throw new Error('No response from agent.');
+        return first.response;
+      }),
+    },
   };
-
-  (fred as any).getAgents = () =>
-    agents.map((a) => ({ id: a.id, config: { model: 'test-model', platform: 'test' } }));
-
-  (fred as any).processMessage = async (_message: string, _options?: any) => {
-    // Use the first agent's response (run command targets a specific agent)
-    const first = agents[0];
-    if (!first) return null;
-    return first.response ?? null;
-  };
-
-  return fred;
 }
 
 /* ------------------------------------------------------------------ */
@@ -55,7 +73,7 @@ function createMockFred(agents: MockAgentConfig[] = []): Fred {
 describe('run command', () => {
   test('returns response content on success', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'Hello from agent!' } },
     ]);
 
@@ -72,7 +90,7 @@ describe('run command', () => {
 
   test('returns structured JSON with --json flag', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'JSON response', toolCalls: [] } },
     ]);
 
@@ -106,7 +124,7 @@ describe('run command', () => {
 
   test('errors when --input is missing (TTY mode)', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'response' } },
     ]);
 
@@ -122,7 +140,7 @@ describe('run command', () => {
 
   test('errors when agent is not found', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'helper', response: { content: 'response' } },
     ]);
 
@@ -139,7 +157,7 @@ describe('run command', () => {
 
   test('errors when agent returns null response', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: null },
     ]);
 
@@ -155,7 +173,7 @@ describe('run command', () => {
 
   test('shows tool calls on stderr with --verbose', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'assistant',
         response: {
@@ -183,7 +201,7 @@ describe('run command', () => {
 
   test('reads input from stdin when piped', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'Piped response' } },
     ]);
 
@@ -203,7 +221,7 @@ describe('run command', () => {
 
   test('--json includes toolCalls array even when empty', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'No tools used' } },
     ]);
 
@@ -239,7 +257,7 @@ describe('run command --json channel contract', () => {
 
   test('JSON success emits exactly one stdout doc and zero stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'Hello!', toolCalls: [] } },
     ]);
 
@@ -278,7 +296,7 @@ describe('run command --json channel contract', () => {
 
   test('JSON error: missing input emits one stdout JSON doc, zero stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'response' } },
     ]);
 
@@ -297,7 +315,7 @@ describe('run command --json channel contract', () => {
 
   test('JSON error: unknown agent emits one stdout JSON doc, zero stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'helper', response: { content: 'response' } },
     ]);
 
@@ -317,7 +335,7 @@ describe('run command --json channel contract', () => {
 
   test('JSON error: null response emits one stdout JSON doc, zero stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: null },
     ]);
 
@@ -336,11 +354,11 @@ describe('run command --json channel contract', () => {
 
   test('JSON error: runtime throw emits one stdout JSON doc, zero stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
     // Override processMessage to throw
-    (fred as any).processMessage = async () => {
+    fred.messages.process = async () => {
       throw new Error('LLM provider timeout');
     };
 
@@ -361,7 +379,7 @@ describe('run command --json channel contract', () => {
 
   test('JSON mode: startup warnings serialize under meta.warnings', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'response' } },
     ]);
 
@@ -384,10 +402,9 @@ describe('run command --json channel contract', () => {
     expect(directCaptured.errors).toHaveLength(0);
     const doc = parseOneJsonDoc(directCaptured.output);
     expect(doc.ok).toBe(true);
-    expect((doc.meta as any)?.warnings).toEqual([
-      'Config file not found',
-      'Plugin X failed to load',
-    ]);
+    expect(doc.meta).toEqual(expect.objectContaining({
+      warnings: ['Config file not found', 'Plugin X failed to load'],
+    }));
   });
 
   test('JSON mode: warnings included in error payload too', async () => {
@@ -400,14 +417,14 @@ describe('run command --json channel contract', () => {
     expect(captured.errors).toHaveLength(0);
     const doc = parseOneJsonDoc(captured.output);
     expect(doc.ok).toBe(false);
-    expect((doc.meta as any)?.warnings).toEqual(['Partial config loaded']);
+    expect(doc.meta).toEqual(expect.objectContaining({ warnings: ['Partial config loaded'] }));
   });
 
   /* ---- Verbose tool-call diagnostics in JSON mode ---- */
 
   test('JSON mode: verbose tool calls fold into meta.verbose', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'assistant',
         response: {
@@ -430,17 +447,17 @@ describe('run command --json channel contract', () => {
     const doc = parseOneJsonDoc(captured.output);
     expect(doc.ok).toBe(true);
     // Verbose diagnostics captured in meta.stderr (channel.diagnostic lines)
-    expect((doc.meta as any)?.stderr).toBeDefined();
-    expect((doc.meta as any).stderr.length).toBeGreaterThan(0);
-    expect((doc.meta as any).stderr[0]).toContain('[tool: calculator]');
-    // Verbose structured data in meta.verbose
-    expect((doc.meta as any)?.verbose?.toolCalls).toBeDefined();
-    expect((doc.meta as any).verbose.toolCalls[0].toolId).toBe('calculator');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      stderr: [expect.stringContaining('[tool: calculator]')],
+      verbose: expect.objectContaining({
+        toolCalls: [expect.objectContaining({ toolId: 'calculator' })],
+      }),
+    }));
   });
 
   test('JSON mode: non-verbose success has no meta field', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'Simple response' } },
     ]);
 
@@ -496,7 +513,7 @@ describe('run command --json channel contract', () => {
 
   test('text mode: verbose tool calls still go to stderr', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'assistant',
         response: {
@@ -534,7 +551,7 @@ describe('run command --json retry diagnostics', () => {
 
   test('JSON error: transient provider failure includes retryDiagnostics in meta.details', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
 
@@ -546,9 +563,10 @@ describe('run command --json retry diagnostics', () => {
       lastStatusCode: 503,
       failureCategory: 'transient',
     };
-    const error = new Error('HTTP request failed after 4 attempt(s) (transient)');
-    (error as any)._retryDiagnostics = diagnostics;
-    (fred as any).processMessage = async () => { throw error; };
+    const error = Object.assign(new Error('HTTP request failed after 4 attempt(s) (transient)'), {
+      _retryDiagnostics: diagnostics,
+    });
+    fred.messages.process = async () => { throw error; };
 
     const exitCode = await handleRunCommand(
       [],
@@ -562,17 +580,18 @@ describe('run command --json retry diagnostics', () => {
     expect(doc.ok).toBe(false);
     expect(doc.error).toContain('HTTP request failed after 4 attempt(s)');
 
-    const meta = doc.meta as any;
-    expect(meta).toBeDefined();
-    expect(meta.details).toBeDefined();
-    expect(meta.details.retryDiagnostics).toEqual(diagnostics);
-    expect(meta.details.category).toBe('transient');
-    expect(meta.details.suggestion).toContain('Retry the request');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: diagnostics,
+        category: 'transient',
+        suggestion: expect.stringContaining('Retry the request'),
+      }),
+    }));
   });
 
   test('JSON error: non-retryable 401 includes configuration diagnostics', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
 
@@ -584,9 +603,10 @@ describe('run command --json retry diagnostics', () => {
       lastStatusCode: 401,
       failureCategory: 'non-retryable',
     };
-    const error = new Error('HTTP request failed: non-retryable 401 error');
-    (error as any)._retryDiagnostics = diagnostics;
-    (fred as any).processMessage = async () => { throw error; };
+    const error = Object.assign(new Error('HTTP request failed: non-retryable 401 error'), {
+      _retryDiagnostics: diagnostics,
+    });
+    fred.messages.process = async () => { throw error; };
 
     const exitCode = await handleRunCommand(
       [],
@@ -596,20 +616,22 @@ describe('run command --json retry diagnostics', () => {
 
     expect(exitCode).toBe(1);
     const doc = parseOneJsonDoc(captured.output);
-    const meta = doc.meta as any;
-    expect(meta.details.retryDiagnostics.retryable).toBe(false);
-    expect(meta.details.retryDiagnostics.lastStatusCode).toBe(401);
-    expect(meta.details.category).toBe('configuration');
-    expect(meta.details.suggestion).toContain('Check API key');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: expect.objectContaining({ retryable: false, lastStatusCode: 401 }),
+        category: 'configuration',
+        suggestion: expect.stringContaining('Check API key'),
+      }),
+    }));
   });
 
   test('JSON error: plain error without diagnostics has no meta.details', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
 
-    (fred as any).processMessage = async () => { throw new Error('Generic failure'); };
+    fred.messages.process = async () => { throw new Error('Generic failure'); };
 
     const exitCode = await handleRunCommand(
       [],
@@ -626,7 +648,7 @@ describe('run command --json retry diagnostics', () => {
 
   test('JSON error: rate-limit 429 includes transient diagnostics', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
 
@@ -638,9 +660,8 @@ describe('run command --json retry diagnostics', () => {
       lastStatusCode: 429,
       failureCategory: 'rate-limit',
     };
-    const error = new Error('Rate limited');
-    (error as any)._retryDiagnostics = diagnostics;
-    (fred as any).processMessage = async () => { throw error; };
+    const error = Object.assign(new Error('Rate limited'), { _retryDiagnostics: diagnostics });
+    fred.messages.process = async () => { throw error; };
 
     const exitCode = await handleRunCommand(
       [],
@@ -650,15 +671,18 @@ describe('run command --json retry diagnostics', () => {
 
     expect(exitCode).toBe(1);
     const doc = parseOneJsonDoc(captured.output);
-    const meta = doc.meta as any;
-    expect(meta.details.retryDiagnostics.failureCategory).toBe('rate-limit');
-    expect(meta.details.category).toBe('transient');
-    expect(meta.details.suggestion).toContain('rate-limit');
+    expect(doc.meta).toEqual(expect.objectContaining({
+      details: expect.objectContaining({
+        retryDiagnostics: expect.objectContaining({ failureCategory: 'rate-limit' }),
+        category: 'transient',
+        suggestion: expect.stringContaining('rate-limit'),
+      }),
+    }));
   });
 
   test('text mode: error with diagnostics still outputs plain error', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'assistant', response: { content: 'ok' } },
     ]);
 
@@ -669,9 +693,10 @@ describe('run command --json retry diagnostics', () => {
       maxRetries: 3,
       failureCategory: 'transient',
     };
-    const error = new Error('HTTP request failed after 4 attempt(s)');
-    (error as any)._retryDiagnostics = diagnostics;
-    (fred as any).processMessage = async () => { throw error; };
+    const error = Object.assign(new Error('HTTP request failed after 4 attempt(s)'), {
+      _retryDiagnostics: diagnostics,
+    });
+    fred.messages.process = async () => { throw error; };
 
     const exitCode = await handleRunCommand(
       [],

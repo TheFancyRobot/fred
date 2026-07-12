@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { Deferred, Effect, Fiber, Runtime } from 'effect';
-import { Fred, trackAgentRun, type AgentStatusSnapshot } from '@fancyrobot/fred';
+import { Deferred, Effect, Fiber, Stream } from 'effect';
+import { createFred, trackAgentRun, type AgentStatusSnapshot, type FredClient } from '@fancyrobot/fred';
+import { AgentStatusService } from '@fancyrobot/fred/effect';
 import { handleStatusCommand, type StatusCommandIO } from '../../src/commands/status';
 
 const captureIO = () => {
@@ -24,6 +25,21 @@ const activeRuns: AgentStatusSnapshot = [
   },
 ];
 
+const createStatusClient = async (snapshot: AgentStatusSnapshot): Promise<FredClient> => {
+  const fred = await createFred();
+  const status: typeof AgentStatusService.Service = {
+    snapshot: Effect.succeed(snapshot),
+    changes: Stream.empty,
+    transition: () => Effect.void,
+  };
+  return {
+    ...fred,
+    effects: {
+      run: (effect) => fred.effects.run(Effect.provideService(effect, AgentStatusService, status)),
+    },
+  };
+};
+
 describe('status command', () => {
   test('is registered in built-in dispatch and help', async () => {
     const source = await Bun.file(new URL('../../src/index.ts', import.meta.url)).text();
@@ -36,8 +52,9 @@ describe('status command', () => {
 
   test('renders a clear empty human result', async () => {
     const captured = captureIO();
+    const fred = await createStatusClient([]);
     const exitCode = await handleStatusCommand([], {}, {
-      fred: { getAgentStatus: async () => [] },
+      fred,
       io: captured.io,
     });
 
@@ -48,8 +65,9 @@ describe('status command', () => {
 
   test('renders valid structured JSON', async () => {
     const captured = captureIO();
+    const fred = await createStatusClient(activeRuns);
     const exitCode = await handleStatusCommand([], { json: true }, {
-      fred: { getAgentStatus: async () => activeRuns },
+      fred,
       io: captured.io,
     });
 
@@ -75,8 +93,9 @@ describe('status command', () => {
       fiberId: '#7\u009b31m',
     }];
 
+    const fred = await createStatusClient(unsafeRuns);
     const exitCode = await handleStatusCommand([], {}, {
-      fred: { getAgentStatus: async () => unsafeRuns },
+      fred,
       io: captured.io,
     });
 
@@ -91,12 +110,11 @@ describe('status command', () => {
     expect(captured.stderr).toEqual([]);
   });
 
-  test('reads an injected Fred runtime while a run is active', async () => {
-    const fred = await Fred.create();
-    const started = await Effect.runPromise(Deferred.make<void>());
-    const release = await Effect.runPromise(Deferred.make<void>());
-    const runtime = await fred.getRuntime();
-    const run = Runtime.runFork(runtime)(
+  test('reads an injected FredClient while a run is active', async () => {
+    const fred = await createFred();
+    const started = await fred.effects.run(Deferred.make<void>());
+    const release = await fred.effects.run(Deferred.make<void>());
+    const run = await fred.effects.run(Effect.forkDaemon(
       trackAgentRun({
         runId: 'status-command-run',
         agentId: 'live-agent',
@@ -107,10 +125,10 @@ describe('status command', () => {
           Effect.zipRight(Deferred.await(release)),
         ),
       ),
-    );
+    ));
 
     try {
-      await Effect.runPromise(Deferred.await(started));
+      await fred.effects.run(Deferred.await(started));
       const active = captureIO();
       expect(await handleStatusCommand([], {}, { fred, io: active.io })).toBe(0);
       expect(active.stdout[0]).toContain('live-agent');
@@ -118,15 +136,15 @@ describe('status command', () => {
       expect(active.stdout[0]).toContain('live-session');
       expect(active.stdout[0]).toContain('starting');
 
-      await Effect.runPromise(Deferred.succeed(release, undefined));
-      await Effect.runPromise(Fiber.join(run));
+      await fred.effects.run(Deferred.succeed(release, undefined));
+      await fred.effects.run(Fiber.join(run));
 
       const completed = captureIO();
       expect(await handleStatusCommand([], {}, { fred, io: completed.io })).toBe(0);
       expect(completed.stdout).toEqual(['No agent runs are active.']);
     } finally {
-      await Effect.runPromise(Deferred.succeed(release, undefined));
-      await Effect.runPromise(Fiber.interrupt(run));
+      await fred.effects.run(Deferred.succeed(release, undefined));
+      await fred.effects.run(Fiber.interrupt(run));
       await fred.shutdown();
     }
   });
