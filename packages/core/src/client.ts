@@ -108,6 +108,7 @@ import type {
 } from './subagent/service';
 import { MCPServerRegistry, type ServerStatus } from './mcp';
 import type { MCPServerConfig } from './mcp/types';
+import { MCPSecurityError, validateCommand, validateUrl } from './mcp/security';
 import type { VariableFactory } from './variables';
 import { BUILTIN_PACKS } from './platform/packs';
 import type { AgentFileWatcher } from './agent/file-watcher';
@@ -299,6 +300,7 @@ export interface MCPToolMetadata {
 export interface MCPServerInfo {
   readonly id: string;
   readonly transport: MCPServerConfig['transport'];
+  readonly lazy: boolean;
   readonly status: ServerStatus | 'stopped';
   readonly connected: boolean;
   readonly tools: readonly MCPToolMetadata[];
@@ -426,6 +428,7 @@ const toMCPServerConfig = (
   headers: config.headers,
   timeout: config.timeout,
   enabled: config.enabled,
+  lazy: config.lazy,
   healthCheckIntervalMs: config.healthCheckIntervalMs,
   allowedCommands: config.allowedCommands,
   envAllowlist: config.envAllowlist,
@@ -507,22 +510,37 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     TemplateEngineLive({ ...template, basePath: templateBasePath })
   ) as Layer.Layer<FredServices | TemplateEngine>;
 
-  const scope = Effect.runSync(Scope.make());
-  const clientRuntime = (await Effect.runPromise(
-    Scope.extend(Layer.toRuntime(layer), scope)
-  )) as Runtime.Runtime<FredServices | TemplateEngine>;
-  const mcpRegistry = new MCPServerRegistry();
-  const globalVariables = new Map<string, VariableFactory>();
-  const templateNamespaces = new Map<string, () => unknown>();
-  const warningListeners = new Set<FredWarningListener>();
-  let agentFileWatcher: AgentFileWatcher | undefined;
-  const cleanupTasks: CheckpointCleanupTask[] = [];
   const ownedClosers: Array<() => Promise<void>> = [];
   if (configuredStorage) {
     ownedClosers.push(async () => { await configuredStorage.close(); });
   }
   if (configuredCheckpointStorage) {
     ownedClosers.push(() => configuredCheckpointStorage.close());
+  }
+  const closeOwnedResources = async (): Promise<void> => {
+    for (const close of ownedClosers) {
+      await close().catch(() => undefined);
+    }
+  };
+
+  const scope = Effect.runSync(Scope.make());
+  let clientRuntime: Runtime.Runtime<FredServices | TemplateEngine>;
+  try {
+    clientRuntime = (await Effect.runPromise(
+      Scope.extend(Layer.toRuntime(layer), scope)
+    )) as Runtime.Runtime<FredServices | TemplateEngine>;
+  } catch (error) {
+    await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined);
+    await closeOwnedResources();
+    throw error;
+  }
+  const mcpRegistry = new MCPServerRegistry();
+  const globalVariables = new Map<string, VariableFactory>();
+  const templateNamespaces = new Map<string, () => unknown>();
+  const warningListeners = new Set<FredWarningListener>();
+  let agentFileWatcher: AgentFileWatcher | undefined;
+  const cleanupTasks: CheckpointCleanupTask[] = [];
+  if (configuredCheckpointStorage) {
     const cleanupTask = new CheckpointCleanupTask(configuredCheckpointStorage, {
       intervalMs: persistence?.checkpoint?.cleanupIntervalMs ?? 3_600_000,
     });
@@ -531,8 +549,8 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   }
 
   // One-time service initialization, mirroring the Fred facade defaults.
-  await Runtime.runPromise(clientRuntime)(
-    Effect.gen(function* () {
+  try {
+    await Runtime.runPromise(clientRuntime)(Effect.gen(function* () {
       const tools = yield* ToolRegistryService;
       const agentService = yield* AgentService;
       const templateEngine = yield* TemplateEngine;
@@ -564,8 +582,13 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
         const context = yield* ContextStorageService;
         yield* context.replaceStorage(options.storage);
       }
-    })
-  );
+    }));
+  } catch (error) {
+    for (const task of cleanupTasks) task.stop();
+    await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined);
+    await closeOwnedResources();
+    throw error;
+  }
 
   const runtime = clientRuntime as FredRuntime;
 
@@ -784,6 +807,33 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
         ensureOpen();
         for (const config of configs) {
           const serverConfig = toMCPServerConfig(config);
+          if (serverConfig.transport === 'stdio') {
+            if (!serverConfig.command) {
+              throw new MCPSecurityError('COMMAND_DENIED', 'MCP stdio configuration requires a command');
+            }
+            if (!serverConfig.allowedCommands?.length) {
+              throw new MCPSecurityError(
+                'COMMAND_DENIED',
+                `MCP stdio server '${config.id}' requires a non-empty allowedCommands allowlist`,
+              );
+            }
+            validateCommand(serverConfig.command, serverConfig.allowedCommands);
+          } else {
+            if (!serverConfig.url) {
+              throw new MCPSecurityError('URL_DENIED', 'MCP HTTP/SSE configuration requires a URL');
+            }
+            if (!serverConfig.allowedHosts?.length || !serverConfig.allowedSchemes?.length) {
+              throw new MCPSecurityError(
+                'URL_DENIED',
+                `MCP ${serverConfig.transport} server '${config.id}' requires non-empty allowedHosts and allowedSchemes allowlists`,
+              );
+            }
+            validateUrl(
+              serverConfig.url,
+              serverConfig.allowedHosts,
+              serverConfig.allowedSchemes,
+            );
+          }
           if (config.lazy) {
             mcpRegistry.registerLazyServer(config.id, serverConfig);
           } else {
@@ -817,6 +867,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             return {
               id,
               transport: config.transport,
+              lazy: config.lazy ?? false,
               status: mcpRegistry.getServerStatus(id) ?? 'stopped',
               connected: false,
               tools: [],
@@ -827,6 +878,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             return {
               id,
               transport: config.transport,
+              lazy: config.lazy ?? false,
               status: mcpRegistry.getServerStatus(id) ?? 'stopped',
               connected: true,
               tools,
@@ -835,6 +887,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             return {
               id,
               transport: config.transport,
+              lazy: config.lazy ?? false,
               status: mcpRegistry.getServerStatus(id) ?? 'stopped',
               connected: true,
               tools: [],
@@ -985,7 +1038,14 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           await run(Effect.flatMap(
             ProviderRegistryService,
             (service) => service.registerFactory(factory, {}),
-          )).catch(() => undefined);
+          )).catch(async (error) => {
+            await run(Effect.logDebug('Built-in provider pack registration failed').pipe(
+              Effect.annotateLogs({
+                providerId: factory.id,
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            ));
+          });
         }
       },
       configureMCPServers: (configs) => client.mcp.configure(configs),
@@ -1018,7 +1078,10 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       await initializer.initializeServices(
         target,
         options.configPath,
-        options.configOptions,
+        {
+          ...options.configOptions,
+          routingOverride: options.routing,
+        },
       );
     } catch (error) {
       await client.shutdown();

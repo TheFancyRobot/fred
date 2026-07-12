@@ -324,6 +324,7 @@ export const makeFredLayers = (
   promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer,
   contextStorageLayer: Layer.Layer<ContextStorageService> = ContextStorageServiceLive,
   checkpointServiceLayer: Layer.Layer<CheckpointService> = CheckpointServiceLive,
+  messageRouterLayer?: Layer.Layer<MessageRouterService>,
 ) => {
   const selectedCoreLayer = Layer.mergeAll(
     ProviderRegistryServiceLive,
@@ -352,12 +353,15 @@ export const makeFredLayers = (
     Layer.provide(selectedPauseLayer)
   );
 
-  const selectedMessageProcessorLayer = MessageProcessorServiceLive.pipe(
+  const messageProcessorDependencies = MessageProcessorServiceLive.pipe(
     Layer.provide(selectedAgentLayer),
     Layer.provide(selectedPipelineLayer),
     Layer.provide(contextStorageLayer),
     Layer.provide(SessionServiceLive)
   );
+  const selectedMessageProcessorLayer = messageRouterLayer
+    ? messageProcessorDependencies.pipe(Layer.provide(messageRouterLayer))
+    : messageProcessorDependencies;
 
   const selectedIntentLayer = Layer.mergeAll(
     IntentMatcherServiceLive,
@@ -376,7 +380,7 @@ export const makeFredLayers = (
     selectedMessageProcessorLayer,
     subagentLayer,
     selectedIntentLayer,
-    defaultRouterLayer,
+    messageRouterLayer ?? defaultRouterLayer,
     SessionServiceLive
   );
 };
@@ -393,11 +397,15 @@ export const FredLayers = makeFredLayers();
 export const makeFredLayersWithLeafRouting = (
   routerConfig: RoutingConfig,
   promptSourceLayer: Layer.Layer<PromptSourceServiceApi, never, never> = DefaultPromptSourceLayer
-) =>
-  Layer.merge(
-    makeFredLayers(promptSourceLayer),
-    MessageRouterServiceLiveWithConfig(routerConfig)
+) => {
+  const messageRouterLayer = MessageRouterServiceLiveWithConfig(routerConfig);
+  return makeFredLayers(
+    promptSourceLayer,
+    ContextStorageServiceLive,
+    CheckpointServiceLive,
+    messageRouterLayer,
   );
+};
 
 export interface FredLayerOptions {
   routingConfig?: RoutingConfig;
@@ -422,12 +430,15 @@ export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Laye
         defaultTtlMs: options.checkpointTtlMs,
       })
     : CheckpointServiceLive;
-  const base = options.routingConfig
-    ? Layer.merge(
-        makeFredLayers(promptSourceLayer, contextStorageLayer, checkpointServiceLayer),
-        MessageRouterServiceLiveWithConfig(options.routingConfig),
-      )
-    : makeFredLayers(promptSourceLayer, contextStorageLayer, checkpointServiceLayer);
+  const messageRouterLayer = options.routingConfig
+    ? MessageRouterServiceLiveWithConfig(options.routingConfig)
+    : undefined;
+  const base = makeFredLayers(
+    promptSourceLayer,
+    contextStorageLayer,
+    checkpointServiceLayer,
+    messageRouterLayer,
+  );
 
   if (!options.observabilityLayers) {
     return base;

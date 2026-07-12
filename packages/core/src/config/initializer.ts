@@ -103,6 +103,7 @@ interface LoadedAgentFile {
 export interface InitializerOptions {
   toolExecutors?: Map<string, Tool['execute']>;
   providers?: ProviderConfigInput;
+  routingOverride?: import('../routing/types').RoutingConfig;
 }
 
 /**
@@ -420,8 +421,9 @@ export class ConfigInitializer {
       await target.registerTool(makeConfiguredTool(definition, executor));
     }
 
-    if (config.routing) {
-      await target.configureRouting(config.routing);
+    const effectiveRouting = options?.routingOverride ?? config.routing;
+    if (effectiveRouting) {
+      await target.configureRouting(effectiveRouting);
     }
     await target.configureWorkflows(extractWorkflows(config));
     await target.registerIntents(extractIntents(config));

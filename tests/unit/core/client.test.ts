@@ -5,11 +5,11 @@
  * the runtime escape hatch sharing state with the Promise facade, and
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { Cause, Effect, Exit, Runtime, Schema } from 'effect';
+import { Cause, Effect, Exit, Layer, Runtime, Schema } from 'effect';
 import {
   createFred,
   FredClientClosedError,
@@ -19,10 +19,15 @@ import {
   AgentService,
   CheckpointService,
   ContextStorageService,
+  MessageProcessorService,
+  MessageRouterService,
   ProviderRegistryService,
   ToolRegistryService,
 } from '../../../packages/core/src/services';
 import { SqliteCheckpointStorage } from '../../../packages/core/src/pipeline/checkpoint';
+import { SqliteContextStorage } from '../../../packages/core/src/context/storage/sqlite';
+import { PromptSourceService } from '../../../packages/core/src/agent/prompt-source';
+import { MCPSecurityError } from '../../../packages/core/src/mcp/security';
 import { PromptResolutionError } from '../../../packages/core/src/agent/errors';
 import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
@@ -122,6 +127,77 @@ describe('createFred client', () => {
     }
   });
 
+  it('keeps explicit routing overrides wired into message processing', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fred-client-routing-'));
+    const configPath = join(directory, 'fred.config.json');
+    writeFileSync(configPath, JSON.stringify({
+      routing: { defaultAgent: 'config-agent', rules: [] },
+    }));
+
+    try {
+      const client = track(await createFred({
+        configPath,
+        routing: { defaultAgent: 'override-agent', rules: [] },
+      }));
+      await registerMockProvider(client);
+      for (const id of ['config-agent', 'override-agent', 'updated-agent']) {
+        await client.agents.register({
+          id,
+          platform: 'mock',
+          model: 'mock-model',
+          systemMessage: 'Routing test agent.',
+        });
+      }
+
+      const initialRoute = await Runtime.runPromise(client.runtime)(
+        Effect.flatMap(MessageProcessorService, (service) => service.routeMessage('hello')),
+      );
+      expect(initialRoute.agentId).toBe('override-agent');
+
+      await Runtime.runPromise(client.runtime)(
+        Effect.flatMap(
+          MessageRouterService,
+          (service) => service.setConfig({ defaultAgent: 'updated-agent', rules: [] }),
+        ),
+      );
+      const updatedRoute = await Runtime.runPromise(client.runtime)(
+        Effect.flatMap(MessageProcessorService, (service) => service.routeMessage('hello')),
+      );
+      expect(updatedRoute.agentId).toBe('updated-agent');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('closes owned persistence when runtime construction fails', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fred-client-bootstrap-'));
+    const configPath = join(directory, 'fred.config.json');
+    const databasePath = join(directory, 'fred.db');
+    const previousDatabasePath = process.env.FRED_SQLITE_PATH;
+    const contextClose = spyOn(SqliteContextStorage.prototype, 'close');
+    const checkpointClose = spyOn(SqliteCheckpointStorage.prototype, 'close');
+    process.env.FRED_SQLITE_PATH = databasePath;
+    writeFileSync(configPath, JSON.stringify({ persistence: { adapter: 'sqlite' } }));
+
+    try {
+      const failingPromptLayer = Layer.effect(
+        PromptSourceService,
+        Effect.die(new Error('prompt layer failed')),
+      );
+      await expect(createFred({ configPath, promptSourceLayer: failingPromptLayer })).rejects.toThrow(
+        'prompt layer failed',
+      );
+      expect(contextClose).toHaveBeenCalledTimes(1);
+      expect(checkpointClose).toHaveBeenCalledTimes(1);
+    } finally {
+      contextClose.mockRestore();
+      checkpointClose.mockRestore();
+      if (previousDatabasePath === undefined) delete process.env.FRED_SQLITE_PATH;
+      else process.env.FRED_SQLITE_PATH = previousDatabasePath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('exposes service-backed message, tool, hook, template, and variable capabilities', async () => {
     const client = track(await createFred());
     await client.tools.register({
@@ -148,6 +224,7 @@ describe('createFred client', () => {
       id: 'lazy-files',
       transport: 'stdio',
       command: 'unused',
+      allowedCommands: ['unused'],
       lazy: true,
       enabled: false,
     }]);
@@ -168,6 +245,24 @@ describe('createFred client', () => {
     const result = await client.subagents.execute(subagent.id);
     expect(result.stdout).toBe('ready');
     expect(await client.subagents.destroy(subagent.id)).toBe(true);
+  });
+
+  it('rejects MCP configurations without explicit transport allowlists', async () => {
+    const client = track(await createFred());
+
+    await expect(client.mcp.configure([{
+      id: 'unsafe-stdio',
+      transport: 'stdio',
+      command: 'node',
+      lazy: true,
+    }])).rejects.toBeInstanceOf(MCPSecurityError);
+    await expect(client.mcp.configure([{
+      id: 'unsafe-http',
+      transport: 'http',
+      url: 'https://example.com/mcp',
+      lazy: true,
+    }])).rejects.toBeInstanceOf(MCPSecurityError);
+    expect(await client.mcp.list()).toEqual([]);
   });
 
   it('exposes safe MCP discovery and preserves configuration across lifecycle operations', async () => {
@@ -213,6 +308,8 @@ describe('createFred client', () => {
         id: 'safe-http',
         transport: 'http',
         url: `http://127.0.0.1:${server.port}`,
+        allowedHosts: ['127.0.0.1'],
+        allowedSchemes: ['http'],
         headers: { Authorization: 'Bearer secret' },
         env: { SECRET_TOKEN: 'secret' },
         lazy: true,
@@ -221,6 +318,7 @@ describe('createFred client', () => {
       expect(await client.mcp.listServers()).toEqual([{
         id: 'safe-http',
         transport: 'http',
+        lazy: true,
         status: 'stopped',
         connected: false,
         tools: [],
