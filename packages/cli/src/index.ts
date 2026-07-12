@@ -6,7 +6,7 @@
  */
 
 import { handleTestCommand } from './test';
-import { handleDevCommand } from './dev';
+import { handleDevCommand, loadProjectSetup } from './dev';
 import { handleEvalCommand } from './eval';
 import { handleChatCommand } from './commands/chat';
 import { handleSessionCommand } from './commands/session';
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
       case 'chat':
       case 'tui':
         // handleChatCommand is async — OpenTUI manages terminal lifecycle
-        await handleChatCommand();
+        await handleChatCommand({ projectSetupHook: loadProjectSetup });
         return;
 
       case 'dev':
@@ -495,7 +495,10 @@ function emitPluginStartupDiagnostics(
 
 // Run if executed directly
 if (import.meta.main) {
-  main();
+  void main().catch((error) => {
+    console.error('Fatal CLI error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
 }
 
 export { handleChatCommand } from './commands/chat.js';

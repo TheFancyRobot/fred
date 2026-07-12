@@ -524,6 +524,33 @@ export const TERMINAL_RECOVERY_GUIDANCE =
   'Terminal may be in an inconsistent state. ' +
   'Run `reset` or `stty sane` to restore normal terminal behavior.';
 
+export const CHAT_SHUTDOWN_TIMEOUT_MS = 5_000;
+
+export async function shutdownFredBeforeExit(
+  fred: Pick<Fred, 'shutdown'>,
+  timeoutMs = CHAT_SHUTDOWN_TIMEOUT_MS,
+): Promise<number> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Fred shutdown timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    await Promise.race([fred.shutdown(), timeout]);
+    return 0;
+  } catch (error) {
+    console.error(`Failed to shut down Fred cleanly: ${sanitizeErrorForCli(error)}`);
+    return 1;
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
 /**
  * Handle chat command
  *
@@ -787,7 +814,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                 activeStreamAbort?.abort();
                 console.log('Exiting Fred chat...');
                 queueMicrotask(() => app.stop());
-                void fred.shutdown().finally(() => process.exit(0));
+                void shutdownFredBeforeExit(fred).then((exitCode) => process.exit(exitCode));
               },
               onError: (_error) => {
                 // Abort the active stream so the for-await loop exits cleanly.

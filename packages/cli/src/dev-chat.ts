@@ -9,6 +9,6 @@ export type DevChatSetupHook = (fred: Fred) => Promise<void> | void;
  * @deprecated Use the `fred chat` command or {@link handleChatCommand}.
  * This adapter remains for the final `@fancyrobot/fred-dev` compatibility release.
  */
-export function startDevChat(setupHook?: DevChatSetupHook): void {
-  void handleChatCommand({ projectSetupHook: setupHook });
+export function startDevChat(setupHook?: DevChatSetupHook): Promise<void> {
+  return handleChatCommand({ projectSetupHook: setupHook });
 }

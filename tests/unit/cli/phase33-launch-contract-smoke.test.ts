@@ -166,8 +166,10 @@ describe('phase 33 launch contract smoke', () => {
     const source = await Bun.file(indexPath).text();
 
     expect(source).toContain("const command = args[0] || 'chat';");
-    expect(source).toMatch(/case 'chat':\s*case 'tui':[\s\S]*?await handleChatCommand\(\);/);
-    expect(source.match(/await handleChatCommand\(\);/g)?.length).toBe(1);
+    expect(source).toMatch(
+      /case 'chat':\s*case 'tui':[\s\S]*?await handleChatCommand\(\{ projectSetupHook: loadProjectSetup \}\);/,
+    );
+    expect(source.match(/await handleChatCommand\(\{ projectSetupHook: loadProjectSetup \}\);/g)?.length).toBe(1);
   });
 
   test('explicit help flags remain help-only and do not route into launch flow', () => {

@@ -8,6 +8,7 @@ import {
   detectAvailableProvider,
   loadProviderPackage,
   PROVIDER_PACKAGES,
+  shutdownFredBeforeExit,
   TERMINAL_RECOVERY_GUIDANCE,
 } from '../../../packages/cli/src/commands/chat';
 
@@ -436,8 +437,34 @@ describe('Chat Command', () => {
       const chatPath = path.resolve(import.meta.dir, '../../../packages/cli/src/commands/chat.ts');
       const content = await Bun.file(chatPath).text();
 
-      expect(content).toContain('fred.shutdown().finally(() => process.exit(0))');
+      expect(content).toContain('shutdownFredBeforeExit(fred)');
+      expect(content).toContain('process.exit(exitCode)');
       expect(content).toContain('queueMicrotask(() => app.stop())');
+    });
+
+    test('bounded shutdown reports success, failure, and timeout exit codes', async () => {
+      const originalConsoleError = console.error;
+      const consoleError = mock(() => undefined);
+      console.error = consoleError;
+
+      try {
+        expect(await shutdownFredBeforeExit({ shutdown: async () => undefined }, 25)).toBe(0);
+        expect(
+          await shutdownFredBeforeExit(
+            { shutdown: async () => Promise.reject(new Error('close failed')) },
+            25,
+          ),
+        ).toBe(1);
+        expect(
+          await shutdownFredBeforeExit(
+            { shutdown: () => new Promise<void>(() => undefined) },
+            1,
+          ),
+        ).toBe(1);
+        expect(consoleError).toHaveBeenCalledTimes(2);
+      } finally {
+        console.error = originalConsoleError;
+      }
     });
   });
 
