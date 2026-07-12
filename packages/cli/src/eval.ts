@@ -2,7 +2,8 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 import {
-  Fred,
+  createFred,
+  type FredClient,
   ObservabilityServiceLive,
   evaluation,
 } from '@fancyrobot/fred';
@@ -227,17 +228,23 @@ function resolveConfigPath(explicitConfigPath?: string): string | undefined {
 }
 
 function createFredReplayRuntime(): ReplayRuntimeAdapter {
-  const fred = new Fred();
+  let fred: FredClient | undefined;
 
   return {
     initializeFromConfig: async (configPath, options) => {
-      await fred.initializeFromConfig(configPath, options);
+      await fred?.shutdown();
+      fred = await createFred({ configPath, configOptions: options });
     },
-    resumeFromCheckpoint: ({ runId, mode }) =>
-      fred.resume(runId, {
+    resumeFromCheckpoint: ({ runId, mode }) => {
+      if (!fred) {
+        return Effect.fail(new Error('Fred replay runtime has not been initialized'));
+      }
+      const client = fred;
+      return Effect.tryPromise(() => client.workflows.resume(runId, {
         humanInput: '',
         resumeBehavior: mode === 'skip' ? 'continue' : 'rerun',
-      }),
+      }));
+    },
   };
 }
 

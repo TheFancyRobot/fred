@@ -1,4 +1,4 @@
-import { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
 
 export const DEV_CHAT_PROVIDER_PACKAGES: Record<string, string> = {
   openai: '@fancyrobot/fred-openai',
@@ -59,22 +59,16 @@ const DEFAULT_SYSTEM_MESSAGE =
   'This is a temporary agent for dev-chat. Users can create custom agents in their config files.';
 
 export async function ensureDefaultChatAgent(
-  fred: Fred,
+  fred: FredClient,
   options: EnsureDefaultChatAgentOptions = {}
 ): Promise<EnsureDefaultChatAgentResult> {
   const agentId = options.agentId ?? DEFAULT_AGENT_ID;
   const systemMessage = options.systemMessage ?? DEFAULT_SYSTEM_MESSAGE;
 
-  const agents = fred.getAgents();
+  const agents = await fred.agents.list();
   if (agents.length > 0) {
-    const defaultAgentId = fred.getDefaultAgentId();
-    const selectedAgentId = defaultAgentId ?? agents[0].id;
-
-    if (!defaultAgentId) {
-      fred.setDefaultAgent(selectedAgentId);
-    }
-
-    const selectedAgent = fred.getAgent(selectedAgentId);
+    const selectedAgentId = agents[0].id;
+    const selectedAgent = await fred.agents.get(selectedAgentId);
     if (!selectedAgent) {
       throw new Error(`Default agent could not be resolved: ${selectedAgentId}`);
     }
@@ -100,17 +94,14 @@ export async function ensureDefaultChatAgent(
   }
 
   await loadProviderPackage(providerInfo.platform);
-  await fred.registerDefaultProviders();
-  await fred.useProvider(providerInfo.platform);
-  await fred.createAgent({
+  await fred.providers.use(providerInfo.platform);
+  await fred.agents.register({
     id: agentId,
     systemMessage,
     platform: providerInfo.platform,
     model: providerInfo.model,
     tools: ['calculator'],
   });
-  fred.setDefaultAgent(agentId);
-
   return {
     provider: providerInfo.platform,
     model: providerInfo.model,

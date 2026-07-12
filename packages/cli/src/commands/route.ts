@@ -5,7 +5,8 @@
  * Usage: fred route test "message"
  */
 
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
+import { MessageRouterService } from '@fancyrobot/fred/effect';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { createColors } from './color.js';
@@ -23,7 +24,7 @@ export interface RouteCommandIO {
 }
 
 export interface RouteCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: RouteCommandIO;
 }
 
@@ -35,25 +36,24 @@ const DEFAULT_IO: RouteCommandIO = {
 /**
  * Initialize Fred instance with config, wrapped in Effect.
  */
-const initializeFredEffect = (io: RouteCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+const initializeFredEffect = (io: RouteCommandIO): Effect.Effect<FredClient, ConfigInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
+    const fred = yield* Effect.tryPromise({
+        try: () => createFred({ configPath: configResult.success ? configResult.configPath : undefined }),
         catch: (error) =>
           new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
       }).pipe(
         Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            io.stderr(error.message);
-          }),
+          Effect.zipRight(
+            Effect.sync(() => io.stderr(error.message)),
+            Effect.tryPromise({
+              try: () => createFred(),
+              catch: (cause) => new ConfigInitError({ message: sanitizeErrorForCli(cause) }),
+            }),
+          ),
         ),
       );
-    }
-
     return fred;
   });
 
@@ -92,7 +92,9 @@ const routeTestEffect = (
     // Test route
     const startTime = Date.now();
     const decision = yield* Effect.tryPromise({
-      try: () => fred.testRoute(message, {}),
+      try: () => fred.effects.run(
+        Effect.flatMap(MessageRouterService, (service) => service.testRoute(message, {})),
+      ),
       catch: (error) =>
         new RoutingError({ message: `Routing failed: ${sanitizeErrorForCli(error)}` }),
     });

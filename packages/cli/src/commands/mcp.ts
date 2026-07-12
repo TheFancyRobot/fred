@@ -5,7 +5,11 @@
  * Subcommands: list, start, stop, status
  */
 
-import { Fred } from '@fancyrobot/fred';
+import {
+  createFred,
+  type FredClient,
+  type MCPServerInfo,
+} from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { createColors } from './color.js';
@@ -16,7 +20,6 @@ import {
   McpOperationError,
   UnknownSubcommandError,
 } from './errors.js';
-import type { MCPServerRegistry } from '@fancyrobot/fred/mcp/registry';
 
 export interface McpCommandIO {
   stdout: (msg: string) => void;
@@ -24,9 +27,8 @@ export interface McpCommandIO {
 }
 
 export interface McpCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: McpCommandIO;
-  registry?: MCPServerRegistry; // Override for testing
 }
 
 const DEFAULT_IO: McpCommandIO = {
@@ -56,26 +58,34 @@ function formatTable(headers: string[], rows: string[][]): string {
 /**
  * Initialize Fred instance with config, wrapped in Effect.
  */
-const initializeFredEffect = (io: McpCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+const initializeFredEffect = (io: McpCommandIO): Effect.Effect<FredClient, ConfigInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
-        catch: (error) =>
-          new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
-      }).pipe(
-        Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            io.stderr(error.message);
+    return yield* Effect.tryPromise({
+      try: () => createFred({
+        configPath: configResult.success ? configResult.configPath : undefined,
+      }),
+      catch: (error) =>
+        new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
+    }).pipe(
+      Effect.catchTag('ConfigInitError', (error) =>
+        Effect.zipRight(
+          Effect.sync(() => io.stderr(error.message)),
+          Effect.tryPromise({
+            try: () => createFred(),
+            catch: (cause) => new ConfigInitError({ message: sanitizeErrorForCli(cause) }),
           }),
         ),
-      );
-    }
+      ),
+    );
+  });
 
-    return fred;
+const listMcpServersEffect = (
+  fred: FredClient,
+): Effect.Effect<readonly MCPServerInfo[], McpOperationError> =>
+  Effect.tryPromise({
+    try: () => fred.mcp.listServers(),
+    catch: (error) => new McpOperationError({ message: sanitizeErrorForCli(error) }),
   });
 
 /**
@@ -83,37 +93,19 @@ const initializeFredEffect = (io: McpCommandIO): Effect.Effect<Fred, ConfigInitE
  */
 const mcpListEffect = (
   options: Record<string, unknown>,
-  registry: MCPServerRegistry,
+  fred: FredClient,
   io: McpCommandIO,
-): Effect.Effect<number, never> =>
+): Effect.Effect<number, McpOperationError> =>
   Effect.gen(function* () {
-    const allServers = registry.getAllConfiguredServers();
+    const allServers = yield* listMcpServersEffect(fred);
 
     if (options.json === true) {
-      const servers = yield* Effect.forEach(allServers, (id) =>
-        Effect.gen(function* () {
-          const status = registry.getServerStatus(id) ?? 'stopped';
-          const config = registry.getServerConfig(id);
-          const transport = config?.transport ?? 'unknown';
-
-          const client = registry.getClient(id);
-          let toolCount: number | undefined;
-          if (client && client.isConnected()) {
-            const toolList: Array<unknown> = yield* Effect.tryPromise({
-              try: () => client.listTools() as Promise<Array<unknown>>,
-              catch: () => new McpOperationError({ serverId: id, message: 'Failed to list tools' }),
-            }).pipe(Effect.orElseSucceed(() => []));
-            toolCount = toolList.length;
-          }
-
-          return {
-            id,
-            status,
-            transport,
-            ...(toolCount !== undefined ? { toolCount } : {}),
-          };
-        }),
-      );
+      const servers = allServers.map((server) => ({
+        id: server.id,
+        status: server.status,
+        transport: server.transport,
+        ...(server.connected ? { toolCount: server.tools.length } : {}),
+      }));
 
       io.stdout(JSON.stringify({ ok: true, command: 'mcp-list', servers }, null, 2));
       return 0;
@@ -125,25 +117,12 @@ const mcpListEffect = (
     }
 
     const headers = ['ID', 'Status', 'Transport', 'Tools'];
-    const rows = yield* Effect.forEach(allServers, (id) =>
-      Effect.gen(function* () {
-        const status = registry.getServerStatus(id) ?? 'stopped';
-        const config = registry.getServerConfig(id);
-        const transport = config?.transport ?? 'unknown';
-
-        const client = registry.getClient(id);
-        let toolCount = '-';
-        if (client && client.isConnected()) {
-          const toolList: Array<unknown> = yield* Effect.tryPromise({
-            try: () => client.listTools() as Promise<Array<unknown>>,
-            catch: () => new McpOperationError({ serverId: id, message: 'Failed to list tools' }),
-          }).pipe(Effect.orElseSucceed(() => []));
-          toolCount = String(toolList.length);
-        }
-
-        return [id, status, transport, toolCount];
-      }),
-    );
+    const rows = allServers.map((server) => [
+      server.id,
+      server.status,
+      server.transport,
+      server.connected ? String(server.tools.length) : '-',
+    ]);
 
     io.stdout(formatTable(headers, rows));
     return 0;
@@ -155,29 +134,21 @@ const mcpListEffect = (
 const mcpStartEffect = (
   args: string[],
   options: Record<string, unknown>,
-  registry: MCPServerRegistry,
+  fred: FredClient,
   io: McpCommandIO,
 ): Effect.Effect<number, InvalidArgumentError | McpOperationError> =>
   Effect.gen(function* () {
     const colors = createColors(process.stdout.isTTY);
 
     if (options.all === true) {
-      const allServers = registry.getAllConfiguredServers();
-      const errors: string[] = [];
-
-      for (const serverId of allServers) {
-        yield* Effect.tryPromise({
-          try: () => Effect.runPromise(registry.ensureConnected(serverId)),
-          catch: (error) =>
-            new McpOperationError({ serverId, message: sanitizeErrorForCli(error) }),
-        }).pipe(
-          Effect.catchTag('McpOperationError', (error) =>
-            Effect.sync(() => {
-              errors.push(`${serverId}: ${error.message}`);
-            }),
-          ),
-        );
-      }
+      const results = yield* Effect.tryPromise({
+        try: () => fred.mcp.connectAll(),
+        catch: (error) => new McpOperationError({ message: sanitizeErrorForCli(error) }),
+      });
+      const allServers = results.map((result) => result.id);
+      const errors = results.flatMap((result) =>
+        result.success ? [] : [`${result.id}: ${result.error ?? 'Unknown error'}`],
+      );
 
       if (errors.length > 0) {
         if (options.json === true) {
@@ -203,13 +174,11 @@ const mcpStartEffect = (
     // Start a specific server
     const serverId = args[1];
     if (!serverId) {
-      return yield* Effect.fail(
-        new InvalidArgumentError({ message: 'Server ID is required' }),
-      );
+      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
     }
 
     yield* Effect.tryPromise({
-      try: () => Effect.runPromise(registry.ensureConnected(serverId)),
+      try: () => fred.mcp.connect(serverId),
       catch: (error) =>
         new McpOperationError({ serverId, message: sanitizeErrorForCli(error) }),
     });
@@ -228,27 +197,25 @@ const mcpStartEffect = (
 const mcpStopEffect = (
   args: string[],
   options: Record<string, unknown>,
-  registry: MCPServerRegistry,
+  fred: FredClient,
   io: McpCommandIO,
 ): Effect.Effect<number, InvalidArgumentError | McpOperationError> =>
   Effect.gen(function* () {
     const colors = createColors(process.stdout.isTTY);
 
     if (options.all === true) {
-      const connectedServers = registry.getRegisteredServers();
+      const results = yield* Effect.tryPromise({
+        try: () => fred.mcp.disconnectAll(),
+        catch: (error) => new McpOperationError({ message: sanitizeErrorForCli(error) }),
+      });
+      const connectedServers = results.map((result) => result.id);
 
-      for (const serverId of connectedServers) {
-        yield* Effect.tryPromise({
-          try: () => Effect.runPromise(registry.removeServer(serverId)),
-          catch: (error) =>
-            new McpOperationError({ serverId, message: sanitizeErrorForCli(error) }),
-        }).pipe(
-          Effect.catchTag('McpOperationError', (error) =>
-            Effect.sync(() => {
-              io.stderr(colors.yellow(`Warning: Failed to stop ${serverId}: ${error.message}`));
-            }),
-          ),
-        );
+      for (const result of results) {
+        if (!result.success) {
+          io.stderr(colors.yellow(
+            `Warning: Failed to stop ${result.id}: ${result.error ?? 'Unknown error'}`,
+          ));
+        }
       }
 
       if (options.json === true) {
@@ -262,13 +229,11 @@ const mcpStopEffect = (
     // Stop a specific server
     const serverId = args[1];
     if (!serverId) {
-      return yield* Effect.fail(
-        new InvalidArgumentError({ message: 'Server ID is required' }),
-      );
+      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
     }
 
     yield* Effect.tryPromise({
-      try: () => Effect.runPromise(registry.removeServer(serverId)),
+      try: () => fred.mcp.disconnect(serverId),
       catch: (error) =>
         new McpOperationError({ serverId, message: sanitizeErrorForCli(error) }),
     });
@@ -287,7 +252,7 @@ const mcpStopEffect = (
 const mcpStatusEffect = (
   args: string[],
   options: Record<string, unknown>,
-  registry: MCPServerRegistry,
+  fred: FredClient,
   io: McpCommandIO,
 ): Effect.Effect<number, InvalidArgumentError | McpOperationError> =>
   Effect.gen(function* () {
@@ -295,68 +260,39 @@ const mcpStatusEffect = (
 
     const serverId = args[1];
     if (!serverId) {
-      return yield* Effect.fail(
-        new InvalidArgumentError({ message: 'Server ID is required' }),
-      );
+      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
     }
 
-    const status = registry.getServerStatus(serverId);
-    const config = registry.getServerConfig(serverId);
-
-    if (!config) {
-      return yield* Effect.fail(
-        new McpOperationError({ serverId, message: 'Server not found' }),
-      );
+    const servers = yield* listMcpServersEffect(fred);
+    const server = servers.find((candidate) => candidate.id === serverId);
+    if (!server) {
+      return yield* new McpOperationError({ serverId, message: 'Server not found' });
     }
 
-    const client = registry.getClient(serverId);
-    const isConnected = client?.isConnected() ?? false;
-    const transport = config.transport ?? 'unknown';
-
-    // Try to discover tools if connected
-    let tools: any[] = [];
-    let toolDiscoveryFailed = false;
-    if (isConnected && client) {
-      const result = yield* Effect.either(
-        Effect.tryPromise({
-          try: () => Effect.runPromise(Effect.either(registry.discoverTools(serverId))),
-          catch: () =>
-            new McpOperationError({ serverId, message: 'Tool discovery failed' }),
-        }),
-      );
-      if (result._tag === 'Right') {
-        const innerResult = result.right;
-        if (innerResult._tag === 'Right') {
-          tools = innerResult.right;
-        } else {
-          toolDiscoveryFailed = true;
-        }
-      } else {
-        toolDiscoveryFailed = true;
-      }
-    }
+    const { connected: isConnected, tools, toolDiscoveryFailed = false } = server;
 
     if (options.json === true) {
-      const statusData: any = {
+      const statusData = {
         ok: true,
         command: 'mcp-status',
         server: {
           id: serverId,
-          status: status ?? 'stopped',
-          transport,
+          status: server.status,
+          transport: server.transport,
           connected: isConnected,
           toolCount: toolDiscoveryFailed ? null : tools.length,
           ...(toolDiscoveryFailed ? { toolDiscoveryFailed: true } : {}),
+          ...(options.verbose === true && tools.length > 0
+            ? {
+                tools: tools.map((tool) => ({
+                  id: tool.id,
+                  name: tool.name,
+                  description: tool.description,
+                })),
+              }
+            : {}),
         },
       };
-
-      if (options.verbose === true && tools.length > 0) {
-        statusData.server.tools = tools.map((t) => ({
-          id: t.id,
-          name: t.name,
-          description: t.description,
-        }));
-      }
 
       io.stdout(JSON.stringify(statusData, null, 2));
       return isConnected ? 0 : 1;
@@ -364,8 +300,8 @@ const mcpStatusEffect = (
 
     // Human-readable output
     io.stdout(`Server: ${serverId}`);
-    io.stdout(`Status: ${status ?? 'stopped'}`);
-    io.stdout(`Transport: ${transport}`);
+    io.stdout(`Status: ${server.status}`);
+    io.stdout(`Transport: ${server.transport}`);
     io.stdout(`Connected: ${isConnected ? 'yes' : 'no'}`);
     io.stdout(`Uptime: N/A`);
     io.stdout(`Last error: none`);
@@ -404,26 +340,23 @@ const mcpCommandEffect = (
           ),
         );
 
-    const registry = deps.registry ?? fred.getMCPServerRegistry();
     const subcommand = args[0];
 
     switch (subcommand) {
       case 'list':
-        return yield* mcpListEffect(options, registry, io);
+        return yield* mcpListEffect(options, fred, io);
       case 'start':
-        return yield* mcpStartEffect(args, options, registry, io);
+        return yield* mcpStartEffect(args, options, fred, io);
       case 'stop':
-        return yield* mcpStopEffect(args, options, registry, io);
+        return yield* mcpStopEffect(args, options, fred, io);
       case 'status':
-        return yield* mcpStatusEffect(args, options, registry, io);
+        return yield* mcpStatusEffect(args, options, fred, io);
       default:
-        return yield* Effect.fail(
-          new UnknownSubcommandError({
-            subcommand: subcommand ?? '(none)',
-            available: 'list, start, stop, status',
-            message: `Unknown subcommand: ${subcommand ?? '(none)'}. Available: list, start, stop, status`,
-          }),
-        );
+        return yield* new UnknownSubcommandError({
+          subcommand: subcommand ?? '(none)',
+          available: 'list, start, stop, status',
+          message: `Unknown subcommand: ${subcommand ?? '(none)'}. Available: list, start, stop, status`,
+        });
     }
   });
 

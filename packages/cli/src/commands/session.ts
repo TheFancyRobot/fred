@@ -7,8 +7,8 @@
 import { writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { createInterface } from 'node:readline/promises';
-import { Fred } from '@fancyrobot/fred';
-import type { SessionDetails, SessionSummary } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
+import type { FredClient, SessionDetails, SessionSummary } from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
@@ -26,7 +26,7 @@ export interface SessionCommandIO {
 }
 
 export interface SessionCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: SessionCommandIO;
   confirm?: (message: string) => Promise<boolean>;
   now?: () => Date;
@@ -112,27 +112,42 @@ const toExportContent = (exported: SessionDetails | string | Record<string, unkn
 /**
  * Initialize Fred instance with config, wrapped in Effect.
  */
-const initializeFredEffect = (io: SessionCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+const initializeFredEffect = (io: SessionCommandIO): Effect.Effect<FredClient, ConfigInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
+    const fred = yield* Effect.tryPromise({
+        try: () => createFred({ configPath: configResult.success ? configResult.configPath : undefined }),
         catch: (error) =>
           new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
       }).pipe(
         Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            io.stderr(error.message);
-          }),
+          Effect.zipRight(
+            Effect.sync(() => io.stderr(error.message)),
+            Effect.tryPromise({
+              try: () => createFred(),
+              catch: (cause) => new ConfigInitError({ message: sanitizeErrorForCli(cause) }),
+            }),
+          ),
         ),
       );
-    }
-
     return fred;
   });
+
+const exportSession = (
+  session: SessionDetails,
+  format: SessionExportFormat,
+): string | Record<string, unknown> => {
+  if (format === 'markdown') {
+    return session.messages
+      .map((message) => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`)
+      .join('\n\n');
+  }
+  return {
+    id: session.summary.id,
+    metadata: session.metadata,
+    messages: session.messages,
+  };
+};
 
 async function promptForConfirmation(message: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -195,7 +210,7 @@ const sessionCommandEffect = (
       switch (subcommand) {
       case 'list': {
         const sessions = yield* Effect.tryPromise({
-          try: () => fred.listSessions(),
+          try: () => fred.sessions.list(),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
@@ -223,22 +238,13 @@ const sessionCommandEffect = (
         }
 
         const rawDetails = yield* Effect.tryPromise({
-          try: () => fred.getSession(id),
+          try: () => fred.sessions.get(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const details = yield* getSessionDetailsOrFail(rawDetails, id);
 
-        const exportResult = yield* Effect.tryPromise({
-          try: () => fred.exportSession(id, 'markdown'),
-          catch: (error) =>
-            new SessionOperationError({ message: sanitizeErrorForCli(error) }),
-        });
-
-        if (!exportResult) {
-          io.stderr(`Session not found: ${id}`);
-          return 1;
-        }
+        const exportResult = exportSession(details, 'markdown');
 
         io.stdout(typeof exportResult === 'string' ? exportResult : toExportContent(details));
         return 0;
@@ -255,22 +261,13 @@ const sessionCommandEffect = (
         const format = yield* parseFormat(options.format ?? (options.json === true ? 'json' : undefined));
 
         const rawSession = yield* Effect.tryPromise({
-          try: () => fred.getSession(id),
+          try: () => fred.sessions.get(id),
           catch: (error) =>
             new SessionOperationError({ message: sanitizeErrorForCli(error) }),
         });
         const session = yield* getSessionDetailsOrFail(rawSession, id);
 
-        const exportResult = yield* Effect.tryPromise({
-          try: () => fred.exportSession(id, format),
-          catch: (error) =>
-            new SessionOperationError({ message: sanitizeErrorForCli(error) }),
-        });
-
-        if (!exportResult) {
-          io.stderr(`Session not found: ${id}`);
-          return 1;
-        }
+        const exportResult = exportSession(session, format);
 
         const now = (dependencies.now ?? (() => new Date()))();
         const output = typeof options.output === 'string'
@@ -305,7 +302,7 @@ const sessionCommandEffect = (
         const missing: string[] = [];
         for (const id of ids) {
           const session = yield* Effect.tryPromise({
-            try: () => fred.getSession(id),
+            try: () => fred.sessions.get(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });
@@ -338,7 +335,7 @@ const sessionCommandEffect = (
 
         for (const id of ids) {
           yield* Effect.tryPromise({
-            try: () => fred.deleteSession(id),
+            try: () => fred.sessions.delete(id),
             catch: (error) =>
               new SessionOperationError({ message: sanitizeErrorForCli(error) }),
           });
