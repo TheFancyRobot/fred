@@ -1,4 +1,4 @@
-import { Fred, defineWorkflow } from '@fancyrobot/fred';
+import { createFred, defineWorkflow } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 function extractText(value: unknown): string {
@@ -32,8 +32,7 @@ function extractText(value: unknown): string {
 }
 
 async function main() {
-  const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  const fred = await createFred({ configPath: './config.yaml' });
 
   // Native WorkflowIR: the same edge-driven primitive that PipelineBuilder and
   // GraphWorkflowBuilder compile to internally.
@@ -75,23 +74,29 @@ async function main() {
     ],
   });
 
-  await fred.defineWorkflow(workflow);
+  await fred.workflows.define(workflow);
 
   console.log('=== Graph Workflow Demo: Branching Research Flow ===\n');
 
   console.log('--- Factual Question ---');
-  const factualResult = await fred.executeWorkflow(
+  const factualResult = await fred.workflows.run(
     'research-flow',
     'What causes the northern lights?'
   );
+  if (!('executedNodes' in factualResult) || !('outputs' in factualResult)) {
+    throw new Error('Research flow did not return a graph workflow result');
+  }
   console.log('Executed nodes:', factualResult.executedNodes.join(' -> '));
   console.log('Final output:', extractText(factualResult.outputs.synthesizer));
 
   console.log('\n--- Creative Question ---');
-  const creativeResult = await fred.executeWorkflow(
+  const creativeResult = await fred.workflows.run(
     'research-flow',
     'Imagine a world where gravity works in reverse.'
   );
+  if (!('executedNodes' in creativeResult) || !('outputs' in creativeResult)) {
+    throw new Error('Research flow did not return a graph workflow result');
+  }
   console.log('Executed nodes:', creativeResult.executedNodes.join(' -> '));
   console.log('Final output:', extractText(creativeResult.outputs.synthesizer));
 

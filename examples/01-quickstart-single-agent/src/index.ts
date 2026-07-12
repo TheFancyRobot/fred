@@ -1,11 +1,10 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 async function main() {
-  const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  const fred = await createFred({ configPath: './config.yaml' });
 
-  const response = await fred.processMessage('What is TypeScript in one sentence?');
+  const response = await fred.messages.process('What is TypeScript in one sentence?');
   console.log('Response:', response?.content);
 
   await fred.shutdown();

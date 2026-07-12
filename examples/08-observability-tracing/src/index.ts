@@ -1,4 +1,4 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 type TraceEntry = {
@@ -21,12 +21,11 @@ function toMessageLength(payload: unknown): number {
 }
 
 async function main() {
-  const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  const fred = await createFred({ configPath: './config.yaml' });
 
   const traceLog: TraceEntry[] = [];
 
-  fred.registerHook('beforeMessageReceived', async (event) => {
+  await fred.hooks.register('beforeMessageReceived', async (event) => {
     traceLog.push({
       event: 'message.received',
       timestamp: Date.now(),
@@ -34,7 +33,7 @@ async function main() {
     });
   });
 
-  fred.registerHook('afterRouting', async (event) => {
+  await fred.hooks.register('afterRouting', async (event) => {
     traceLog.push({
       event: 'routing.complete',
       timestamp: Date.now(),
@@ -44,7 +43,7 @@ async function main() {
     });
   });
 
-  fred.registerHook('afterToolCalled', async (event) => {
+  await fred.hooks.register('afterToolCalled', async (event) => {
     const payload = event.data as { toolId?: string; duration?: number } | undefined;
     traceLog.push({
       event: 'tool.called',
@@ -56,7 +55,7 @@ async function main() {
     });
   });
 
-  fred.registerHook('afterResponseGenerated', async (event) => {
+  await fred.hooks.register('afterResponseGenerated', async (event) => {
     const response = (event.data as { content?: unknown } | string | undefined);
     const responseText = typeof response === 'string'
       ? response
@@ -72,7 +71,7 @@ async function main() {
   });
 
   console.log('=== Observability & Tracing Demo ===\n');
-  const response = await fred.processMessage('What is 2 + 2?');
+  const response = await fred.messages.process('What is 2 + 2?');
   console.log('Response:', response?.content);
 
   console.log('\n--- Trace Log ---');

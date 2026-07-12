@@ -1,61 +1,56 @@
 import {
-  Fred,
+  createFred,
   createHandoffTool,
-  MessageProcessorService,
-  SessionService,
   type Tool,
 } from '@fancyrobot/fred';
-import { Effect, Runtime } from 'effect';
 import '@fancyrobot/fred-openrouter';
 
 async function main() {
-  const fred = await Fred.create();
+  const fred = await createFred({ configPath: './config.yaml' });
 
   const allAgentIds = ['intake', 'billing-specialist', 'tech-specialist'];
+  const agents = new Map((await fred.agents.list()).map((agent) => [agent.id, agent]));
 
   const handoffTool = createHandoffTool(
-    (agentId) => fred.getAgent(agentId),
+    (agentId) => agents.get(agentId),
     () => allAgentIds
   );
 
-  fred.registerTool(handoffTool as unknown as Tool);
-  fred.addTemplateContext('departments', () => ({
+  await fred.tools.register(handoffTool as unknown as Tool);
+  for (const agent of agents.values()) {
+    await fred.agents.remove(agent.id);
+    await fred.agents.register({
+      ...agent.config,
+      tools: [handoffTool.id],
+    });
+  }
+  await fred.templates.addContext('departments', () => ({
     available: ['billing-specialist', 'tech-specialist'],
   }));
-  await fred.initializeFromConfig('./config.yaml');
 
   console.log('=== Dynamic Handoff Demo (ambient session) ===\n');
 
-  // The whole conversation reads and writes one ambient session. Neither turn
-  // is handed a conversationId — the agents (including the one handed off to)
-  // share history through the Effect environment automatically.
-  const conversation = Effect.gen(function* () {
-    const processor = yield* MessageProcessorService;
+  // Both turns use one resumable session, so the intake agent and any handoff
+  // target share the same ContextStorage-backed conversation history.
+  const session = await fred.sessions.open();
+  console.log(`Session: ${session.id}\n`);
 
-    const firstMessage =
-      'I was charged twice for my subscription last month and need a refund.';
-    console.log(`User: ${firstMessage}`);
-    const firstResponse = yield* processor.processMessage(firstMessage);
-    console.log('Assistant:', firstResponse?.content ?? '(no response)');
-
-    console.log('\n--- Follow-up to trigger possible hand-back ---');
-    const followUp =
-      'The charge was on card ending 4242. If needed, ask intake for any missing details.';
-    console.log(`User: ${followUp}`);
-    const secondResponse = yield* processor.processMessage(followUp);
-    console.log('Assistant:', secondResponse?.content ?? '(no response)');
+  const firstMessage =
+    'I was charged twice for my subscription last month and need a refund.';
+  console.log(`User: ${firstMessage}`);
+  const firstResponse = await fred.messages.process(firstMessage, {
+    conversationId: session.id,
   });
+  console.log('Assistant:', firstResponse?.content ?? '(no response)');
 
-  const runtime = await fred.getRuntime();
-  await Runtime.runPromise(runtime)(
-    Effect.gen(function* () {
-      const sessions = yield* SessionService;
-      // Session auto-created on first input; its id is resumable at any time.
-      const session = yield* sessions.open();
-      console.log(`Session: ${session.id}\n`);
-      yield* sessions.withSession(session, conversation);
-    })
-  );
+  console.log('\n--- Follow-up to trigger possible hand-back ---');
+  const followUp =
+    'The charge was on card ending 4242. If needed, ask intake for any missing details.';
+  console.log(`User: ${followUp}`);
+  const secondResponse = await fred.messages.process(followUp, {
+    conversationId: session.id,
+  });
+  console.log('Assistant:', secondResponse?.content ?? '(no response)');
 
   await fred.shutdown();
 }

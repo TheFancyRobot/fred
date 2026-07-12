@@ -1,4 +1,4 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import type { HookEvent, HookResult, HookType } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
@@ -51,11 +51,11 @@ function summarizeEvent(type: HookType, event: HookEvent): Record<string, unknow
 }
 
 async function main() {
-  const fred = await Fred.create();
+  const fred = await createFred({ configPath: './config.yaml' });
 
   const structuredLogs: Array<Record<string, unknown>> = [];
 
-  fred.registerHook('beforeMessageReceived', async (event): Promise<HookResult | void> => {
+  await fred.hooks.register('beforeMessageReceived', async (event): Promise<HookResult | void> => {
     if (typeof event.data !== 'string') {
       return;
     }
@@ -67,7 +67,7 @@ async function main() {
     return { data: sanitized };
   });
 
-  fred.registerHook('beforeAgentSelected', async (event): Promise<HookResult> => {
+  await fred.hooks.register('beforeAgentSelected', async (event): Promise<HookResult> => {
     const policyPreamble =
       'ORG POLICY: avoid exposing secrets, avoid irreversible actions, and explain assumptions.';
 
@@ -88,13 +88,13 @@ async function main() {
     };
   });
 
-  fred.registerHook('afterToolCalled', async (event): Promise<void> => {
+  await fred.hooks.register('afterToolCalled', async (event): Promise<void> => {
     const record = summarizeEvent('afterToolCalled', event);
     structuredLogs.push(record);
     console.log('[HOOK:log]', JSON.stringify(record));
   });
 
-  fred.registerHook('afterResponseGenerated', async (event): Promise<void> => {
+  await fred.hooks.register('afterResponseGenerated', async (event): Promise<void> => {
     const record = {
       ...summarizeEvent('afterResponseGenerated', event),
       responseLength: typeof event.data === 'string' ? event.data.length : 0,
@@ -106,35 +106,31 @@ async function main() {
   console.log('=== Hooks & Middleware Demo ===\n');
   console.log(`Fred exposes ${HOOK_TYPES.length} hook points across the lifecycle.`);
 
-  await fred.initializeFromConfig('./config.yaml');
-
   // --- Per-Message Variable Injection ---
-  // addTemplateContext registers a custom namespace whose resolver is called
-  // each time the system prompt is resolved (i.e., per message).
+  // addContext snapshots a custom namespace when it is registered.
   let sessionState = { userId: 'anonymous', requestCount: 0 };
-  fred.addTemplateContext('session', () => ({ ...sessionState }));
+  await fred.templates.addContext('session', () => ({ ...sessionState }));
 
-  // Update session state before each message - the template resolver
-  // captures the latest snapshot, so the agent prompt reflects current values.
+  // Re-register the namespace before each message so the agent prompt receives
+  // the latest session-state snapshot.
   sessionState = { userId: 'user-42', requestCount: 1 };
-  fred.addTemplateContext('session', () => ({ ...sessionState }));
+  await fred.templates.addContext('session', () => ({ ...sessionState }));
 
-  const response = await fred.processMessage(
+  const response = await fred.messages.process(
     'Send this report to jane@company.com. Use API key sk-abc123def456ghi789jkl012 and SSN 123-45-6789.'
   );
 
   console.log('\nResponse:', response?.content ?? '<no response>');
 
-  // Second message with updated session state - demonstrates that
-  // the template re-resolves with fresh values on every processMessage.
+  // Second message with an explicitly refreshed session-state snapshot.
   sessionState = { userId: 'user-42', requestCount: 2 };
-  fred.addTemplateContext('session', () => ({ ...sessionState }));
+  await fred.templates.addContext('session', () => ({ ...sessionState }));
 
-  const followUp = await fred.processMessage('Summarize what you know about my session.');
+  const followUp = await fred.messages.process('Summarize what you know about my session.');
   console.log('\nFollow-up:', followUp?.content ?? '<no response>');
 
   console.log('\n--- Per-Message Variable Demo ---');
-  console.log('Session state was injected dynamically via addTemplateContext.');
+  console.log('Session state was refreshed with templates.addContext before each message.');
   console.log('The agent prompt resolved session.userId and session.requestCount per message.');
 
   console.log('\nStructured log records captured:', structuredLogs.length);

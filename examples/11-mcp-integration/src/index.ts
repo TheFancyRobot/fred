@@ -1,13 +1,11 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 async function main() {
-  const fred = await Fred.create();
+  const fred = await createFred({ configPath: './config.yaml' });
 
   try {
-    await fred.initializeFromConfig('./config.yaml');
-
-    const serverStatus = fred.getMCPServerRegistry().getServerStatus('filesystem');
+    const serverStatus = await fred.mcp.status('filesystem');
     if (serverStatus !== 'connected') {
       console.warn(
         '[MCP] Filesystem server is not connected. Check npx availability and server command, then retry.'
@@ -19,7 +17,7 @@ async function main() {
     console.log('Connected to filesystem MCP server. MCP tools are auto-discovered from configured server IDs.');
     console.log('');
 
-    const response = await fred.processMessage('List the files in /tmp/mcp-demo');
+    const response = await fred.messages.process('List the files in /tmp/mcp-demo');
     console.log('Response:', response?.content ?? '(no response content)');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

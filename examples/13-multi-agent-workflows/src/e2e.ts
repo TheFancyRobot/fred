@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 import { setupExample } from './runtime';
 
@@ -81,7 +81,7 @@ async function runWithRetry<T>(label: string, task: () => Promise<T>): Promise<T
 }
 
 async function runScenario(
-  fred: Fred,
+  fred: FredClient,
   label: string,
   message: string,
   expectation: ScenarioExpectation,
@@ -91,9 +91,9 @@ async function runScenario(
 
   for (let attempt = 1; attempt <= maxValidationAttempts; attempt += 1) {
     try {
-      const conversationId = fred.generateConversationId();
+      const session = await fred.sessions.open();
       const response = await runWithRetry(label, () =>
-        fred.processMessage(message, { conversationId }),
+        fred.messages.process(message, { conversationId: session.id }),
       );
 
       if (!response?.content) {
@@ -136,12 +136,11 @@ async function main() {
 
   const tempDir = await mkdtemp(join(tmpdir(), 'fred-example-13-e2e-'));
   const notebookPath = join(tempDir, 'notebook.md');
-  const fred = await Fred.create();
+  const fred = await createFred({ configPath: DEFAULT_CONFIG_PATH });
 
   try {
     const { notebookPath: activeNotebookPath } = await setupExample(fred, {
       notebookPath,
-      configPath: DEFAULT_CONFIG_PATH,
     });
     const results: ScenarioResult[] = [];
 

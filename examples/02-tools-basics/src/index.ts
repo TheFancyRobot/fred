@@ -1,4 +1,4 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 import type { Tool } from '@fancyrobot/fred';
 import { Schema } from 'effect';
@@ -27,21 +27,35 @@ const weatherTool: Tool<{ readonly city: string }, string> = {
 };
 
 async function main() {
-  const fred = await Fred.create();
+  const fred = await createFred({ configPath: './config.yaml' });
 
   // Calculator is a built-in Fred tool, registered by default.
-  console.log('Calculator tool available:', Boolean(fred.getTool('calculator')));
+  console.log(
+    'Calculator tool available:',
+    (await fred.tools.list()).some((tool) => tool.id === 'calculator')
+  );
 
   // Register custom tool defined with Effect Schema.
-  fred.registerTool(weatherTool as Tool);
-  await fred.initializeFromConfig('./config.yaml');
+  await fred.tools.register(weatherTool as unknown as Tool);
+
+  // Config-first construction resolves declared tools while agents load.
+  // Re-register this agent after adding the application-defined weather tool.
+  const toolUser = await fred.agents.get('tool-user');
+  if (!toolUser) {
+    throw new Error('Configured tool-user agent not found');
+  }
+  await fred.agents.remove(toolUser.id);
+  await fred.agents.register({
+    ...toolUser.config,
+    tools: ['calculator', weatherTool.id],
+  });
 
   console.log('--- Weather Query ---');
-  const weatherResponse = await fred.processMessage('What is the weather in Tokyo right now?');
+  const weatherResponse = await fred.messages.process('What is the weather in Tokyo right now?');
   console.log('Response:', weatherResponse?.content);
 
   console.log('\n--- Calculator Query ---');
-  const calcResponse = await fred.processMessage('What is 42 * 17 + 3? Use the calculator tool.');
+  const calcResponse = await fred.messages.process('What is 42 * 17 + 3? Use the calculator tool.');
   console.log('Response:', calcResponse?.content);
 
   await fred.shutdown();
