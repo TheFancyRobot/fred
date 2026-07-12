@@ -1,6 +1,7 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred, MessageRouterService } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 import type { Intent } from '@fancyrobot/fred';
+import { Effect } from 'effect';
 
 type TranscriptMatch =
   | { type: 'exact'; intentId: string; matchedUtterance: string }
@@ -46,8 +47,7 @@ function buildIntentTranscript(message: string, intents: Intent[]): TranscriptMa
 }
 
 async function main() {
-  const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  const fred = await createFred({ configPath: './config.yaml' });
 
   // Demo transcript data mirrors utterances defined in agents/*.md frontmatter.
   const intents: Intent[] = [
@@ -75,7 +75,11 @@ async function main() {
   for (const message of testMessages) {
     console.log(`\n--- Message: "${message}" ---`);
 
-    const route = await fred.routeMessage(message);
+    const route = await fred.effects.run(
+      MessageRouterService.pipe(
+        Effect.flatMap((router) => router.route(message))
+      )
+    );
     console.log('Routed to agent:', route.agentId ?? 'none');
     console.log('Route type:', route.type);
     console.log('Route result:', JSON.stringify(route, null, 2));
@@ -91,7 +95,7 @@ async function main() {
       console.log(`Transcript: ${transcript.reason}`);
     }
 
-    const response = await fred.processMessage(message);
+    const response = await fred.messages.process(message);
     const preview = response?.content?.slice(0, 100) ?? '(no response)';
     console.log('Response preview:', `${preview}...`);
   }

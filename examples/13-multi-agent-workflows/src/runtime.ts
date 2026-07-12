@@ -1,15 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-  Fred,
+  type FredClient,
   GraphWorkflowBuilder,
-  SessionService,
   compileGraphWorkflow,
   createHandoffTool,
   defineWorkflow,
   type Tool,
 } from '@fancyrobot/fred';
-import { Effect, Runtime, Schema } from 'effect';
+import { Effect, Schema } from 'effect';
 import { appendNotebookEntry, ensureNotebook, queryNotebook } from './notes';
 import { fetchLatestNewsDigest } from './news';
 import {
@@ -27,7 +26,6 @@ export const DEFAULT_NOTEBOOK_PATH = fileURLToPath(
 );
 
 export interface SetupExampleOptions {
-  configPath?: string;
   notebookPath?: string;
 }
 
@@ -294,18 +292,18 @@ function buildCurrentDateContextLine(): string {
   return `Current date: ${new Date().toISOString().slice(0, 10)}`;
 }
 
-async function runAgentPrompt(fred: Fred, agentId: string, message: string): Promise<string> {
-  const agent = fred.getAgent(agentId);
+async function runAgentPrompt(fred: FredClient, agentId: string, message: string): Promise<string> {
+  const agent = await fred.agents.get(agentId);
   if (!agent) {
     throw new Error(`Agent not found: ${agentId}`);
   }
 
   try {
-    // Use fred.runSafe which wraps with Effect.exit internally,
+    // The scoped client wraps Effect failures at its approved runtime boundary,
     // preventing Effect's runtime from logging fiber failures to stderr.
     const response = await researchProgressAgentContext.run(
       { agentId },
-      () => fred.runSafe(agent.processMessage(message, [])),
+      () => fred.effects.run(agent.processMessage(message, [])),
     );
     return extractText(response).trim();
   } catch (error) {
@@ -322,12 +320,12 @@ function getWorkflowProgressId(
 }
 
 async function runAgentPromptWithProgress(
-  fred: Fred,
+  fred: FredClient,
   agentId: string,
   message: string,
   context: ResearchProgressContext,
 ): Promise<string> {
-  const agent = fred.getAgent(agentId);
+  const agent = await fred.agents.get(agentId);
   if (!agent) {
     throw new Error(`Agent not found: ${agentId}`);
   }
@@ -335,7 +333,7 @@ async function runAgentPromptWithProgress(
   try {
     const response = await researchProgressAgentContext.run(
       context,
-      () => fred.runSafe(agent.processMessage(message, [])),
+      () => fred.effects.run(agent.processMessage(message, [])),
     );
     return extractText(response).trim();
   } catch (error) {
@@ -344,7 +342,7 @@ async function runAgentPromptWithProgress(
 }
 
 async function runParallelTrackResearch(
-  fred: Fred,
+  fred: FredClient,
   agentId: string,
   userRequest: string,
   plan: string,
@@ -434,7 +432,7 @@ async function runParallelTrackResearch(
     .join('\n\n');
 }
 
-function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['build']> {
+function buildResearchWorkflow(fred: FredClient): ReturnType<GraphWorkflowBuilder['build']> {
   return new GraphWorkflowBuilder('research-swarm')
     .addNode('planResearch', {
       type: 'function',
@@ -592,7 +590,7 @@ function buildResearchWorkflow(fred: Fred): ReturnType<GraphWorkflowBuilder['bui
     .build();
 }
 
-function buildDailyBriefWorkflow(fred: Fred, notebookPath: string): ReturnType<GraphWorkflowBuilder['build']> {
+function buildDailyBriefWorkflow(fred: FredClient, notebookPath: string): ReturnType<GraphWorkflowBuilder['build']> {
   return new GraphWorkflowBuilder('daily-brief')
     .addForkNode('collectBriefInputs', ['noteSnapshot', 'newsSnapshot'])
     .addNode('noteSnapshot', {
@@ -738,7 +736,7 @@ function createNewsTool(): Tool<
   };
 }
 
-function createResearchTool(notebookPath: string, fred: Fred): Tool<
+function createResearchTool(notebookPath: string, fred: FredClient): Tool<
   { readonly question: string; readonly saveSummary?: string | null },
   string
 > {
@@ -762,7 +760,10 @@ function createResearchTool(notebookPath: string, fred: Fred): Tool<
       },
     },
     execute: async ({ question, saveSummary }) => {
-      const result = await fred.executeGraphWorkflow('research-swarm', question);
+      const result = await fred.workflows.run('research-swarm', question);
+      if (!('outputs' in result)) {
+        throw new Error('Research workflow did not return graph outputs');
+      }
       const finalReport = readOutputField(result.outputs.finalizeResearch, 'finalReport');
 
       const shouldSave = typeof saveSummary === 'string'
@@ -780,7 +781,7 @@ function createResearchTool(notebookPath: string, fred: Fred): Tool<
   };
 }
 
-function createBrowserResearchTool(fred: Fred, searchBaseUrl: string): Tool<
+function createBrowserResearchTool(fred: FredClient, searchBaseUrl: string): Tool<
   { readonly query: string; readonly maxResults?: number | string | null; readonly readTopResults?: number | string | boolean | null },
   string
 > {
@@ -847,7 +848,7 @@ function createBrowserResearchTool(fred: Fred, searchBaseUrl: string): Tool<
   };
 }
 
-function createDailyBriefTool(fred: Fred): Tool<{ readonly focus?: string }, string> {
+function createDailyBriefTool(fred: FredClient): Tool<{ readonly focus?: string }, string> {
   return {
     id: 'create_daily_brief',
     name: 'create_daily_brief',
@@ -866,30 +867,29 @@ function createDailyBriefTool(fred: Fred): Tool<{ readonly focus?: string }, str
     },
     execute: async ({ focus }) => {
       // Open a session on first input and run the whole daily-brief workflow
-      // under it. executeGraphWorkflow binds the id as the ambient session for
+      // under it. workflows.run binds the id as the ambient session for
       // the run (SessionService.withSession), so its nodes read/write the same
       // conversation through the environment. The id is resumable at any time,
       // so a follow-up brief can continue the same conversation.
-      const runtime = await fred.getRuntime();
-      const session = await Runtime.runPromise(runtime)(
-        Effect.flatMap(SessionService, (sessions) => sessions.open()),
-      );
-      const result = await fred.executeGraphWorkflow(
+      const session = await fred.sessions.open();
+      const result = await fred.workflows.run(
         'daily-brief',
         focus?.trim() || 'general daily brief',
-        { conversationId: session.id },
+        { sessionId: session.id },
       );
+      if (!('outputs' in result)) {
+        throw new Error('Daily brief workflow did not return graph outputs');
+      }
       return readOutputField(result.outputs.writeDailyBrief, 'brief');
     },
   };
 }
 
 export async function setupExample(
-  fred: Fred,
+  fred: FredClient,
   options: SetupExampleOptions = {},
 ): Promise<{ notebookPath: string; workflows: string[] }> {
   const notebookPath = options.notebookPath ?? DEFAULT_NOTEBOOK_PATH;
-  const configPath = options.configPath ?? './config.yaml';
   const directSpecialists = [
     'research-orchestrator',
     'note-taker',
@@ -900,30 +900,52 @@ export async function setupExample(
   await ensureNotebook(notebookPath);
   const searchBaseUrl = process.env.FRED_SEARCH_URL ?? 'https://search.tfr.one';
 
-  await fred.registerGlobalVariables({
+  await fred.variables.registerAll({
     current_date: () => Effect.succeed(new Date().toISOString().slice(0, 10)),
     search_url: () => Effect.succeed(searchBaseUrl),
   });
 
-  fred.registerTool(
+  const agents = new Map((await fred.agents.list()).map((agent) => [agent.id, agent]));
+  await fred.tools.register(
     createHandoffTool(
-      (agentId) => fred.getAgent(agentId),
+      (agentId) => agents.get(agentId),
       () => directSpecialists,
-    ) as unknown as Tool,
+    ),
   );
-  fred.registerTool(createSaveNoteTool(notebookPath) as Tool);
-  fred.registerTool(createReadNotesTool(notebookPath) as Tool);
-  fred.registerTool(createNewsTool() as Tool);
-  fred.registerTool(createBrowserResearchTool(fred, searchBaseUrl) as Tool);
-  fred.registerTool(createResearchTool(notebookPath, fred) as Tool);
-  fred.registerTool(createDailyBriefTool(fred) as Tool);
+  await fred.tools.register(createSaveNoteTool(notebookPath));
+  await fred.tools.register(createReadNotesTool(notebookPath));
+  await fred.tools.register(createNewsTool());
+  await fred.tools.register(createBrowserResearchTool(fred, searchBaseUrl));
+  await fred.tools.register(createResearchTool(notebookPath, fred));
+  await fred.tools.register(createDailyBriefTool(fred));
 
-  await fred.initializeFromConfig(configPath);
+  // Config-first construction loads agent content before application-defined
+  // tools exist. Re-register the tool-using agents through the supported
+  // client API so their declared bindings resolve against the populated
+  // registry; prompt/model/routing metadata remains unchanged.
+  const toolAssignments: Record<string, readonly string[]> = {
+    concierge: ['handoff_to_agent'],
+    'daily-brief-agent': ['create_daily_brief'],
+    'market-researcher': ['agent_browser_research'],
+    'news-briefer': ['fetch_latest_news'],
+    'note-taker': ['save_note', 'read_notes'],
+    'research-orchestrator': ['run_research_swarm', 'save_note', 'read_notes'],
+    'risk-analyst': ['agent_browser_research'],
+    'web-researcher': ['agent_browser_research'],
+  };
+  for (const [agentId, toolIds] of Object.entries(toolAssignments)) {
+    const agent = await fred.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Configured example agent not found: ${agentId}`);
+    }
+    await fred.agents.remove(agentId);
+    await fred.agents.register({ ...agent.config, tools: [...toolIds] });
+  }
 
   // Builders remain ergonomic sugar; compiling them here makes the canonical
   // WorkflowIR explicit and registers both through the unified API.
-  await fred.defineWorkflow(defineWorkflow(compileGraphWorkflow(buildResearchWorkflow(fred))));
-  await fred.defineWorkflow(
+  await fred.workflows.define(defineWorkflow(compileGraphWorkflow(buildResearchWorkflow(fred))));
+  await fred.workflows.define(
     defineWorkflow(compileGraphWorkflow(buildDailyBriefWorkflow(fred, notebookPath))),
   );
 

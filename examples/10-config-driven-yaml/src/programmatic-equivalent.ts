@@ -1,9 +1,8 @@
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
 async function main() {
-  const fred = await Fred.create();
-  await fred.initializeFromConfig('./config.yaml');
+  const fred = await createFred({ configPath: './config.yaml' });
 
   console.log('=== Programmatic Equivalent ===\n');
   console.log('Rosetta Stone mapping (config + markdown -> API concepts):');
@@ -14,7 +13,7 @@ async function main() {
   console.log('');
   console.log('This run still loads from config.yaml + ./agents to share one source of truth.\n');
 
-  const response = await fred.processMessage('How do I write a TypeScript interface?');
+  const response = await fred.messages.process('How do I write a TypeScript interface?');
   console.log('Response:', response?.content);
 
   await fred.shutdown();

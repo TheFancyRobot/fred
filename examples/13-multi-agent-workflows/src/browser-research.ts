@@ -1,4 +1,6 @@
-import type { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
+
+type BrowserResearchClient = Pick<FredClient, 'subagents'>;
 
 const AGENT_BROWSER = 'agent-browser';
 const DEFAULT_TIMEOUT = 30_000;
@@ -17,7 +19,7 @@ export interface BrowserResearchEntry {
 }
 
 async function runAgentBrowser(
-  fred: Fred,
+  fred: BrowserResearchClient,
   subagentId: string,
   args: string[],
   options: { timeout?: number } = {},
@@ -108,7 +110,7 @@ function parseSearchResults(snapshotText: string, maxResults: number): BrowserRe
 }
 
 async function fetchPageExtractViaBrowser(
-  fred: Fred,
+  fred: BrowserResearchClient,
   url: string,
   maxChars = 1400,
 ): Promise<string | undefined> {
@@ -161,7 +163,7 @@ async function fetchPageExtractViaBrowser(
 }
 
 export async function runBrowserResearch(
-  fred: Fred,
+  fred: BrowserResearchClient,
   query: string,
   options: {
     searchUrl: string;

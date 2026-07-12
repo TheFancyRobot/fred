@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
 import { runBrowserResearch } from '../../../examples/13-multi-agent-workflows/src/browser-research';
 
 describe('browser research subagent integration', () => {
@@ -9,7 +9,7 @@ describe('browser research subagent integration', () => {
     const destroyed: string[] = [];
     let nextId = 0;
 
-    globalThis.fetch = (async () => new Response(`
+    globalThis.fetch = async () => new Response(`
       <div class="result results_links web-result">
         <div class="links_main links_deep result__body">
           <h2 class="result__title">
@@ -21,15 +21,27 @@ describe('browser research subagent integration', () => {
     `, {
       headers: { 'content-type': 'text/html; charset=utf-8' },
       status: 200,
-    })) as unknown as typeof fetch;
+    });
 
     try {
-      const fred = {
+      const now = new Date().toISOString();
+      const fred: Pick<FredClient, 'subagents'> = {
         subagents: {
           spawn: async (options: { command: string; args?: readonly string[] }) => {
             const id = `subagent-${++nextId}`;
             spawned.push({ id, command: options.command, args: options.args ?? [] });
-            return { id };
+            return {
+              id,
+              name: 'browser-test',
+              command: options.command,
+              args: options.args ?? [],
+              envKeys: [],
+              metadata: {},
+              status: 'idle',
+              createdAt: now,
+              updatedAt: now,
+              executionCount: 0,
+            };
           },
           execute: async (_id: string, options?: { args?: readonly string[] }) => {
             const args = options?.args ?? [];
@@ -53,8 +65,10 @@ describe('browser research subagent integration', () => {
             destroyed.push(id);
             return true;
           },
+          list: async () => [],
+          inspect: async () => null,
         },
-      } as unknown as Fred;
+      };
 
       const report = await runBrowserResearch(fred, 'dog adoption statistics', {
         searchUrl: 'https://example.com/search?q=dogs',

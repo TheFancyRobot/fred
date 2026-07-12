@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, MessageRouterService } from '@fancyrobot/fred';
+import { Effect } from 'effect';
 import '@fancyrobot/fred-openrouter';
 import { extractDuckDuckGoResults } from '../../../examples/13-multi-agent-workflows/src/browser-research';
 import { appendNotebookEntry, queryNotebook } from '../../../examples/13-multi-agent-workflows/src/notes';
@@ -148,23 +149,23 @@ describe('example 13 helpers', () => {
 
   test('setupExample loads all example agents without live model calls', async () => {
     await withTempDir(async (dir) => {
-      const fred = await Fred.create();
+      const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
+      const fred = await createFred({ configPath });
 
       try {
         const notebookPath = path.join(dir, 'notebook.md');
-        const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
-        const result = await setupExample(fred, { notebookPath, configPath });
+        const result = await setupExample(fred, { notebookPath });
 
         expect(result.workflows).toEqual(['research-swarm', 'daily-brief']);
-        expect(fred.getAgent('concierge')).toBeDefined();
-        expect(fred.getAgent('research-orchestrator')).toBeDefined();
-        expect(fred.getAgent('note-taker')).toBeDefined();
-        expect(fred.getAgent('news-briefer')).toBeDefined();
-        expect(fred.getAgent('daily-brief-agent')).toBeDefined();
-        expect(await fred.getGlobalVariable('current_date')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        expect(fred.getAgent('web-researcher')?.config.tools).toContain('agent_browser_research');
-        expect(fred.getAgent('market-researcher')?.config.tools).toContain('agent_browser_research');
-        expect(fred.getAgent('risk-analyst')?.config.tools).toContain('agent_browser_research');
+        expect(await fred.agents.get('concierge')).toBeDefined();
+        expect(await fred.agents.get('research-orchestrator')).toBeDefined();
+        expect(await fred.agents.get('note-taker')).toBeDefined();
+        expect(await fred.agents.get('news-briefer')).toBeDefined();
+        expect(await fred.agents.get('daily-brief-agent')).toBeDefined();
+        expect((await fred.variables.snapshot()).current_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect((await fred.agents.get('web-researcher'))?.config.tools).toContain('agent_browser_research');
+        expect((await fred.agents.get('market-researcher'))?.config.tools).toContain('agent_browser_research');
+        expect((await fred.agents.get('risk-analyst'))?.config.tools).toContain('agent_browser_research');
       } finally {
         await fred.shutdown();
       }
@@ -173,21 +174,23 @@ describe('example 13 helpers', () => {
 
   test('routes broad comparison prompts directly to research-orchestrator', async () => {
     await withTempDir(async (dir) => {
-      const fred = await Fred.create();
+      const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
+      const fred = await createFred({ configPath });
 
       try {
         const notebookPath = path.join(dir, 'notebook.md');
-        const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
-        await setupExample(fred, { notebookPath, configPath });
+        await setupExample(fred, { notebookPath });
 
-        const route = await fred.routeMessage(
-          'What dog breeds are good for apartment living and first-time owners?'
+        const route = await fred.effects.run(
+          MessageRouterService.pipe(
+            Effect.flatMap((router) =>
+              router.route('What dog breeds are good for apartment living and first-time owners?')
+            )
+          )
         );
 
-        expect(route.type).toBe('agent');
-        if (route.type === 'agent') {
-          expect(route.agentId).toBe('research-orchestrator');
-        }
+        expect(route.agent).toBe('research-orchestrator');
+        expect(route.fallback).toBe(false);
       } finally {
         await fred.shutdown();
       }
@@ -196,21 +199,23 @@ describe('example 13 helpers', () => {
 
   test('routes research essay prompts directly to research-orchestrator', async () => {
     await withTempDir(async (dir) => {
-      const fred = await Fred.create();
+      const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
+      const fred = await createFred({ configPath });
 
       try {
         const notebookPath = path.join(dir, 'notebook.md');
-        const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
-        await setupExample(fred, { notebookPath, configPath });
+        await setupExample(fred, { notebookPath });
 
-        const route = await fred.routeMessage(
-          'research the fall of rome and wrote a 500 word essay on your findings'
+        const route = await fred.effects.run(
+          MessageRouterService.pipe(
+            Effect.flatMap((router) =>
+              router.route('research the fall of rome and wrote a 500 word essay on your findings')
+            )
+          )
         );
 
-        expect(route.type).toBe('agent');
-        if (route.type === 'agent') {
-          expect(route.agentId).toBe('research-orchestrator');
-        }
+        expect(route.agent).toBe('research-orchestrator');
+        expect(route.fallback).toBe(false);
       } finally {
         await fred.shutdown();
       }
