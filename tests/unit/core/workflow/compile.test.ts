@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
   compileGraphWorkflow,
-  compilePipelineV1,
   compilePipelineV2,
   compileWorkflow,
 } from '../../../../packages/core/src/workflow/compile';
@@ -9,15 +8,6 @@ import { validateWorkflowIR, WorkflowValidationError } from '../../../../package
 import { findNode, outEdges, type WorkflowIR } from '../../../../packages/core/src/workflow/ir';
 
 describe('workflow compilers', () => {
-  it('lowers a V1 agent list to a linear graph', () => {
-    const ir = compilePipelineV1({ id: 'chain', agents: ['a', 'b'] });
-
-    expect(ir.source).toBe('v1');
-    expect(ir.entry).toBe('chain:agent:0');
-    expect(ir.nodes.map((node) => node.kind)).toEqual(['agent', 'agent']);
-    expect(ir.edges).toEqual([{ from: 'chain:agent:0', to: 'chain:agent:1' }]);
-  });
-
   it('lowers V2 conditional nesting to guarded edges without a conditional node kind', () => {
     const ir = compilePipelineV2({
       id: 'branching',

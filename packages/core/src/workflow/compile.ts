@@ -1,13 +1,12 @@
 /**
- * Lossless compilers from Fred's three historical workflow dialects into the
+ * Lossless compilers from Fred's supported workflow dialects into the
  * unified `WorkflowIR` representation.
  *
  * Compilation is deliberately pure: registration, dependency lookup, and
  * execution remain service concerns. Control flow is always emitted as edges;
  * compiler-generated function nodes only adapt source-level result contracts.
  */
-import type { PipelineConfig, PipelineConfigV2 } from '../pipeline/pipeline';
-import { isPipelineConfigV2 } from '../pipeline/pipeline';
+import type { PipelineConfigV2 } from '../pipeline/pipeline';
 import type { PipelineStep } from '../pipeline/steps';
 import type { AnyGraphNode, GraphWorkflowConfig } from '../pipeline/graph';
 import { isGraphWorkflowConfig } from '../pipeline/graph';
@@ -189,30 +188,6 @@ function compileV2Step(
   }
 }
 
-/** Compile a legacy ordered agent-list pipeline. */
-export function compilePipelineV1(config: PipelineConfig): WorkflowIR {
-  const nodes: IRNode[] = config.agents.map((agent, index) => ({
-    id: `${config.id}:agent:${index}`,
-    name: typeof agent === 'string' ? agent : agent.id,
-    kind: 'agent',
-    agentId: typeof agent === 'string' ? agent : agent.id,
-    sourceIndex: index,
-  }));
-  const edges: IREdge[] = nodes.slice(1).map((node, index) => ({
-    from: nodes[index]!.id,
-    to: node.id,
-  }));
-  const ir: WorkflowIR = {
-    id: config.id,
-    nodes,
-    edges,
-    entry: nodes[0]?.id ?? '',
-    source: 'v1',
-  };
-  validateWorkflowIR(ir);
-  return ir;
-}
-
 /** Compile a V2 typed-step pipeline, lowering nested conditions to guarded edges. */
 export function compilePipelineV2(config: PipelineConfigV2): WorkflowIR {
   const state = createV2CompileState(config);
@@ -372,7 +347,6 @@ export function isWorkflowIR(value: unknown): value is WorkflowIR {
 }
 
 export type CompilableWorkflow =
-  | PipelineConfig
   | PipelineConfigV2
   | GraphWorkflowConfig
   | WorkflowIR;
@@ -385,8 +359,7 @@ export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
     validateWorkflowIR(native);
     return native;
   }
-  if (isPipelineConfigV2(config)) return compilePipelineV2(config);
-  return compilePipelineV1(config);
+  return compilePipelineV2(config);
 }
 
 /** Define a native workflow with validation and an explicit native source tag. */

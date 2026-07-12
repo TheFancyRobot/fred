@@ -51,7 +51,6 @@ import type {
   SemanticMatcherFn,
 } from './types';
 import { AgentService } from '../agent/service';
-import { PipelineService } from '../pipeline/service';
 import { ContextStorageService } from '../context/service';
 import { SessionService } from '../context/session-service';
 import {
@@ -154,7 +153,6 @@ const MAX_HANDOFF_DEPTH = 10;
 class MessageProcessorServiceImpl implements MessageProcessorService {
   constructor(
     private readonly agentService: typeof AgentService.Service,
-    private readonly pipelineService: typeof PipelineService.Service,
     private readonly contextStorage: typeof ContextStorageService.Service,
     private readonly intentMatcherService: typeof IntentMatcherService.Service | undefined,
     private readonly intentRouterService: typeof IntentRouterService.Service | undefined,
@@ -269,71 +267,6 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           } else {
             if (routingSpan) {
               routingSpan.addEvent('agent.notFound', { 'agent.id': agentMatch.agentId });
-            }
-          }
-        }
-
-        // Check pipeline utterances
-        const pipelineMatch = yield* self.pipelineService.matchPipelineByUtterance(message, semanticMatcher);
-
-        if (pipelineMatch) {
-          if (routingSpan) {
-            routingSpan.setAttributes({
-              'routing.method': 'pipeline.utterance',
-              'routing.pipelineId': pipelineMatch.pipelineId,
-              'routing.confidence': pipelineMatch.confidence,
-              'routing.matchType': pipelineMatch.matchType,
-            });
-          }
-
-          // Create span for pipeline execution
-          const pipelineSpan = tracer?.startSpan('pipeline.process', {
-            kind: SpanKind.INTERNAL,
-            attributes: {
-              'pipeline.id': pipelineMatch.pipelineId,
-              'pipeline.matchType': pipelineMatch.matchType,
-              'pipeline.confidence': pipelineMatch.confidence,
-            },
-          });
-
-          const previousPipelineSpan = tracer?.getActiveSpan();
-          if (pipelineSpan) {
-            tracer?.setActiveSpan(pipelineSpan);
-          }
-
-          try {
-            const response = yield* self.pipelineService.executePipeline(
-              pipelineMatch.pipelineId,
-              message,
-              previousMessages,
-              {
-                conversationId,
-                sequentialVisibility,
-              }
-            );
-            if (pipelineSpan) {
-              pipelineSpan.setAttribute('response.length', response.content.length);
-              pipelineSpan.setAttribute('response.hasToolCalls', (response.toolCalls?.length ?? 0) > 0);
-              pipelineSpan.setStatus('ok');
-            }
-            if (routingSpan) {
-              routingSpan.setStatus('ok');
-            }
-            return {
-              type: 'pipeline',
-              pipelineId: pipelineMatch.pipelineId,
-              response,
-            } as RouteResult;
-          } catch (error) {
-            if (pipelineSpan && error instanceof Error) {
-              pipelineSpan.recordException(error);
-              pipelineSpan.setStatus('error', error.message);
-            }
-            throw error;
-          } finally {
-            pipelineSpan?.end();
-            if (previousPipelineSpan) {
-              tracer?.setActiveSpan(previousPipelineSpan);
             }
           }
         }
@@ -508,7 +441,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           return yield* Effect.fail(new NoRouteFoundError({ message }));
         }
 
-        if (route.type === 'pipeline' || route.type === 'intent') {
+        if (route.type === 'intent') {
           if (!route.response) {
             return yield* Effect.fail(
               new RouteExecutionError({ routeType: route.type, cause: new Error(`Route type ${route.type} did not return a response`) })
@@ -841,8 +774,8 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           return yield* Effect.fail(new NoRouteFoundError({ message }));
         }
 
-        // Handle pipeline/intent routes with synthetic events
-        if (route.type === 'pipeline' || route.type === 'intent') {
+        // Handle intent routes with synthetic events
+        if (route.type === 'intent') {
           if (!route.response) {
             return yield* Effect.fail(
               new RouteExecutionError({ routeType: route.type, cause: new Error(`Route type ${route.type} did not return a response`) })
@@ -1378,7 +1311,6 @@ export const MessageProcessorServiceLive = Layer.effect(
   MessageProcessorService,
   Effect.gen(function* () {
     const agentService = yield* AgentService;
-    const pipelineService = yield* PipelineService;
     const contextStorage = yield* ContextStorageService;
 
     // Optional services - use Effect.serviceOption for optional dependencies
@@ -1403,7 +1335,6 @@ export const MessageProcessorServiceLive = Layer.effect(
 
     return new MessageProcessorServiceImpl(
       agentService,
-      pipelineService,
       contextStorage,
       intentMatcherService,
       intentRouterService,
@@ -1424,7 +1355,6 @@ export const MessageProcessorServiceLiveWithConfig = (
     MessageProcessorService,
     Effect.gen(function* () {
       const agentService = yield* AgentService;
-      const pipelineService = yield* PipelineService;
       const contextStorage = yield* ContextStorageService;
 
       const intentMatcherService = yield* Effect.serviceOption(IntentMatcherService).pipe(
@@ -1448,7 +1378,6 @@ export const MessageProcessorServiceLiveWithConfig = (
 
       return new MessageProcessorServiceImpl(
         agentService,
-        pipelineService,
         contextStorage,
         intentMatcherService,
         intentRouterService,

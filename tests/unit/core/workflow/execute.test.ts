@@ -4,7 +4,6 @@ import type { AgentInstance, AgentResponse } from '../../../../packages/core/src
 import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import {
   compileGraphWorkflow,
-  compilePipelineV1,
   compilePipelineV2,
 } from '../../../../packages/core/src/workflow/compile';
 import { executeWorkflowEffect } from '../../../../packages/core/src/workflow/execute';
@@ -26,20 +25,28 @@ function agentManager(entries: Record<string, AgentInstance>): AgentManagerLike 
 }
 
 describe('unified WorkflowIR executor', () => {
-  it('preserves V1 message threading and accumulated history', async () => {
-    const workflow = compilePipelineV1({ id: 'chain', agents: ['a', 'b'] });
+  it('executes native IR agent nodes with canonical input and outputs', async () => {
+    const workflow = {
+      id: 'chain',
+      source: 'native' as const,
+      entry: 'a',
+      nodes: [
+        { id: 'a', name: 'a', kind: 'agent' as const, agentId: 'a' },
+        { id: 'b', name: 'b', kind: 'agent' as const, agentId: 'b' },
+      ],
+      edges: [{ from: 'a', to: 'b' }],
+    };
     const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'hi', {
       agentManager: agentManager({ a: echoAgent('a'), b: echoAgent('b') }),
     }));
 
     expect(result.success).toBe(true);
-    expect(result.finalResponse).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
-    expect(result.context.history).toEqual([
-      { role: 'user', content: 'hi' },
-      { role: 'assistant', content: 'a<-hi' },
-      { role: 'user', content: 'a<-hi' },
-      { role: 'assistant', content: 'b<-a<-hi' },
-    ]);
+    expect(result.finalOutput).toEqual({ content: 'b<-hi', toolCalls: [] });
+    expect(result.context.outputs).toEqual({
+      a: { content: 'a<-hi', toolCalls: [] },
+      b: { content: 'b<-hi', toolCalls: [] },
+    });
+    expect(result.context.history).toEqual([]);
   });
 
   it('preserves V2 accumulation and hides compiler-generated conditional outputs', async () => {

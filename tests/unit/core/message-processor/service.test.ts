@@ -145,15 +145,7 @@ describe('MessageProcessorService Configuration', () => {
   } as any;
 
   const mockPipelineService = {
-    createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-    getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
-    getPipelineOptional: () => Effect.succeed(undefined),
-    hasPipeline: () => Effect.succeed(false),
-    removePipeline: () => Effect.succeed(false),
-    getAllPipelines: () => Effect.succeed([]),
     clear: () => Effect.void,
-    executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-    matchPipelineByUtterance: () => Effect.succeed(null),
     createPipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     getPipelineV2: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
     executePipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
@@ -264,15 +256,7 @@ describe('MessageProcessorService Routing', () => {
   } as any;
 
   const mockPipelineService = {
-    createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-    getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
-    getPipelineOptional: () => Effect.succeed(undefined),
-    hasPipeline: () => Effect.succeed(false),
-    removePipeline: () => Effect.succeed(false),
-    getAllPipelines: () => Effect.succeed([]),
     clear: () => Effect.void,
-    executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-    matchPipelineByUtterance: () => Effect.succeed(null),
     createPipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
     getPipelineV2: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
     executePipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
@@ -589,15 +573,7 @@ describe('MessageProcessorService stream contracts', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
     } as any;
 
     const mockContextStorage = {
@@ -698,15 +674,7 @@ describe('MessageProcessorService stream contracts', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
     } as any;
 
     const mockContextStorage = {
@@ -803,15 +771,7 @@ describe('MessageProcessorService stream contracts', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
     } as any;
 
     const mockContextStorage = {
@@ -904,15 +864,7 @@ describe('MessageProcessorService stream contracts', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
     } as any;
 
     const mockContextStorage = {
@@ -1030,15 +982,7 @@ describe('MessageProcessorService stream contracts', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
     } as any;
 
     const mockContextStorage = {
@@ -1111,15 +1055,7 @@ describe('MessageProcessorService policy context propagation', () => {
     } as any;
 
     const mockPipelineService = {
-      createPipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-      getPipeline: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
-      getPipelineOptional: () => Effect.succeed(undefined),
-      hasPipeline: () => Effect.succeed(false),
-      removePipeline: () => Effect.succeed(false),
-      getAllPipelines: () => Effect.succeed([]),
       clear: () => Effect.void,
-      executePipeline: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
-      matchPipelineByUtterance: () => Effect.succeed(null),
       createPipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),
       getPipelineV2: () => Effect.fail({ _tag: 'PipelineNotFoundError' as const, pipelineId: 'test' }),
       executePipelineV2: () => Effect.fail({ _tag: 'PipelineExecutionError' as const, message: 'Not implemented' }),

@@ -45,7 +45,6 @@ export interface WorkflowExecutionResult {
   readonly outputs: Record<string, unknown>;
   readonly executedNodes: string[];
   readonly finalOutput?: unknown;
-  readonly finalResponse?: AgentResponse;
   readonly error?: Error;
   readonly failedNodeId?: string;
   readonly abortedBy?: string;
@@ -102,10 +101,6 @@ function nodeFailure(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function agentResponseContent(value: unknown): string | undefined {
-  return isRecord(value) && typeof value.content === 'string' ? value.content : undefined;
 }
 
 /** Convert structured workflow input only when it crosses a conversational string boundary. */
@@ -263,10 +258,7 @@ function runNodeBody(
           true,
         );
       }
-      const history = workflow.source === 'v1' && options.sequentialVisibility === false
-        ? []
-        : context.history;
-      return agent.processMessage(message, history, {
+      return agent.processMessage(message, context.history, {
         workflowId: workflow.id,
         sessionId: context.conversationId,
       }).pipe(
@@ -663,8 +655,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         .map((node) => node.id)
     : [workflow.entry];
   let finalOutput: unknown;
-  let finalResponse: AgentResponse | undefined;
-  let currentMessage = workflowInputToMessage(context.input);
   const retryAttempts = new Map<string, number>();
 
   const workflowSpan = options.tracer?.startSpan(
@@ -776,7 +766,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             context,
             runtimeOutputs,
             options,
-            workflow.source === 'v1' ? currentMessage : workflowInputToMessage(context.input),
+            workflowInputToMessage(context.input),
             runId,
             skipBeforeHooks,
           )).pipe(Effect.map((outcome) => ({ node, outcome })));
@@ -813,7 +803,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
                   outputs,
                   executedNodes: [...executedNodes],
                   finalOutput,
-                  finalResponse,
                   abortedBy,
                   runId,
                 } satisfies WorkflowExecutionResult;
@@ -859,7 +848,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             outputs,
             executedNodes,
             finalOutput,
-            finalResponse,
             abortedBy: execution.abortedBy,
             runId,
           } satisfies WorkflowExecutionResult;
@@ -887,16 +875,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           continue;
         }
 
-        if (workflow.source === 'v1' && node.kind === 'agent' && !execution.skipped) {
-          const content = agentResponseContent(result);
-          context.history.push({ role: 'user', content: currentMessage });
-          if (content) context.history.push({ role: 'assistant', content });
-          if (content !== undefined) currentMessage = content;
-          if (isRecord(result) && typeof result.content === 'string') {
-            finalResponse = { ...result, content: result.content };
-          }
-        }
-
         context.outputs = getPublicWorkflowOutputs(workflow, runtimeOutputs);
 
         if (execution.pause) {
@@ -919,7 +897,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             outputs: context.outputs,
             executedNodes,
             finalOutput,
-            finalResponse,
             runId,
             pauseRequest: {
               prompt: execution.pause.signal.prompt,
@@ -1010,7 +987,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       outputs: context.outputs,
       executedNodes,
       finalOutput: validatedFinalOutput,
-      finalResponse,
       runId,
     } satisfies WorkflowExecutionResult;
   });
@@ -1028,7 +1004,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         outputs,
         executedNodes: [...executedNodes],
         finalOutput,
-        finalResponse,
         error: toError(failure.cause),
         failedNodeId: failure.nodeId,
         runId,

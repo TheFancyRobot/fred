@@ -44,7 +44,7 @@ export const withCustomLayer = <T>(
  * const program = Effect.gen(function* () {
  *   const fred = yield* FredService;
  *   const agent = yield* fred.agents.getAgent(id);
- *   const pipeline = yield* fred.pipelines.getPipeline(pipelineId);
+ *   const workflow = yield* fred.pipelines.getWorkflowIR(workflowId);
  * });
  * ```
  */

@@ -151,10 +151,9 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
     );
   });
 
-  it('pipelines (open) and pipelinesV2 with nested conditional steps', () => {
+  it('pipelinesV2 with nested conditional steps', () => {
     expectAccepted(
       {
-        pipelines: [{ id: 'p1', agents: ['a1', 'a2'] }],
         pipelinesV2: {
           review: {
             description: 'review flow',
@@ -171,7 +170,7 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
           },
         },
       },
-      'pipelines + pipelinesV2',
+      'pipelinesV2',
     );
   });
 

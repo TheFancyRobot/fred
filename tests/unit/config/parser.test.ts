@@ -114,20 +114,20 @@ intents:
       expect(config.intents?.[0].utterances).toHaveLength(2);
     });
 
-    test('should parse YAML with pipelines', () => {
+    test('should parse YAML with V2 pipelines', () => {
       const yamlContent = `
-pipelines:
-  - id: test-pipeline
-    agents:
-      - test-agent-1
-      - test-agent-2
+pipelinesV2:
+  test-pipeline:
+    steps:
+      - type: agent
+        name: first
+        agentId: test-agent-1
 `;
 
       const config = parseConfig(yamlContent, 'yaml');
 
-      expect(config.pipelines).toHaveLength(1);
-      expect(config.pipelines?.[0].id).toBe('test-pipeline');
-      expect(config.pipelines?.[0].agents).toHaveLength(2);
+      expect(Object.keys(config.pipelinesV2 ?? {})).toEqual(['test-pipeline']);
+      expect(config.pipelinesV2?.['test-pipeline']?.steps).toHaveLength(1);
     });
 
     test('should accept yml format alias', () => {

@@ -2,7 +2,7 @@
  * Phase 63 / STEP-63-01: differential test corpus.
  *
  * A single, reusable set of deterministic workflow fixtures spanning all three
- * architectures being unified (V1 agent-list, V2 typed steps, graph DAG). Every
+ * supported compiled architectures (V2 typed steps and graph DAG). Every
  * fixture is fully deterministic — function steps and echo mock agents only, no
  * AI — so its result can be snapshotted and compared byte-for-byte.
  *
@@ -37,7 +37,7 @@ import type {
 } from '../../../packages/core/src/pipeline/checkpoint/types';
 
 /** Workflow architecture under test. */
-export type WorkflowArch = 'v1' | 'v2' | 'graph';
+export type WorkflowArch = 'v2' | 'graph';
 
 /**
  * A deterministic echo agent. Its response is a pure function of id + input, so
@@ -167,12 +167,6 @@ export interface WorkflowFixture {
   readonly run: Effect.Effect<unknown, unknown, PipelineService>;
 }
 
-const v1 = (
-  name: string,
-  agents: readonly string[],
-  build: (service: PipelineService) => Effect.Effect<AgentResponse, unknown, never>,
-): WorkflowFixture => ({ name, arch: 'v1', agents, run: Effect.flatMap(PipelineService, build) });
-
 const v2 = (
   name: string,
   agents: readonly string[],
@@ -187,25 +181,10 @@ const graph = (
 
 /**
  * The differential corpus. Each fixture exercises a behavior the unified
- * executor must reproduce exactly: agent-message threading (V1), output
- * accumulation + conditional branching (V2), edge routing + execution order
- * (graph).
+ * executor must reproduce exactly: output accumulation + conditional branching
+ * (V2), and edge routing + execution order (graph).
  */
 export const WORKFLOW_FIXTURES: readonly WorkflowFixture[] = [
-  // ---- V1: agent-list pipelines (message threads through the chain) ----
-  v1('v1-single-agent', ['a'], (s) =>
-    Effect.gen(function* () {
-      yield* s.createPipeline({ id: 'v1-single', agents: ['a'] });
-      return yield* s.executePipeline('v1-single', 'hi');
-    }),
-  ),
-  v1('v1-agent-chain', ['a', 'b'], (s) =>
-    Effect.gen(function* () {
-      yield* s.createPipeline({ id: 'v1-chain', agents: ['a', 'b'] });
-      return yield* s.executePipeline('v1-chain', 'hi');
-    }),
-  ),
-
   // ---- V2: typed-step pipelines ----
   v2('v2-function-single', [], (s) =>
     Effect.gen(function* () {
@@ -314,10 +293,6 @@ export function snapshotResult(arch: WorkflowArch, raw: unknown): Record<string,
   const errShape = (e: unknown) =>
     e instanceof Error ? { name: e.name, message: e.message } : e ?? undefined;
 
-  if (arch === 'v1') {
-    const r = raw as AgentResponse;
-    return { content: r.content, toolCalls: r.toolCalls ?? [] };
-  }
   if (arch === 'v2') {
     const r = raw as PipelineResult;
     return {

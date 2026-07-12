@@ -26,8 +26,6 @@ const mockAgentService = {
 } as any;
 
 const mockPipelineService = {
-  getPipelineOptional: () => Effect.succeed(undefined),
-  matchPipelineByUtterance: () => Effect.succeed(null),
 } as any;
 
 /** Storage that records every conversationId passed to getHistory. */

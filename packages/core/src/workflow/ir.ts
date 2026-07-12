@@ -2,12 +2,11 @@
  * Phase 63 / STEP-63-02: WorkflowIR — the unified workflow intermediate
  * representation.
  *
- * Fred grew three separate workflow models that duplicate executor logic:
- *   - V1  `PipelineConfig`      — an ordered agent list (message threads through);
+ * Fred's supported workflow models compile to one execution representation:
  *   - V2  `PipelineConfigV2`    — typed steps with checkpoint/pause/resume;
  *   - graph `GraphWorkflowConfig` — a DAG with conditional edges + fork/join.
  *
- * `WorkflowIR` is the single primitive all three compile down to (see
+ * `WorkflowIR` is the single primitive all supported dialects compile down to (see
  * `compile.ts`), executed by one executor (see `execute.ts`). It is a true
  * superset because **control flow lives on edges, not nodes**:
  *
@@ -167,7 +166,7 @@ export interface IREdge {
 }
 
 /** Which source architecture an IR was compiled from (observability/debugging). */
-export type WorkflowSource = 'v1' | 'v2' | 'graph' | 'native';
+export type WorkflowSource = 'v2' | 'graph' | 'native';
 
 /**
  * The unified workflow. `nodes` + `edges` form the execution graph; `entry` is

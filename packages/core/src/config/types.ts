@@ -1,7 +1,6 @@
 import type { Intent } from '../intent/intent';
 import type { AgentConfig } from '../agent/agent';
 import type { Tool, ToolSchemaMetadata } from '../tool/tool';
-import type { PipelineConfig } from '../pipeline/pipeline';
 import type { RoutingConfig } from '../routing/types';
 
 // =============================================================================
@@ -361,7 +360,6 @@ export interface FrameworkConfig {
    *  Defaults to ['./agents'] if that directory exists.
    *  Paths are relative to the config file or CWD. */
   agentDirs?: string[];
-  pipelines?: PipelineConfig[];
   /** Extended pipelines with step types (Phase 5+) */
   pipelinesV2?: Record<string, ExtendedPipelineConfig>;
   tools?: ToolConfig[];

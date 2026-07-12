@@ -226,65 +226,6 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
     }
   });
 
-  // -- Pipelines -------------------------------------------------------------
-  const seenPipelineIds = new Set<string>();
-  config.pipelines?.forEach((pipeline, i) => {
-    const base = `pipelines[${i}]`;
-    const name = pipeline.id ?? '(unnamed)';
-    if (!pipeline.id) {
-      errors.push(configError(`${base}.id`, 'pipeline is missing an id', 'Add a unique `id` to the pipeline.'));
-    } else {
-      if (seenPipelineIds.has(pipeline.id)) {
-        errors.push(
-          configError(`${base}.id`, `duplicate pipeline id "${pipeline.id}"`, 'Give each pipeline a unique `id`.'),
-        );
-      }
-      seenPipelineIds.add(pipeline.id);
-    }
-
-    const agents = (pipeline as Record<string, unknown>).agents;
-    if (!Array.isArray(agents) || agents.length === 0) {
-      errors.push(
-        configError(
-          `${base}.agents`,
-          `pipeline "${name}" must have at least one agent`,
-          'List one or more agent ids (or inline agent configs) under `agents`.',
-        ),
-      );
-      return;
-    }
-    agents.forEach((ref, j) => {
-      if (typeof ref === 'string') return;
-      const inline = asRecord(ref);
-      const abase = `${base}.agents[${j}]`;
-      const inlineName = (inline?.id as string | undefined) ?? `(index ${j})`;
-      if (!inline?.id) {
-        errors.push(
-          configError(`${abase}.id`, `pipeline "${name}" has an inline agent without an id`, 'Add an `id` to the inline agent.'),
-        );
-      }
-      if (inline && !inline.systemMessage && !hasDefaultSystemMessage) {
-        errors.push(
-          configError(
-            `${abase}.systemMessage`,
-            `inline agent "${inlineName}" in pipeline "${name}" needs a systemMessage or defaultSystemMessage`,
-            'Add `systemMessage` to the inline agent, or set a top-level `defaultSystemMessage`.',
-          ),
-        );
-      }
-      if (inline && !inline.platform) {
-        errors.push(
-          configError(`${abase}.platform`, `inline agent "${inlineName}" in pipeline "${name}" needs a platform`, 'Set `platform`.'),
-        );
-      }
-      if (inline && !inline.model) {
-        errors.push(
-          configError(`${abase}.model`, `inline agent "${inlineName}" in pipeline "${name}" needs a model`, 'Set `model`.'),
-        );
-      }
-    });
-  });
-
   // -- Routing rules ---------------------------------------------------------
   config.routing?.rules?.forEach((rule, i) => {
     const r = rule as Record<string, unknown>;

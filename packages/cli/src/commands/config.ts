@@ -90,8 +90,7 @@ function countEntities(config: FrameworkConfig): {
     agents: config.agents?.length ?? 0,
     tools: config.tools?.length ?? 0,
     intents: config.intents?.length ?? 0,
-    pipelines: (config.pipelines?.length ?? 0) +
-      Object.keys(config.pipelinesV2 ?? {}).length,
+    pipelines: Object.keys(config.pipelinesV2 ?? {}).length,
     workflows: Object.keys(config.workflows ?? {}).length,
   };
 }

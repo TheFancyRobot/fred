@@ -150,22 +150,6 @@ describe('validateFrameworkConfig — tool-policy rule contents', () => {
 });
 
 describe('validateFrameworkConfig — uniqueness & references', () => {
-  it('flags duplicate pipeline ids', () => {
-    const errors = validate({
-      defaultSystemMessage: 'x',
-      pipelines: [
-        { id: 'p1', agents: ['a1'] },
-        { id: 'p1', agents: ['a2'] },
-      ],
-    });
-    expect(errors.some((e) => e.path === 'pipelines[1].id' && e.issue.includes('duplicate'))).toBe(true);
-  });
-
-  it('flags a pipeline with no agents', () => {
-    const err = findByPath({ defaultSystemMessage: 'x', pipelines: [{ id: 'p1', agents: [] }] }, 'pipelines[0].agents');
-    expect(err?.issue).toContain('at least one agent');
-  });
-
   it('rejects both policies and toolPolicies together', () => {
     const err = findByPath(
       { policies: { default: { allow: ['a'] } }, toolPolicies: { default: { allow: ['b'] } } },

@@ -273,7 +273,7 @@ export class Fred extends FredBase {
 
   // --- Graph Workflow Execution ---
 
-  /** Register V1, V2, graph, or native WorkflowIR through the unified registry. */
+  /** Register V2, graph, or native WorkflowIR through the unified registry. */
   async defineWorkflow(config: CompilableWorkflow): Promise<void> {
     await this.runEffect(
       Effect.flatMap(PipelineService, (service) => service.defineWorkflow(config)),

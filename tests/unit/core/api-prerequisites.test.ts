@@ -7,8 +7,7 @@ import {
   ProviderRegistryService,
 } from '../../../packages/core/src/services';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
-import type { PipelineConfig, PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
-import { createMockProvider } from '../helpers/mock-provider';
+import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 
 const activeClients: FredClient[] = [];
 
@@ -16,20 +15,6 @@ const track = (client: FredClient): FredClient => {
   activeClients.push(client);
   return client;
 };
-
-async function registerMockAgent(fred: FredClient, agentId: string): Promise<void> {
-  await fred.effects.run(
-    Effect.flatMap(ProviderRegistryService, (providers) =>
-      providers.registerDefinition({ ...createMockProvider('mock'), aliases: [] })
-    ),
-  );
-  await fred.agents.register({
-    id: agentId,
-    platform: 'mock',
-    model: 'mock-model',
-    systemMessage: 'Mock agent',
-  } as any);
-}
 
 afterEach(async () => {
   while (activeClients.length > 0) {
@@ -57,21 +42,6 @@ describe('Phase 46 API prerequisites', () => {
     );
 
     expect(hookCalled).toBe(true);
-  });
-
-  it('defines V1 pipeline configs in the service registry', async () => {
-    const fred = track(await createFred());
-    await registerMockAgent(fred, 'legacy-agent');
-    const config: PipelineConfig = {
-      id: 'legacy-pipeline',
-      agents: ['legacy-agent'],
-    };
-
-    await fred.workflows.define(config);
-
-    expect(await fred.effects.run(
-      Effect.flatMap(PipelineService, (pipelines) => pipelines.hasPipeline(config.id)),
-    )).toBe(true);
   });
 
   it('defines V2 pipeline configs in the V2 registry', async () => {

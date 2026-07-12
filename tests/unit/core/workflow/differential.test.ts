@@ -1,8 +1,8 @@
 /**
  * Phase 63 / STEP-63-01: differential safety net (golden side).
  *
- * Locks the exact observable behavior of the three legacy executors (V1
- * agent-list, V2 typed steps, graph DAG) as golden snapshots. Later steps in the
+ * Locks the exact observable behavior of the V2 typed-step and graph DAG
+ * executors as golden snapshots. Later steps in the
  * phase flip execution to the compiled-`WorkflowIR` path one architecture at a
  * time; the parity test re-runs this same corpus through the unified executor
  * and asserts identical snapshots. Any drift here — before or after the flip —
@@ -23,14 +23,6 @@ import {
 
 /** Golden snapshots, keyed by fixture name. Captured from the legacy executors. */
 const GOLDEN: Record<string, Record<string, unknown>> = {
-  'v1-single-agent': {
-    content: 'a<-hi',
-    toolCalls: [],
-  },
-  'v1-agent-chain': {
-    content: 'b<-a<-hi',
-    toolCalls: [],
-  },
   'v2-function-single': {
     success: true,
     status: 'completed',
@@ -101,9 +93,9 @@ const GOLDEN: Record<string, Record<string, unknown>> = {
 };
 
 describe('workflow differential — legacy executors (golden)', () => {
-  it('covers all three architectures', () => {
+  it('covers both supported compiled architectures', () => {
     const archs = new Set(WORKFLOW_FIXTURES.map((f) => f.arch));
-    expect([...archs].sort()).toEqual(['graph', 'v1', 'v2']);
+    expect([...archs].sort()).toEqual(['graph', 'v2']);
   });
 
   it('has a golden snapshot for every fixture (no orphans on either side)', () => {

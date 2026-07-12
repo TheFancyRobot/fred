@@ -166,9 +166,8 @@ export type {
 export { PipelineBuilder } from './pipeline/builder';
 export { GraphWorkflowBuilder } from './pipeline/graph-builder';
 export type {
-  PipelineConfigV2, AnyPipelineConfig,
+  PipelineConfigV2,
 } from './pipeline/pipeline';
-export { isPipelineConfigV2 } from './pipeline/pipeline';
 export type {
   GraphWorkflowConfig, GraphNode, BranchCondition,
 } from './pipeline/graph';
@@ -204,7 +203,6 @@ export type {
 export {
   defineWorkflow,
   compileWorkflow,
-  compilePipelineV1,
   compilePipelineV2,
   compileGraphWorkflow,
   isWorkflowIR,

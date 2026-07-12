@@ -1,13 +1,5 @@
-import type { AgentConfig, AgentMessage, AgentResponse } from '../agent/agent';
 import type { HookHandler } from '../hooks/types';
 import type { PipelineStep } from './steps';
-
-/**
- * Agent reference in a pipeline - can be either:
- * - A string (agent ID) for externally defined agents
- * - An AgentConfig object for inline agent definitions
- */
-export type PipelineAgentRef = string | AgentConfig;
 
 /**
  * Checkpoint configuration for pipeline execution.
@@ -18,18 +10,6 @@ export interface CheckpointConfig {
 
   /** TTL in milliseconds for checkpoints. Default: 7 days */
   ttlMs?: number;
-}
-
-/**
- * Pipeline configuration (V1 - legacy agent-based pipelines).
- * @deprecated Prefer `defineWorkflow()` or `PipelineConfigV2`; V1 is compiled
- * to WorkflowIR and retained only as migration sugar.
- */
-export interface PipelineConfig {
-  id: string;
-  agents: PipelineAgentRef[]; // Array of agent IDs or inline agent configs
-  utterances?: string[]; // Phrases that trigger this pipeline (for intent matching)
-  description?: string; // Optional description of the pipeline
 }
 
 /**
@@ -68,27 +48,4 @@ export interface PipelineConfigV2 {
   failFast?: boolean;
   /** Checkpoint configuration for resume support */
   checkpoint?: CheckpointConfig;
-}
-
-/**
- * Union type for backward compatibility - accepts both V1 and V2 configs
- */
-export type AnyPipelineConfig = PipelineConfig | PipelineConfigV2;
-
-/**
- * Type guard to distinguish V2 pipeline configs from V1
- * @param config - Pipeline configuration to check
- * @returns true if config is PipelineConfigV2
- */
-export function isPipelineConfigV2(config: AnyPipelineConfig): config is PipelineConfigV2 {
-  return 'steps' in config && Array.isArray(config.steps);
-}
-
-/**
- * Pipeline instance (created from config)
- */
-export interface PipelineInstance {
-  id: string;
-  config: PipelineConfig;
-  execute: (message: string, previousMessages?: AgentMessage[]) => Promise<AgentResponse>;
 }

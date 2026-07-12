@@ -90,7 +90,7 @@ const createFredMock = (): {
       removedAgents.push(id);
     },
     hasAgent: async (id: string) => createdAgents.some((agent) => agent.id === id),
-    createPipeline: async () => {},
+    defineWorkflow: async () => {},
     getGlobalVariables: async () => ({}),
     invalidateTemplateCache: async () => {},
     ownAgentFileWatcher: (value: AgentFileWatcher) => {
