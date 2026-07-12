@@ -15,7 +15,6 @@ OpenAI-compatible endpoint for chat completions.
   "messages": [
     { "role": "user", "content": "Hello!" }
   ],
-  "conversation_id": "optional-conversation-id",
   "stream": false
 }
 ```
@@ -49,8 +48,7 @@ Simplified chat endpoint.
 
 ```json
 {
-  "message": "Hello!",
-  "conversation_id": "optional-conversation-id"
+  "message": "Hello!"
 }
 ```
 
@@ -120,6 +118,7 @@ Model: fred-agent
 ```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-Session-Id: conv-123" \
   -d '{
     "messages": [
       { "role": "user", "content": "Hello!" }
@@ -138,18 +137,17 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -d '{
     "messages": [
       { "role": "user", "content": "My name is Alice" }
-    ],
-    "conversation_id": "conv-123"
+    ]
   }'
 
 # Follow-up message
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-Session-Id: conv-123" \
   -d '{
     "messages": [
       { "role": "user", "content": "What is my name?" }
-    ],
-    "conversation_id": "conv-123"
+    ]
   }'
 ```
 
@@ -231,10 +229,10 @@ async function chat(message, conversationId) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'X-Session-Id': conversationId,
     },
     body: JSON.stringify({
       messages: [{ role: 'user', content: message }],
-      conversation_id: conversationId,
     }),
   });
   
@@ -248,13 +246,11 @@ async function chat(message, conversationId) {
 ```python
 import requests
 
-def chat(message, conversation_id=None):
+def chat(message, session_id=None):
     response = requests.post(
         'http://localhost:3000/v1/chat/completions',
-        json={
-            'messages': [{'role': 'user', 'content': message}],
-            'conversation_id': conversation_id,
-        }
+        headers={'X-Session-Id': session_id} if session_id else {},
+        json={'messages': [{'role': 'user', 'content': message}]}
     )
     return response.json()['choices'][0]['message']['content']
 ```

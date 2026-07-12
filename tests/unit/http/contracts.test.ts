@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { Schema } from 'effect';
-import chatRequestFixture from './fixtures/legacy-chat-request.json';
 import chatResponseFixture from './fixtures/legacy-chat-response.json';
 import messageRequestFixture from './fixtures/legacy-message-request.json';
 import messageResponseFixture from './fixtures/legacy-message-response.json';
@@ -17,9 +16,10 @@ import {
 const decode = <A, I>(schema: Schema.Schema<A, I>) => Schema.decodeUnknownSync(schema);
 
 describe('Fred HttpApi contracts', () => {
-  it('decodes legacy request and response fixtures', () => {
-    expect(decode(ChatCompletionRequest)(chatRequestFixture).conversation_id)
-      .toBe('legacy-conversation');
+  it('decodes supported request and response fixtures', () => {
+    expect(decode(ChatCompletionRequest)({
+      messages: [{ role: 'user', content: 'hello' }],
+    }).messages[0]?.content).toBe('hello');
     expect(decode(ChatCompletionResponse)(chatResponseFixture).object)
       .toBe('chat.completion');
     expect(decode(MessageRequest)(messageRequestFixture).message)

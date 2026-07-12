@@ -18,6 +18,98 @@ const start = async (options: Parameters<typeof withHttp>[1]) => {
 };
 
 describe('FredHttpServerLive security middleware', () => {
+  test('mounts public custom routes on the canonical Effect router', async () => {
+    const handle = await start({
+      routes: [{
+        method: 'GET',
+        path: '/public/ping',
+        visibility: 'public',
+        handler: () => new Response('pong'),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/public/ping`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('pong');
+  });
+
+  test('applies auth and CORS methods to custom routes', async () => {
+    const handle = await start({
+      security: {
+        authToken: 'route-secret',
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      routes: [{
+        method: 'PUT',
+        path: '/private/resource',
+        handler: () => new Response('updated'),
+      }],
+    });
+
+    expect((await fetch(`${handle.url}/private/resource`, { method: 'PUT' })).status).toBe(401);
+    const response = await fetch(`${handle.url}/private/resource`, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer route-secret' },
+    });
+    expect(response.status).toBe(200);
+    const preflight = await fetch(`${handle.url}/private/resource`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('PUT');
+  });
+
+  test('sanitizes custom-route failures', async () => {
+    const handle = await start({
+      security: { requireAuth: false },
+      routes: [{
+        method: 'GET',
+        path: '/boom',
+        visibility: 'public',
+        handler: () => {
+          throw new Error('sensitive failure details');
+        },
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/boom`);
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'Request failed' });
+    expect(JSON.stringify(body)).not.toContain('sensitive failure details');
+  });
+
+  test('times out custom routes and aborts their request signal', async () => {
+    let aborted = false;
+    const handle = await start({
+      security: { requireAuth: false, requestTimeoutSeconds: 1 },
+      routes: [{
+        method: 'GET',
+        path: '/slow',
+        visibility: 'public',
+        handler: (request) => new Promise<Response>(() => {
+          request.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+        }),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/slow`);
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ success: false, error: 'Request timed out' });
+    expect(aborted).toBe(true);
+  });
+
+  test('rejects custom routes that collide with built-in security paths', async () => {
+    await expect(start({
+      routes: [{
+        method: 'PUT',
+        path: '/health',
+        visibility: 'public',
+        handler: () => new Response('unsafe'),
+      }],
+    })).rejects.toThrow('Reserved custom route path: /health');
+  });
+
   test('authenticates built-in routes and emits the session CORS contract', async () => {
     const handle = await start({
       security: {

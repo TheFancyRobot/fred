@@ -96,7 +96,7 @@ export const FredMessageHandlersLive = HttpApiBuilder.group(
       )
       .handle('chat', ({ headers, payload }) =>
         Effect.gen(function* () {
-          const sessionId = resolveSessionId(headers['x-session-id'], payload.conversation_id);
+          const sessionId = resolveSessionId(headers['x-session-id']);
           if (payload.stream === true) {
             const used = yield* useSession(sessionId, Effect.void);
             return yield* jsonWithSession(

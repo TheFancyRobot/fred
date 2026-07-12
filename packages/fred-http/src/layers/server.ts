@@ -1,8 +1,22 @@
-import { HttpApiBuilder, HttpServer } from '@effect/platform';
+import {
+  HttpApiBuilder,
+  HttpMethod,
+  HttpRouter,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from '@effect/platform';
 import { BunHttpServer } from '@effect/platform-bun';
 import type { FredClient, WorkflowDescriptor } from '@fancyrobot/fred';
-import { Layer } from 'effect';
-import { FredHttpApi, FredDocsLayer, FredOpenApiLayer } from '../api';
+import { Effect, Layer, Schema } from 'effect';
+import {
+  FRED_DOCS_PATH,
+  FRED_OPENAPI_PATH,
+  FredHttpApi,
+  FredDocsLayer,
+  FredOpenApiLayer,
+  FredOpenApiSpec,
+} from '../api';
 import { FredHttpHandlersLive } from '../handlers/index';
 import { FredHttpSecurityLive, type FredHttpSecurityOptions } from '../middleware';
 import {
@@ -21,7 +35,78 @@ export interface FredHttpServerLayerOptions extends FredHttpSecurityOptions {
   readonly port?: number;
   readonly hostname?: string;
   readonly workflowEndpoints?: WorkflowEndpointsConfig;
+  readonly routes?: ReadonlyArray<FredHttpRoute>;
 }
+
+export type FredHttpRouteVisibility = 'public' | 'authenticated';
+
+export interface FredHttpRoute {
+  readonly method: HttpMethod.HttpMethod;
+  readonly path: `/${string}`;
+  readonly visibility?: FredHttpRouteVisibility;
+  readonly handler: (request: Request) => Response | Promise<Response>;
+}
+
+export class FredHttpRouteConfigurationError extends Schema.TaggedError<FredHttpRouteConfigurationError>()(
+  'FredHttpRouteConfigurationError',
+  { message: Schema.String },
+) {}
+
+const validateCustomRoutes = (
+  routes: ReadonlyArray<FredHttpRoute>,
+  workflowPaths: ReadonlyArray<string>,
+): void => {
+  const reservedPaths = new Set([
+    ...Object.keys(FredOpenApiSpec.paths),
+    FRED_DOCS_PATH,
+    FRED_OPENAPI_PATH,
+    ...workflowPaths,
+  ]);
+  const methodsAndPaths = new Set<string>();
+  const visibilityByPath = new Map<string, FredHttpRouteVisibility>();
+  for (const route of routes) {
+    if (!HttpMethod.isHttpMethod(route.method) || canonicalizeHttpPath(route.path) !== route.path) {
+      throw new FredHttpRouteConfigurationError({
+        message: `Invalid custom route: ${String(route.method)} ${String(route.path)}`,
+      });
+    }
+    if (reservedPaths.has(route.path)) {
+      throw new FredHttpRouteConfigurationError({ message: `Reserved custom route path: ${route.path}` });
+    }
+    const key = `${route.method} ${route.path}`;
+    if (methodsAndPaths.has(key)) {
+      throw new FredHttpRouteConfigurationError({ message: `Duplicate custom route: ${key}` });
+    }
+    methodsAndPaths.add(key);
+    const visibility = route.visibility ?? 'authenticated';
+    const existingVisibility = visibilityByPath.get(route.path);
+    if (existingVisibility !== undefined && existingVisibility !== visibility) {
+      throw new FredHttpRouteConfigurationError({
+        message: `Custom routes sharing ${route.path} must use the same visibility`,
+      });
+    }
+    visibilityByPath.set(route.path, visibility);
+  }
+};
+
+const customRoutesLayer = (routes: ReadonlyArray<FredHttpRoute>) =>
+  HttpApiBuilder.Router.use((router) =>
+    Effect.forEach(routes, (route) =>
+      router.addRoute(HttpRouter.makeRoute(
+        route.method,
+        route.path,
+        Effect.gen(function* () {
+          const serverRequest = yield* HttpServerRequest.HttpServerRequest;
+          const request = yield* HttpServerRequest.toWeb(serverRequest);
+          const response = yield* Effect.tryPromise({
+            try: (signal) => Promise.resolve(route.handler(new Request(request, { signal }))),
+            catch: (cause) => cause,
+          });
+          return HttpServerResponse.fromWeb(response);
+        }),
+      )),
+    { discard: true }),
+  );
 
 export const FredHttpApiLive = HttpApiBuilder.api(FredHttpApi).pipe(
   Layer.provide(FredHttpHandlersLive),
@@ -53,21 +138,36 @@ export const FredHttpServerLive = (
     security,
   };
   const endpoints = resolveWorkflowEndpoints(workflowSnapshot, options.workflowEndpoints);
-  const authRequirements = new Map(endpoints.map((endpoint) => [
+  const routes = options.routes ?? [];
+  validateCustomRoutes(routes, endpoints.map((endpoint) => endpoint.path));
+  const authRequirements = new Map<string, false | readonly string[]>(endpoints.map((endpoint) => [
     canonicalizeHttpPath(endpoint.path) ?? endpoint.path,
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
+  for (const route of routes) {
+    authRequirements.set(
+      canonicalizeHttpPath(route.path) ?? route.path,
+      route.visibility === 'public' ? false : [],
+    );
+  }
   const api = buildFredHttpApi(endpoints);
-  const handlerLayers = fred === undefined
+  const apiHandlers = fred === undefined
     ? FredHttpHandlersLive
     : Layer.merge(FredHttpHandlersLive, buildWorkflowHandlersLayer(api, fred, endpoints));
+  const handlerLayers = routes.length === 0
+    ? apiHandlers
+    : Layer.merge(apiHandlers, customRoutesLayer(routes));
   const apiLive = HttpApiBuilder.api(api).pipe(
     Layer.provide(handlerLayers),
   ) as unknown as typeof FredHttpApiLive;
   return HttpApiBuilder.serve().pipe(
     Layer.provide(FredDocsLayer),
     Layer.provide(FredOpenApiLayer),
-    Layer.provide(FredHttpSecurityLive({ ...resolvedOptions, authRequirements })),
+    Layer.provide(FredHttpSecurityLive({
+      ...resolvedOptions,
+      authRequirements,
+      allowedMethods: routes.map((route) => route.method),
+    })),
     Layer.provide(apiLive),
     Layer.provideMerge(BunHttpServer.layer({
       port: runtimeConfig.port ?? 0,

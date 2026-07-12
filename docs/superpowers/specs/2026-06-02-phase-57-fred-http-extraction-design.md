@@ -46,8 +46,8 @@ Refactor internals first, then publish the new package later.
 Add `packages/fred-http` published as `@fancyrobot/fred-http`.
 
 This package owns:
-- `startServer`
-- `ServerApp`
+- a simple server launcher
+- a standalone server class
 - server security config/types
 - route wiring
 - auth/rate-limit/CORS/error-sanitization behavior
@@ -59,8 +59,8 @@ This package owns:
 
 #### Simple mode
 A batteries-included entrypoint for consumers who just want Fred's HTTP API:
-- `startServer(...)`
-- `ServerApp(...)`
+- simple launcher usage
+- standalone server usage
 
 #### Composable mode
 An Effect-oriented composition surface for consumers who need to build a wider HTTP API around Fred:

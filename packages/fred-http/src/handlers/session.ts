@@ -6,8 +6,7 @@ export const SESSION_ID_HEADER = 'x-session-id';
 
 export const resolveSessionId = (
   headerSessionId: string | undefined,
-  legacyConversationId?: string,
-): string | undefined => headerSessionId ?? legacyConversationId;
+): string | undefined => headerSessionId;
 
 export const useSession = Effect.fn('FredHttp.useSession')(
   function* <A, E, R>(sessionId: string | undefined, effect: Effect.Effect<A, E, R>) {

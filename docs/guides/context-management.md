@@ -112,15 +112,15 @@ The chat API automatically manages context:
 
 ```typescript
 // POST /v1/chat/completions
+// X-Session-Id: my-conversation
 {
   "messages": [
     { "role": "user", "content": "Hello!" }
-  ],
-  "conversation_id": "my-conversation"  // Optional
+  ]
 }
 ```
 
-Context is maintained across all requests with the same `conversation_id`.
+Context is maintained across all requests with the same `X-Session-Id` header.
 
 ## Best Practices
 
@@ -283,4 +283,3 @@ function getConversationId(userId: string): string {
 - Learn about [Chat API](chat-api.md)
 - Explore [Default Agent](default-agent.md)
 - Check [API Reference](../api-reference/context.md)
-

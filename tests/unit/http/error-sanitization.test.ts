@@ -1,20 +1,17 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createFred, type FredClient } from '@fancyrobot/fred';
-import { createFredHttpApp } from '../../../packages/fred-http/src';
+import { createFred } from '@fancyrobot/fred';
+import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src';
 
 describe('fred-http error sanitization', () => {
-  const clients: FredClient[] = [];
+  const clients: FredWithHttp[] = [];
 
   afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.shutdown()));
   });
 
   it('sanitizes thrown errors from custom handlers', async () => {
-    const fred = await createFred();
-    clients.push(fred);
-    const app = createFredHttpApp({
-      fred,
-      getClientIp: () => '203.0.113.10',
+    const fred = withHttp(await createFred(), {
+      security: { requireAuth: false },
       routes: [
         {
           method: 'GET',
@@ -26,8 +23,9 @@ describe('fred-http error sanitization', () => {
         },
       ],
     });
-
-    const response = await app.fetch(new Request('http://localhost/boom'));
+    clients.push(fred);
+    const handle = await fred.server.listen();
+    const response = await fetch(`${handle.url}/boom`);
     expect(response.status).toBe(500);
 
     const body = await response.json();
