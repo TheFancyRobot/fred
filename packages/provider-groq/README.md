@@ -4,10 +4,15 @@
 
 Groq provider for Fred AI framework.
 
+See the [Phase 68 migration matrix](../../MIGRATION.md) for the compatible core
+and Effect AI lines.
+
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-groq
+bun add --exact @fancyrobot/fred-groq@4.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.0 effect@^3.21.0 \
+  @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 
 ## Setup

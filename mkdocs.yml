@@ -96,7 +96,7 @@ nav:
     - advanced/flox-integration.md
     - advanced/deployment.md
   - Migration:
-    - migration/v0.4.0.md
+    - Phase 68 independent package lines: migration/v0.4.0.md
     - migration/v0.2.5.md
 
 plugins:

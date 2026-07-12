@@ -4,10 +4,15 @@
 
 MiniMax multi-modality provider for the Fred AI framework. Supports seven capabilities — language, image, video, speech, voice, music, and lyrics — through a single package.
 
+See the [Phase 68 migration matrix](../../MIGRATION.md) for the compatible core
+line and the Stanza provider migration recipe.
+
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-minimax
+bun add --exact @fancyrobot/fred-minimax@2.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.0 effect@^3.21.0 \
+  @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 
 ## Setup

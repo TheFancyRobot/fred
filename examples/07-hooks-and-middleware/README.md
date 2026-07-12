@@ -4,7 +4,7 @@ This example demonstrates Fred's middleware model using practical hook registrat
 
 ## What You'll Learn
 
-- How to register hooks with `fred.registerHook(...)`
+- How to register hooks with `await fred.hooks.register(...)`
 - How hook handlers can modify `event.data` by returning `{ data: ... }`
 - How to add metadata/context during execution
 - How to capture structured lifecycle logs for observability

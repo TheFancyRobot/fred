@@ -5,7 +5,7 @@ This example shows how to define and register tools in Fred, then let an agent i
 ## What you'll learn
 
 - Define a custom tool with the Effect Schema format (`schema.input`, `schema.success`, `schema.metadata`)
-- Register tools with `fred.registerTool(...)`
+- Register tools with `await fred.tools.register(...)`
 - Use the built-in `calculator` tool plus a custom `get-weather` tool
 - Keep agents declarative in `agents/tool-user.md` and load with `initializeFromConfig()`
 

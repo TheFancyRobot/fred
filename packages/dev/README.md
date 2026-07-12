@@ -2,6 +2,9 @@
 
 > Deprecated compatibility shim. Install `@fancyrobot/fred-cli` and use `fred chat`.
 
+See the [Phase 68 migration matrix](../../MIGRATION.md) for the exact compatible
+CLI version and the removal timeline.
+
 This final compatibility release contains no development-chat implementation. It
 forwards the former root and `./chat-defaults` exports to
 `@fancyrobot/fred-cli` and will be removed in the next major release.
@@ -10,7 +13,7 @@ forwards the former root and `./chat-defaults` exports to
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d @fancyrobot/fred-cli
+bun add -d --exact @fancyrobot/fred-cli@0.5.1-alpha.0
 ```
 
 Replace programmatic imports:

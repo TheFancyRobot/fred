@@ -2,6 +2,9 @@
 
 Convex integration helpers for the [Fred](https://github.com/fancyrobot/fred) AI framework.
 
+See the [Phase 68 migration matrix](../../MIGRATION.md) for the compatible core,
+Effect, and Convex peer lines.
+
 ## Overview
 
 This package provides adapter glue for connecting Fred agents to a Convex backend. It follows the provider-style library pattern established by `@fancyrobot/fred-baml`: Fred owns the reusable adapter helpers while consuming apps own their Convex schema, generated `convex/_generated/api`, deployment URLs, auth, and concrete function references.
@@ -9,7 +12,8 @@ This package provides adapter glue for connecting Fred agents to a Convex backen
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-convex
+bun add --exact @fancyrobot/fred-convex@1.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.0 convex@^1.0.0 effect@^3.21.0
 ```
 
 ## Quick Start

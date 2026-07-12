@@ -2,6 +2,17 @@
 
 Reusable Bun HTTP server package for Fred.
 
+Migrating from `ServerApp`, `startServer()`, or `createFredHttpApp()`? Follow
+the [Phase 68 migration matrix and security guide](../../MIGRATION.md).
+
+## Installation
+
+```bash
+bun add --exact @fancyrobot/fred-http@1.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.0 effect@^3.21.0 \
+  @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
+```
+
 ## Scope
 
 `@fancyrobot/fred-http` provides an optional HTTP enhancement for Fred, a

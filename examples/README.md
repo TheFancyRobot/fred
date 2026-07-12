@@ -1,6 +1,8 @@
 # Fred Examples
 
-A progressive learning path for Fred's v0.3 API, from a one-agent quickstart to production-oriented workflows.
+A progressive learning path for Fred's `createFred()` API, from a one-agent
+quickstart to production-oriented workflows. For legacy facade migrations, see
+the [Phase 68 migration guide](../MIGRATION.md).
 
 ## Getting Started
 
@@ -43,7 +45,7 @@ This keeps examples consistent with Fred's declarative-by-default pattern: agent
 
 | # | Example | What You'll Learn |
 | --- | --- | --- |
-| 01 | [Quickstart: Single Agent](./01-quickstart-single-agent/) | Initialize `Fred`, load one markdown-defined agent from config, and process your first message |
+| 01 | [Quickstart: Single Agent](./01-quickstart-single-agent/) | Initialize a `FredClient`, load one markdown-defined agent from config, and process your first message |
 | 02 | [Tools: Registration & Invocation](./02-tools-basics/) | Register built-in and custom tools (Effect Schema format) and let agents invoke them |
 | 03 | [Intent Routing](./03-intent-routing-basics/) | Route messages to specialist agents with explicit intent matching and transcript-style routing output |
 | 04 | [Dynamic Handoff](./04-dynamic-handoff/) | Perform tool-based intake -> specialist handoff with bidirectional transfer and shared conversation context |

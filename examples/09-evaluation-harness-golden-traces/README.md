@@ -64,7 +64,8 @@ Fred core does not import a generated BAML client.
 ## Structured streaming
 
 An agent with an `output` schema validates its complete model result before it
-is exposed. When that agent is used through `fred.streamMessage()`, Fred emits a
+is exposed. When that agent streams through the Effect-native agent service,
+Fred emits a
 validated synthetic stream rather than partial structured JSON. The final
 `run-end` event carries the decoded value at `event.result.output`. A malformed
 result fails validation (after any configured malformed-only retries), so an

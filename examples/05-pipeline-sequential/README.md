@@ -23,7 +23,7 @@ Fred's checkpoint/resume is built into pipeline execution primitives. In this de
 
 1. A function step returns `{ pause: true, ... }`
 2. The pipeline pauses and produces a `runId`
-3. We resume with `fred.resume(runId, { humanInput: 'approve' })`
+3. We resume with `fred.workflows.resume(runId, { humanInput: 'approve' })`
 
 This keeps orchestration state inside Fred instead of requiring external state management glue in your application code.
 
@@ -31,7 +31,9 @@ This keeps orchestration state inside Fred instead of requiring external state m
 
 This sample demonstrates pause -> resume in a single process so it runs out-of-the-box.
 
-To test true crash/restart recovery, wire persistent checkpoint storage (for example SQLite/Postgres), stop the process after pause, then restart and call `fred.resume(runId, ...)` in a new process.
+To test true crash/restart recovery, wire persistent checkpoint storage (for
+example SQLite/Postgres), stop the process after pause, then restart and call
+`fred.workflows.resume(runId, ...)` in a new process.
 
 ## Prerequisites
 

@@ -2,9 +2,14 @@
 [![npm version](https://img.shields.io/npm/v/@fancyrobot/fred)](https://www.npmjs.com/package/@fancyrobot/fred)
 TypeScript AI agent framework with intent-based routing and pipeline orchestration.
 
+> Upgrading from `Fred`, `FredInstance`, or manager-style methods? Use the
+> repository [migration guide](../../MIGRATION.md). Package versions are
+> independent; the guide contains the exact compatible release matrix.
+
 ## Installation
 ```bash
-bun add @fancyrobot/fred effect
+bun add --exact @fancyrobot/fred@2.0.0-alpha.0 \
+  effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 
 Add at least one provider package:
@@ -107,7 +112,7 @@ Explain charges clearly and ask for missing details.
 ### Programmatic Agents
 
 ```typescript
-await fred.createAgent({
+await fred.agents.register({
   id: 'triage',
   systemMessage: 'Route requests to the right specialist.',
   platform: 'anthropic',
@@ -134,7 +139,7 @@ import { Effect, Schema } from 'effect';
 const Input = Schema.Struct({ question: Schema.String });
 const Output = Schema.Struct({ answer: Schema.String, confidence: Schema.Number });
 
-const agent = await fred.createAgent({
+const agent = await fred.agents.register({
   id: 'typed-answer',
   platform: 'openai',
   model: 'gpt-4o-mini',
@@ -167,7 +172,7 @@ unvalidated incremental JSON through `streamMessage`.
 ```typescript
 import { Schema } from 'effect';
 
-fred.registerTool({
+await fred.tools.register({
   id: 'weather',
   name: 'weather',
   description: 'Get weather for a city',
@@ -183,7 +188,7 @@ fred.registerTool({
 ### Legacy JSON Schema
 
 ```typescript
-fred.registerTool({
+await fred.tools.register({
   id: 'lookup-order',
   name: 'lookup-order',
   description: 'Get order status by ID',
@@ -253,13 +258,13 @@ const workflow = new GraphWorkflowBuilder('research-flow')
   .setEntry('classifier')
   .build();
 
-fred.registerGraphWorkflow(workflow);
+await fred.workflows.define(workflow);
 ```
 
 ### Checkpoints and Pause/Resume
 
 ```typescript
-const resumed = await fred.resume(runId, {
+const resumed = await fred.workflows.resume(runId, {
   humanInput: 'approve',
   resumeBehavior: 'continue',
 });
@@ -270,12 +275,12 @@ const resumed = await fred.resume(runId, {
 Fred exposes 21 hook points across the message lifecycle.
 
 ```typescript
-fred.registerHook('beforeMessageReceived', async (event) => {
+await fred.hooks.register('beforeMessageReceived', async (event) => {
   if (typeof event.data !== 'string') return;
   return { data: event.data.replace(/secret/gi, '[REDACTED]') };
 });
 
-fred.registerHook('afterResponseGenerated', async (event) => {
+await fred.hooks.register('afterResponseGenerated', async (event) => {
   console.log('Generated response:', event.data);
 });
 ```
@@ -356,13 +361,12 @@ const fred = await createFred({
 Fred is built on Effect and exposes service tags for custom Layer composition.
 
 ```typescript
-import { Effect, Runtime } from 'effect';
+import { Effect } from 'effect';
 import {
-  FredLayers,
   AgentService,
   PipelineService,
   ProviderRegistryService,
-} from '@fancyrobot/fred';
+} from '@fancyrobot/fred/effect';
 
 const program = Effect.gen(function* () {
   const providers = yield* ProviderRegistryService;
@@ -374,16 +378,20 @@ const program = Effect.gen(function* () {
     agents: yield* agents.getAllAgents(),
     pipelines: yield* pipelines.listWorkflows(),
   };
-}).pipe(Effect.provide(FredLayers));
+});
 
-const result = await Runtime.runPromise(Runtime.defaultRuntime)(program);
+// Reuse the client's scoped services. Application entry points own this
+// Promise boundary; domain logic stays as Effect.
+const result = await fred.effects.run(program);
 console.log(result);
 ```
 
 Use this path when you need low-level service control or custom runtime wiring.
 
 ## Examples
-See [examples/README.md](../../examples/README.md) for the 12-example learning path covering quickstart, tools, routing, pipelines, hooks, observability, evaluation, MCP integration, and CLI/TUI workflows.
+See [examples/README.md](../../examples/README.md) for the 15-example learning
+path covering quickstart, tools, routing, pipelines, hooks, observability,
+evaluation, MCP, CLI/TUI, multi-agent orchestration, and optional HTTP.
 
 ## License
 
