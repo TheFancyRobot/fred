@@ -40,10 +40,10 @@ describe('fred-http sibling consumption', () => {
 
     writeFileSync(
       join(tempDir, 'index.ts'),
-      `import { Fred } from '@fancyrobot/fred';
+      `import { createFred } from '@fancyrobot/fred';
 import { createFredHttpApp } from '@fancyrobot/fred-http';
 
-const fred = new Fred();
+const fred = await createFred();
 const app = createFredHttpApp({
   fred,
   getClientIp: () => '203.0.113.10',
@@ -68,8 +68,9 @@ if (body !== 'pong') {
 }
 const dispose = Reflect.get(app, 'dispose');
 if (typeof dispose === 'function') {
-  dispose.call(app);
+  await dispose.call(app);
 }
+await fred.shutdown();
 process.exit(0);
 `
     );

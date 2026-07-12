@@ -1,5 +1,6 @@
 import { HttpApiBuilder, HttpServer } from '@effect/platform';
-import type { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
+import type { FredServices } from '@fancyrobot/fred/effect';
 import { Effect, Either, Layer, Option, Schema } from 'effect';
 import { isIP } from 'node:net';
 import { FredDocsLayer, FredOpenApiLayer } from './api';
@@ -35,7 +36,7 @@ export interface FredHttpCustomRoute {
 }
 
 export interface CreateFredHttpAppOptions {
-  fred: Fred;
+  fred: FredClient;
   security?: Partial<ServerSecurityConfig>;
   routes?: ReadonlyArray<FredHttpCustomRoute>;
   trustProxy?: boolean;
@@ -203,9 +204,9 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
 
   const getWebHandler = async () => {
     if (webHandler) return webHandler;
-    const runtime = await options.fred.getRuntime();
+    const context = await options.fred.effects.run(Effect.context<FredServices>());
     const fredApiLayer = FredHttpApiLive.pipe(
-      Layer.provide(Layer.succeedContext(runtime.context)),
+      Layer.provide(Layer.succeedContext(context)),
     );
     const webLayer = Layer.mergeAll(
       fredApiLayer,

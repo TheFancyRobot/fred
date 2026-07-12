@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
 import { ServerApp } from '../../../packages/fred-http/src';
 
 const startedApps: ServerApp[] = [];
+const clients: FredClient[] = [];
 
 afterEach(async () => {
   while (startedApps.length > 0) {
@@ -11,11 +12,13 @@ afterEach(async () => {
       await app.stop();
     }
   }
+  await Promise.all(clients.splice(0).map((client) => client.shutdown()));
 });
 
 describe('ServerApp', () => {
   it('delegates to the HttpApi listener while preserving lifecycle and CORS', async () => {
-    const framework = new Fred();
+    const framework = await createFred();
+    clients.push(framework);
     const app = new ServerApp(framework, {
       requireAuth: false,
       corsAllowedOrigins: ['http://client.test:*'],
