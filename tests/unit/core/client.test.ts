@@ -223,8 +223,6 @@ describe('createFred client', () => {
     await client.mcp.configure([{
       id: 'lazy-files',
       transport: 'stdio',
-      command: 'unused',
-      allowedCommands: ['unused'],
       lazy: true,
       enabled: false,
     }]);

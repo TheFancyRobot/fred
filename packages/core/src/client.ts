@@ -807,6 +807,10 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
         ensureOpen();
         for (const config of configs) {
           const serverConfig = toMCPServerConfig(config);
+          if (serverConfig.enabled === false) {
+            mcpRegistry.registerLazyServer(config.id, serverConfig);
+            continue;
+          }
           if (serverConfig.transport === 'stdio') {
             if (!serverConfig.command) {
               throw new MCPSecurityError('COMMAND_DENIED', 'MCP stdio configuration requires a command');
