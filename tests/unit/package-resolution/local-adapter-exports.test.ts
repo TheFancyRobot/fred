@@ -56,9 +56,9 @@ describe('local adapter package exports', () => {
         },
       },
       'packages/fred-convex/package.json': {
-        types: './src/index.ts',
+        types: './dist/index.d.ts',
         exports: {
-          types: './src/index.ts',
+          types: './dist/index.d.ts',
           bun: './src/index.ts',
           import: './dist/index.js',
           default: './dist/index.js',
@@ -88,7 +88,7 @@ describe('local adapter package exports', () => {
         default: './dist/testing.js',
       },
       'packages/fred-convex/package.json': {
-        types: './src/testing.ts',
+        types: './dist/testing.d.ts',
         bun: './src/testing.ts',
         import: './dist/testing.js',
         default: './dist/testing.js',

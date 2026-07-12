@@ -236,18 +236,11 @@ describe('remaining package entrypoints: fred-cli', () => {
     expect(manifest.bin?.fred).toBeDefined();
   });
 
-  test('workspace: protocol is acceptable in CLI runtime dependencies', () => {
-    // CLI uses workspace: for sibling Fred packages in the monorepo.
-    // Bun resolves workspace: to actual versions during publish.
-    // This is acceptable because the CLI is a monorepo-internal tool.
+  test('runtime dependencies use publishable semver ranges', () => {
     const deps = manifest.dependencies ?? {};
     const workspaceDeps = Object.entries(deps).filter(
       ([, v]) => (v as string).startsWith('workspace:'),
     );
-
-    // All workspace deps should be Fred packages (monorepo siblings)
-    for (const [name] of workspaceDeps) {
-      expect(name).toMatch(/^@fancyrobot\//);
-    }
+    expect(workspaceDeps).toEqual([]);
   });
 });

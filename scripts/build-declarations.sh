@@ -25,6 +25,13 @@ build_one() {
   [ -f "$dir/package.json" ] || return 0
   grep -q '"build:declarations"' "$dir/package.json" || return 0
 
+  # Old declaration commands emitted beside source. npm includes those
+  # ignored files because packages ship src/ for Bun's source condition, so
+  # remove only generated declarations before rebuilding canonical dist types.
+  if [ -d "$dir/src" ]; then
+    find "$dir/src" -type f \( -name '*.d.ts' -o -name '*.d.ts.map' \) -delete
+  fi
+
   echo "==> $dir"
   out=$( (cd "$dir" && rm -f tsconfig.tsbuildinfo && bun run build:declarations) 2>&1 )
   rc=$?
