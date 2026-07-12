@@ -96,7 +96,7 @@ export const withHttp = (fred: FredClient, options: WithHttpOptions = {}): FredW
         port: listenOptions.port,
         hostname: listenOptions.hostname,
       }, fred, await fred.workflows.list());
-      const runtimeExit = await Runtime.runPromise(fred.runtime)(
+      const runtimeExit = await fred.effects.run(
         Effect.exit(Scope.extend(Layer.toRuntime(layer), scope)),
       );
       if (Exit.isFailure(runtimeExit)) throw squash(runtimeExit.cause);

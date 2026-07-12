@@ -2,8 +2,12 @@
 
 import { BunRuntime } from '@effect/platform-bun';
 import { Effect, Schema } from 'effect';
-import { Fred } from '@fancyrobot/fred';
-import { ServerApp } from './app';
+import {
+  createFred,
+  getBuiltinPackIds,
+  type FredClient,
+} from '@fancyrobot/fred';
+import { withHttp, type FredWithHttp } from './client';
 
 export function parseArgs(args: readonly string[] = process.argv.slice(2)): { configPath?: string; port: number } {
   const configIndex = args.indexOf('--config');
@@ -30,33 +34,72 @@ const initializationError = (message: string, cause: unknown) =>
     cause: cause instanceof Error ? cause.message : String(cause),
   });
 
-function initializeFred(fred: Fred, configPath?: string): Effect.Effect<void, FredServerInitializationError> {
-  if (configPath) {
-    return Effect.tryPromise({
-      try: () => fred.initializeFromConfig(configPath),
-      catch: (cause) => initializationError('Failed to load config', cause),
-    }).pipe(Effect.tap(() => Effect.log(`Initialized from config: ${configPath}`)));
-  }
-
-  return Effect.tryPromise({
-    try: () => fred.registerDefaultProviders(),
-    catch: (cause) => initializationError('Failed to register providers', cause),
-  }).pipe(
-    Effect.tap(() => Effect.log('No config file provided. Using default providers.')),
-    Effect.tap(() => Effect.log('Register agents, intents, and tools programmatically or provide a config file.')),
+export const registerDefaultProvidersBestEffort = (
+  useProvider: FredClient['providers']['use'],
+  providerIds: readonly string[] = getBuiltinPackIds(),
+): Effect.Effect<void> =>
+  Effect.forEach(
+    providerIds,
+    (providerId) => Effect.tryPromise({
+      try: () => useProvider(providerId),
+      catch: (cause) => initializationError(
+        `Failed to register built-in provider: ${providerId}`,
+        cause,
+      ),
+    }).pipe(
+      Effect.catchTag('FredServerInitializationError', (error) =>
+        Effect.logDebug('Built-in provider not available').pipe(
+          Effect.annotateLogs({ providerId, error: error.cause ?? error.message }),
+        )),
+    ),
+    { discard: true },
   );
-}
+
+const createConfiguredFred = (configPath?: string): Effect.Effect<FredClient, FredServerInitializationError> =>
+  Effect.gen(function* () {
+    const fred = yield* Effect.tryPromise({
+      try: () => createFred(configPath ? { configPath } : {}),
+      catch: (cause) => initializationError(
+        configPath ? 'Failed to load config' : 'Failed to initialize Fred',
+        cause,
+      ),
+    });
+    if (!configPath) {
+      yield* registerDefaultProvidersBestEffort(fred.providers.use);
+    }
+    return fred;
+  }).pipe(
+    Effect.tap(() => configPath
+      ? Effect.log(`Initialized from config: ${configPath}`)
+      : Effect.log('No config file provided. Using default providers.')),
+    Effect.tap(() => configPath
+      ? Effect.void
+      : Effect.log('Register agents, intents, and tools programmatically or provide a config file.')),
+  );
+
+const listen = (
+  configPath: string | undefined,
+  port: number,
+): Effect.Effect<FredWithHttp, FredServerInitializationError> =>
+  Effect.gen(function* () {
+    const fred = withHttp(yield* createConfiguredFred(configPath));
+    return yield* Effect.tryPromise({
+      try: () => fred.server.listen({ port, hostname: '0.0.0.0' }),
+      catch: (cause) => initializationError('Failed to start server', cause),
+    }).pipe(
+      Effect.as(fred),
+      Effect.catchTag('FredServerInitializationError', (error) =>
+        Effect.promise(() => fred.shutdown().catch(() => undefined)).pipe(
+          Effect.zipRight(Effect.fail(error)),
+        )),
+    );
+  });
 
 const program = Effect.gen(function* () {
   const { configPath, port } = parseArgs();
-  const fred = new Fred();
-
-  yield* initializeFred(fred, configPath);
-
-  const app = new ServerApp(fred);
   yield* Effect.acquireRelease(
-    Effect.promise(() => app.start(port)),
-    () => Effect.promise(() => app.stop())
+    listen(configPath, port),
+    (fred) => Effect.promise(() => fred.shutdown()),
   );
 
   return yield* Effect.never;
@@ -82,24 +125,9 @@ export { ServerApp } from './app';
  */
 export function startServer(options?: { configPath?: string; port?: number }): void {
   const serverProgram = Effect.gen(function* () {
-    const fred = new Fred();
-
-    if (options?.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(options.configPath!),
-        catch: (cause) => initializationError('Failed to load config', cause),
-      });
-    } else {
-      yield* Effect.tryPromise({
-        try: () => fred.registerDefaultProviders(),
-        catch: (cause) => initializationError('Failed to register providers', cause),
-      });
-    }
-
-    const app = new ServerApp(fred);
     yield* Effect.acquireRelease(
-      Effect.promise(() => app.start(options?.port ?? 3000)),
-      () => Effect.promise(() => app.stop())
+      listen(options?.configPath, options?.port ?? 3000),
+      (fred) => Effect.promise(() => fred.shutdown()),
     );
 
     return yield* Effect.never;

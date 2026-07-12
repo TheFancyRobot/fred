@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createFred, type FredClient } from '@fancyrobot/fred';
 import { createFredHttpApp } from '../../../packages/fred-http/src';
 
 describe('fred-http error sanitization', () => {
+  const clients: FredClient[] = [];
+
+  afterEach(async () => {
+    await Promise.all(clients.splice(0).map((client) => client.shutdown()));
+  });
+
   it('sanitizes thrown errors from custom handlers', async () => {
-    const fred = new Fred();
+    const fred = await createFred();
+    clients.push(fred);
     const app = createFredHttpApp({
       fred,
       getClientIp: () => '203.0.113.10',

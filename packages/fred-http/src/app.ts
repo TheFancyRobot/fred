@@ -1,31 +1,49 @@
 import { HttpServer } from '@effect/platform';
-import type { Fred } from '@fancyrobot/fred';
+import type { Fred, FredClient } from '@fancyrobot/fred';
 import { Cause, Effect, Exit, Layer, Runtime, Scope } from 'effect';
+import { withHttp, type FredHttpServerHandle, type FredWithHttp } from './client';
 import { FredHttpServerLive, serverAddress } from './layers/server';
 import type { ServerSecurityConfig } from './security';
+
+const isFredClient = (framework: Fred | FredClient): framework is FredClient =>
+  'effects' in framework;
 
 /**
  * @deprecated Use `withHttp(await createFred()).server.listen()` instead.
  * This compatibility wrapper will be removed in the next major release.
  */
 export class ServerApp {
-  private readonly framework: Fred;
+  private readonly framework: Fred | FredClient;
   private readonly securityConfig?: Partial<ServerSecurityConfig>;
+  private readonly http: FredWithHttp | undefined;
+  private readonly legacyFramework: Fred | undefined;
   private scope: Scope.CloseableScope | undefined;
   private server: { readonly port: number } | undefined;
 
-  constructor(framework: Fred, securityConfig?: Partial<ServerSecurityConfig>) {
+  constructor(framework: Fred | FredClient, securityConfig?: Partial<ServerSecurityConfig>) {
     this.framework = framework;
     this.securityConfig = securityConfig;
+    this.http = isFredClient(framework)
+      ? withHttp(framework, { security: securityConfig })
+      : undefined;
+    this.legacyFramework = isFredClient(framework) ? undefined : framework;
   }
 
   async start(port = 3000, hostname = '0.0.0.0'): Promise<void> {
-    if (this.scope) return;
+    if (this.server || this.scope) return;
+    if (this.http) {
+      const handle: FredHttpServerHandle = await this.http.server.listen({ port, hostname });
+      this.server = { port: handle.port };
+      return;
+    }
 
-    const runtime = await this.framework.getRuntime();
+    const legacyFramework = this.legacyFramework;
+    if (!legacyFramework) {
+      throw new Error('ServerApp compatibility framework is unavailable');
+    }
+    const runtime = await legacyFramework.getRuntime();
     const scope = Effect.runSync(Scope.make());
     this.scope = scope;
-
     const exit = await Runtime.runPromise(runtime)(
       Effect.exit(Scope.extend(
         Layer.toRuntime(FredHttpServerLive({
@@ -45,18 +63,20 @@ export class ServerApp {
     }
 
     const httpServer = Runtime.runSync(exit.value)(HttpServer.HttpServer);
-    const address = serverAddress(httpServer);
-    this.server = { port: address.port };
+    this.server = { port: serverAddress(httpServer).port };
   }
 
   async stop(): Promise<void> {
+    if (this.http) {
+      await this.http.server.stop();
+    }
     const scope = this.scope;
     this.scope = undefined;
-    this.server = undefined;
     if (scope) await Effect.runPromise(Scope.close(scope, Exit.void));
+    this.server = undefined;
   }
 
-  getFramework(): Fred {
+  getFramework(): Fred | FredClient {
     return this.framework;
   }
 }

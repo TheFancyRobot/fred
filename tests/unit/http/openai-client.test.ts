@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import OpenAI from 'openai';
-import { Context, Effect, Runtime, Stream } from 'effect';
+import { Effect, Stream } from 'effect';
 import { createFred, type FredClient, type StreamEvent } from '@fancyrobot/fred';
 import {
   MessageProcessorService,
+  type FredServices,
   type MessageProcessorService as MessageProcessorServiceApi,
 } from '@fancyrobot/fred/effect';
 import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src';
@@ -38,11 +39,12 @@ const deterministicProcessor: MessageProcessorServiceApi = {
 
 const withDeterministicProcessor = (client: FredClient): FredClient => ({
   ...client,
-  runtime: Runtime.make({
-    context: Context.add(client.runtime.context, MessageProcessorService, deterministicProcessor),
-    runtimeFlags: client.runtime.runtimeFlags,
-    fiberRefs: client.runtime.fiberRefs,
-  }),
+  effects: {
+    run: <A, E>(effect: Effect.Effect<A, E, FredServices>) =>
+      client.effects.run(
+        Effect.provideService(effect, MessageProcessorService, deterministicProcessor),
+      ),
+  },
 });
 
 describe('OpenAI npm client compatibility', () => {

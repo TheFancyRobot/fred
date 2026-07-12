@@ -30,13 +30,14 @@ describe('withHttp', () => {
     })).status).toBe(200);
   });
 
-  test('returns a non-mutating enhanced view backed by the same Fred runtime', async () => {
+  test('returns a non-mutating enhanced view backed by the same Fred client capabilities', async () => {
     const core = await createFred();
     const fred = withHttp(core, { security: { requireAuth: false } });
     clients.push(fred);
 
     expect('server' in core).toBe(false);
-    expect(fred.runtime).toBe(core.runtime);
+    expect(fred.agents).toBe(core.agents);
+    expect(fred.effects).toBe(core.effects);
 
     const handle = await fred.server.listen();
     expect(handle.port).toBeGreaterThan(0);

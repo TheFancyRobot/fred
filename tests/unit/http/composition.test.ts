@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, Fred, type FredClient } from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import { createFredHttpApp as createFredHttpAppBase } from '../../../packages/fred-http/src/index';
 import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
@@ -13,22 +13,32 @@ const createFredHttpApp = (options: CreateFredHttpAppOptions) => createFredHttpA
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
   let now = 0;
-  const createdApps: Array<{ dispose?: () => void }> = [];
+  const createdApps: Array<{ dispose: () => Promise<void> }> = [];
+  const createdClients: FredClient[] = [];
+  const createdFacades: Fred[] = [];
+
+  const createClient = async (): Promise<FredClient> => {
+    const client = await createFred();
+    createdClients.push(client);
+    return client;
+  };
 
   beforeEach(() => {
     now = 0;
     Date.now = () => now;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     Date.now = originalNow;
     for (const app of createdApps.splice(0)) {
-      app.dispose?.();
+      await app.dispose();
     }
+    await Promise.all(createdClients.splice(0).map((client) => client.shutdown()));
+    await Promise.all(createdFacades.splice(0).map((facade) => facade.shutdown()));
   });
 
   it('exposes a dispose method for composable apps', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: { requireAuth: false },
@@ -39,7 +49,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('delegates built-in routes to the Effect HttpApi implementation', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: { requireAuth: false },
@@ -51,8 +61,21 @@ describe('createFredHttpApp', () => {
     expect(await response.json()).toMatchObject({ status: 'ok' });
   });
 
-  it('adds CORS headers exactly once for built-in adapter routes', async () => {
+  it('preserves the deprecated Fred facade compatibility path', async () => {
     const fred = new Fred();
+    createdFacades.push(fred);
+    const app = createFredHttpApp({
+      fred,
+      security: { requireAuth: false },
+    });
+    createdApps.push(app);
+
+    const response = await app.fetch(new Request('http://localhost/health'));
+    expect(response.status).toBe(200);
+  });
+
+  it('adds CORS headers exactly once for built-in adapter routes', async () => {
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: {
@@ -71,7 +94,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('allows explicit public custom routes without auth', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       routes: [
@@ -91,7 +114,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('applies auth to private custom routes', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: { requireAuth: true, authToken: 'secret' },
@@ -111,7 +134,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('does not allow spoofed forwarded headers to bypass local auth exemptions', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: {
@@ -140,7 +163,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('applies rate limiting to custom routes', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: {
@@ -169,7 +192,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('fails closed instead of sharing one limiter bucket when client identity is unavailable', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpAppBase({
       fred,
       security: { requireAuth: false },
@@ -188,7 +211,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('keeps anonymous limiter buckets isolated by trusted client IP', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpAppBase({
       fred,
       getClientIp: (request) => request.headers.get('x-test-client-ip') ?? undefined,
@@ -215,7 +238,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('shares key-first rate-limit semantics with the compatibility adapter', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const apiKeyStore = makeMemoryApiKeyStore();
     const first = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } }));
     const second = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } }));
@@ -241,7 +264,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('reflects custom route methods in CORS preflight responses', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: {
@@ -273,7 +296,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('enforces compatibility body limits at the boundary and sanitizes rejection', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     const app = createFredHttpApp({
       fred,
       security: { requireAuth: false, maxRequestBodySize: 4 },
@@ -302,7 +325,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('stops reading a chunked compatibility request once it exceeds the body limit', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     let pulls = 0;
     let handled = false;
     const app = createFredHttpApp({
@@ -339,7 +362,7 @@ describe('createFredHttpApp', () => {
   });
 
   it('times out compatibility handlers, aborts their signal, and returns a sanitized response', async () => {
-    const fred = new Fred();
+    const fred = await createClient();
     let aborted = false;
     const app = createFredHttpApp({
       fred,
