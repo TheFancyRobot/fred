@@ -13,7 +13,7 @@ const createFredHttpApp = (options: CreateFredHttpAppOptions) => createFredHttpA
 describe('createFredHttpApp', () => {
   const originalNow = Date.now;
   let now = 0;
-  const createdApps: Array<{ dispose?: () => void }> = [];
+  const createdApps: Array<{ dispose: () => Promise<void> }> = [];
   const createdClients: FredClient[] = [];
   const createdFacades: Fred[] = [];
 
@@ -31,7 +31,7 @@ describe('createFredHttpApp', () => {
   afterEach(async () => {
     Date.now = originalNow;
     for (const app of createdApps.splice(0)) {
-      await app.dispose?.();
+      await app.dispose();
     }
     await Promise.all(createdClients.splice(0).map((client) => client.shutdown()));
     await Promise.all(createdFacades.splice(0).map((facade) => facade.shutdown()));
