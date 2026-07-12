@@ -10,14 +10,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { FredClient } from '@fancyrobot/fred';
 import {
-  createMockContextManager,
-  createMockFredClass,
+  createMockFredClient,
   createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
-  MockSqliteContextStorage,
   restoreProcessDoubles,
+  shutdownMockFredClients,
 } from './fixtures/fred-smoke-contract';
 
 const STALE_CONTRACT = 'STALE_CONTRACT';
@@ -31,7 +31,7 @@ type StaleContractDiagnostic = {
 
 function createStaleContractError(missing: string[], cause?: unknown): Error & { diagnostic: StaleContractDiagnostic } {
   const error = new Error(
-    `[${STALE_CONTRACT}] Missing Fred smoke contract members: ${missing.join(', ')}. ${FIXTURE_HINT}`,
+    `[${STALE_CONTRACT}] Missing FredClient smoke contract members: ${missing.join(', ')}. ${FIXTURE_HINT}`,
     { cause },
   ) as Error & { diagnostic: StaleContractDiagnostic };
 
@@ -44,47 +44,18 @@ function createStaleContractError(missing: string[], cause?: unknown): Error & {
   return error;
 }
 
-function assertFredSmokeContract(components: {
-  fredModule: Record<string, unknown>;
-  fredInstance: Record<string, unknown>;
-}): void {
+function assertFredClientSmokeContract(client: FredClient): void {
   const missing: string[] = [];
-
-  if (typeof components.fredInstance.setStorage !== 'function') {
-    missing.push('setStorage');
+  const groups = ['agents', 'sessions', 'effects', 'warnings', 'subagents'] as const;
+  for (const group of groups) {
+    if (typeof client[group] !== 'object' || client[group] === null) missing.push(group);
   }
-  if (typeof components.fredInstance.generateConversationId !== 'function') {
-    missing.push('generateConversationId');
-  }
-  if (typeof components.fredInstance.getContext !== 'function') {
-    missing.push('getContext');
-  }
-  if (typeof components.fredInstance.updateMetadata !== 'function') {
-    missing.push('updateMetadata');
-  }
-  if (typeof components.fredInstance.getSession !== 'function') {
-    missing.push('getSession');
-  }
-  if (typeof components.fredInstance.deleteSession !== 'function') {
-    missing.push('deleteSession');
-  }
-  if (typeof components.fredModule.SqliteContextStorage !== 'function') {
-    missing.push('SqliteContextStorage');
-  }
+  if (typeof client.shutdown !== 'function') missing.push('shutdown');
 
   if (missing.length > 0) {
     throw createStaleContractError(missing);
   }
 }
-
-const mockContextManager = createMockContextManager({
-  generateConversationId: () => 'conv_phase35_smoke',
-  setStorage: mock(() => {}),
-});
-const CanonicalMockFred = createMockFredClass({
-  contextManager: mockContextManager,
-  defaultStreamDelta: 'test',
-});
 
 describe('phase 35 cross-phase smoke contract guard', () => {
   let originalStdin: typeof process.stdin;
@@ -96,63 +67,41 @@ describe('phase 35 cross-phase smoke contract guard', () => {
     originalStdout = process.stdout;
     originalExit = process.exit;
 
-    mockContextManager.setStorage.mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore process globals first
     restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
     // Reset all mock call history and restore spies
     mock.restore();
+    await shutdownMockFredClients();
   });
 
-  test('shared fixture exposes required runtime-facing contract members', () => {
-    const fred = new CanonicalMockFred() as any;
-
-    assertFredSmokeContract({
-      fredModule: { SqliteContextStorage: MockSqliteContextStorage },
-      fredInstance: fred,
-    });
+  test('shared fixture exposes required runtime-facing contract members', async () => {
+    const fred = await createMockFredClient();
+    assertFredClientSmokeContract(fred);
   });
 
   test('stale diagnostics are deterministic and remediation-focused', () => {
-    const error = createStaleContractError(['setStorage', 'SqliteContextStorage']);
+    const error = createStaleContractError(['sessions', 'effects']);
 
     expect(error.message).toContain(STALE_CONTRACT);
-    expect(error.message).toContain('setStorage');
-    expect(error.message).toContain('SqliteContextStorage');
+    expect(error.message).toContain('sessions');
+    expect(error.message).toContain('effects');
     expect(error.message).toContain('tests/unit/cli/fixtures/fred-smoke-contract.ts');
     expect(error.diagnostic).toEqual({
       channel: STALE_CONTRACT,
-      missing: ['setStorage', 'SqliteContextStorage'],
+      missing: ['sessions', 'effects'],
       hint: FIXTURE_HINT,
     });
   });
 
   test('handleChatCommand integration reports STALE_CONTRACT context for stale mocks', async () => {
-    // Create a deliberately incomplete mock Fred that lacks setStorage
-    class StaleMockFred {
-      async initializeFromConfig() {}
-      async setToolPolicies() {}
-      getAgents() {
-        return [{ id: '__tui_agent__' }];
-      }
-      async createAgent(config: any) {
-        return { ...config };
-      }
-      streamMessage() {
-        return {
-          fullStream: (async function* () {
-            yield { type: 'token', delta: 'test' };
-          })(),
-        };
-      }
-    }
-
-    // Inject the stale mock via DI instead of mock.module
-    const staleDeps = createSmokeTestDeps({ FredClass: CanonicalMockFred });
-    staleDeps.createFred = () => new StaleMockFred() as any;
+    const staleDeps = createSmokeTestDeps();
+    staleDeps.createFred = async () => {
+      throw createStaleContractError(['sessions', 'effects']);
+    };
 
     const mockStdin = createStdinDouble({
       isTTY: true,
@@ -187,7 +136,7 @@ describe('phase 35 cross-phase smoke contract guard', () => {
         try {
           await handleChatCommand(staleDeps);
         } catch (cause) {
-          throw createStaleContractError(['setStorage', 'SqliteContextStorage'], cause);
+          throw createStaleContractError(['sessions', 'effects'], cause);
         }
       };
 

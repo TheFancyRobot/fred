@@ -784,7 +784,7 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
   ): Stream.Stream<StreamEvent, MessageProcessorError> {
     const self = this;
 
-    return Stream.unwrap(
+    const stream = Stream.unwrap(
       Effect.gen(function* () {
         const config = yield* Ref.get(self.config);
 
@@ -898,6 +898,25 @@ class MessageProcessorServiceImpl implements MessageProcessorService {
           new RouteExecutionError({ routeType: 'unknown', cause: new Error(`Unknown route type: ${route.type}`) })
         );
       })
+    );
+
+    const signal = options?.signal;
+    if (!signal) {
+      return stream;
+    }
+
+    return stream.pipe(
+      Stream.interruptWhen(
+        Effect.async<void>((resume) => {
+          if (signal.aborted) {
+            resume(Effect.void);
+            return;
+          }
+          const onAbort = () => resume(Effect.void);
+          signal.addEventListener('abort', onAbort, { once: true });
+          return Effect.sync(() => signal.removeEventListener('abort', onAbort));
+        }),
+      ),
     );
   }
 

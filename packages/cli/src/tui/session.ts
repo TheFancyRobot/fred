@@ -4,7 +4,7 @@ import { addSession, applySessionDeletion, createTranscriptState } from './state
 
 export interface SessionContextService {
   listSessions(): Promise<SessionSummary[]>;
-  generateConversationId(): string;
+  generateConversationId(): Promise<string>;
   getContext(id: string): Promise<unknown>;
   updateMetadata(id: string, metadata: Record<string, unknown>): Promise<void>;
   getSession(id: string): Promise<SessionDetails | null>;
@@ -53,7 +53,7 @@ export async function createSession(
   deps: SessionServiceDependencies,
   options: { title?: string; agent?: { id?: string; name?: string } } = {}
 ): Promise<SessionListItem> {
-  const id = deps.contextManager.generateConversationId();
+  const id = await deps.contextManager.generateConversationId();
   const metadata: Record<string, unknown> = {};
   if (options.title) {
     metadata.title = options.title;

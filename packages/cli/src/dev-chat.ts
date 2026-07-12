@@ -1,7 +1,7 @@
-import type { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
 import { handleChatCommand } from './commands/chat.js';
 
-export type DevChatSetupHook = (fred: Fred) => Promise<void> | void;
+export type DevChatSetupHook = (fred: FredClient) => Promise<void> | void;
 
 /**
  * Start the CLI-owned interactive chat implementation.

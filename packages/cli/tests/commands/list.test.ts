@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
+import { IntentMatcherService, ProviderRegistryService } from '@fancyrobot/fred/effect';
+import { Effect } from 'effect';
 import { handleListCommand } from '../../src/commands/list';
 
 /* ------------------------------------------------------------------ */
@@ -31,16 +33,26 @@ interface MockEntities {
   workflows?: string[] | undefined;
 }
 
-function createMockFred(entities: MockEntities = {}): Fred {
-  const fred = new Fred();
+async function createMockFred(entities: MockEntities = {}): Promise<FredClient> {
+  const fred = await createFred();
+  await fred.effects.run(Effect.flatMap(IntentMatcherService, (service) =>
+    service.registerIntents(entities.intents ?? []),
+  ));
+  for (const id of entities.providers ?? []) {
+    await fred.effects.run(Effect.flatMap(ProviderRegistryService, (service) =>
+      service.registerDefinition({ id, aliases: [], models: {}, getModel: () => Effect.dieMessage('unused') }),
+    ));
+  }
 
-  (fred as any).getAgents = () => entities.agents ?? [];
-  (fred as any).getTools = () => entities.tools ?? [];
-  (fred as any).getIntents = () => entities.intents ?? [];
-  (fred as any).listProviders = () => entities.providers ?? [];
-  (fred as any).listWorkflows = () => entities.workflows ?? [];
-
-  return fred;
+  return {
+    ...fred,
+    agents: { ...fred.agents, list: async () => entities.agents ?? [] },
+    tools: { ...fred.tools, list: async () => entities.tools ?? [] },
+    workflows: {
+      ...fred.workflows,
+      list: async () => (entities.workflows ?? []).map((id) => ({ id, source: 'v2' as const })),
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -63,7 +75,7 @@ describe('list command', () => {
 
   describe('agents', () => {
     test('outputs table with agent details', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         agents: [
           { id: 'agent-1', config: { model: 'gpt-4', platform: 'openai' } },
           { id: 'agent-2', config: { model: 'claude-3', platform: 'anthropic' } },
@@ -86,7 +98,7 @@ describe('list command', () => {
     });
 
     test('outputs JSON when --json flag set', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         agents: [
           { id: 'agent-1', config: { model: 'gpt-4', platform: 'openai' } },
         ],
@@ -105,7 +117,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state message when no agents', async () => {
-      const fred = createMockFred({ agents: [] });
+      const fred = await createMockFred({ agents: [] });
 
       const exitCode = await handleListCommand('agents', [], {}, { fred, io: captured.io });
 
@@ -118,7 +130,7 @@ describe('list command', () => {
 
   describe('tools', () => {
     test('outputs table with tool details', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         tools: [
           { id: 'calc', name: 'Calculator', description: 'Evaluate arithmetic expressions safely' },
         ],
@@ -137,7 +149,7 @@ describe('list command', () => {
     });
 
     test('truncates long descriptions', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         tools: [
           {
             id: 'long-desc',
@@ -157,7 +169,7 @@ describe('list command', () => {
     });
 
     test('outputs JSON for tools', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         tools: [
           { id: 'calc', name: 'Calculator', description: 'Evaluate arithmetic' },
         ],
@@ -174,7 +186,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state for tools', async () => {
-      const fred = createMockFred({ tools: [] });
+      const fred = await createMockFred({ tools: [] });
 
       const exitCode = await handleListCommand('tools', [], {}, { fred, io: captured.io });
 
@@ -187,7 +199,7 @@ describe('list command', () => {
 
   describe('intents', () => {
     test('outputs table with intent details and utterance count', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         intents: [
           {
             id: 'greet',
@@ -210,7 +222,7 @@ describe('list command', () => {
     });
 
     test('outputs JSON for intents with full utterance list', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         intents: [
           {
             id: 'greet',
@@ -233,7 +245,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state for intents', async () => {
-      const fred = createMockFred({ intents: [] });
+      const fred = await createMockFred({ intents: [] });
 
       const exitCode = await handleListCommand('intents', [], {}, { fred, io: captured.io });
 
@@ -246,7 +258,7 @@ describe('list command', () => {
 
   describe('providers', () => {
     test('outputs table with provider names', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         providers: ['openai', 'anthropic'],
       });
 
@@ -260,7 +272,7 @@ describe('list command', () => {
     });
 
     test('outputs JSON for providers', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         providers: ['openai'],
       });
 
@@ -274,7 +286,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state for providers', async () => {
-      const fred = createMockFred({ providers: [] });
+      const fred = await createMockFred({ providers: [] });
 
       const exitCode = await handleListCommand('providers', [], {}, { fred, io: captured.io });
 
@@ -287,7 +299,7 @@ describe('list command', () => {
 
   describe('workflows', () => {
     test('outputs table with workflow names', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         workflows: ['onboarding', 'support'],
       });
 
@@ -301,7 +313,7 @@ describe('list command', () => {
     });
 
     test('outputs JSON for workflows', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         workflows: ['onboarding'],
       });
 
@@ -315,7 +327,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state when workflows are undefined', async () => {
-      const fred = createMockFred({ workflows: undefined });
+      const fred = await createMockFred({ workflows: undefined });
 
       const exitCode = await handleListCommand('workflows', [], {}, { fred, io: captured.io });
 
@@ -324,7 +336,7 @@ describe('list command', () => {
     });
 
     test('shows empty-state when workflow list is empty', async () => {
-      const fred = createMockFred({ workflows: [] });
+      const fred = await createMockFred({ workflows: [] });
 
       const exitCode = await handleListCommand('workflows', [], {}, { fred, io: captured.io });
 
@@ -337,7 +349,7 @@ describe('list command', () => {
 
   describe('error handling', () => {
     test('unknown entity type returns exit code 1', async () => {
-      const fred = createMockFred();
+      const fred = await createMockFred();
 
       const exitCode = await handleListCommand('foobar', [], {}, { fred, io: captured.io });
 
@@ -347,7 +359,7 @@ describe('list command', () => {
     });
 
     test('all valid commands return exit code 0', async () => {
-      const fred = createMockFred({
+      const fred = await createMockFred({
         agents: [{ id: 'a1', config: { model: 'm', platform: 'p' } }],
         tools: [{ id: 't1', name: 'T', description: 'd' }],
         intents: [{ id: 'i1', action: { type: 'agent', target: 'a1' }, utterances: ['hi'] }],

@@ -5,7 +5,8 @@
  * Usage: fred agents, fred tools, fred intents, fred providers, fred workflows
  */
 
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
+import { IntentMatcherService, ProviderRegistryService } from '@fancyrobot/fred/effect';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
@@ -17,7 +18,7 @@ export interface ListCommandIO {
 }
 
 export interface ListCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: ListCommandIO;
 }
 
@@ -62,30 +63,29 @@ function truncate(value: string, maxLength: number): string {
 /**
  * Initialize Fred instance with config, wrapped in Effect.
  */
-const initializeFredEffect = (io: ListCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+const initializeFredEffect = (io: ListCommandIO): Effect.Effect<FredClient, ConfigInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
+    const fred = yield* Effect.tryPromise({
+        try: () => createFred({ configPath: configResult.success ? configResult.configPath : undefined }),
         catch: (error) =>
           new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
       }).pipe(
         Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            io.stderr(error.message);
-          }),
+          Effect.zipRight(
+            Effect.sync(() => io.stderr(error.message)),
+            Effect.tryPromise({
+              try: () => createFred(),
+              catch: (cause) => new ConfigInitError({ message: sanitizeErrorForCli(cause) }),
+            }),
+          ),
         ),
       );
-    }
-
     return fred;
   });
 
-function listAgents(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const agents = fred.getAgents();
+async function listAgents(fred: FredClient, options: Record<string, unknown>, io: ListCommandIO): Promise<number> {
+  const agents = await fred.agents.list();
 
   if (options.json === true) {
     const data = agents.map((agent) => ({
@@ -113,8 +113,8 @@ function listAgents(fred: Fred, options: Record<string, unknown>, io: ListComman
   return 0;
 }
 
-function listTools(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const tools = fred.getTools();
+async function listTools(fred: FredClient, options: Record<string, unknown>, io: ListCommandIO): Promise<number> {
+  const tools = await fred.tools.list();
 
   if (options.json === true) {
     const data = tools.map((tool) => ({
@@ -142,8 +142,10 @@ function listTools(fred: Fred, options: Record<string, unknown>, io: ListCommand
   return 0;
 }
 
-function listIntents(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const intents = fred.getIntents();
+async function listIntents(fred: FredClient, options: Record<string, unknown>, io: ListCommandIO): Promise<number> {
+  const intents = await fred.effects.run(
+    Effect.flatMap(IntentMatcherService, (service) => service.getIntents()),
+  );
 
   if (options.json === true) {
     const data = intents.map((intent) => ({
@@ -172,8 +174,10 @@ function listIntents(fred: Fred, options: Record<string, unknown>, io: ListComma
   return 0;
 }
 
-function listProviders(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const providers = fred.listProviders();
+async function listProviders(fred: FredClient, options: Record<string, unknown>, io: ListCommandIO): Promise<number> {
+  const providers = await fred.effects.run(
+    Effect.flatMap(ProviderRegistryService, (service) => service.listProviders()),
+  );
 
   if (options.json === true) {
     const data = providers.map((id) => ({ id }));
@@ -193,11 +197,11 @@ function listProviders(fred: Fred, options: Record<string, unknown>, io: ListCom
   return 0;
 }
 
-function listWorkflows(fred: Fred, options: Record<string, unknown>, io: ListCommandIO): number {
-  const workflows = fred.listWorkflows();
+async function listWorkflows(fred: FredClient, options: Record<string, unknown>, io: ListCommandIO): Promise<number> {
+  const workflows = await fred.workflows.list();
 
   if (options.json === true) {
-    const data = workflows.map((name) => ({ name }));
+    const data = workflows.map((workflow) => ({ name: workflow.id }));
     io.stdout(JSON.stringify({ ok: true, command: 'workflows', data }, null, 2));
     return 0;
   }
@@ -208,7 +212,7 @@ function listWorkflows(fred: Fred, options: Record<string, unknown>, io: ListCom
   }
 
   const headers = ['Workflow'];
-  const rows = workflows.map((workflow) => [workflow]);
+  const rows = workflows.map((workflow) => [workflow.id]);
 
   io.stdout(formatTable(headers, rows));
   return 0;
@@ -234,7 +238,8 @@ const listCommandEffect = (
           ),
         );
 
-    switch (entityType as EntityType) {
+    const operation = (() => {
+      switch (entityType as EntityType) {
       case 'agents':
         return listAgents(fred, options, io);
       case 'tools':
@@ -247,8 +252,13 @@ const listCommandEffect = (
         return listWorkflows(fred, options, io);
       default:
         io.stderr(`Unknown entity type: ${entityType}. Available: ${ENTITY_TYPES.join(', ')}`);
-        return 1;
-    }
+        return Promise.resolve(1);
+      }
+    })();
+    return yield* Effect.tryPromise({
+      try: () => operation,
+      catch: (error) => new FredInitError({ message: sanitizeErrorForCli(error) }),
+    });
   });
 
 /**

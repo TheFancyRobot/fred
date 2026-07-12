@@ -8,13 +8,13 @@
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { pathToFileURL } from 'url';
-import { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
 import { handleChatCommand } from './commands/chat.js';
 
 /**
  * Try to load and call project's setup() function if it exists
  */
-export async function loadProjectSetup(fred: Fred): Promise<void> {
+export async function loadProjectSetup(fred: FredClient): Promise<void> {
   // Try to find project's index.ts or src/index.ts
   const possiblePaths = [
     resolve(process.cwd(), 'src', 'index.ts'),

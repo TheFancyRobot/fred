@@ -3,12 +3,18 @@
  * Explicit interactive entrypoint for fred chat
  */
 
-import { Effect } from 'effect';
+import { Effect, Stream } from 'effect';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type CreateFredOptions, type FredClient } from '@fancyrobot/fred';
 import type { SubagentExecutionSummary, SubagentInfo } from '@fancyrobot/fred';
+import {
+  AgentStatusService,
+  ContextStorageService,
+  MessageProcessorService,
+  ToolGateService,
+} from '@fancyrobot/fred/effect';
 import { SqliteContextStorage } from '@fancyrobot/fred/context/sqlite';
 import { smoothStream, createTextSmoother } from '@fancyrobot/fred/stream';
 import {
@@ -33,7 +39,7 @@ import { sanitizeErrorForCli } from './error-sanitize.js';
  */
 export interface ChatDependencies {
   /** Factory that creates a Fred instance. */
-  createFred: () => Fred | PromiseLike<Fred>;
+  createFred: (options?: CreateFredOptions) => FredClient | PromiseLike<FredClient>;
   /** Storage factory for fallback persistence. */
   createStorage: (opts: { path: string }) => unknown;
   /** Resolve project config. */
@@ -45,11 +51,11 @@ export interface ChatDependencies {
   /** Create the TUI app. */
   createFredTuiApp: typeof createFredTuiApp;
   /** Optional programmatic setup hook used by the deprecated dev-chat adapter. */
-  projectSetupHook?: (fred: Fred) => Promise<void> | void;
+  projectSetupHook?: (fred: FredClient) => Promise<void> | void;
 }
 
 const DEFAULT_DEPS: ChatDependencies = {
-  createFred: () => new Fred(),
+  createFred,
   createStorage: (opts) => new SqliteContextStorage(opts),
   resolveProjectConfig,
   loadProjectRuntimeHook,
@@ -58,7 +64,7 @@ const DEFAULT_DEPS: ChatDependencies = {
 };
 
 export type ProjectRuntimeHook = (
-  fred: Fred,
+  fred: FredClient,
   context: { configPath: string; projectRoot: string }
 ) => Promise<void> | void;
 
@@ -138,7 +144,7 @@ function parseSubagentIdArg(args: string, usage: string): string {
   return subagentId;
 }
 
-export function buildBuiltinSlashCommands(fred: Fred): PluginSlashCommandRuntime[] {
+export function buildBuiltinSlashCommands(fred: FredClient): PluginSlashCommandRuntime[] {
   return [
     {
       pluginId: 'fred',
@@ -379,12 +385,13 @@ export function detectAvailableProvider(): { platform: string; model: string } |
   return detectAvailableProviderFromDev();
 }
 
-export function configureChatFallbackPersistence(
-  fred: Fred,
+export function createChatFallbackOptions(
   sqlitePath = process.env.FRED_SQLITE_PATH || './fred.db',
   createStorage: ChatDependencies['createStorage'] = DEFAULT_DEPS.createStorage,
-): void {
-  fred.setStorage(createStorage({ path: sqlitePath }) as any);
+): CreateFredOptions {
+  return {
+    storage: createStorage({ path: sqlitePath }) as CreateFredOptions['storage'],
+  };
 }
 
 /**
@@ -392,14 +399,14 @@ export function configureChatFallbackPersistence(
  * Returns Fred instance and model/provider info
  */
 async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
-  fred: Fred;
+  fred: FredClient;
   model: string;
   provider: string;
   pluginSlashCommands: PluginSlashCommandRuntime[];
   startupWarning: string | null;
 }> {
-  const fred = await deps.createFred();
-  let pluginSlashCommands: PluginSlashCommandRuntime[] = buildBuiltinSlashCommands(fred);
+  let fred: FredClient | undefined;
+  let pluginSlashCommands: PluginSlashCommandRuntime[] = [];
   let startupWarning: string | null = null;
 
   // Try to load project config
@@ -408,6 +415,10 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
   if (configResult.success && configResult.config && configResult.configPath) {
     // Config found - initialize from it
     try {
+      const runtimeHook = await deps.loadProjectRuntimeHook(configResult.configPath);
+      fred = await deps.createFred({ configPath: configResult.configPath });
+      pluginSlashCommands = buildBuiltinSlashCommands(fred);
+
         if (configResult.config.plugins && configResult.config.plugins.length > 0) {
           const pluginResult = loadPluginsFromConfig(configResult.config.plugins, configResult.configPath);
           pluginSlashCommands = [
@@ -416,31 +427,29 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
           ];
         }
 
-      const runtimeHook = await deps.loadProjectRuntimeHook(configResult.configPath);
       if (runtimeHook) {
         await runtimeHook(fred, {
           configPath: configResult.configPath,
           projectRoot: dirname(configResult.configPath),
         });
-      } else {
-        await fred.initializeFromConfig(configResult.configPath);
       }
 
       await deps.projectSetupHook?.(fred);
 
       const result = await deps.ensureDefaultChatAgent(fred, {
         agentId: '__tui_agent__',
+        preferredAgentId: configResult.config.routing?.defaultAgent,
       });
 
-      if (fred.getAgents().length === 1) {
-        await fred.setToolPolicies({
+      if ((await fred.agents.list()).length === 1) {
+        await fred.effects.run(Effect.flatMap(ToolGateService, (service) => service.reloadPolicies({
           agents: {
             [result.agentId]: {
               deny: ['handoff_to_agent'],
               conflictResolution: 'deny-overrides',
             },
           },
-        });
+        })));
       }
 
       return {
@@ -454,11 +463,14 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
       // Config exists but failed to initialize - fall through to auto-detection
       const reason = sanitizeErrorForCli(error);
       startupWarning = `Config load failed, using defaults: ${reason}`;
+      await fred?.shutdown().catch(() => undefined);
+      fred = undefined;
     }
   }
 
   // No config or config failed - apply shared dev-chat fallback behavior
-  configureChatFallbackPersistence(fred, undefined, deps.createStorage);
+  fred = await deps.createFred(createChatFallbackOptions(undefined, deps.createStorage));
+  pluginSlashCommands = buildBuiltinSlashCommands(fred);
 
   await deps.projectSetupHook?.(fred);
 
@@ -466,15 +478,15 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
     agentId: '__tui_agent__',
   });
 
-  if (fred.getAgents().length === 1) {
-    await fred.setToolPolicies({
+  if ((await fred.agents.list()).length === 1) {
+    await fred.effects.run(Effect.flatMap(ToolGateService, (service) => service.reloadPolicies({
       agents: {
         [result.agentId]: {
           deny: ['handoff_to_agent'],
           conflictResolution: 'deny-overrides',
         },
       },
-    });
+    })));
   }
 
   return {
@@ -527,7 +539,7 @@ export const TERMINAL_RECOVERY_GUIDANCE =
 export const CHAT_SHUTDOWN_TIMEOUT_MS = 5_000;
 
 export async function shutdownFredBeforeExit(
-  fred: Pick<Fred, 'shutdown'>,
+  fred: Pick<FredClient, 'shutdown'>,
   timeoutMs = CHAT_SHUTDOWN_TIMEOUT_MS,
 ): Promise<number> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -576,7 +588,20 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
       });
 
       const { fred, model, provider, pluginSlashCommands, startupWarning } = initResult;
-      const contextManager = fred;
+      const contextManager = {
+        listSessions: () => fred.sessions.list(),
+        generateConversationId: () => fred.effects.run(
+          Effect.flatMap(ContextStorageService, (service) => service.generateConversationId()),
+        ),
+        getContext: (id: string) => fred.effects.run(
+          Effect.flatMap(ContextStorageService, (service) => service.getContext(id)),
+        ),
+        updateMetadata: (id: string, metadata: Record<string, unknown>) => fred.effects.run(
+          Effect.flatMap(ContextStorageService, (service) => service.updateMetadata(id, metadata)),
+        ),
+        getSession: (id: string) => fred.sessions.get(id),
+        deleteSession: (id: string) => fred.sessions.delete(id),
+      };
 
       // Track active stream abort controller for explicit exit cancellation
       let activeStreamAbort: AbortController | null = null;
@@ -588,19 +613,31 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
           resolvedDeps.createFredTuiApp(
             {
               onSubmit: (text: string, sessionId: string | null) => {
-                const activeSessionId = sessionId ?? contextManager.generateConversationId();
                 // Fire-and-forget async streaming (don't await to avoid blocking TUI)
                 (async () => {
                   const globalWithProgress = globalThis as typeof globalThis & {
                     __FRED_TUI_TOOL_PROGRESS__?: GlobalProgressSink;
                   };
                   let progressSink: GlobalProgressSink | null = null;
+                  let streamAbort: AbortController | null = null;
                   try {
-                    activeStreamAbort = new AbortController();
-                    const streamResult = fred.streamMessage(text, {
-                      conversationId: activeSessionId,
-                      signal: activeStreamAbort.signal,
-                    });
+                    activeStreamAbort?.abort();
+                    streamAbort = new AbortController();
+                    activeStreamAbort = streamAbort;
+                    const signal = streamAbort.signal;
+                    const activeSessionId = sessionId ?? await contextManager.generateConversationId();
+                    const eventStream = await fred.effects.run(
+                      Effect.map(MessageProcessorService, (processor) =>
+                        processor.streamMessage(text, {
+                          conversationId: activeSessionId,
+                          signal,
+                        }).pipe(
+                          Stream.mapError((error) =>
+                            error instanceof Error ? error : new Error(String(error)),
+                          ),
+                        ),
+                      ),
+                    );
 
                     // Two-stage display pipeline:
                     // 1. filterXmlTokenStream: strips XML tags from token deltas
@@ -609,7 +646,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     //    segments with real async delays between them
                     const smooth = smoothStream({ delayMs: 12, chunking: 'word' });
                     const displayStream = smooth(
-                      filterXmlTokenStream(streamResult.fullStream),
+                      filterXmlTokenStream(Stream.toAsyncIterable(eventStream)),
                     );
 
                     let renderedAssistantText = '';
@@ -686,7 +723,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     };
 
                     for await (const event of displayStream) {
-                      if (activeStreamAbort?.signal.aborted) break;
+                      if (signal.aborted) break;
                       if (event.type === 'run-start') {
                         const pendingDepths = Array.from(pendingHandoffs.keys()).sort((left, right) => right - left);
                         const pendingDepth = pendingDepths[0];
@@ -792,12 +829,14 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       delete globalWithProgress.__FRED_TUI_TOOL_PROGRESS__;
                     }
                     // User-initiated exit aborts the stream — don't show error
-                    if (activeStreamAbort?.signal.aborted) {
+                    if (streamAbort?.signal.aborted) {
                       return;
                     }
                     app.failAssistantStream(error);
                   } finally {
-                    activeStreamAbort = null;
+                    if (activeStreamAbort === streamAbort) {
+                      activeStreamAbort = null;
+                    }
                   }
                 })().catch((error) => {
                   app.stop();
@@ -832,7 +871,23 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
               patienceMessage: DEFAULT_PATIENCE_MESSAGES,
               patienceIntervalMs: 15_000,
               agentStatus: {
-                subscribe: (listener) => fred.subscribeAgentStatus(listener),
+                subscribe: async (listener) => {
+                  const controller = new AbortController();
+                  const changes = Effect.flatMap(AgentStatusService, (service) =>
+                    service.changes.pipe(
+                      Stream.interruptWhen(
+                        Effect.async<void>((resume) => {
+                          const onAbort = () => resume(Effect.void);
+                          controller.signal.addEventListener('abort', onAbort, { once: true });
+                          return Effect.sync(() => controller.signal.removeEventListener('abort', onAbort));
+                        }),
+                      ),
+                      Stream.runForEach((snapshot) => Effect.sync(() => listener(snapshot))),
+                    ),
+                  );
+                  void fred.effects.run(changes).catch(() => undefined);
+                  return async () => controller.abort();
+                },
               },
             }
           ),
@@ -842,17 +897,22 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
           ),
       });
 
-      // Surface runtime warnings (e.g. hot reload errors) as transient TUI notices
-      fred.onWarning = (msg) => app.setSystemNotice(msg);
-
       // Update telemetry with actual model info
       app.updateTelemetryModel(model, provider);
 
+      // Forward isolated config hot-reload warnings to the TUI notice without
+      // exposing the underlying watcher or allowing it to outlive the app.
       // Keep the Effect alive until the app is stopped.
       // The app runs until onQuit fires (which calls process.exit).
       // This await-forever keeps the lifecycle scope open so the
       // release finalizer remains armed for cleanup.
-      return yield* Effect.never;
+      return yield* Effect.acquireUseRelease(
+        Effect.sync(() => fred.warnings.subscribe((message) => {
+          app.setSystemNotice(message);
+        })),
+        () => Effect.never,
+        (unsubscribe) => Effect.sync(unsubscribe),
+      );
     });
 
     // Wrap interactive program with terminal lifecycle guarantees

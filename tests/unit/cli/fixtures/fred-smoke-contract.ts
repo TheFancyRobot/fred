@@ -1,4 +1,21 @@
 import { mock } from 'bun:test';
+import { Context, Effect, Runtime, Stream } from 'effect';
+import type * as Schema from 'effect/Schema';
+import {
+  createFred,
+  type AgentConfig,
+  type AgentInstance,
+  type CreateFredOptions,
+  type FredClient,
+  type SessionDetails,
+  type StreamEvent,
+} from '@fancyrobot/fred';
+import {
+  ContextStorageService,
+  MessageProcessorService,
+  type ContextStorageService as ContextStorageServiceApi,
+  type MessageProcessorService as MessageProcessorServiceApi,
+} from '@fancyrobot/fred/effect';
 import type { ChatDependencies } from '../../../../packages/cli/src/commands/chat';
 
 /**
@@ -10,10 +27,10 @@ import type { ChatDependencies } from '../../../../packages/cli/src/commands/cha
  * entire Bun test process, which previously caused 50+ unrelated test failures.
  */
 export function createSmokeTestDeps(options: {
-  FredClass?: ReturnType<typeof createMockFredClass>;
+  client?: MockFredClientOptions;
   createFredTuiApp?: (...args: any[]) => any;
+  onCreate?: (options: CreateFredOptions | undefined) => void;
 } = {}): ChatDependencies {
-  const FredClass = options.FredClass ?? createMockFredClass();
   const createFredTuiApp = options.createFredTuiApp ?? mock(async () => ({
     stop: mock(() => {}),
     isRunning: () => true,
@@ -22,15 +39,19 @@ export function createSmokeTestDeps(options: {
   }));
 
   return {
-    createFred: () => new FredClass() as any,
+    createFred: async (createOptions) => {
+      options.onCreate?.(createOptions);
+      return createMockFredClient(options.client);
+    },
     createStorage: (opts) => new MockSqliteContextStorage(opts),
     resolveProjectConfig: () => ({ success: false, diagnostics: [] }) as any,
     loadProjectRuntimeHook: async () => null,
-    ensureDefaultChatAgent: async (fred: any) => {
-      if (fred.getAgents().length === 0) {
-        await fred.createAgent({
+    ensureDefaultChatAgent: async (fred) => {
+      const existingAgents = await fred.agents.list();
+      if (existingAgents.length === 0) {
+        await fred.agents.register({
           id: '__tui_agent__',
-          name: 'Chat',
+          systemMessage: 'Chat',
           platform: 'openai',
           model: 'gpt-4o-mini',
         });
@@ -39,7 +60,7 @@ export function createSmokeTestDeps(options: {
         agentId: '__tui_agent__',
         model: 'gpt-4o-mini',
         provider: 'openai',
-        created: fred.getAgents().length === 1,
+        created: existingAgents.length === 0,
       };
     },
     createFredTuiApp: createFredTuiApp as any,
@@ -146,9 +167,9 @@ export type MockContextManager = {
   setStorage: ReturnType<typeof mock>;
   generateConversationId: () => string;
   listSessions: () => Promise<SessionSummary[]>;
-  getContext: (id: string) => Promise<{ id: string }>;
+  getContext: (id: string) => Promise<unknown>;
   updateMetadata: (id: string, metadata: Record<string, unknown>) => Promise<void>;
-  getSession: (id: string) => Promise<{ summary: SessionSummary; messages: Array<{ role: string; content: string; timestamp: Date }> } | null>;
+  getSession: (id: string) => Promise<SessionDetails | null>;
   deleteSession: (id: string) => Promise<void>;
 };
 
@@ -174,105 +195,128 @@ export class MockSqliteContextStorage {
   }
 }
 
-type MockFredClassOptions = {
+export type MockFredClientOptions = {
   contextManager?: MockContextManager;
-  defaultStreamDelta?: string;
+  stream?: () => Stream.Stream<StreamEvent>;
 };
 
-export function createMockFredClass(options: MockFredClassOptions = {}) {
+const activeClients = new Set<FredClient>();
+
+const makeMockAgent = <
+  InputSchema extends Schema.Schema.AnyNoContext,
+  OutputSchema extends Schema.Schema.AnyNoContext,
+>(config: AgentConfig<InputSchema, OutputSchema>): AgentInstance<InputSchema, OutputSchema> => ({
+  id: config.id,
+  config,
+  run: () => Effect.succeed({ content: '' }),
+  processMessage: () => Effect.succeed({ content: '' }),
+});
+
+const defaultStream = (): Stream.Stream<StreamEvent> => Stream.fromIterable([
+  {
+    type: 'token',
+    runId: 'run_smoke_test',
+    threadId: 'conv_smoke_test',
+    sequence: 1,
+    emittedAt: 1,
+    messageId: 'message_smoke_test',
+    step: 0,
+    delta: 'test',
+    accumulated: 'test',
+  },
+]);
+
+export async function createMockFredClient(options: MockFredClientOptions = {}): Promise<FredClient> {
   const contextManager = options.contextManager ?? createMockContextManager();
-  const defaultStreamDelta = options.defaultStreamDelta ?? 'test';
+  const base = await createFred();
+  const agents: AgentInstance[] = [];
 
-  return class MockFred {
-    private agents: any[] = [];
-    private providers = new Map<string, any>();
-    private defaultAgentId: string | null = null;
-
-    async registerDefaultProviders() {
-      this.providers.set('openai', { id: 'openai' });
-      this.providers.set('anthropic', { id: 'anthropic' });
-      this.providers.set('google', { id: 'google' });
-      this.providers.set('groq', { id: 'groq' });
-      this.providers.set('openrouter', { id: 'openrouter' });
-    }
-
-    async initializeFromConfig() {
-      this.agents.push({ id: '__mock__', platform: 'openai', model: 'gpt-4o-mini' });
-      this.providers.set('openai', { id: 'openai' });
-    }
-
-    async setToolPolicies() {}
-
-    getAgents() {
-      return this.agents;
-    }
-
-    getAgent(id: string) {
-      return this.agents.find((agent) => agent.id === id);
-    }
-
-    getContextManager() {
-      return contextManager;
-    }
-
-    setStorage(storage: unknown) {
-      contextManager.setStorage(storage);
-    }
-
-    generateConversationId() {
-      return contextManager.generateConversationId();
-    }
-
-    listSessions() {
-      return contextManager.listSessions();
-    }
-
-    getContext(id: string) {
-      return contextManager.getContext(id);
-    }
-
-    updateMetadata(id: string, metadata: Record<string, unknown>) {
-      return contextManager.updateMetadata(id, metadata);
-    }
-
-    getSession(id: string) {
-      return contextManager.getSession(id);
-    }
-
-    deleteSession(id: string) {
-      return contextManager.deleteSession(id);
-    }
-
-    getDefaultAgentId() {
-      return this.defaultAgentId;
-    }
-
-    setDefaultAgent(agentId: string) {
-      this.defaultAgentId = agentId;
-    }
-
-    useProvider(platform: string) {
-      if (!this.providers.has(platform)) {
-        this.providers.set(platform, { id: platform });
-      }
-      return Promise.resolve({ id: platform });
-    }
-
-    createAgent(config: any) {
-      const agent = { ...config, id: config.id || '__test_agent__' };
-      this.agents.push(agent);
-      if (!this.defaultAgentId) {
-        this.defaultAgentId = agent.id;
-      }
-      return Promise.resolve(agent);
-    }
-
-    streamMessage() {
-      return {
-        fullStream: (async function* () {
-          yield { type: 'token', delta: defaultStreamDelta };
-        })(),
-      };
-    }
+  const contextService: ContextStorageServiceApi = {
+    generateConversationId: () => Effect.sync(() => contextManager.generateConversationId()),
+    getContext: (id) => Effect.promise(async () => {
+      const conversationId = id ?? contextManager.generateConversationId();
+      await contextManager.getContext(conversationId);
+      const now = new Date();
+      return { id: conversationId, messages: [], metadata: { createdAt: now, updatedAt: now } };
+    }),
+    getContextById: (id) => Effect.promise(async () => {
+      await contextManager.getContext(id);
+      const now = new Date();
+      return { id, messages: [], metadata: { createdAt: now, updatedAt: now } };
+    }),
+    addMessage: () => Effect.void,
+    addMessages: () => Effect.void,
+    getHistory: () => Effect.succeed([]),
+    updateMetadata: (id, metadata) => Effect.promise(() => contextManager.updateMetadata(id, metadata)),
+    clearContext: (id) => Effect.promise(() => contextManager.deleteSession(id)),
+    resetContext: (id) => Effect.promise(async () => {
+      const existed = await contextManager.getSession(id) !== null;
+      await contextManager.deleteSession(id);
+      return existed;
+    }),
+    clearAll: () => Effect.void,
+    setDefaultPolicy: () => Effect.void,
+    setContextPolicy: () => Effect.void,
+    replaceStorage: (storage) => Effect.sync(() => contextManager.setStorage(storage)),
+    listSessions: () => Effect.promise(() => contextManager.listSessions()),
   };
+
+  const messageProcessor: MessageProcessorServiceApi = {
+    routeMessage: () => Effect.dieMessage('routeMessage is not used by this fixture'),
+    processMessage: () => Effect.succeed({ content: 'test' }),
+    processChatMessage: () => Effect.succeed({ content: 'test' }),
+    streamMessage: () => options.stream?.() ?? defaultStream(),
+    updateConfig: () => Effect.void,
+    getConfig: () => Effect.succeed({ memoryDefaults: {} }),
+  };
+
+  const context = Context.add(
+    Context.add(base.runtime.context, ContextStorageService, contextService),
+    MessageProcessorService,
+    messageProcessor,
+  );
+  const runtime = Runtime.make({
+    context,
+    runtimeFlags: base.runtime.runtimeFlags,
+    fiberRefs: base.runtime.fiberRefs,
+  });
+  const run = Runtime.runPromise(runtime);
+
+  const client: FredClient = {
+    ...base,
+    agents: {
+      register: async (config) => {
+        const agent = makeMockAgent(config);
+        agents.push(agent);
+        return agent;
+      },
+      remove: async (id) => {
+        const index = agents.findIndex((agent) => agent.id === id);
+        if (index < 0) return false;
+        agents.splice(index, 1);
+        return true;
+      },
+      get: async (id) => agents.find((agent) => agent.id === id) ?? null,
+      list: async () => [...agents],
+    },
+    sessions: {
+      ...base.sessions,
+      get: (id) => contextManager.getSession(id),
+      list: () => contextManager.listSessions(),
+      delete: (id) => contextManager.deleteSession(id),
+    },
+    effects: { run },
+    runtime,
+    shutdown: async () => {
+      activeClients.delete(client);
+      await base.shutdown();
+    },
+  };
+
+  activeClients.add(client);
+  return client;
+}
+
+export async function shutdownMockFredClients(): Promise<void> {
+  await Promise.all([...activeClients].map((client) => client.shutdown()));
 }

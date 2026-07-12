@@ -5,7 +5,8 @@
  * attach to another process; the HTTP transport owns that boundary.
  */
 
-import { Fred, type AgentRunInfo } from '@fancyrobot/fred';
+import { createFred, type AgentRunInfo, type FredClient } from '@fancyrobot/fred';
+import { AgentStatusService } from '@fancyrobot/fred/effect';
 import { Effect } from 'effect';
 import { sanitizeForTerminalTableCell } from '../runtime/terminal-sanitize.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
@@ -17,7 +18,7 @@ export interface StatusCommandIO {
 }
 
 export interface StatusCommandDependencies {
-  fred?: Pick<Fred, 'getAgentStatus'>;
+  fred?: FredClient;
   io?: StatusCommandIO;
 }
 
@@ -60,9 +61,14 @@ const statusCommandEffect = (
   io: StatusCommandIO,
 ): Effect.Effect<number, StatusReadError> =>
   Effect.gen(function* () {
-    const fred = deps.fred ?? new Fred();
+    const fred = deps.fred ?? (yield* Effect.tryPromise({
+      try: () => createFred(),
+      catch: (error) => new StatusReadError({ message: sanitizeErrorForCli(error) }),
+    }));
     const runs = yield* Effect.tryPromise({
-      try: () => fred.getAgentStatus(),
+      try: () => fred.effects.run(
+        Effect.flatMap(AgentStatusService, (service) => service.snapshot),
+      ),
       catch: (error) => new StatusReadError({ message: sanitizeErrorForCli(error) }),
     });
 

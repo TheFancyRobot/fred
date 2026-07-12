@@ -854,11 +854,13 @@ describe('MessageProcessorService stream contracts', () => {
   });
 
   test('streamMessage interruption halts processing and emission immediately', async () => {
-    const { Stream, Effect, Fiber } = await import('effect');
+    const { Stream, Effect } = await import('effect');
 
     // Track events emitted after interrupt flag is set
     let interruptFlag = false;
     let eventsAfterInterrupt = 0;
+    let agentStreamFinalized = false;
+    const controller = new AbortController();
 
     const mockAgent = {
       id: 'interrupt-agent',
@@ -875,13 +877,13 @@ describe('MessageProcessorService stream contracts', () => {
         const threadId = opts?.threadId;
         let seq = 0;
 
-        // Create a stream that emits events with delays
+        // Keep the agent/provider stream alive until the processing signal aborts.
         return Stream.fromIterable([
           { type: 'run-start', sequence: ++seq, emittedAt: Date.now(), runId, threadId, startedAt: Date.now(), input: { message, previousMessages: [] } },
-          { type: 'token', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, delta: 'token-0', accumulated: 'token-0' },
-          { type: 'token', sequence: ++seq, emittedAt: Date.now(), runId, threadId, messageId: 'msg-1', step: 0, delta: 'token-1', accumulated: 'token-0token-1' },
-          { type: 'run-end', sequence: ++seq, emittedAt: Date.now(), runId, threadId, finishedAt: Date.now(), durationMs: 100, result: { content: 'done', toolCalls: [] } },
-        ]);
+        ]).pipe(
+          Stream.concat(Stream.never),
+          Stream.ensuring(Effect.sync(() => { agentStreamFinalized = true; })),
+        );
       },
     } as any;
 
@@ -936,11 +938,15 @@ describe('MessageProcessorService stream contracts', () => {
 
     const collectedEvents: any[] = [];
 
-    // Run stream collection in a fiber
-    const fiber = await Effect.runPromise(
+    // Run collection through the public boundary; aborting the signal must
+    // complete the processor stream and finalize the nested agent stream.
+    const collection = Effect.runPromise(
       Effect.gen(function* () {
         const service = yield* MessageProcessorService;
-        const stream = service.streamMessage('test message', { conversationId: 'conv-1' });
+        const stream = service.streamMessage('test message', {
+          conversationId: 'conv-1',
+          signal: controller.signal,
+        });
 
         return yield* Stream.runForEach(stream, (event) => {
           if (interruptFlag) {
@@ -952,19 +958,23 @@ describe('MessageProcessorService stream contracts', () => {
       }).pipe(
         Effect.provide(MessageProcessorServiceLive),
         Effect.provide(testLayer),
-        Effect.fork
       )
     );
 
-    // Set interrupt flag
-    interruptFlag = true;
+    while (collectedEvents.length === 0) {
+      await Bun.sleep(1);
+    }
 
-    // Interrupt the fiber
-    await Effect.runPromise(Fiber.interrupt(fiber));
+    // Abort through the public ProcessingOptions signal rather than directly
+    // interrupting the consumer fiber.
+    interruptFlag = true;
+    controller.abort();
+    await collection;
 
     // After interrupt, no new events should have been emitted
     // This tests that the stream interruption contract is honored
     expect(eventsAfterInterrupt).toBe(0);
+    expect(agentStreamFinalized).toBe(true);
 
     // We should have collected some events before interrupt
     // Note: The exact count depends on timing, but there should be at least one

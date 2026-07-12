@@ -1,4 +1,6 @@
-import { Fred } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
+import { MessageProcessorService } from '@fancyrobot/fred/effect';
+import { Effect } from 'effect';
 
 export const DEV_CHAT_PROVIDER_PACKAGES: Record<string, string> = {
   openai: '@fancyrobot/fred-openai',
@@ -41,6 +43,7 @@ export async function loadProviderPackage(platform: string): Promise<void> {
 
 export interface EnsureDefaultChatAgentOptions {
   agentId?: string;
+  preferredAgentId?: string;
   systemMessage?: string;
 }
 
@@ -59,22 +62,30 @@ const DEFAULT_SYSTEM_MESSAGE =
   'This is a temporary agent for dev-chat. Users can create custom agents in their config files.';
 
 export async function ensureDefaultChatAgent(
-  fred: Fred,
+  fred: FredClient,
   options: EnsureDefaultChatAgentOptions = {}
 ): Promise<EnsureDefaultChatAgentResult> {
   const agentId = options.agentId ?? DEFAULT_AGENT_ID;
   const systemMessage = options.systemMessage ?? DEFAULT_SYSTEM_MESSAGE;
 
-  const agents = fred.getAgents();
+  const agents = await fred.agents.list();
   if (agents.length > 0) {
-    const defaultAgentId = fred.getDefaultAgentId();
-    const selectedAgentId = defaultAgentId ?? agents[0].id;
+    const processorConfig = await fred.effects.run(
+      Effect.flatMap(MessageProcessorService, (service) => service.getConfig()),
+    );
+    const selectedAgentId = options.preferredAgentId
+      ?? processorConfig.defaultAgentId
+      ?? agents[0].id;
 
-    if (!defaultAgentId) {
-      fred.setDefaultAgent(selectedAgentId);
+    if (processorConfig.defaultAgentId !== selectedAgentId) {
+      await fred.effects.run(
+        Effect.flatMap(MessageProcessorService, (service) =>
+          service.updateConfig({ defaultAgentId: selectedAgentId })
+        ),
+      );
     }
 
-    const selectedAgent = fred.getAgent(selectedAgentId);
+    const selectedAgent = await fred.agents.get(selectedAgentId);
     if (!selectedAgent) {
       throw new Error(`Default agent could not be resolved: ${selectedAgentId}`);
     }
@@ -100,17 +111,19 @@ export async function ensureDefaultChatAgent(
   }
 
   await loadProviderPackage(providerInfo.platform);
-  await fred.registerDefaultProviders();
-  await fred.useProvider(providerInfo.platform);
-  await fred.createAgent({
+  await fred.providers.use(providerInfo.platform);
+  await fred.agents.register({
     id: agentId,
     systemMessage,
     platform: providerInfo.platform,
     model: providerInfo.model,
     tools: ['calculator'],
   });
-  fred.setDefaultAgent(agentId);
-
+  await fred.effects.run(
+    Effect.flatMap(MessageProcessorService, (service) =>
+      service.updateConfig({ defaultAgentId: agentId })
+    ),
+  );
   return {
     provider: providerInfo.platform,
     model: providerInfo.model,

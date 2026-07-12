@@ -1,40 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import {
+  createFred,
+  type FredClient,
+  type RoutingDecision,
+  type RoutingExplanation,
+} from '@fancyrobot/fred';
+import { MessageRouterService } from '@fancyrobot/fred/effect';
+import { Effect } from 'effect';
 import { handleRouteCommand } from '../../src/commands/route';
 
-// Inline types to avoid submodule imports
-type RoutingAlternative = {
-  targetId: string;
-  targetName: string;
-  confidence: number;
-  matchType?: string;
-};
-
-type RoutingConcern = {
-  type: string;
-  severity: 'warning' | 'error';
-  message: string;
-};
-
-type RoutingExplanation = {
-  winner: RoutingAlternative;
-  alternatives: RoutingAlternative[];
-  confidence: number;
-  matchType: string;
-  calibrationMetadata: {
-    rawScore: number;
-    calibratedScore: number;
-    calibrated: boolean;
-  };
-  concerns: RoutingConcern[];
-  narrative: string;
-};
-
-type RoutingDecision = {
-  agent: string;
-  fallback: boolean;
-  explanation?: RoutingExplanation;
-};
+const createRoutingDecision = (decision: MockRouteConfig): RoutingDecision => ({
+  agent: decision.agent,
+  fallback: decision.fallback,
+  explanation: decision.explanation,
+});
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -59,19 +38,25 @@ interface MockRouteConfig {
   explanation?: RoutingExplanation;
 }
 
-function createMockFred(decision: MockRouteConfig | null): Fred {
-  const fred = new Fred();
-
-  (fred as any).testRoute = async (_message: string, _metadata: Record<string, unknown>) => {
-    if (!decision) return null;
-    return {
-      agent: decision.agent,
-      fallback: decision.fallback,
-      explanation: decision.explanation,
-    } as RoutingDecision;
+async function createMockFred(decision: MockRouteConfig | null): Promise<FredClient> {
+  const fred = await createFred();
+  const resolveDecision = () =>
+    decision
+      ? Effect.succeed(createRoutingDecision(decision))
+      : Effect.fail(Object.assign(new Error('Routing not configured.'), {
+          _tag: 'NoAgentsAvailableError' as const,
+        }));
+  const router: typeof MessageRouterService.Service = {
+    route: resolveDecision,
+    testRoute: resolveDecision,
+    setConfig: () => Effect.void,
   };
-
-  return fred;
+  return {
+    ...fred,
+    effects: {
+      run: (effect) => fred.effects.run(Effect.provideService(effect, MessageRouterService, router)),
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -81,7 +66,7 @@ function createMockFred(decision: MockRouteConfig | null): Fred {
 describe('route command', () => {
   test('returns compact output on direct match', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'assistant',
       fallback: false,
     });
@@ -101,7 +86,7 @@ describe('route command', () => {
 
   test('returns yellow output on fallback', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'default-assistant',
       fallback: true,
     });
@@ -120,7 +105,7 @@ describe('route command', () => {
 
   test('returns JSON on match', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'assistant',
       fallback: false,
     });
@@ -140,7 +125,7 @@ describe('route command', () => {
 
   test('returns verbose output with explanation', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'assistant',
       fallback: false,
       explanation: {
@@ -184,7 +169,7 @@ describe('route command', () => {
 
   test('returns exit code 1 on fallback', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'default-assistant',
       fallback: true,
     });
@@ -200,7 +185,7 @@ describe('route command', () => {
 
   test('returns exit code 2 on routing not configured', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred(null);
+    const fred = await createMockFred(null);
 
     const exitCode = await handleRouteCommand(
       ['test', 'hello'],
@@ -215,7 +200,7 @@ describe('route command', () => {
 
   test('returns exit code 2 when message is missing', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({ agent: 'assistant', fallback: false });
+    const fred = await createMockFred({ agent: 'assistant', fallback: false });
 
     const exitCode = await handleRouteCommand(
       ['test'],
@@ -231,7 +216,7 @@ describe('route command', () => {
 
   test('verbose JSON includes explanation fields', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'assistant',
       fallback: false,
       explanation: {
@@ -273,7 +258,7 @@ describe('route command', () => {
 
   test('errors on unknown subcommand', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({ agent: 'assistant', fallback: false });
+    const fred = await createMockFred({ agent: 'assistant', fallback: false });
 
     const exitCode = await handleRouteCommand(
       ['unknown'],
@@ -289,7 +274,7 @@ describe('route command', () => {
 
   test('displays concerns in verbose mode', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({
+    const fred = await createMockFred({
       agent: 'assistant',
       fallback: false,
       explanation: {
@@ -300,7 +285,7 @@ describe('route command', () => {
         },
         alternatives: [],
         confidence: 0.55,
-        matchType: 'semantic',
+        matchType: 'regex',
         calibrationMetadata: {
           rawScore: 0.55,
           calibratedScore: 0.55,
@@ -332,7 +317,7 @@ describe('route command', () => {
 
   test('outputs JSON error when message missing with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({ agent: 'assistant', fallback: false });
+    const fred = await createMockFred({ agent: 'assistant', fallback: false });
 
     const exitCode = await handleRouteCommand(
       ['test'],
@@ -349,7 +334,7 @@ describe('route command', () => {
 
   test('outputs JSON error when routing not configured with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred(null); // Routing not configured
+    const fred = await createMockFred(null); // Routing not configured
 
     const exitCode = await handleRouteCommand(
       ['test', 'hello'],
@@ -366,7 +351,7 @@ describe('route command', () => {
 
   test('outputs JSON error on unknown subcommand with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred({ agent: 'assistant', fallback: false });
+    const fred = await createMockFred({ agent: 'assistant', fallback: false });
 
     const exitCode = await handleRouteCommand(
       ['unknown'],

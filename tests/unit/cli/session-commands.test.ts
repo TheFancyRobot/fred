@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { Fred } from '../../../packages/core/src';
+import type { FredClient } from '../../../packages/core/src';
 import type { SessionDetails } from '../../../packages/core/src/context/context';
 import { handleSessionCommand } from '../../../packages/cli/src/commands/session';
+import {
+  createMockContextManager,
+  createMockFredClient,
+  shutdownMockFredClients,
+} from './fixtures/fred-smoke-contract';
 
 class InMemoryContextStorage {
   private sessions: Map<string, SessionDetails> = new Map();
@@ -23,32 +28,14 @@ class InMemoryContextStorage {
   }
 }
 
-function createFred(storage: InMemoryContextStorage): Fred {
-  const fred = new Fred();
-
-  (fred as any).listSessions = () => storage.listSessions();
-  (fred as any).getSession = (id: string) => storage.get(id);
-  (fred as any).exportSession = async (id: string, format: 'json' | 'markdown') => {
-    const session = await storage.get(id);
-    if (!session) return null;
-    if (format === 'markdown') {
-      return `# Session: ${session.summary.title ?? 'Untitled'}\n\n## Transcript\n\n${session.messages
-        .map((message) => `${message.role}: ${String(message.content)}`)
-        .join('\n')}`;
-    }
-    return {
-      id: session.summary.id,
-      metadata: {
-        createdAt: session.summary.createdAt.toISOString(),
-        updatedAt: session.summary.updatedAt.toISOString(),
-      },
-      messages: session.messages.map((message) => ({ role: message.role, content: message.content })),
-    };
-  };
-  (fred as any).deleteSession = (id: string) => storage.delete(id);
-
-  return fred;
-}
+const createFred = (storage: InMemoryContextStorage): Promise<FredClient> =>
+  createMockFredClient({
+    contextManager: createMockContextManager({
+      listSessions: () => storage.listSessions(),
+      getSession: (id) => storage.get(id),
+      deleteSession: (id) => storage.delete(id),
+    }),
+  });
 
 function createSessionDetails(id: string, title: string, date: Date): SessionDetails {
   return {
@@ -84,9 +71,10 @@ describe('session commands', () => {
     stderr.length = 0;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     stdout.length = 0;
     stderr.length = 0;
+    await shutdownMockFredClients();
   });
 
   test('list outputs table by default', async () => {
@@ -94,7 +82,7 @@ describe('session commands', () => {
     const date = new Date('2026-02-08T18:00:00Z');
     storage.seed(createSessionDetails('conv_1', 'Alpha', date));
 
-    const exitCode = await handleSessionCommand(['list'], {}, { io, fred: createFred(storage) });
+    const exitCode = await handleSessionCommand(['list'], {}, { io, fred: await createFred(storage) });
 
     expect(exitCode).toBe(0);
     expect(stdout[0]).toContain('ID');
@@ -107,7 +95,7 @@ describe('session commands', () => {
     const date = new Date('2026-02-08T18:00:00Z');
     storage.seed(createSessionDetails('conv_2', 'Beta', date));
 
-    const exitCode = await handleSessionCommand(['list'], { json: true }, { io, fred: createFred(storage) });
+    const exitCode = await handleSessionCommand(['list'], { json: true }, { io, fred: await createFred(storage) });
 
     expect(exitCode).toBe(0);
     const payload = JSON.parse(stdout[0] ?? '{}');
@@ -120,11 +108,13 @@ describe('session commands', () => {
     const date = new Date('2026-02-08T18:00:00Z');
     storage.seed(createSessionDetails('conv_show', 'Showcase', date));
 
-    const exitCode = await handleSessionCommand(['show', 'conv_show'], {}, { io, fred: createFred(storage) });
+    const exitCode = await handleSessionCommand(['show', 'conv_show'], {}, { io, fred: await createFred(storage) });
 
     expect(exitCode).toBe(0);
-    expect(stdout[0]).toContain('Session: Showcase');
-    expect(stdout[0]).toContain('Transcript');
+    expect(stdout[0]).toContain('## user');
+    expect(stdout[0]).toContain('hi');
+    expect(stdout[0]).toContain('## assistant');
+    expect(stdout[0]).toContain('hello');
   });
 
   test('export writes file with default name', async () => {
@@ -139,7 +129,7 @@ describe('session commands', () => {
       { format: 'json' },
       {
         io,
-        fred: createFred(storage),
+        fred: await createFred(storage),
         now: () => new Date('2026-02-08T00:00:00Z'),
         writeFile: writeFileMock,
       }
@@ -155,7 +145,7 @@ describe('session commands', () => {
     storage.seed(createSessionDetails('conv_rm', 'Remove Me', date));
 
     const confirm = mock(async () => false);
-    const exitCode = await handleSessionCommand(['rm', 'conv_rm'], {}, { io, fred: createFred(storage), confirm });
+    const exitCode = await handleSessionCommand(['rm', 'conv_rm'], {}, { io, fred: await createFred(storage), confirm });
 
     expect(exitCode).toBe(0);
     expect(stdout[0]).toContain('Aborted');

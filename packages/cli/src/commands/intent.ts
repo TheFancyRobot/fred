@@ -5,7 +5,8 @@
  * Usage: fred intent test "message"
  */
 
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
+import { IntentMatcherService } from '@fancyrobot/fred/effect';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { createColors } from './color.js';
@@ -24,7 +25,7 @@ export interface IntentCommandIO {
 }
 
 export interface IntentCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: IntentCommandIO;
 }
 
@@ -36,25 +37,24 @@ const DEFAULT_IO: IntentCommandIO = {
 /**
  * Initialize Fred instance with config, wrapped in Effect.
  */
-const initializeFredEffect = (io: IntentCommandIO): Effect.Effect<Fred, ConfigInitError> =>
+const initializeFredEffect = (io: IntentCommandIO): Effect.Effect<FredClient, ConfigInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
+    const fred = yield* Effect.tryPromise({
+        try: () => createFred({ configPath: configResult.success ? configResult.configPath : undefined }),
         catch: (error) =>
           new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
       }).pipe(
         Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            io.stderr(error.message);
-          }),
+          Effect.zipRight(
+            Effect.sync(() => io.stderr(error.message)),
+            Effect.tryPromise({
+              try: () => createFred(),
+              catch: (cause) => new ConfigInitError({ message: sanitizeErrorForCli(cause) }),
+            }),
+          ),
         ),
       );
-    }
-
     return fred;
   });
 
@@ -90,7 +90,12 @@ const intentTestEffect = (
           ),
         );
 
-    const intents = fred.getIntents();
+    const intents = yield* Effect.tryPromise({
+      try: () => fred.effects.run(
+        Effect.flatMap(IntentMatcherService, (service) => service.getIntents()),
+      ),
+      catch: (error) => new IntentMatchError({ message: sanitizeErrorForCli(error) }),
+    });
     if (intents.length === 0) {
       return yield* Effect.fail(
         new InvalidArgumentError({ message: 'No intents registered.' }),
@@ -100,7 +105,9 @@ const intentTestEffect = (
     // Match intent using Fred's internal matcher
     const startTime = Date.now();
     const matchResult = yield* Effect.tryPromise({
-      try: () => Effect.runPromise((fred as any).intentMatcher.matchIntent(message)),
+      try: () => fred.effects.run(
+        Effect.flatMap(IntentMatcherService, (service) => service.matchIntent(message)),
+      ),
       catch: (error) =>
         new IntentMatchError({ message: `Intent matching failed: ${sanitizeErrorForCli(error)}` }),
     });
@@ -117,16 +124,16 @@ const intentTestEffect = (
     }
 
     // Match found - extract data
-    const { intent, confidence, allCandidates } = matchResult as any;
+    const { intent, confidence, allCandidates = [] } = matchResult;
     const agentTarget = intent.action.target;
 
     // Filter alternatives by threshold if specified
     const threshold = typeof options.threshold === 'number' ? options.threshold : 0;
-    const filteredAlternatives = allCandidates.filter((alt: any) => alt.confidence >= threshold);
+    const filteredAlternatives = allCandidates.filter((alt) => alt.confidence >= threshold);
 
     // JSON output
     if (options.json === true) {
-      const result: any = {
+      const result: Record<string, unknown> = {
         ok: true,
         matched: true,
         intent: intent.id,

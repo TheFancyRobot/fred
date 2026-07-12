@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
-import { Effect } from 'effect';
+import {
+  createFred,
+  type FredClient,
+  type MCPServerInfo,
+  type MCPToolMetadata,
+} from '@fancyrobot/fred';
 import { handleMcpCommand } from '../../src/commands/mcp';
-import type { MCPServerConfig, MCPClient } from '@fancyrobot/fred/mcp/types';
-import type { Tool } from '@fancyrobot/fred/tool/tool';
+import type { MCPServerConfig } from '@fancyrobot/fred/mcp/types';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -26,64 +29,45 @@ interface MockServer {
   id: string;
   status?: 'connected' | 'disconnected' | 'error';
   config: MCPServerConfig;
-  tools?: Tool[];
+  tools?: MCPToolMetadata[];
   startShouldFail?: boolean;
 }
 
-function createMockRegistry(servers: MockServer[]) {
-  const connectedServers = servers.filter((s) => s.status === 'connected');
-  const allServers = servers;
-
+async function createMockFred(servers: MockServer[] = []): Promise<FredClient> {
+  const fred = await createFred();
+  const findServer = (id: string): MockServer => {
+    const server = servers.find((candidate) => candidate.id === id);
+    if (!server) throw new Error(`Server '${id}' not found`);
+    return server;
+  };
+  const listServers = async (): Promise<readonly MCPServerInfo[]> => servers.map((server) => ({
+    id: server.id,
+    transport: server.config.transport,
+    status: server.status ?? 'stopped',
+    connected: server.status === 'connected',
+    tools: server.status === 'connected' ? server.tools ?? [] : [],
+  }));
   return {
-    getAllConfiguredServers: () => allServers.map((s) => s.id),
-    getRegisteredServers: () => connectedServers.map((s) => s.id),
-    getServerStatus: (id: string) => {
-      const server = servers.find((s) => s.id === id);
-      return server?.status;
-    },
-    getServerConfig: (id: string) => {
-      const server = servers.find((s) => s.id === id);
-      return server?.config;
-    },
-    getClient: (id: string) => {
-      const server = servers.find((s) => s.id === id && s.status === 'connected');
-      if (!server) return undefined;
-      return {
-        isConnected: () => true,
-        listTools: async () => server.tools ?? [],
-      } as MCPClient;
-    },
-    ensureConnected: (serverId: string) => {
-      const server = servers.find((s) => s.id === serverId);
-      if (!server) {
-        return Effect.fail(new Error(`Server '${serverId}' not found in lazy configs`));
-      }
-      if (server.startShouldFail) {
-        return Effect.fail(new Error(`Failed to connect lazy server '${serverId}': Connection refused`));
-      }
-      return Effect.succeed({
-        isConnected: () => true,
-        listTools: async () => server.tools ?? [],
-      } as MCPClient);
-    },
-    removeServer: (serverId: string) => {
-      return Effect.succeed(undefined);
-    },
-    discoverTools: (serverId: string) => {
-      const server = servers.find((s) => s.id === serverId && s.status === 'connected');
-      if (!server) {
-        return Effect.fail(new Error(`MCP server '${serverId}' not found`));
-      }
-      return Effect.succeed(server.tools ?? []);
+    ...fred,
+    mcp: {
+      configure: async () => undefined,
+      status: async (id) => servers.find((server) => server.id === id)?.status,
+      list: async () => servers.map((server) => server.id),
+      listServers,
+      discoverTools: async (id) => findServer(id).tools ?? [],
+      connect: async (id) => {
+        const server = findServer(id);
+        if (server.startShouldFail) throw new Error(`Failed to connect lazy server '${id}': Connection refused`);
+      },
+      connectAll: async () => servers.map((server) => server.startShouldFail
+        ? { id: server.id, success: false, error: 'Connection refused' }
+        : { id: server.id, success: true }),
+      disconnect: async (id) => { findServer(id); },
+      disconnectAll: async () => servers
+        .filter((server) => server.status === 'connected')
+        .map((server) => ({ id: server.id, success: true })),
     },
   };
-}
-
-function createMockFred(servers: MockServer[] = []): Fred {
-  const fred = new Fred();
-  const registry = createMockRegistry(servers);
-  (fred as any).getMCPServerRegistry = () => registry;
-  return fred;
 }
 
 /* ------------------------------------------------------------------ */
@@ -93,7 +77,7 @@ function createMockFred(servers: MockServer[] = []): Fred {
 describe('mcp list', () => {
   test('lists all configured servers with status and transport', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -123,7 +107,7 @@ describe('mcp list', () => {
 
   test('shows empty message when no servers configured', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['list'],
@@ -137,7 +121,7 @@ describe('mcp list', () => {
 
   test('returns JSON with --json flag', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -163,12 +147,12 @@ describe('mcp list', () => {
 
   test('shows tool count for connected servers', async () => {
     const captured = createCapturingIO();
-    const mockTools: Tool[] = [
-      { id: 'filesystem/read', name: 'read_file', description: 'Read a file', handler: async () => ({}) } as any,
-      { id: 'filesystem/write', name: 'write_file', description: 'Write a file', handler: async () => ({}) } as any,
+    const mockTools: MCPToolMetadata[] = [
+      { id: 'filesystem/read', name: 'read_file', description: 'Read a file' },
+      { id: 'filesystem/write', name: 'write_file', description: 'Write a file' },
     ];
 
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -198,7 +182,7 @@ describe('mcp list', () => {
 describe('mcp start', () => {
   test('starts a server by ID', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: undefined,
@@ -219,7 +203,7 @@ describe('mcp start', () => {
 
   test('starts all servers with --all', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: undefined,
@@ -245,7 +229,7 @@ describe('mcp start', () => {
 
   test('returns exit 2 on start failure', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'broken-server',
         status: undefined,
@@ -268,7 +252,7 @@ describe('mcp start', () => {
 
   test('returns exit 2 when server ID is missing', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['start'],
@@ -285,7 +269,7 @@ describe('mcp start', () => {
 describe('mcp stop', () => {
   test('stops a server by ID', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -306,7 +290,7 @@ describe('mcp stop', () => {
 
   test('stops all servers with --all', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -332,7 +316,7 @@ describe('mcp stop', () => {
 
   test('returns exit 2 when server ID is missing', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['stop'],
@@ -349,11 +333,11 @@ describe('mcp stop', () => {
 describe('mcp status', () => {
   test('shows connected server status with tool count', async () => {
     const captured = createCapturingIO();
-    const mockTools: Tool[] = [
-      { id: 'filesystem/read', name: 'read_file', description: 'Read a file', handler: async () => ({}) } as any,
+    const mockTools: MCPToolMetadata[] = [
+      { id: 'filesystem/read', name: 'read_file', description: 'Read a file' },
     ];
 
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -378,7 +362,7 @@ describe('mcp status', () => {
 
   test('shows disconnected server status', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'lazy-server',
         status: undefined,
@@ -400,7 +384,7 @@ describe('mcp status', () => {
 
   test('returns exit 1 for not-found server', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['status', 'nonexistent'],
@@ -416,7 +400,7 @@ describe('mcp status', () => {
 
   test('returns JSON status with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       {
         id: 'filesystem',
         status: 'connected',
@@ -443,7 +427,7 @@ describe('mcp status', () => {
 
   test('errors when server ID is missing', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['status'],
@@ -460,7 +444,7 @@ describe('mcp status', () => {
 describe('mcp command errors', () => {
   test('errors on unknown subcommand', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['unknown'],
@@ -476,7 +460,7 @@ describe('mcp command errors', () => {
 
   test('outputs JSON error when server ID missing for start with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['start'],
@@ -494,7 +478,7 @@ describe('mcp command errors', () => {
 
   test('outputs JSON error when server ID missing for stop with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['stop'],
@@ -512,7 +496,7 @@ describe('mcp command errors', () => {
 
   test('outputs JSON error when server ID missing for status with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['status'],
@@ -530,7 +514,7 @@ describe('mcp command errors', () => {
 
   test('outputs JSON error on unknown subcommand with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleMcpCommand(
       ['unknown'],

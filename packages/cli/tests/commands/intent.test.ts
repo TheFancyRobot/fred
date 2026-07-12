@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { Fred } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
+import { IntentMatcherService } from '@fancyrobot/fred/effect';
 import { Effect } from 'effect';
 import { handleIntentCommand } from '../../src/commands/intent';
 
@@ -27,71 +28,16 @@ interface MockIntentConfig {
   description?: string;
 }
 
-function createMockFred(intents: MockIntentConfig[] = []): Fred {
-  const fred = new Fred();
-
-  // Mock getIntents to return our test intents
-  (fred as any).getIntents = () =>
-    intents.map((cfg) => ({
+async function createMockFred(intents: MockIntentConfig[] = []): Promise<FredClient> {
+  const fred = await createFred();
+  await fred.effects.run(Effect.flatMap(IntentMatcherService, (service) =>
+    service.registerIntents(intents.map((cfg) => ({
       id: cfg.id,
       utterances: cfg.utterances,
       action: { target: cfg.target },
       description: cfg.description || cfg.id,
-    }));
-
-  // Mock the internal intentMatcher that the command uses
-  (fred as any).intentMatcher = {
-    matchIntent: (message: string) => {
-      const normalizedMessage = message.toLowerCase().trim();
-
-      // Try exact match
-      for (const cfg of intents) {
-        for (const utterance of cfg.utterances) {
-          if (normalizedMessage === utterance.toLowerCase().trim()) {
-            return Effect.succeed({
-              intent: {
-                id: cfg.id,
-                utterances: cfg.utterances,
-                action: { target: cfg.target },
-                description: cfg.description || cfg.id,
-              },
-              confidence: 1.0,
-              matchType: 'exact',
-              allCandidates: [{ intentId: cfg.id, intentName: cfg.description || cfg.id, confidence: 1.0 }],
-            });
-          }
-        }
-      }
-
-      // Try regex match
-      for (const cfg of intents) {
-        for (const utterance of cfg.utterances) {
-          try {
-            const regex = new RegExp(utterance, 'i');
-            if (regex.test(message)) {
-              return Effect.succeed({
-                intent: {
-                  id: cfg.id,
-                  utterances: cfg.utterances,
-                  action: { target: cfg.target },
-                  description: cfg.description || cfg.id,
-                },
-                confidence: 0.8,
-                matchType: 'regex',
-                allCandidates: [{ intentId: cfg.id, intentName: cfg.description || cfg.id, confidence: 0.8 }],
-              });
-            }
-          } catch {
-            // Invalid regex, skip
-          }
-        }
-      }
-
-      // No match
-      return Effect.succeed(null);
-    },
-  };
-
+    }))),
+  ));
   return fred;
 }
 
@@ -102,7 +48,7 @@ function createMockFred(intents: MockIntentConfig[] = []): Fred {
 describe('intent command', () => {
   test('returns compact output on match', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello', 'hi'], target: 'assistant' },
     ]);
 
@@ -125,7 +71,7 @@ describe('intent command', () => {
 
   test('returns JSON on match with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello'], target: 'assistant' },
     ]);
 
@@ -146,7 +92,7 @@ describe('intent command', () => {
 
   test('returns exit code 1 on no match', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello'], target: 'assistant' },
     ]);
 
@@ -163,7 +109,7 @@ describe('intent command', () => {
 
   test('returns verbose output with alternatives', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello', 'hi'], target: 'assistant' },
       { id: 'farewell', utterances: ['goodbye', 'bye'], target: 'assistant' },
     ]);
@@ -185,7 +131,7 @@ describe('intent command', () => {
 
   test('filters alternatives by --threshold', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello.*'], target: 'assistant' }, // regex match (0.8 confidence)
     ]);
 
@@ -207,7 +153,7 @@ describe('intent command', () => {
 
   test('returns exit code 2 when message is missing', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleIntentCommand(
       ['test'],
@@ -223,7 +169,7 @@ describe('intent command', () => {
 
   test('outputs JSON on no match', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello'], target: 'assistant' },
     ]);
 
@@ -242,7 +188,7 @@ describe('intent command', () => {
 
   test('errors on unknown subcommand', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleIntentCommand(
       ['unknown'],
@@ -258,7 +204,7 @@ describe('intent command', () => {
 
   test('verbose JSON includes extra fields', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([
+    const fred = await createMockFred([
       { id: 'greeting', utterances: ['hello'], target: 'assistant' },
     ]);
 
@@ -278,7 +224,7 @@ describe('intent command', () => {
 
   test('returns exit code 2 when no intents registered', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]); // No intents
+    const fred = await createMockFred([]); // No intents
 
     const exitCode = await handleIntentCommand(
       ['test', 'hello'],
@@ -293,7 +239,7 @@ describe('intent command', () => {
 
   test('outputs JSON error when message missing with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleIntentCommand(
       ['test'],
@@ -310,7 +256,7 @@ describe('intent command', () => {
 
   test('outputs JSON error when no intents registered with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]); // No intents
+    const fred = await createMockFred([]); // No intents
 
     const exitCode = await handleIntentCommand(
       ['test', 'hello'],
@@ -327,7 +273,7 @@ describe('intent command', () => {
 
   test('outputs JSON error on unknown subcommand with --json', async () => {
     const captured = createCapturingIO();
-    const fred = createMockFred([]);
+    const fred = await createMockFred([]);
 
     const exitCode = await handleIntentCommand(
       ['unknown'],

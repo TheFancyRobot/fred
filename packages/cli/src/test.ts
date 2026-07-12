@@ -1,9 +1,11 @@
 import { readdir, readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 import { existsSync } from 'fs';
-import { Fred, NoOpTracer } from '@fancyrobot/fred';
+import { createFred, NoOpTracer, type FredClient } from '@fancyrobot/fred';
+import { AgentService, MessageProcessorService } from '@fancyrobot/fred/effect';
 import { GoldenTraceRecorder, loadGoldenTrace, runTestCase, formatTestResults, type TestCase } from '@fancyrobot/fred/eval';
 import { createHash } from 'crypto';
+import { Effect } from 'effect';
 
 /**
  * Test command options
@@ -55,7 +57,7 @@ async function findTestCases(tracesDir: string): Promise<TestCase[]> {
  */
 export async function recordTrace(
   message: string,
-  fred: Fred,
+  fred: FredClient,
   tracesDir: string,
   options?: { conversationId?: string }
 ): Promise<string> {
@@ -69,13 +71,18 @@ export async function recordTrace(
   });
 
   // Enable tracing with the callback-enabled tracer
-  fred.enableTracing(tracer);
+  await fred.effects.run(Effect.gen(function* () {
+    const agents = yield* AgentService;
+    const processor = yield* MessageProcessorService;
+    yield* agents.setTracer(tracer);
+    yield* processor.updateConfig({ tracer });
+  }));
 
   // Record message
   recorder.recordMessage(message);
 
   // Process message (spans will be automatically captured via callback)
-  const response = await fred.processMessage(message, {
+  const response = await fred.messages.process(message, {
     conversationId: options?.conversationId,
   });
 
@@ -137,7 +144,7 @@ export async function runTests(
  */
 export async function updateTraces(
   tracesDir: string,
-  fred: Fred,
+  fred: FredClient,
   pattern?: string
 ): Promise<void> {
   const traceFiles = await findGoldenTraces(tracesDir);
@@ -194,10 +201,9 @@ export async function handleTestCommand(
     // Handle record command
     if (options.record) {
       // Load Fred instance
-      let fred!: Fred;
+      let fred!: FredClient;
       if (options.configFile) {
-        fred = new Fred();
-        await fred.initializeFromConfig(options.configFile);
+        fred = await createFred({ configPath: options.configFile });
       } else {
         // Try to find default config
         const defaultConfigs = ['fred.config.yaml', 'fred.config.yml', 'fred.config.json'];
@@ -205,8 +211,7 @@ export async function handleTestCommand(
 
         for (const configFile of defaultConfigs) {
           if (existsSync(configFile)) {
-            fred = new Fred();
-            await fred.initializeFromConfig(configFile);
+            fred = await createFred({ configPath: configFile });
             configFound = true;
             break;
           }
@@ -225,18 +230,16 @@ export async function handleTestCommand(
     // Handle update command
     if (options.update) {
       // Load Fred instance
-      let fred!: Fred;
+      let fred!: FredClient;
       if (options.configFile) {
-        fred = new Fred();
-        await fred.initializeFromConfig(options.configFile);
+        fred = await createFred({ configPath: options.configFile });
       } else {
         const defaultConfigs = ['fred.config.yaml', 'fred.config.yml', 'fred.config.json'];
         let configFound = false;
 
         for (const configFile of defaultConfigs) {
           if (existsSync(configFile)) {
-            fred = new Fred();
-            await fred.initializeFromConfig(configFile);
+            fred = await createFred({ configPath: configFile });
             configFound = true;
             break;
           }

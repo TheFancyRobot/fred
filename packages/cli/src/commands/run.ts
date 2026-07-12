@@ -9,7 +9,7 @@
  * zero bytes on stderr.
  */
 
-import { Fred, hasRetryDiagnostics } from '@fancyrobot/fred';
+import { createFred, hasRetryDiagnostics, type FredClient } from '@fancyrobot/fred';
 import {
   ensureDefaultChatAgent,
 } from '../chat-defaults.js';
@@ -31,7 +31,7 @@ export interface RunCommandIO {
 }
 
 export interface RunCommandDependencies {
-  fred?: Fred;
+  fred?: FredClient;
   io?: RunCommandIO;
   stdin?: () => Promise<string>;
 }
@@ -58,28 +58,30 @@ async function readStdin(): Promise<string> {
 const initializeFredEffect = (
   agentId: string,
   channel: RunJsonChannel,
-): Effect.Effect<Fred, FredInitError> =>
+): Effect.Effect<FredClient, FredInitError> =>
   Effect.gen(function* () {
-    const fred = new Fred();
     const configResult = resolveProjectConfig();
-
-    if (configResult.success && configResult.config && configResult.configPath) {
-      yield* Effect.tryPromise({
-        try: () => fred.initializeFromConfig(configResult.configPath!),
-        catch: (error) =>
-          new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
-      }).pipe(
-        Effect.catchTag('ConfigInitError', (error) =>
-          Effect.sync(() => {
-            channel.warn(error.message);
+    const fred = yield* Effect.tryPromise({
+      try: () => createFred({
+        configPath: configResult.success ? configResult.configPath : undefined,
+      }),
+      catch: (error) =>
+        new ConfigInitError({ message: `Failed to initialize from config: ${sanitizeErrorForCli(error)}` }),
+    }).pipe(
+      Effect.catchTag('ConfigInitError', (error) =>
+        Effect.zipRight(
+          Effect.sync(() => channel.warn(error.message)),
+          Effect.tryPromise({
+            try: () => createFred(),
+            catch: (cause) => new FredInitError({ message: sanitizeErrorForCli(cause) }),
           }),
         ),
-      );
-    }
+      ),
+    );
 
     // Bootstrap provider (auto-detection when config doesn't fully specify)
     yield* Effect.tryPromise({
-      try: () => ensureDefaultChatAgent(fred, { agentId }),
+      try: () => ensureDefaultChatAgent(fred, { agentId, preferredAgentId: agentId }),
       catch: (error) =>
         new FredInitError({ message: `Failed to bootstrap provider: ${sanitizeErrorForCli(error)}` }),
     });
@@ -137,9 +139,15 @@ const runCommandEffect = (
       : yield* initializeFredEffect(agentId, channel);
 
     // --- Verify agent exists ---
-    const agent = fred.getAgent(agentId);
+    const agent = yield* Effect.tryPromise({
+      try: () => fred.agents.get(agentId),
+      catch: (error) => new AgentNotFoundError({ agentId, message: sanitizeErrorForCli(error) }),
+    });
     if (!agent) {
-      const agents = fred.getAgents().map((a) => a.id);
+      const agents = (yield* Effect.tryPromise({
+        try: () => fred.agents.list(),
+        catch: () => new AgentNotFoundError({ agentId, message: `Agent "${agentId}" not found.` }),
+      })).map((a) => a.id);
       const available = agents.length > 0 ? ` Available agents: ${agents.join(', ')}` : '';
       return yield* Effect.fail(
         new AgentNotFoundError({
@@ -153,7 +161,7 @@ const runCommandEffect = (
     const conversationId = (options['conversation-id'] ?? options.conversationId) as string | undefined;
 
     const response = yield* Effect.tryPromise({
-      try: () => fred.processMessage(input!, { conversationId }),
+      try: () => fred.messages.process(input!, { conversationId }),
       catch: (error) =>
         new MessageProcessError({
           message: sanitizeErrorForCli(error),
