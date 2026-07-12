@@ -6,7 +6,7 @@
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Cause, Effect, Exit, Runtime, Schema } from 'effect';
@@ -57,6 +57,26 @@ async function registerMockProvider(client: FredClient): Promise<void> {
     )
   );
 }
+
+const waitFor = async (predicate: () => boolean, timeoutMs = 2_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for condition');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+};
+
+const writeAgentFile = (path: string, id?: string): void => {
+  writeFileSync(path, [
+    '---',
+    ...(id ? [`id: ${id}`] : []),
+    'platform: openai',
+    'model: gpt-4o-mini',
+    '---',
+    '',
+    'Configured agent.',
+  ].join('\n'));
+};
 
 describe('createFred client', () => {
   it('loads validated config before returning the client', async () => {
@@ -129,9 +149,16 @@ describe('createFred client', () => {
       transport: 'stdio',
       command: 'unused',
       lazy: true,
+      enabled: false,
     }]);
     expect(await client.mcp.list()).toEqual(['lazy-files']);
     expect(await client.mcp.status('lazy-files')).toBeUndefined();
+    expect(await client.mcp.connectAll()).toEqual([{
+      id: 'lazy-files',
+      success: false,
+      error: 'MCP server is disabled',
+    }]);
+    await expect(client.mcp.connect('lazy-files')).rejects.toThrow('MCP server is disabled');
 
     const subagent = await client.subagents.spawn({
       name: 'client-subagent',
@@ -141,6 +168,134 @@ describe('createFred client', () => {
     const result = await client.subagents.execute(subagent.id);
     expect(result.stdout).toBe('ready');
     expect(await client.subagents.destroy(subagent.id)).toBe(true);
+  });
+
+  it('exposes safe MCP discovery and preserves configuration across lifecycle operations', async () => {
+    const requests: string[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (request) => {
+        const body = await request.json() as { id?: string | number; method: string };
+        requests.push(body.method);
+        if (body.method === 'notifications/initialized') return new Response(null, { status: 204 });
+        if (body.method === 'initialize') {
+          return Response.json({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: { tools: {} },
+              serverInfo: { name: 'test', version: '1.0.0' },
+            },
+          });
+        }
+        return Response.json({
+          jsonrpc: '2.0',
+          id: body.id,
+          result: {
+            tools: [{
+              name: 'echo',
+              description: 'Echo input',
+              inputSchema: {
+                type: 'object',
+                properties: { text: { type: 'string' } },
+                required: ['text'],
+              },
+            }],
+          },
+        });
+      },
+    });
+
+    try {
+      const client = track(await createFred());
+      await client.mcp.configure([{
+        id: 'safe-http',
+        transport: 'http',
+        url: `http://127.0.0.1:${server.port}`,
+        headers: { Authorization: 'Bearer secret' },
+        env: { SECRET_TOKEN: 'secret' },
+        lazy: true,
+      }]);
+
+      expect(await client.mcp.listServers()).toEqual([{
+        id: 'safe-http',
+        transport: 'http',
+        status: 'stopped',
+        connected: false,
+        tools: [],
+      }]);
+      expect(JSON.stringify(await client.mcp.listServers())).not.toContain('secret');
+
+      expect(await client.mcp.connectAll()).toEqual([{ id: 'safe-http', success: true }]);
+      const connected = await client.mcp.listServers();
+      expect(connected[0]).toMatchObject({
+        id: 'safe-http',
+        transport: 'http',
+        status: 'connected',
+        connected: true,
+      });
+      expect(connected[0].tools).toEqual([{
+        id: 'safe-http/echo',
+        name: 'safe-http/echo',
+        description: 'Echo input',
+        schema: {
+          type: 'object',
+          properties: { text: { type: 'string' } },
+          required: ['text'],
+        },
+      }]);
+      expect(await client.mcp.discoverTools('safe-http')).toEqual(connected[0].tools);
+
+      await client.mcp.disconnect('safe-http');
+      expect(await client.mcp.list()).toEqual(['safe-http']);
+      expect((await client.mcp.listServers())[0].connected).toBe(false);
+      await client.mcp.connect('safe-http');
+      expect(await client.mcp.disconnectAll()).toEqual([{ id: 'safe-http', success: true }]);
+      expect((await client.mcp.listServers())[0].connected).toBe(false);
+      expect(requests).toContain('tools/list');
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it('delivers config warnings and null clears with isolated, idempotent subscriptions', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fred-client-warnings-'));
+    const agentsDirectory = join(directory, 'agents');
+    const agentPath = join(agentsDirectory, 'watched.md');
+    const configPath = join(directory, 'fred.config.json');
+    mkdirSync(agentsDirectory, { recursive: true });
+    writeAgentFile(agentPath, 'watched');
+    writeFileSync(configPath, JSON.stringify({ agentDirs: ['./agents'] }));
+
+    try {
+      const client = track(await createFred({ configPath }));
+      const warnings: Array<string | null> = [];
+      client.warnings.subscribe(() => { throw new Error('listener failure'); });
+      const unsubscribe = client.warnings.subscribe((message) => warnings.push(message));
+
+      writeAgentFile(agentPath);
+      await waitFor(() => warnings.some((message) => typeof message === 'string'));
+      expect(warnings[0]).toContain('Agent reload failed');
+
+      writeAgentFile(agentPath, 'watched');
+      await waitFor(() => warnings.includes(null));
+
+      unsubscribe();
+      unsubscribe();
+      const delivered = warnings.length;
+      writeAgentFile(agentPath);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(warnings).toHaveLength(delivered);
+
+      await client.shutdown();
+      expect(() => client.warnings.subscribe(() => undefined)).toThrow(FredClientClosedError);
+      writeAgentFile(agentPath, 'watched');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(warnings).toHaveLength(delivered);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('agents sub-API registers, lists, and removes agents', async () => {
@@ -548,6 +703,9 @@ describe('createFred client', () => {
     await expect(client.messages.process('hello')).rejects.toBeInstanceOf(FredClientClosedError);
     await expect(client.tools.list()).rejects.toBeInstanceOf(FredClientClosedError);
     await expect(client.mcp.list()).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.mcp.listServers()).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.mcp.connect('anything')).rejects.toBeInstanceOf(FredClientClosedError);
+    await expect(client.mcp.disconnect('anything')).rejects.toBeInstanceOf(FredClientClosedError);
     await expect(client.variables.snapshot()).rejects.toBeInstanceOf(FredClientClosedError);
   });
 });

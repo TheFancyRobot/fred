@@ -51,7 +51,7 @@ import {
   type WorkflowExecutionOptions,
   type WorkflowExecutionResult,
 } from './workflow/execute';
-import type { Tool } from './tool/tool';
+import type { Tool, ToolSchemaMetadata } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
 import type { ProviderConfig, ProviderDefinition } from './platform/provider';
 import type { Tracer } from './tracing';
@@ -287,6 +287,33 @@ export type WorkflowRunResult =
   | GraphExecutionResult
   | WorkflowExecutionResult;
 
+/** Safe, execution-free metadata for a tool discovered from an MCP server. */
+export interface MCPToolMetadata {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly schema?: ToolSchemaMetadata;
+}
+
+/** Client-facing MCP server state. Secret-bearing registry config stays private. */
+export interface MCPServerInfo {
+  readonly id: string;
+  readonly transport: MCPServerConfig['transport'];
+  readonly status: ServerStatus | 'stopped';
+  readonly connected: boolean;
+  readonly tools: readonly MCPToolMetadata[];
+  readonly toolDiscoveryFailed?: boolean;
+}
+
+/** Per-server result used by best-effort bulk MCP lifecycle operations. */
+export interface MCPServerOperationResult {
+  readonly id: string;
+  readonly success: boolean;
+  readonly error?: string;
+}
+
+export type FredWarningListener = (message: string | null) => void;
+
 export interface FredClient {
   readonly agents: {
     register<
@@ -357,6 +384,16 @@ export interface FredClient {
     configure(configs: Array<MCPGlobalServerConfig & { id: string }>): Promise<void>;
     status(id: string): Promise<ServerStatus | undefined>;
     list(): Promise<string[]>;
+    listServers(): Promise<readonly MCPServerInfo[]>;
+    discoverTools(id: string): Promise<readonly MCPToolMetadata[]>;
+    connect(id: string): Promise<void>;
+    connectAll(): Promise<readonly MCPServerOperationResult[]>;
+    disconnect(id: string): Promise<void>;
+    disconnectAll(): Promise<readonly MCPServerOperationResult[]>;
+  };
+  readonly warnings: {
+    /** Subscribe to config hot-reload warnings and null clears. */
+    subscribe(listener: FredWarningListener): () => void;
   };
   readonly subagents: {
     spawn(options: SpawnSubagentOptions): Promise<SubagentInfo>;
@@ -399,6 +436,21 @@ const toMCPServerConfig = (
         maxAttempts: config.retry.maxRetries,
         initialDelayMs: config.retry.backoffMs,
         maxDelayMs: config.retry.maxBackoffMs,
+      }
+    : undefined,
+});
+
+const toMCPToolMetadata = (tool: Tool): MCPToolMetadata => ({
+  id: tool.id,
+  name: tool.name,
+  description: tool.description,
+  schema: tool.schema?.metadata
+    ? {
+        ...tool.schema.metadata,
+        properties: { ...tool.schema.metadata.properties },
+        required: tool.schema.metadata.required
+          ? [...tool.schema.metadata.required]
+          : undefined,
       }
     : undefined,
 });
@@ -462,6 +514,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const mcpRegistry = new MCPServerRegistry();
   const globalVariables = new Map<string, VariableFactory>();
   const templateNamespaces = new Map<string, () => unknown>();
+  const warningListeners = new Set<FredWarningListener>();
   let agentFileWatcher: AgentFileWatcher | undefined;
   const cleanupTasks: CheckpointCleanupTask[] = [];
   const ownedClosers: Array<() => Promise<void>> = [];
@@ -540,6 +593,32 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       const error = Cause.squash(exit.cause);
       throw error instanceof Error ? error : new Error(String(error));
     });
+  };
+
+  const emitWarning = (message: string | null): void => {
+    if (closed) return;
+    for (const listener of [...warningListeners]) {
+      try {
+        listener(message);
+      } catch {
+        // A consumer listener must never interrupt watcher delivery to peers.
+      }
+    }
+  };
+
+  const discoverMCPTools = (id: string): Promise<readonly MCPToolMetadata[]> =>
+    run(Effect.map(mcpRegistry.discoverTools(id), (tools) => tools.map(toMCPToolMetadata)));
+
+  const connectMCPServer = async (id: string): Promise<void> => {
+    await run(mcpRegistry.ensureConnected(id));
+    mcpRegistry.startHealthChecks();
+  };
+
+  const disconnectMCPServer = async (id: string): Promise<void> => {
+    ensureOpen();
+    const config = mcpRegistry.getServerConfig(id);
+    await run(mcpRegistry.removeServer(id));
+    if (config) mcpRegistry.registerLazyServer(id, config);
   };
 
   const client: FredClient = {
@@ -709,6 +788,10 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
             mcpRegistry.registerLazyServer(config.id, serverConfig);
           } else {
             await run(mcpRegistry.registerAndConnect(config.id, serverConfig));
+            if (!mcpRegistry.getServerConfig(config.id)) {
+              // Preserve failed eager configs for discovery and later reconnects.
+              mcpRegistry.registerLazyServer(config.id, serverConfig);
+            }
           }
         }
         mcpRegistry.startHealthChecks();
@@ -720,6 +803,95 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       list: async () => {
         ensureOpen();
         return mcpRegistry.getAllConfiguredServers();
+      },
+      listServers: async () => {
+        ensureOpen();
+        const configuredServers = mcpRegistry.getAllConfiguredServers().flatMap((id) => {
+          const config = mcpRegistry.getServerConfig(id);
+          return config ? [{ id, config }] : [];
+        });
+        return Promise.all(configuredServers.map(async ({ id, config }): Promise<MCPServerInfo> => {
+          const client = mcpRegistry.getClient(id);
+          const connected = client?.isConnected() ?? false;
+          if (!connected) {
+            return {
+              id,
+              transport: config.transport,
+              status: mcpRegistry.getServerStatus(id) ?? 'stopped',
+              connected: false,
+              tools: [],
+            } satisfies MCPServerInfo;
+          }
+          try {
+            const tools = await discoverMCPTools(id);
+            return {
+              id,
+              transport: config.transport,
+              status: mcpRegistry.getServerStatus(id) ?? 'stopped',
+              connected: true,
+              tools,
+            } satisfies MCPServerInfo;
+          } catch {
+            return {
+              id,
+              transport: config.transport,
+              status: mcpRegistry.getServerStatus(id) ?? 'stopped',
+              connected: true,
+              tools: [],
+              toolDiscoveryFailed: true,
+            } satisfies MCPServerInfo;
+          }
+        }));
+      },
+      discoverTools: discoverMCPTools,
+      connect: connectMCPServer,
+      connectAll: async () => {
+        ensureOpen();
+        const results: MCPServerOperationResult[] = [];
+        for (const id of mcpRegistry.getAllConfiguredServers()) {
+          try {
+            await connectMCPServer(id);
+            results.push({ id, success: true });
+          } catch (error) {
+            results.push({
+              id,
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        return results;
+      },
+      disconnect: disconnectMCPServer,
+      disconnectAll: async () => {
+        ensureOpen();
+        const results: MCPServerOperationResult[] = [];
+        for (const id of mcpRegistry.getRegisteredServers()) {
+          try {
+            await disconnectMCPServer(id);
+            results.push({ id, success: true });
+          } catch (error) {
+            results.push({
+              id,
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        return results;
+      },
+    },
+
+    warnings: {
+      subscribe: (listener) => {
+        ensureOpen();
+        warningListeners.add(listener);
+        let subscribed = true;
+        return () => {
+          if (!subscribed) return;
+          subscribed = false;
+          warningListeners.delete(listener);
+        };
       },
     },
 
@@ -749,6 +921,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
         return;
       }
       closed = true;
+      warningListeners.clear();
 
       agentFileWatcher?.close();
       agentFileWatcher = undefined;
@@ -839,7 +1012,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
         agentFileWatcher?.close();
         agentFileWatcher = watcher;
       },
-      emitWarning: () => undefined,
+      emitWarning,
     };
     try {
       await initializer.initializeServices(
