@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
 import {
+  API_KEY_VERIFIER_IDS,
   ApiKeyVerifierDescriptor,
   LEGACY_SHA256_DESCRIPTOR,
   makeDefaultApiKeyVerifierRegistry,
@@ -480,8 +481,14 @@ export const authorizeApiKey = Effect.fn('ApiKeyStore.authorize')(function* (
   }
   const upgradeVerifierId = options.upgradeVerifierId === false
     ? undefined
-    : (options.upgradeVerifierId ?? registry.defaultVerifierId);
-  if (upgradeVerifierId !== undefined && record.verifier.id !== upgradeVerifierId) {
+    : (options.upgradeVerifierId
+      ?? (record.verifier.id === API_KEY_VERIFIER_IDS.legacySha256
+        ? registry.defaultVerifierId
+        : record.verifier.id));
+  const shouldUpgrade = upgradeVerifierId === undefined
+    ? false
+    : yield* registry.needsUpgrade(record.verifier, upgradeVerifierId);
+  if (upgradeVerifierId !== undefined && shouldUpgrade) {
     const replacement = yield* registry.derive(upgradeVerifierId, token).pipe(Effect.either);
     if (replacement._tag === 'Right') {
       yield* store.compareAndSwapVerifier(record.id, record.hash, replacement.right).pipe(Effect.either);

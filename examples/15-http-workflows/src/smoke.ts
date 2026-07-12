@@ -28,18 +28,20 @@ const post = (
 
 async function main(): Promise<void> {
   const store = makeMemoryApiKeyStore();
-  const reader = generateApiKey([], {
-    id: 'smoke-reader',
-    rateLimit: { maxRequests: 10, windowMs: 60_000 },
-  });
-  const runner = generateApiKey(['workflows:run'], {
-    id: 'smoke-runner',
-    rateLimit: { maxRequests: 10, windowMs: 60_000 },
-  });
-  const streamer = generateApiKey(['workflows:stream'], {
-    id: 'smoke-streamer',
-    rateLimit: { maxRequests: 10, windowMs: 60_000 },
-  });
+  const [reader, runner, streamer] = await Effect.runPromise(Effect.all([
+    generateApiKey([], {
+      id: 'smoke-reader',
+      rateLimit: { maxRequests: 10, windowMs: 60_000 },
+    }),
+    generateApiKey(['workflows:run'], {
+      id: 'smoke-runner',
+      rateLimit: { maxRequests: 10, windowMs: 60_000 },
+    }),
+    generateApiKey(['workflows:stream'], {
+      id: 'smoke-streamer',
+      rateLimit: { maxRequests: 10, windowMs: 60_000 },
+    }),
+  ]));
   await Effect.runPromise(Effect.all([
     store.insert(reader.record),
     store.insert(runner.record),

@@ -6,6 +6,7 @@ import {
   API_KEY_TABLE,
   ApiKeyAuthenticationError,
   ApiKeyDuplicateIdError,
+  ApiKeyVerifierConfigurationError,
   ApiKeyScopeError,
   LEGACY_SHA256_DESCRIPTOR,
   authorizeApiKey,
@@ -105,6 +106,22 @@ describe('API key authorization', () => {
     expect(String(await failure(authorizeApiKey(invalidStore, `Bearer ${generated.token}`)))).toContain('verifier');
   });
 
+  test('validates registry ids and verifier parameters with typed configuration errors', async () => {
+    const invalidVerifier: ApiKeyVerifier = {
+      id: 'INVALID',
+      metadataSchema: Schema.Struct({}),
+      canDerive: true,
+      derive: () => Effect.die('not called'),
+      verify: () => Effect.die('not called'),
+    };
+    expect(() => makeApiKeyVerifierRegistry([invalidVerifier], invalidVerifier.id)).toThrow(ApiKeyVerifierConfigurationError);
+    expect(() => makeScryptApiKeyVerifier({ cost: 5_000 })).toThrow(ApiKeyVerifierConfigurationError);
+    expect(() => makePbkdf2ApiKeyVerifier(99_999)).toThrow(ApiKeyVerifierConfigurationError);
+
+    const registry = makeApiKeyVerifierRegistry([makeArgon2idApiKeyVerifier({ memoryCost: 4_096, timeCost: 1 })]);
+    expect(String(await failure(registry.register({ ...invalidVerifier, id: 'no spaces' })))).toContain(ApiKeyVerifierConfigurationError.name);
+  });
+
   test('verifies legacy SHA-256 and lazily upgrades exactly once under concurrency', async () => {
     const store = makeMemoryApiKeyStore();
     const token = `fred_legacy01.${randomToken()}`;
@@ -153,7 +170,7 @@ describe('API key authorization', () => {
     }
   });
 
-  test('supports overlapping HMAC key ids without persisting pepper material', async () => {
+  test('rotates stale HMAC key ids without persisting pepper material', async () => {
     const previous = makeApiKeyVerifierRegistry([
       makeHmacApiKeyVerifier({ currentKeyId: 'previous', keys: { previous: 'p'.repeat(32) } }),
     ], API_KEY_VERIFIER_IDS.hmac);
@@ -166,12 +183,41 @@ describe('API key authorization', () => {
     ], API_KEY_VERIFIER_IDS.hmac);
     const store = makeMemoryApiKeyStore();
     await Effect.runPromise(store.insert(generated.record));
-    await Effect.runPromise(authorizeApiKey(store, `Bearer ${generated.token}`, [], {
-      verifierRegistry: current,
-      upgradeVerifierId: false,
-    }));
+    await Effect.runPromise(authorizeApiKey(store, `Bearer ${generated.token}`, [], { verifierRegistry: current }));
     expect(JSON.stringify(generated.record)).not.toContain('p'.repeat(32));
     expect(generated.record.verifier.metadata).toEqual({ keyId: 'previous', digest: 'sha256' });
+    const rotated = await Effect.runPromise(store.findById(generated.record.id));
+    expect(Option.isSome(rotated) && rotated.value.verifier.metadata).toEqual({ keyId: 'current', digest: 'sha256' });
+    const currentOnly = makeApiKeyVerifierRegistry([
+      makeHmacApiKeyVerifier({ currentKeyId: 'current', keys: { current: 'c'.repeat(32) } }),
+    ], API_KEY_VERIFIER_IDS.hmac);
+    await Effect.runPromise(authorizeApiKey(store, `Bearer ${generated.token}`, [], { verifierRegistry: currentOnly }));
+  });
+
+  test('does not rewrite valid custom verifier records to the registry default', async () => {
+    const custom: ApiKeyVerifier = {
+      id: 'custom-stable-v1',
+      metadataSchema: Schema.Struct({ marker: Schema.Literal('stable') }),
+      canDerive: true,
+      derive: (token) => Effect.succeed({
+        verifier: { id: 'custom-stable-v1', version: 1, metadata: { marker: 'stable' } },
+        hash: `custom:${hashApiKey(token)}`,
+      }),
+      verify: (token, hash) => Effect.succeed(hash === `custom:${hashApiKey(token)}`),
+    };
+    const registry = makeApiKeyVerifierRegistry([
+      makeArgon2idApiKeyVerifier({ memoryCost: 4_096, timeCost: 1 }),
+      custom,
+    ]);
+    const generated = await Effect.runPromise(generateApiKey([], {
+      verifierId: custom.id,
+      verifierRegistry: registry,
+    }));
+    const store = makeMemoryApiKeyStore();
+    await Effect.runPromise(store.insert(generated.record));
+    await Effect.runPromise(authorizeApiKey(store, `Bearer ${generated.token}`, [], { verifierRegistry: registry }));
+    const loaded = await Effect.runPromise(store.findById(generated.record.id));
+    expect(Option.isSome(loaded) && loaded.value.verifier.id).toBe(custom.id);
   });
 
   test('covers absent, malformed, unknown, mismatched, revoked, scoped, and valid keys', async () => {
@@ -437,6 +483,27 @@ describe('fred keys create', () => {
     )).toBe(1);
     expect(stdout).not.toHaveBeenCalled();
     expect(stderr).toHaveBeenCalledTimes(2);
+    stdout.mockRestore();
+    stderr.mockRestore();
+  });
+
+  test('rejects non-ISO expiration values and verifier ids that require a programmatic registry', async () => {
+    const stdout = spyOn(console, 'log').mockImplementation(() => undefined);
+    const stderr = spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await handleKeysCommand(['create'], {
+      sqlite: ':memory:',
+      'expires-at': 'January 1, 2027',
+    })).toBe(1);
+    expect(await handleKeysCommand(['create'], {
+      sqlite: ':memory:',
+      'expires-at': '2027-02-30T00:00:00Z',
+    })).toBe(1);
+    expect(await handleKeysCommand(['create'], {
+      sqlite: ':memory:',
+      verifier: API_KEY_VERIFIER_IDS.hmac,
+    })).toBe(1);
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr.mock.calls.flat().join(' ')).toContain('programmatic registry');
     stdout.mockRestore();
     stderr.mockRestore();
   });
