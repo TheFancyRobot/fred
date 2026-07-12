@@ -24,7 +24,7 @@ next candidate line.
 | `@fancyrobot/fred-dev` | `1.0.0-alpha.0` | CLI `^0.6.0-alpha.0` | Final deprecated compatibility shim |
 | `@fancyrobot/fred-http` | `1.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
 | `@fancyrobot/fred-baml` | `1.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
-| `@fancyrobot/fred-convex` | `1.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `convex ^1.0.0`; `effect ^3.21.0` | Convex runtime and tool adapters |
+| `@fancyrobot/fred-convex` | `1.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
 | `@fancyrobot/fred-anthropic` | `4.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
 | `@fancyrobot/fred-google` | `4.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
 | `@fancyrobot/fred-groq` | `4.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
