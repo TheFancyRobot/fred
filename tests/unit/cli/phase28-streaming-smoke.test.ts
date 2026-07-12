@@ -13,6 +13,7 @@ import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { Stream } from 'effect';
 import type { StreamEvent } from '@fancyrobot/fred';
+import type { ChatDependencies } from '../../../packages/cli/src/commands/chat';
 import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
@@ -165,15 +166,21 @@ describe('Phase 28 streaming smoke', () => {
 
   test('uses project runtime hook when available', async () => {
     const createOptions: Array<unknown> = [];
+    const defaultAgentOptions: Array<Parameters<ChatDependencies['ensureDefaultChatAgent']>[1]> = [];
     const runtimeHook = mock(async () => undefined);
 
     const deps = createSmokeTestDeps({
       createFredTuiApp: mockCreateFredTuiApp,
       onCreate: (options) => createOptions.push(options),
     });
+    const ensureDefaultChatAgent = deps.ensureDefaultChatAgent;
+    deps.ensureDefaultChatAgent = async (fred, options) => {
+      defaultAgentOptions.push(options);
+      return ensureDefaultChatAgent(fred, options);
+    };
     deps.resolveProjectConfig = () => ({
       success: true,
-      config: {},
+      config: { routing: { defaultAgent: 'configured-agent', rules: [] } },
       configPath: '/tmp/fred.config.yaml',
       diagnostics: [],
     }) as any;
@@ -204,6 +211,10 @@ describe('Phase 28 streaming smoke', () => {
 
     expect(runtimeHook).toHaveBeenCalledTimes(1);
     expect(createOptions).toEqual([{ configPath: '/tmp/fred.config.yaml' }]);
+    expect(defaultAgentOptions).toEqual([{
+      agentId: '__tui_agent__',
+      preferredAgentId: 'configured-agent',
+    }]);
 
     void chatPromise;
   });

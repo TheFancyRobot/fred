@@ -438,6 +438,7 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
 
       const result = await deps.ensureDefaultChatAgent(fred, {
         agentId: '__tui_agent__',
+        preferredAgentId: configResult.config.routing?.defaultAgent,
       });
 
       if ((await fred.agents.list()).length === 1) {
@@ -633,17 +634,6 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                         }).pipe(
                           Stream.mapError((error) =>
                             error instanceof Error ? error : new Error(String(error)),
-                          ),
-                          Stream.interruptWhen(
-                            Effect.async<void>((resume) => {
-                              if (signal.aborted) {
-                                resume(Effect.void);
-                                return;
-                              }
-                              const onAbort = () => resume(Effect.void);
-                              signal.addEventListener('abort', onAbort, { once: true });
-                              return Effect.sync(() => signal.removeEventListener('abort', onAbort));
-                            }),
                           ),
                         ),
                       ),

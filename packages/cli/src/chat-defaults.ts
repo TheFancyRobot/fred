@@ -43,6 +43,7 @@ export async function loadProviderPackage(platform: string): Promise<void> {
 
 export interface EnsureDefaultChatAgentOptions {
   agentId?: string;
+  preferredAgentId?: string;
   systemMessage?: string;
 }
 
@@ -72,9 +73,11 @@ export async function ensureDefaultChatAgent(
     const processorConfig = await fred.effects.run(
       Effect.flatMap(MessageProcessorService, (service) => service.getConfig()),
     );
-    const selectedAgentId = processorConfig.defaultAgentId ?? agents[0].id;
+    const selectedAgentId = options.preferredAgentId
+      ?? processorConfig.defaultAgentId
+      ?? agents[0].id;
 
-    if (!processorConfig.defaultAgentId) {
+    if (processorConfig.defaultAgentId !== selectedAgentId) {
       await fred.effects.run(
         Effect.flatMap(MessageProcessorService, (service) =>
           service.updateConfig({ defaultAgentId: selectedAgentId })

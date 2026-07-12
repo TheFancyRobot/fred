@@ -81,7 +81,7 @@ const initializeFredEffect = (
 
     // Bootstrap provider (auto-detection when config doesn't fully specify)
     yield* Effect.tryPromise({
-      try: () => ensureDefaultChatAgent(fred, { agentId }),
+      try: () => ensureDefaultChatAgent(fred, { agentId, preferredAgentId: agentId }),
       catch: (error) =>
         new FredInitError({ message: `Failed to bootstrap provider: ${sanitizeErrorForCli(error)}` }),
     });

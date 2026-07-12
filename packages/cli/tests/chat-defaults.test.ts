@@ -26,17 +26,11 @@ afterEach(async () => {
 });
 
 describe('ensureDefaultChatAgent', () => {
-  test('selects the configured message-processor default instead of the first agent', async () => {
+  test('selects the preferred config default instead of the first agent', async () => {
     const base = await createFred();
     clients.push(base);
     const first = makeAgent('first', 'openai', 'first-model');
     const configured = makeAgent('configured', 'anthropic', 'configured-model');
-    await base.effects.run(
-      Effect.flatMap(MessageProcessorService, (service) =>
-        service.updateConfig({ defaultAgentId: configured.id })
-      ),
-    );
-
     const client: FredClient = {
       ...base,
       agents: {
@@ -46,7 +40,9 @@ describe('ensureDefaultChatAgent', () => {
       },
     };
 
-    const result = await ensureDefaultChatAgent(client);
+    const result = await ensureDefaultChatAgent(client, {
+      preferredAgentId: configured.id,
+    });
 
     expect(result).toEqual({
       provider: 'anthropic',
@@ -54,6 +50,10 @@ describe('ensureDefaultChatAgent', () => {
       agentId: 'configured',
       created: false,
     });
+    const processorConfig = await base.effects.run(
+      Effect.flatMap(MessageProcessorService, (service) => service.getConfig()),
+    );
+    expect(processorConfig.defaultAgentId).toBe(configured.id);
   });
 
   test('sets a newly created fallback agent as the message-processor default', async () => {
