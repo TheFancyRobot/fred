@@ -203,7 +203,7 @@ describe('Phase 28 streaming smoke', () => {
     }
 
     expect(runtimeHook).toHaveBeenCalledTimes(1);
-    expect(createOptions).toEqual([undefined]);
+    expect(createOptions).toEqual([{ configPath: '/tmp/fred.config.yaml' }]);
 
     void chatPromise;
   });

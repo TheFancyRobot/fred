@@ -416,7 +416,7 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
     // Config found - initialize from it
     try {
       const runtimeHook = await deps.loadProjectRuntimeHook(configResult.configPath);
-      fred = await deps.createFred(runtimeHook ? undefined : { configPath: configResult.configPath });
+      fred = await deps.createFred({ configPath: configResult.configPath });
       pluginSlashCommands = buildBuiltinSlashCommands(fred);
 
         if (configResult.config.plugins && configResult.config.plugins.length > 0) {
@@ -538,7 +538,7 @@ export const TERMINAL_RECOVERY_GUIDANCE =
 export const CHAT_SHUTDOWN_TIMEOUT_MS = 5_000;
 
 export async function shutdownFredBeforeExit(
-  fred: Pick<Fred, 'shutdown'>,
+  fred: Pick<FredClient, 'shutdown'>,
   timeoutMs = CHAT_SHUTDOWN_TIMEOUT_MS,
 ): Promise<number> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -618,10 +618,13 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     __FRED_TUI_TOOL_PROGRESS__?: GlobalProgressSink;
                   };
                   let progressSink: GlobalProgressSink | null = null;
+                  let streamAbort: AbortController | null = null;
                   try {
+                    activeStreamAbort?.abort();
+                    streamAbort = new AbortController();
+                    activeStreamAbort = streamAbort;
+                    const signal = streamAbort.signal;
                     const activeSessionId = sessionId ?? await contextManager.generateConversationId();
-                    activeStreamAbort = new AbortController();
-                    const signal = activeStreamAbort.signal;
                     const eventStream = await fred.effects.run(
                       Effect.map(MessageProcessorService, (processor) =>
                         processor.streamMessage(text, {
@@ -730,7 +733,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                     };
 
                     for await (const event of displayStream) {
-                      if (activeStreamAbort?.signal.aborted) break;
+                      if (signal.aborted) break;
                       if (event.type === 'run-start') {
                         const pendingDepths = Array.from(pendingHandoffs.keys()).sort((left, right) => right - left);
                         const pendingDepth = pendingDepths[0];
@@ -836,12 +839,14 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                       delete globalWithProgress.__FRED_TUI_TOOL_PROGRESS__;
                     }
                     // User-initiated exit aborts the stream — don't show error
-                    if (activeStreamAbort?.signal.aborted) {
+                    if (streamAbort?.signal.aborted) {
                       return;
                     }
                     app.failAssistantStream(error);
                   } finally {
-                    activeStreamAbort = null;
+                    if (activeStreamAbort === streamAbort) {
+                      activeStreamAbort = null;
+                    }
                   }
                 })().catch((error) => {
                   app.stop();

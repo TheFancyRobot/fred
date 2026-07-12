@@ -1,4 +1,6 @@
 import type { FredClient } from '@fancyrobot/fred';
+import { MessageProcessorService } from '@fancyrobot/fred/effect';
+import { Effect } from 'effect';
 
 export const DEV_CHAT_PROVIDER_PACKAGES: Record<string, string> = {
   openai: '@fancyrobot/fred-openai',
@@ -67,7 +69,19 @@ export async function ensureDefaultChatAgent(
 
   const agents = await fred.agents.list();
   if (agents.length > 0) {
-    const selectedAgentId = agents[0].id;
+    const processorConfig = await fred.effects.run(
+      Effect.flatMap(MessageProcessorService, (service) => service.getConfig()),
+    );
+    const selectedAgentId = processorConfig.defaultAgentId ?? agents[0].id;
+
+    if (!processorConfig.defaultAgentId) {
+      await fred.effects.run(
+        Effect.flatMap(MessageProcessorService, (service) =>
+          service.updateConfig({ defaultAgentId: selectedAgentId })
+        ),
+      );
+    }
+
     const selectedAgent = await fred.agents.get(selectedAgentId);
     if (!selectedAgent) {
       throw new Error(`Default agent could not be resolved: ${selectedAgentId}`);
@@ -102,6 +116,11 @@ export async function ensureDefaultChatAgent(
     model: providerInfo.model,
     tools: ['calculator'],
   });
+  await fred.effects.run(
+    Effect.flatMap(MessageProcessorService, (service) =>
+      service.updateConfig({ defaultAgentId: agentId })
+    ),
+  );
   return {
     provider: providerInfo.platform,
     model: providerInfo.model,

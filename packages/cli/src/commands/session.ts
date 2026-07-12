@@ -246,7 +246,7 @@ const sessionCommandEffect = (
 
         const exportResult = exportSession(details, 'markdown');
 
-        io.stdout(typeof exportResult === 'string' ? exportResult : toExportContent(details));
+        io.stdout(toExportContent(exportResult));
         return 0;
       }
 

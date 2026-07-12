@@ -101,7 +101,7 @@ function createSessionServiceFixture(options: { serializeDates?: boolean; includ
 
   const contextManager: SessionContextService = {
     listSessions: async () => sessions,
-    generateConversationId: () => 's-new',
+    generateConversationId: async () => 's-new',
     getContext: async (_id: string) => ({ id: _id }),
     updateMetadata: async (_id: string, _metadata: Record<string, unknown>) => undefined,
     getSession: async (id: string) => {

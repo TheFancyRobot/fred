@@ -174,7 +174,7 @@ const mcpStartEffect = (
     // Start a specific server
     const serverId = args[1];
     if (!serverId) {
-      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
+      return yield* Effect.fail(new InvalidArgumentError({ message: 'Server ID is required' }));
     }
 
     yield* Effect.tryPromise({
@@ -229,7 +229,7 @@ const mcpStopEffect = (
     // Stop a specific server
     const serverId = args[1];
     if (!serverId) {
-      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
+      return yield* Effect.fail(new InvalidArgumentError({ message: 'Server ID is required' }));
     }
 
     yield* Effect.tryPromise({
@@ -260,13 +260,13 @@ const mcpStatusEffect = (
 
     const serverId = args[1];
     if (!serverId) {
-      return yield* new InvalidArgumentError({ message: 'Server ID is required' });
+      return yield* Effect.fail(new InvalidArgumentError({ message: 'Server ID is required' }));
     }
 
     const servers = yield* listMcpServersEffect(fred);
     const server = servers.find((candidate) => candidate.id === serverId);
     if (!server) {
-      return yield* new McpOperationError({ serverId, message: 'Server not found' });
+      return yield* Effect.fail(new McpOperationError({ serverId, message: 'Server not found' }));
     }
 
     const { connected: isConnected, tools, toolDiscoveryFailed = false } = server;
@@ -352,11 +352,11 @@ const mcpCommandEffect = (
       case 'status':
         return yield* mcpStatusEffect(args, options, fred, io);
       default:
-        return yield* new UnknownSubcommandError({
+        return yield* Effect.fail(new UnknownSubcommandError({
           subcommand: subcommand ?? '(none)',
           available: 'list, start, stop, status',
           message: `Unknown subcommand: ${subcommand ?? '(none)'}. Available: list, start, stop, status`,
-        });
+        }));
     }
   });
 
