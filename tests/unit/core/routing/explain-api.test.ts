@@ -1,23 +1,20 @@
 /**
- * Integration tests for routing explain() API and AgentResponse extension
+ * Integration tests for Effect-native routing explanations.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect } from 'effect';
-import { Fred } from '../../../../packages/core/src/index';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { Effect, Option } from 'effect';
+import { createFred, type FredClient } from '../../../../packages/core/src/index';
+import { MessageRouterService, ProviderRegistryService } from '../../../../packages/core/src/services';
+import type { RoutingConfig } from '../../../../packages/core/src/routing/types';
 import { createMockProvider } from '../../helpers/mock-provider';
 
 async function registerMockAgent(
-  fred: Fred,
+  fred: FredClient,
   agentId: string,
-  response: string
+  response: string,
 ): Promise<void> {
-  if (!fred.hasProvider('mock')) {
-    const provider = createMockProvider('mock');
-    fred.registerProvider('mock', { ...provider, aliases: [] });
-  }
-
-  const agent = await fred.registerAgent({
+  const agent = await fred.agents.register({
     id: agentId,
     platform: 'mock',
     model: 'mock-model',
@@ -27,25 +24,41 @@ async function registerMockAgent(
   agent.processMessage = () => Effect.succeed({ content: response });
 }
 
+const configureRouting = (fred: FredClient, config: RoutingConfig): Promise<void> =>
+  fred.effects.run(Effect.flatMap(MessageRouterService, (router) => router.setConfig(config)));
+
+const testRoute = (
+  fred: FredClient,
+  message: string,
+  metadata?: Record<string, unknown>,
+) => fred.effects.run(
+  Effect.option(Effect.flatMap(
+    MessageRouterService,
+    (router) => router.testRoute(message, metadata),
+  )),
+).then(Option.getOrNull);
+
+const explainRoute = async (
+  fred: FredClient,
+  message: string,
+  metadata?: Record<string, unknown>,
+) => (await testRoute(fred, message, metadata))?.explanation ?? null;
+
 describe('Routing Explain API Integration', () => {
-  let fred: Fred;
+  let fred: FredClient;
 
   beforeEach(async () => {
-    fred = await Fred.create();
-
-    fred.configureRouting({
+    fred = await createFred();
+    await fred.effects.run(
+      Effect.flatMap(ProviderRegistryService, (providers) =>
+        providers.registerDefinition({ ...createMockProvider('mock'), aliases: [] })
+      ),
+    );
+    await configureRouting(fred, {
       defaultAgent: 'help-agent',
       rules: [
-        {
-          id: 'help-rule',
-          agent: 'help-agent',
-          patterns: ['^help'],
-        },
-        {
-          id: 'math-rule',
-          agent: 'math-agent',
-          patterns: ['math|calculate|compute'],
-        },
+        { id: 'help-rule', agent: 'help-agent', patterns: ['^help'] },
+        { id: 'math-rule', agent: 'math-agent', patterns: ['math|calculate|compute'] },
       ],
     });
 
@@ -57,111 +70,84 @@ describe('Routing Explain API Integration', () => {
     await fred.shutdown();
   });
 
-  it('fred.routing.explain() returns RoutingExplanation for rule-matched message', async () => {
-    const explanation = await fred.routing.explain('help me with something');
+  it('returns RoutingExplanation for a rule-matched message', async () => {
+    const explanation = await explainRoute(fred, 'help me with something');
 
     expect(explanation).toBeDefined();
-    expect(explanation!.winner).toBeDefined();
     expect(explanation!.winner.targetId).toBe('help-agent');
     expect(explanation!.confidence).toBeGreaterThan(0);
     expect(explanation!.matchType).toBe('regex');
     expect(explanation!.narrative).toContain('help-agent');
   });
 
-  it('fred.routing.explain() returns explanation with alternatives', async () => {
-    const explanation = await fred.routing.explain('help with math');
+  it('returns an explanation with alternatives', async () => {
+    const explanation = await explainRoute(fred, 'help with math');
 
-    expect(explanation).toBeDefined();
-    expect(explanation!.winner).toBeDefined();
-    expect(explanation!.alternatives).toBeDefined();
-    expect(Array.isArray(explanation!.alternatives)).toBe(true);
+    expect(explanation?.winner).toBeDefined();
+    expect(Array.isArray(explanation?.alternatives)).toBe(true);
   });
 
-  it('fred.routing.explain() returns null when no router configured', async () => {
-    const fredNoRouter = await Fred.create();
+  it('returns null when no router is configured', async () => {
+    const noRouter = await createFred();
     try {
-      const explanation = await fredNoRouter.routing.explain('test message');
-      expect(explanation).toBeNull();
+      expect(await explainRoute(noRouter, 'test message')).toBeNull();
     } finally {
-      await fredNoRouter.shutdown();
+      await noRouter.shutdown();
     }
   });
 
-  it('testRoute includes explanation metadata', async () => {
-    const decision = await fred.testRoute('help me');
+  it('includes explanation metadata in the routing decision', async () => {
+    const decision = await testRoute(fred, 'help me');
 
-    expect(decision).toBeDefined();
     expect(decision?.agent).toBe('help-agent');
-    expect(decision?.explanation).toBeDefined();
     expect(decision?.explanation?.winner.targetId).toBe('help-agent');
   });
 
-  it('explanation narrative contains routing details', async () => {
-    const explanation = await fred.routing.explain('help me');
+  it('includes a human-readable narrative', async () => {
+    const explanation = await explainRoute(fred, 'help me');
 
-    expect(explanation).toBeDefined();
-    expect(explanation!.narrative).toBeDefined();
-    expect(typeof explanation!.narrative).toBe('string');
-    expect(explanation!.narrative.length).toBeGreaterThan(0);
-    expect(explanation!.narrative).toContain('help-agent');
+    expect(typeof explanation?.narrative).toBe('string');
+    expect(explanation?.narrative.length).toBeGreaterThan(0);
+    expect(explanation?.narrative).toContain('help-agent');
   });
 
-  it('explanation confidence is numeric (no qualitative labels)', async () => {
-    const explanation = await fred.routing.explain('help me');
+  it('uses numeric confidence without qualitative labels', async () => {
+    const explanation = await explainRoute(fred, 'help me');
 
-    expect(explanation).toBeDefined();
-    expect(typeof explanation!.confidence).toBe('number');
+    expect(typeof explanation?.confidence).toBe('number');
     expect(explanation!.confidence).toBeGreaterThanOrEqual(0);
     expect(explanation!.confidence).toBeLessThanOrEqual(1);
     expect(explanation!.narrative).not.toMatch(/\b(HIGH|MEDIUM|LOW)\b/);
   });
 
-  it('explanation alternatives sorted by confidence descending', async () => {
-    fred.configureRouting({
+  it('sorts alternatives by descending confidence', async () => {
+    await configureRouting(fred, {
       defaultAgent: 'help-agent',
       rules: [
-        {
-          id: 'rule-1',
-          agent: 'help-agent',
-          patterns: ['help'],
-          priority: 100,
-        },
-        {
-          id: 'rule-2',
-          agent: 'math-agent',
-          patterns: ['help'],
-          priority: 50,
-        },
+        { id: 'rule-1', agent: 'help-agent', patterns: ['help'], priority: 100 },
+        { id: 'rule-2', agent: 'math-agent', patterns: ['help'], priority: 50 },
       ],
     });
 
-    const explanation = await fred.routing.explain('help me');
-
-    expect(explanation).toBeDefined();
+    const explanation = await explainRoute(fred, 'help me');
     expect(explanation!.alternatives.length).toBeGreaterThan(0);
-
-    for (let i = 1; i < explanation!.alternatives.length; i++) {
-      expect(explanation!.alternatives[i - 1].confidence).toBeGreaterThanOrEqual(
-        explanation!.alternatives[i].confidence
+    for (let index = 1; index < explanation!.alternatives.length; index++) {
+      expect(explanation!.alternatives[index - 1].confidence).toBeGreaterThanOrEqual(
+        explanation!.alternatives[index].confidence,
       );
     }
   });
 
-  it('explanation includes calibration metadata', async () => {
-    const explanation = await fred.routing.explain('help me');
+  it('includes calibration metadata', async () => {
+    const explanation = await explainRoute(fred, 'help me');
 
-    expect(explanation).toBeDefined();
-    expect(explanation!.calibrationMetadata).toBeDefined();
-    expect(explanation!.calibrationMetadata.rawScore).toBeDefined();
-    expect(explanation!.calibrationMetadata.calibratedScore).toBeDefined();
-    expect(typeof explanation!.calibrationMetadata.calibrated).toBe('boolean');
+    expect(explanation?.calibrationMetadata.rawScore).toBeDefined();
+    expect(explanation?.calibrationMetadata.calibratedScore).toBeDefined();
+    expect(typeof explanation?.calibrationMetadata.calibrated).toBe('boolean');
   });
 
-  it('explanation concerns array is defined (may be empty)', async () => {
-    const explanation = await fred.routing.explain('help me');
-
-    expect(explanation).toBeDefined();
-    expect(explanation!.concerns).toBeDefined();
-    expect(Array.isArray(explanation!.concerns)).toBe(true);
+  it('defines the concerns array', async () => {
+    const explanation = await explainRoute(fred, 'help me');
+    expect(Array.isArray(explanation?.concerns)).toBe(true);
   });
 });

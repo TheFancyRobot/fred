@@ -1,245 +1,153 @@
 /**
- * WorkflowManager unit tests
- *
- * Tests workflow registration, retrieval, validation, and agent existence warnings.
+ * Effect-native workflow service tests.
  */
 
-import { describe, it, expect, spyOn } from 'bun:test';
-import { WorkflowManager } from '../../../../packages/core/src/workflow/manager';
-import { AgentInstance } from '../../../../packages/core/src/agent/agent';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { Effect } from 'effect';
+import { createFred, type FredClient } from '../../../../packages/core/src/index';
+import {
+  ProviderRegistryService,
+  WorkflowService,
+} from '../../../../packages/core/src/services';
+import { createMockProvider } from '../../helpers/mock-provider';
 
-/**
- * Create a mock Fred-like object with agent manager
- */
-function createMockFred(agents: { id: string }[] = []) {
-  const agentsMap = new Map<string, AgentInstance>();
-  for (const agent of agents) {
-    agentsMap.set(agent.id, {
-      id: agent.id,
-      config: { id: agent.id, platform: 'test', model: 'test', systemMessage: 'test' },
-      processMessage: async () => ({ content: 'test' }),
-    } as AgentInstance);
+const withClient = async <A>(
+  agentIds: readonly string[],
+  use: (client: FredClient) => Promise<A>,
+): Promise<A> => {
+  const client = await createFred();
+  try {
+    await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (providers) =>
+        providers.registerDefinition({ ...createMockProvider('mock'), aliases: [] })
+      ),
+    );
+    for (const id of agentIds) {
+      await client.agents.register({
+        id,
+        platform: 'mock',
+        model: 'mock-model',
+        systemMessage: 'test',
+      } as any);
+    }
+    return await use(client);
+  } finally {
+    await client.shutdown();
   }
+};
 
-  return {
-    getAgent: (id: string) => agentsMap.get(id),
-    listAgents: () => Array.from(agentsMap.values()),
-  };
-}
-
-describe('WorkflowManager', () => {
-  describe('constructor', () => {
-    it('should create WorkflowManager with Fred instance', () => {
-      const fred = createMockFred() as any;
-      const manager = new WorkflowManager(fred);
-
-      expect(manager).toBeDefined();
-      expect(manager.listWorkflows()).toEqual([]);
+describe('WorkflowService', () => {
+  it('starts with no workflows', async () => {
+    await withClient([], async (client) => {
+      expect(await client.effects.run(
+        Effect.flatMap(WorkflowService, (workflows) => workflows.listWorkflows()),
+      )).toEqual([]);
     });
   });
 
-  describe('addWorkflow', () => {
-    it('should store workflow correctly', () => {
-      const fred = createMockFred([{ id: 'agent-1' }, { id: 'agent-2' }]) as any;
-      const manager = new WorkflowManager(fred);
+  it('stores and retrieves a workflow', async () => {
+    await withClient(['agent-1', 'agent-2'], async (client) => {
+      await client.effects.run(
+        Effect.flatMap(WorkflowService, (workflows) => workflows.addWorkflow('test-workflow', {
+          defaultAgent: 'agent-1',
+          agents: ['agent-1', 'agent-2'],
+        })),
+      );
 
-      manager.addWorkflow('test-workflow', {
+      const workflow = await client.effects.run(
+        Effect.flatMap(WorkflowService, (workflows) => workflows.getWorkflow('test-workflow')),
+      );
+      expect(workflow).toEqual({
+        name: 'test-workflow',
         defaultAgent: 'agent-1',
         agents: ['agent-1', 'agent-2'],
       });
-
-      const workflow = manager.getWorkflow('test-workflow');
-      expect(workflow).toBeDefined();
-      expect(workflow?.name).toBe('test-workflow');
-      expect(workflow?.defaultAgent).toBe('agent-1');
-      expect(workflow?.agents).toEqual(['agent-1', 'agent-2']);
     });
+  });
 
-    it('should allow workflow with optional routing config', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      manager.addWorkflow('routed-workflow', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1'],
-        routing: {
+  it('preserves optional routing configuration', async () => {
+    await withClient(['agent-1'], async (client) => {
+      await client.effects.run(
+        Effect.flatMap(WorkflowService, (workflows) => workflows.addWorkflow('routed', {
           defaultAgent: 'agent-1',
-          rules: [],
-        },
-      });
+          agents: ['agent-1'],
+          routing: { defaultAgent: 'agent-1', rules: [] },
+        })),
+      );
 
-      const workflow = manager.getWorkflow('routed-workflow');
-      expect(workflow?.routing).toBeDefined();
+      const workflow = await client.effects.run(
+        Effect.flatMap(WorkflowService, (workflows) => workflows.getWorkflow('routed')),
+      );
       expect(workflow?.routing?.defaultAgent).toBe('agent-1');
     });
   });
 
-  describe('getWorkflow', () => {
-    it('should retrieve stored workflow', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1'],
-      });
-
-      const workflow = manager.getWorkflow('workflow-1');
-      expect(workflow?.name).toBe('workflow-1');
-    });
-
-    it('should return undefined for non-existent workflow', () => {
-      const fred = createMockFred() as any;
-      const manager = new WorkflowManager(fred);
-
-      const workflow = manager.getWorkflow('non-existent');
-      expect(workflow).toBeUndefined();
-    });
-  });
-
-  describe('listWorkflows', () => {
-    it('should return all workflow names', () => {
-      const fred = createMockFred([{ id: 'agent-1' }, { id: 'agent-2' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1'],
-      });
-      manager.addWorkflow('workflow-2', {
-        defaultAgent: 'agent-2',
-        agents: ['agent-2'],
-      });
-
-      const names = manager.listWorkflows();
-      expect(names).toContain('workflow-1');
-      expect(names).toContain('workflow-2');
-      expect(names.length).toBe(2);
-    });
-
-    it('should return empty array when no workflows registered', () => {
-      const fred = createMockFred() as any;
-      const manager = new WorkflowManager(fred);
-
-      expect(manager.listWorkflows()).toEqual([]);
-    });
-  });
-
-  describe('hasWorkflow', () => {
-    it('should return true for existing workflow', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1'],
-      });
-
-      expect(manager.hasWorkflow('workflow-1')).toBe(true);
-    });
-
-    it('should return false for non-existent workflow', () => {
-      const fred = createMockFred() as any;
-      const manager = new WorkflowManager(fred);
-
-      expect(manager.hasWorkflow('non-existent')).toBe(false);
-    });
-  });
-
-  describe('validation warnings', () => {
-    it('should warn when default agent not found', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'missing-agent',
-        agents: ['agent-1'],
-      });
-
-      expect(warnSpy).toHaveBeenCalled();
-      const warnCall = warnSpy.mock.calls[0][0];
-      expect(warnCall).toContain('[Workflow]');
-      expect(warnCall).toContain('Default agent');
-      expect(warnCall).toContain('missing-agent');
-      expect(warnCall).toContain('workflow-1');
-
-      warnSpy.mockRestore();
-    });
-
-    it('should warn when workflow agent not found', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1', 'missing-agent'],
-      });
-
-      expect(warnSpy).toHaveBeenCalled();
-      const warnCall = warnSpy.mock.calls[0][0];
-      expect(warnCall).toContain('[Workflow]');
-      expect(warnCall).toContain('Agent');
-      expect(warnCall).toContain('missing-agent');
-      expect(warnCall).toContain('workflow-1');
-
-      warnSpy.mockRestore();
-    });
-
-    it('should warn for multiple missing agents', () => {
-      const fred = createMockFred([{ id: 'agent-1' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1', 'missing-1', 'missing-2'],
-      });
-
-      // Should have warnings for missing-1 and missing-2
-      expect(warnSpy).toHaveBeenCalledTimes(2);
-
-      warnSpy.mockRestore();
-    });
-
-    it('should NOT throw when agents are missing (non-blocking validation)', () => {
-      const fred = createMockFred() as any;
-      const manager = new WorkflowManager(fred);
-
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-      // Should not throw despite all agents missing
-      expect(() => {
-        manager.addWorkflow('workflow-1', {
-          defaultAgent: 'missing-default',
-          agents: ['missing-1', 'missing-2'],
+  it('lists and detects registered workflows', async () => {
+    await withClient(['agent-1', 'agent-2'], async (client) => {
+      await client.effects.run(Effect.gen(function* () {
+        const workflows = yield* WorkflowService;
+        yield* workflows.addWorkflow('workflow-1', {
+          defaultAgent: 'agent-1',
+          agents: ['agent-1'],
         });
-      }).not.toThrow();
+        yield* workflows.addWorkflow('workflow-2', {
+          defaultAgent: 'agent-2',
+          agents: ['agent-2'],
+        });
+      }));
 
-      // Workflow should still be registered
-      expect(manager.hasWorkflow('workflow-1')).toBe(true);
-
-      warnSpy.mockRestore();
+      const result = await client.effects.run(Effect.gen(function* () {
+        const workflows = yield* WorkflowService;
+        return {
+          names: yield* workflows.listWorkflows(),
+          first: yield* workflows.hasWorkflow('workflow-1'),
+          missing: yield* workflows.hasWorkflow('missing'),
+        };
+      }));
+      expect(result.names.sort()).toEqual(['workflow-1', 'workflow-2']);
+      expect(result.first).toBe(true);
+      expect(result.missing).toBe(false);
     });
+  });
 
-    it('should NOT warn when all agents exist', () => {
-      const fred = createMockFred([{ id: 'agent-1' }, { id: 'agent-2' }]) as any;
-      const manager = new WorkflowManager(fred);
-
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-      manager.addWorkflow('workflow-1', {
-        defaultAgent: 'agent-1',
-        agents: ['agent-1', 'agent-2'],
+  it('warns for missing default and listed agents without rejecting registration', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await withClient(['agent-1'], async (client) => {
+        await client.effects.run(
+          Effect.flatMap(WorkflowService, (workflows) => workflows.addWorkflow('workflow-1', {
+            defaultAgent: 'missing-default',
+            agents: ['agent-1', 'missing-1', 'missing-2'],
+          })),
+        );
+        expect(await client.effects.run(
+          Effect.flatMap(WorkflowService, (workflows) => workflows.hasWorkflow('workflow-1')),
+        )).toBe(true);
       });
 
-      expect(warnSpy).not.toHaveBeenCalled();
-
+      expect(warnSpy).toHaveBeenCalledTimes(3);
+      expect(warnSpy.mock.calls.map(([message]) => message).join('\n')).toContain('missing-default');
+      expect(warnSpy.mock.calls.map(([message]) => message).join('\n')).toContain('missing-1');
+      expect(warnSpy.mock.calls.map(([message]) => message).join('\n')).toContain('missing-2');
+    } finally {
       warnSpy.mockRestore();
-    });
+    }
+  });
+
+  it('does not warn when every referenced agent exists', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await withClient(['agent-1', 'agent-2'], async (client) => {
+        await client.effects.run(
+          Effect.flatMap(WorkflowService, (workflows) => workflows.addWorkflow('workflow-1', {
+            defaultAgent: 'agent-1',
+            agents: ['agent-1', 'agent-2'],
+          })),
+        );
+      });
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

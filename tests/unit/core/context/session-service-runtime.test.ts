@@ -1,12 +1,12 @@
 /**
- * Phase 62 / STEP-62-02: SessionService wired into the Fred runtime.
+ * Phase 62 / STEP-62-02: SessionService wired into the scoped runtime.
  *
  * Verifies the ambient session service is part of the createFred runtime:
  * `sessions.open` works from the Promise client, and the same SessionService
- * is reachable (and functional) through the runtime escape hatch.
+ * is reachable through the Effect-native client boundary.
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { Effect, Option, Runtime } from 'effect';
+import { Effect, Option } from 'effect';
 import { createFred, type FredClient } from '../../../../packages/core/src/client';
 import { SessionService } from '../../../../packages/core/src/services';
 
@@ -30,10 +30,10 @@ describe('SessionService in the createFred runtime', () => {
     expect(fresh.id).not.toBe(resumed.id);
   });
 
-  it('SessionService resolves and propagates ambient session via the runtime', async () => {
+  it('SessionService resolves and propagates ambient session via effects.run', async () => {
     const client = track(await createFred());
 
-    const seen = await Runtime.runPromise(client.runtime)(
+    const seen = await client.effects.run(
       Effect.flatMap(SessionService, (svc) =>
         svc.withSession(
           'conv_ambient',
@@ -46,7 +46,7 @@ describe('SessionService in the createFred runtime', () => {
 
   it('has no ambient session outside withSession on the shared runtime', async () => {
     const client = track(await createFred());
-    const current = await Runtime.runPromise(client.runtime)(
+    const current = await client.effects.run(
       Effect.flatMap(SessionService, (svc) => svc.current),
     );
     expect(Option.isNone(current)).toBe(true);

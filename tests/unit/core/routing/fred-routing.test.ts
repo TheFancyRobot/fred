@@ -1,26 +1,22 @@
 /**
- * Fred routing integration tests
+ * Scoped-client routing integration tests
  *
- * Tests Fred.configureRouting(), Fred.testRoute(), and routing integration.
+ * Tests Effect-native routing configuration and decisions through one client runtime.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect } from 'effect';
-import { Fred } from '../../../../packages/core/src/index';
+import { Effect, Option } from 'effect';
+import { createFred, type FredClient } from '../../../../packages/core/src/index';
+import { MessageRouterService, ProviderRegistryService } from '../../../../packages/core/src/services';
 import type { RoutingConfig } from '../../../../packages/core/src/routing/types';
 import { createMockProvider } from '../../helpers/mock-provider';
 
 async function registerMockAgent(
-  fred: Fred,
+  fred: FredClient,
   agentId: string,
   options?: { persistHistory?: boolean; response?: string }
 ): Promise<void> {
-  if (!fred.hasProvider('mock')) {
-    const provider = createMockProvider('mock');
-    fred.registerProvider('mock', { ...provider, aliases: [] });
-  }
-
-  const agent = await fred.registerAgent({
+  const agent = await fred.agents.register({
     id: agentId,
     platform: 'mock',
     model: 'mock-model',
@@ -31,11 +27,34 @@ async function registerMockAgent(
   agent.processMessage = () => Effect.succeed({ content: options?.response ?? 'Mock response' });
 }
 
-describe('Fred Routing Integration', () => {
-  let fred: Fred;
+const configureRouting = (
+  fred: FredClient,
+  config: RoutingConfig,
+): Promise<void> => fred.effects.run(
+  Effect.flatMap(MessageRouterService, (router) => router.setConfig(config)),
+);
+
+const testRoute = (
+  fred: FredClient,
+  message: string,
+  metadata?: Record<string, unknown>,
+) => fred.effects.run(
+  Effect.option(Effect.flatMap(
+    MessageRouterService,
+    (router) => router.testRoute(message, metadata),
+  )),
+).then(Option.getOrNull);
+
+describe('Scoped-client routing integration', () => {
+  let fred: FredClient;
 
   beforeEach(async () => {
-    fred = await Fred.create();
+    fred = await createFred();
+    await fred.effects.run(
+      Effect.flatMap(ProviderRegistryService, (providers) =>
+        providers.registerDefinition({ ...createMockProvider('mock'), aliases: [] })
+      ),
+    );
   });
 
   afterEach(async () => {
@@ -54,16 +73,16 @@ describe('Fred Routing Integration', () => {
         ],
       };
 
-      fred.configureRouting(routingConfig);
+      await configureRouting(fred, routingConfig);
 
-      const decision = await fred.testRoute('I want to buy');
+      const decision = await testRoute(fred, 'I want to buy');
       expect(decision?.agent).toBe('sales-agent');
     });
   });
 
   describe('testRoute', () => {
     it('should return null if routing is not configured', async () => {
-      const decision = await fred.testRoute('any message');
+      const decision = await testRoute(fred, 'any message');
       expect(decision).toBeNull();
     });
 
@@ -71,20 +90,20 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'default-agent');
       await registerMockAgent(fred, 'help-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           { id: 'help-rule', agent: 'help-agent', keywords: ['help', 'support'] },
         ],
       });
 
-      const helpDecision = await fred.testRoute('I need help');
+      const helpDecision = await testRoute(fred, 'I need help');
       expect(helpDecision).not.toBeNull();
       expect(helpDecision?.agent).toBe('help-agent');
       expect(helpDecision?.fallback).toBe(false);
       expect(helpDecision?.matchType).toBe('keyword');
 
-      const defaultDecision = await fred.testRoute('hello world');
+      const defaultDecision = await testRoute(fred, 'hello world');
       expect(defaultDecision).not.toBeNull();
       expect(defaultDecision?.agent).toBe('default-agent');
       expect(defaultDecision?.fallback).toBe(true);
@@ -94,19 +113,19 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'default-agent');
       await registerMockAgent(fred, 'vip-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           { id: 'vip-rule', agent: 'vip-agent', metadata: { tier: 'vip' } },
         ],
       });
 
-      const vipDecision = await fred.testRoute('any message', { tier: 'vip' });
+      const vipDecision = await testRoute(fred, 'any message', { tier: 'vip' });
       expect(vipDecision).not.toBeNull();
       expect(vipDecision?.agent).toBe('vip-agent');
       expect(vipDecision?.matchType).toBe('metadata-only');
 
-      const regularDecision = await fred.testRoute('any message', { tier: 'regular' });
+      const regularDecision = await testRoute(fred, 'any message', { tier: 'regular' });
       expect(regularDecision).not.toBeNull();
       expect(regularDecision?.agent).toBe('default-agent');
       expect(regularDecision?.fallback).toBe(true);
@@ -116,18 +135,18 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'default-agent');
       await registerMockAgent(fred, 'weather-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           { id: 'weather-rule', agent: 'weather-agent', patterns: ['^weather', 'forecast'] },
         ],
       });
 
-      const weatherDecision = await fred.testRoute('weather in NYC');
+      const weatherDecision = await testRoute(fred, 'weather in NYC');
       expect(weatherDecision?.agent).toBe('weather-agent');
       expect(weatherDecision?.matchType).toBe('regex');
 
-      const forecastDecision = await fred.testRoute('give me the forecast');
+      const forecastDecision = await testRoute(fred, 'give me the forecast');
       expect(forecastDecision?.agent).toBe('weather-agent');
     });
 
@@ -135,7 +154,7 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'default-agent');
       await registerMockAgent(fred, 'long-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           {
@@ -146,10 +165,10 @@ describe('Fred Routing Integration', () => {
         ],
       });
 
-      const shortDecision = await fred.testRoute('hi');
+      const shortDecision = await testRoute(fred, 'hi');
       expect(shortDecision?.agent).toBe('default-agent');
 
-      const longDecision = await fred.testRoute('This is a very long message that exceeds fifty characters in length');
+      const longDecision = await testRoute(fred, 'This is a very long message that exceeds fifty characters in length');
       expect(longDecision?.agent).toBe('long-agent');
       expect(longDecision?.matchType).toBe('function');
     });
@@ -160,24 +179,24 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'first-agent');
       await registerMockAgent(fred, 'second-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'non-existent-agent',
         rules: [],
       });
 
-      const decision = await fred.testRoute('any message');
+      const decision = await testRoute(fred, 'any message');
       expect(decision).not.toBeNull();
       expect(decision?.agent).toBe('non-existent-agent');
       expect(decision?.fallback).toBe(true);
     });
 
     it('should still return configured defaultAgent when no agents are available', async () => {
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'non-existent',
         rules: [],
       });
 
-      const decision = await fred.testRoute('any message');
+      const decision = await testRoute(fred, 'any message');
       expect(decision).not.toBeNull();
       expect(decision?.agent).toBe('non-existent');
       expect(decision?.fallback).toBe(true);
@@ -185,15 +204,15 @@ describe('Fred Routing Integration', () => {
   });
 
   describe('routing hooks', () => {
-    it('should allow registering routing hooks on Fred', () => {
+    it('should allow registering routing hooks on the client', async () => {
       let beforeCalled = false;
       let afterCalled = false;
 
-      fred.registerHook('beforeRouting', () => {
+      await fred.hooks.register('beforeRouting', () => {
         beforeCalled = true;
       });
 
-      fred.registerHook('afterRouting', () => {
+      await fred.hooks.register('afterRouting', () => {
         afterCalled = true;
       });
 
@@ -208,7 +227,7 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'keyword-agent');
       await registerMockAgent(fred, 'regex-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           { id: 'keyword-rule', agent: 'keyword-agent', keywords: ['help'] },
@@ -216,7 +235,7 @@ describe('Fred Routing Integration', () => {
         ],
       });
 
-      const decision = await fred.testRoute('help me please');
+      const decision = await testRoute(fred, 'help me please');
       expect(decision?.agent).toBe('regex-agent');
     });
 
@@ -225,7 +244,7 @@ describe('Fred Routing Integration', () => {
       await registerMockAgent(fred, 'low-priority-agent');
       await registerMockAgent(fred, 'high-priority-agent');
 
-      fred.configureRouting({
+      await configureRouting(fred, {
         defaultAgent: 'default-agent',
         rules: [
           { id: 'low', agent: 'low-priority-agent', keywords: ['test'], priority: 10 },
@@ -233,7 +252,7 @@ describe('Fred Routing Integration', () => {
         ],
       });
 
-      const decision = await fred.testRoute('test message');
+      const decision = await testRoute(fred, 'test message');
       expect(decision?.agent).toBe('high-priority-agent');
     });
   });

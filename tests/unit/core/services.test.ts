@@ -27,6 +27,7 @@ import {
   ToolGateService,
 } from '../../../packages/core/src/services';
 import type { Tool } from '../../../packages/core/src/tool/tool';
+import { createFred } from '../../../packages/core/src/index';
 
 describe('FredLayers', () => {
   test('composes all services without errors', async () => {
@@ -161,41 +162,18 @@ describe('createScopedFredRuntime', () => {
   });
 });
 
-describe('Fred.create integration', () => {
-  test('Fred.create initializes runtime', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-    const fred = await Fred.create();
-
-    expect(fred).toBeInstanceOf(Fred);
-
-    // Runtime should be accessible
-    const runtime = await fred.getRuntime();
-    expect(runtime).toBeDefined();
-
-    // Can run effects with the runtime. Built-in tools (calculator) are
-    // registered into the runtime registry when the runtime is built.
-    const result = await Runtime.runPromise(runtime)(
-      Effect.gen(function* () {
-        const service = yield* ToolRegistryService;
-        return yield* service.size();
-      })
-    );
-
-    expect(result).toBe(1);
-
-    await fred.shutdown();
-  });
-
-  test('Fred constructor with lazy runtime works', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-    const fred = new Fred();
-
-    // Runtime not yet initialized
-    // But getRuntime() triggers lazy initialization
-    const runtime = await fred.getRuntime();
-    expect(runtime).toBeDefined();
-
-    await fred.shutdown();
+describe('createFred integration', () => {
+  test('createFred initializes a service-backed client', async () => {
+    const fred = await createFred();
+    try {
+      const result = await fred.effects.run(
+        Effect.flatMap(ToolRegistryService, (service) => service.size()),
+      );
+      expect(result).toBe(1);
+      expect(await fred.tools.list()).toHaveLength(1);
+    } finally {
+      await fred.shutdown();
+    }
   });
 });
 
@@ -485,7 +463,7 @@ describe('Phase 42 Standalone Service Integration', () => {
   });
 });
 
-describe('Phase 43 Fred facade', () => {
+describe('Phase 43 scoped client boundary', () => {
   const makeBoundaryTool = (id: string): Tool => ({
     id,
     name: id,
@@ -493,19 +471,13 @@ describe('Phase 43 Fred facade', () => {
     execute: async () => ({ ok: true }),
   });
 
-  test('processMessage delegates through MessageProcessorService for Fred.create and new Fred', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+  test('messages.process delegates through MessageProcessorService', async () => {
+    const fred = await createFred();
+    {
       let calls = 0;
 
       try {
-        const runtime = await fred.getRuntime();
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* MessageProcessorService;
             const original = service.processMessage;
@@ -521,7 +493,7 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const result = await fred.processMessage('phase-43-boundary-check');
+        const result = await fred.messages.process('phase-43-boundary-check');
         restore();
 
         expect(result?.content).toBe('phase-43');
@@ -533,19 +505,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('registerTool writes through ToolRegistryService runtime state', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
-        fred.registerTool(makeBoundaryTool(`phase-43-tool-${Math.random()}`));
+        await fred.tools.register(makeBoundaryTool(`phase-43-tool-${Math.random()}`));
 
-        const serviceSize = await Runtime.runPromise(runtime)(
+        const serviceSize = await fred.effects.run(
           Effect.gen(function* () {
             const tools = yield* ToolRegistryService;
             return yield* tools.size();
@@ -560,19 +526,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('streamMessage delegates through MessageProcessorService streamMessage', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* MessageProcessorService;
             const original = service.streamMessage;
@@ -588,8 +548,12 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const stream = fred.streamMessage('phase-43-stream-check');
-        await stream.toArray();
+        await fred.effects.run(
+          Stream.unwrap(Effect.map(
+            MessageProcessorService,
+            (service) => service.streamMessage('phase-43-stream-check'),
+          )).pipe(Stream.runDrain),
+        );
         restore();
 
         expect(calls).toBe(1);
@@ -600,19 +564,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('routeMessage delegates through MessageProcessorService routeMessage', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* MessageProcessorService;
             const original = service.routeMessage;
@@ -628,7 +586,12 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const result = await fred.routeMessage('phase-43-route-check');
+        const result = await fred.effects.run(
+          Effect.flatMap(
+            MessageProcessorService,
+            (service) => service.routeMessage('phase-43-route-check'),
+          ),
+        );
         restore();
 
         expect(result.type).toBe('none');
@@ -640,19 +603,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('executePipeline delegates through PipelineService executePipeline', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* PipelineService;
             const original = service.executePipeline;
@@ -668,7 +625,12 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const result = await fred.executePipeline('phase-43-pipeline-id', 'hello');
+        const result = await fred.effects.run(
+          Effect.flatMap(
+            PipelineService,
+            (service) => service.executePipeline('phase-43-pipeline-id', 'hello'),
+          ),
+        );
         restore();
 
         expect(result.content).toBe('phase-43-pipeline');
@@ -680,19 +642,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('registerAgent delegates through AgentService createAgent', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* AgentService;
             const original = service.createAgent;
@@ -713,7 +669,7 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const agent = await fred.registerAgent({
+        const agent = await fred.agents.register({
           id: `phase-43-agent-${Math.random()}`,
           systemMessage: 'test',
           platform: 'openai',
@@ -730,19 +686,13 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('setToolPolicies delegates through ToolGateService reloadPolicies', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* ToolGateService;
             const original = service.reloadPolicies;
@@ -758,7 +708,9 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        await fred.setToolPolicies(undefined);
+        await fred.effects.run(
+          Effect.flatMap(ToolGateService, (service) => service.reloadPolicies(undefined)),
+        );
         restore();
 
         expect(calls).toBe(1);
@@ -769,20 +721,19 @@ describe('Phase 43 Fred facade', () => {
   });
 
   test('testRoute and routing.explain delegate through MessageRouterService', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+    const fred = await createFred();
+    {
 
       try {
-        fred.configureRouting({ defaultAgent: 'phase-43-default', rules: [] });
-        const runtime = await fred.getRuntime();
+        await fred.effects.run(
+          Effect.flatMap(
+            MessageRouterService,
+            (service) => service.setConfig({ defaultAgent: 'phase-43-default', rules: [] }),
+          ),
+        );
         let calls = 0;
 
-        const restore = await Runtime.runPromise(runtime)(
+        const restore = await fred.effects.run(
           Effect.gen(function* () {
             const service = yield* MessageRouterService;
             const original = service.testRoute;
@@ -819,8 +770,18 @@ describe('Phase 43 Fred facade', () => {
           })
         );
 
-        const decision = await fred.testRoute('phase-43-test-route');
-        const explanation = await fred.routing.explain('phase-43-explain-route');
+        const decision = await fred.effects.run(
+          Effect.flatMap(
+            MessageRouterService,
+            (service) => service.testRoute('phase-43-test-route'),
+          ),
+        );
+        const explanation = (await fred.effects.run(
+          Effect.flatMap(
+            MessageRouterService,
+            (service) => service.testRoute('phase-43-explain-route'),
+          ),
+        )).explanation;
         restore();
 
         expect(decision?.agent).toBe('phase-43-default');
@@ -832,27 +793,21 @@ describe('Phase 43 Fred facade', () => {
     }
   });
 
-  test('runtime ToolRegistryService registrations are visible via Fred.getTools', async () => {
-    const { Fred } = await import('../../../packages/core/src/index');
-
-    for (const createFred of [
-      () => Fred.create(),
-      async () => new Fred(),
-    ]) {
-      const fred = await createFred();
+  test('service tool registrations are visible via client.tools.list', async () => {
+    const fred = await createFred();
+    {
 
       try {
-        const runtime = await fred.getRuntime();
         const runtimeTool = makeBoundaryTool(`phase-43-runtime-tool-${Math.random()}`);
 
-        await Runtime.runPromise(runtime)(
+        await fred.effects.run(
           Effect.gen(function* () {
             const tools = yield* ToolRegistryService;
             yield* tools.registerTool(runtimeTool);
           })
         );
 
-        expect(fred.getTools().some((tool) => tool.id === runtimeTool.id)).toBe(true);
+        expect((await fred.tools.list()).some((tool) => tool.id === runtimeTool.id)).toBe(true);
       } finally {
         await fred.shutdown();
       }

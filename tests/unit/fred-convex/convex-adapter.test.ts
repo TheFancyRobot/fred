@@ -18,7 +18,7 @@ import {
   createConvexTool,
 } from '../../../packages/fred-convex/src/tools';
 import { createStubConvexRuntime, createStubConvexClient } from '../../../packages/fred-convex/src/testing';
-import { Fred } from '../../../packages/core/src/index';
+import { createFred } from '../../../packages/core/src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -340,11 +340,11 @@ describe('createConvexTool', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Fred integration
+// Core client integration
 // ---------------------------------------------------------------------------
 
-describe('Fred integration', () => {
-  test('registers and executes a Convex-backed tool through Fred', async () => {
+describe('core client integration', () => {
+  test('registers and executes a Convex-backed tool through the scoped client', async () => {
     const { runtime } = createStubConvexRuntime({ query: { 'api/tasks:list': [{ _id: '1', title: 'Test' }] } });
 
     const tool = createConvexTool({
@@ -357,11 +357,16 @@ describe('Fred integration', () => {
       runtime,
     });
 
-    const fred = await Fred.create();
-    fred.registerTool(tool);
-
-    const registeredTool = fred.getTool('convex.listTasks');
-    expect(registeredTool).toBeDefined();
-    await expect(registeredTool?.execute({})).resolves.toEqual([{ _id: '1', title: 'Test' }]);
+    const fred = await createFred();
+    try {
+      await fred.tools.register(tool);
+      const registeredTool = (await fred.tools.list()).find(
+        (candidate) => candidate.id === 'convex.listTasks',
+      );
+      expect(registeredTool).toBeDefined();
+      await expect(registeredTool?.execute({})).resolves.toEqual([{ _id: '1', title: 'Test' }]);
+    } finally {
+      await fred.shutdown();
+    }
   });
 });

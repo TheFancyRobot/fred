@@ -458,6 +458,8 @@ export class ConfigInitializer {
         );
       }
       ids.add(agent.id);
+    }
+    for (const agent of [...fileAgents, ...configAgents]) {
       await target.createAgent(agent);
     }
 

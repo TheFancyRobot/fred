@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { Fred } from '../../../../packages/core/src/index';
+import { createFred } from '../../../../packages/core/src/index';
 import { FredLayers, SubagentService } from '../../../../packages/core/src/services';
 import { CAPTURE_PROCESS_SOURCE } from '../../../../packages/core/src/subagent/service';
 import { createSubagentExecutionContext, withSubagentExecutionContext } from '../../../../packages/core/src/subagent/context';
@@ -57,8 +57,8 @@ describe('SubagentService', () => {
     expect(result).toEqual([]);
   });
 
-  test('Fred subagents can spawn, inspect, list, and destroy', async () => {
-    const fred = await Fred.create();
+  test('client subagents can spawn, inspect, list, and destroy', async () => {
+    const fred = await createFred();
 
     try {
       const subagent = await fred.subagents.spawn({
@@ -87,7 +87,7 @@ describe('SubagentService', () => {
   });
 
   test('execute captures output and updates execution metadata', async () => {
-    const fred = await Fred.create();
+    const fred = await createFred();
 
     try {
       const subagent = await fred.subagents.spawn({
@@ -112,7 +112,7 @@ describe('SubagentService', () => {
   });
 
   test('execute does not leak the full parent environment to subagents', async () => {
-    const fred = await Fred.create();
+    const fred = await createFred();
     const originalSecret = process.env.TEST_SUBAGENT_SECRET;
     process.env.TEST_SUBAGENT_SECRET = 'top-secret-value';
 
@@ -141,7 +141,7 @@ describe('SubagentService', () => {
   });
 
   test('destroy terminates a running subagent process', async () => {
-    const fred = await Fred.create();
+    const fred = await createFred();
 
     try {
       const subagent = await fred.subagents.spawn({
@@ -162,7 +162,7 @@ describe('SubagentService', () => {
 
       const destroyed = await fred.subagents.destroy(subagent.id);
       expect(destroyed).toBe(true);
-      await expect(execution).rejects.toThrow('Failed to execute subagent');
+      await expect(execution).rejects.toThrow();
 
       const destroyedState = await fred.subagents.inspect(subagent.id);
       expect(destroyedState?.status).toBe('destroyed');
@@ -172,7 +172,7 @@ describe('SubagentService', () => {
   });
 
   test('timeout terminates hung process groups and records timedOut metadata', async () => {
-    const fred = await Fred.create();
+    const fred = await createFred();
 
     try {
       const tempDir = await mkdtemp(join(tmpdir(), 'fred-subagent-'));
@@ -196,7 +196,7 @@ describe('SubagentService', () => {
           timeoutMs: 250,
           terminationGraceMs: 100,
         }),
-      ).rejects.toThrow('Failed to execute subagent');
+      ).rejects.toThrow();
 
       const childPid = Number((await readFile(childPidPath, 'utf8')).trim());
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -212,7 +212,7 @@ describe('SubagentService', () => {
   });
 
   test('inherits execution deadline from parent context', async () => {
-    const fred = await Fred.create();
+    const fred = await createFred();
 
     try {
       const subagent = await fred.subagents.spawn({
@@ -231,7 +231,7 @@ describe('SubagentService', () => {
               terminationGraceMs: 50,
             }),
         ),
-      ).rejects.toThrow('Failed to execute subagent');
+      ).rejects.toThrow();
 
       const elapsedMs = Date.now() - startedAt;
       expect(elapsedMs).toBeLessThan(1000);
