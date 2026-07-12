@@ -34,25 +34,40 @@ const initializationError = (message: string, cause: unknown) =>
     cause: cause instanceof Error ? cause.message : String(cause),
   });
 
-const createConfiguredFred = (configPath?: string): Effect.Effect<FredClient, FredServerInitializationError> =>
-  Effect.tryPromise({
-    try: async () => {
-      const fred = await createFred(configPath ? { configPath } : {});
-      if (configPath) return fred;
-      try {
-        for (const providerId of getBuiltinPackIds()) {
-          await fred.providers.use(providerId);
-        }
-        return fred;
-      } catch (cause) {
-        await fred.shutdown().catch(() => undefined);
-        throw cause;
-      }
-    },
-    catch: (cause) => initializationError(
-      configPath ? 'Failed to load config' : 'Failed to register providers',
-      cause,
+export const registerDefaultProvidersBestEffort = (
+  useProvider: FredClient['providers']['use'],
+  providerIds: readonly string[] = getBuiltinPackIds(),
+): Effect.Effect<void> =>
+  Effect.forEach(
+    providerIds,
+    (providerId) => Effect.tryPromise({
+      try: () => useProvider(providerId),
+      catch: (cause) => initializationError(
+        `Failed to register built-in provider: ${providerId}`,
+        cause,
+      ),
+    }).pipe(
+      Effect.catchTag('FredServerInitializationError', (error) =>
+        Effect.logDebug('Built-in provider not available').pipe(
+          Effect.annotateLogs({ providerId, error: error.cause ?? error.message }),
+        )),
     ),
+    { discard: true },
+  );
+
+const createConfiguredFred = (configPath?: string): Effect.Effect<FredClient, FredServerInitializationError> =>
+  Effect.gen(function* () {
+    const fred = yield* Effect.tryPromise({
+      try: () => createFred(configPath ? { configPath } : {}),
+      catch: (cause) => initializationError(
+        configPath ? 'Failed to load config' : 'Failed to initialize Fred',
+        cause,
+      ),
+    });
+    if (!configPath) {
+      yield* registerDefaultProvidersBestEffort(fred.providers.use);
+    }
+    return fred;
   }).pipe(
     Effect.tap(() => configPath
       ? Effect.log(`Initialized from config: ${configPath}`)
