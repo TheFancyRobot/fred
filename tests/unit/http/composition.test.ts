@@ -217,8 +217,8 @@ describe('createFredHttpApp', () => {
   it('shares key-first rate-limit semantics with the compatibility adapter', async () => {
     const fred = new Fred();
     const apiKeyStore = makeMemoryApiKeyStore();
-    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
-    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } });
+    const first = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } }));
+    const second = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 1_000 } }));
     await Effect.runPromise(Effect.all([
       apiKeyStore.insert(first.record),
       apiKeyStore.insert(second.record),

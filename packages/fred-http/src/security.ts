@@ -53,6 +53,9 @@ export const FredHttpRuntimeConfigSchema = Schema.Struct({
   hostname: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(253))),
   trustProxy: Schema.optional(Schema.Boolean),
   apiKeyStorage: Schema.optional(HttpStorageBackendSchema),
+  apiKeyVerifier: Schema.optional(Schema.String.pipe(
+    Schema.pattern(/^[a-z0-9][a-z0-9._-]{2,63}$/),
+  )),
   rateLimitStorage: Schema.optional(HttpStorageBackendSchema),
   security: Schema.optional(ServerSecurityOverridesSchema),
 });

@@ -7,6 +7,8 @@ interface KeysCommandOptions {
   readonly scopes?: string;
   readonly scope?: string;
   readonly id?: string;
+  readonly verifier?: string;
+  readonly 'expires-at'?: string;
   readonly 'rate-limit-max'?: string;
   readonly 'rate-limit-window-ms'?: string;
 }
@@ -31,13 +33,34 @@ const parseScopes = (value: string | undefined): readonly string[] => {
   return scopes.sort();
 };
 
+const parseIsoTimestamp = (value: string | undefined): Date | undefined => {
+  if (value === undefined) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (match === null) throw new Error('--expires-at must be a valid ISO-8601 timestamp');
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth
+    || hour > 23 || minute > 59 || second > 59) {
+    throw new Error('--expires-at must be a valid ISO-8601 timestamp');
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error('--expires-at must be a valid ISO-8601 timestamp');
+  return parsed;
+};
+
 export async function handleKeysCommand(
   args: string[],
   options: KeysCommandOptions,
   loadFredHttp: () => Promise<FredHttpApiKeyModule> = () => import('@fancyrobot/fred-http'),
 ): Promise<number> {
   if (args[0] !== 'create') {
-    console.error('Usage: fred keys create (--sqlite <path> | --postgres <url>) [--scopes <a,b>]');
+    console.error('Usage: fred keys create (--sqlite <path> | --postgres <url>) [--scopes <a,b>] [--verifier <id>] [--expires-at <ISO-8601>]');
     return 1;
   }
   if (options.memory !== undefined) {
@@ -69,12 +92,22 @@ export async function handleKeysCommand(
       store = http.makePostgresApiKeyStore(pool);
     }
 
-    const generated = http.generateApiKey(scopes, {
+    const expiresAt = parseIsoTimestamp(options['expires-at']);
+    if (options.verifier !== undefined && ![
+      http.API_KEY_VERIFIER_IDS.argon2id,
+      http.API_KEY_VERIFIER_IDS.scrypt,
+      http.API_KEY_VERIFIER_IDS.pbkdf2,
+    ].includes(options.verifier)) {
+      throw new Error('--verifier must be argon2id-v1, scrypt-v1, or pbkdf2-sha256-v1; HMAC and custom verifiers require a programmatic registry');
+    }
+    const generated = await Effect.runPromise(http.generateApiKey(scopes, {
       ...(options.id === undefined ? {} : { id: options.id }),
+      ...(options.verifier === undefined ? {} : { verifierId: options.verifier }),
+      ...(expiresAt === undefined ? {} : { expiresAt }),
       ...(maxRequests === undefined || windowMs === undefined
         ? {}
         : { rateLimit: { maxRequests, windowMs } }),
-    });
+    }));
     await Effect.runPromise(store.initialize.pipe(Effect.andThen(store.insert(generated.record))));
     console.log(generated.token);
     return 0;

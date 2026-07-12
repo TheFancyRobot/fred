@@ -37,6 +37,7 @@ export const FredHttpServerLive = (
     hostname: options.hostname,
     trustProxy: options.trustProxy,
     apiKeyStorage: options.apiKeyStore?.backend,
+    apiKeyVerifier: options.apiKeyVerifierRegistry?.defaultVerifierId,
     rateLimitStorage: options.rateLimitStore?.backend,
     security: options.security,
   });

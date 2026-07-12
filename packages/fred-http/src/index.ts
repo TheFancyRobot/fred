@@ -22,6 +22,7 @@ export {
   ApiKeyAuthorization,
   ApiKeyAuthorizationLive,
   ApiKeyDuplicateIdError,
+  ApiKeyGenerationError,
   ApiKeyRateLimit,
   ApiKeyRecord,
   ApiKeyScopeError,
@@ -46,6 +47,26 @@ export type {
   GeneratedApiKey,
   PostgresApiKeyPool,
 } from './api-keys';
+export {
+  API_KEY_VERIFIER_IDS,
+  ApiKeyVerifierConfigurationError,
+  ApiKeyVerifierDescriptor,
+  ApiKeyVerifierOperationError,
+  LEGACY_SHA256_DESCRIPTOR,
+  LegacySha256ApiKeyVerifier,
+  makeApiKeyVerifierRegistry,
+  makeArgon2idApiKeyVerifier,
+  makeDefaultApiKeyVerifierRegistry,
+  makeHmacApiKeyVerifier,
+  makePbkdf2ApiKeyVerifier,
+  makeScryptApiKeyVerifier,
+} from './api-key-verifiers';
+export type {
+  ApiKeyVerifier,
+  ApiKeyVerifierDerived,
+  ApiKeyVerifierRegistryService,
+  Argon2idVerifierOptions,
+} from './api-key-verifiers';
 export {
   RATE_LIMIT_TABLE,
   RateLimitDecision,

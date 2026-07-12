@@ -20,6 +20,7 @@ import {
   type AuthenticatedApiKeyIdentity,
   type ApiKeyStoreService,
 } from './api-keys';
+import type { ApiKeyVerifierRegistryService } from './api-key-verifiers';
 import {
   canonicalizeHttpPath,
   isLocalRequest,
@@ -32,6 +33,8 @@ export interface FredHttpSecurityOptions {
   readonly security?: Partial<ServerSecurityConfig>;
   readonly trustProxy?: boolean;
   readonly apiKeyStore?: ApiKeyStoreService;
+  readonly apiKeyVerifierRegistry?: ApiKeyVerifierRegistryService;
+  readonly apiKeyUpgradeVerifierId?: string | false;
   readonly rateLimitStore?: RateLimitStoreService;
   readonly authRequirements?: ReadonlyMap<string, false | readonly string[]>;
 }
@@ -104,6 +107,8 @@ const makeSecurityMiddleware = (
   token: string | undefined,
   limiter: RateLimitService,
   apiKeyStore: ApiKeyStoreService | undefined,
+  apiKeyVerifierRegistry: ApiKeyVerifierRegistryService | undefined,
+  apiKeyUpgradeVerifierId: string | false | undefined,
   authRequirements: ReadonlyMap<string, false | readonly string[]>,
 ) => (app: HttpApp.Default): HttpApp.Default =>
   Effect.gen(function* () {
@@ -129,6 +134,10 @@ const makeSecurityMiddleware = (
         apiKeyStore,
         authorization,
         routeRequirement === undefined ? [] : routeRequirement,
+        {
+          verifierRegistry: apiKeyVerifierRegistry,
+          upgradeVerifierId: apiKeyUpgradeVerifierId,
+        },
       ));
       if (Either.isLeft(authResult)) {
         const response = authResult.left instanceof ApiKeyScopeError
@@ -224,6 +233,8 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
         options.apiKeyStore === undefined ? config.authToken : undefined,
         limiter,
         options.apiKeyStore,
+        options.apiKeyVerifierRegistry,
+        options.apiKeyUpgradeVerifierId,
         options.authRequirements ?? new Map(),
       );
     }),

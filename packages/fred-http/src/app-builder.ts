@@ -16,6 +16,7 @@ import {
   type ApiKeyStoreService,
   type AuthenticatedApiKeyIdentity,
 } from './api-keys';
+import type { ApiKeyVerifierRegistryService } from './api-key-verifiers';
 import {
   checkAuth,
   matchOrigin,
@@ -40,6 +41,8 @@ export interface CreateFredHttpAppOptions {
   trustProxy?: boolean;
   getClientIp?: (request: Request) => string | undefined;
   apiKeyStore?: ApiKeyStoreService;
+  apiKeyVerifierRegistry?: ApiKeyVerifierRegistryService;
+  apiKeyUpgradeVerifierId?: string | false;
   rateLimitStore?: RateLimitStoreService;
 }
 
@@ -182,6 +185,7 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
   const runtimeConfig = validateFredHttpRuntimeConfig({
     trustProxy: options.trustProxy,
     apiKeyStorage: options.apiKeyStore?.backend,
+    apiKeyVerifier: options.apiKeyVerifierRegistry?.defaultVerifierId,
     rateLimitStorage: options.rateLimitStore?.backend,
     security: options.security,
   });
@@ -234,6 +238,11 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
         const result = await Effect.runPromise(Effect.either(authorizeApiKey(
           options.apiKeyStore,
           request.headers.get('Authorization') ?? undefined,
+          [],
+          {
+            verifierRegistry: options.apiKeyVerifierRegistry,
+            upgradeVerifierId: options.apiKeyUpgradeVerifierId,
+          },
         )));
         if (Either.isLeft(result)) {
           const status = result.left instanceof ApiKeyScopeError

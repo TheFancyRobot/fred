@@ -37,6 +37,8 @@ describe('fred-http configuration Schema', () => {
     expect(() => resolveServerSecurityConfig({ redactPaths: ['headers..authorization'] })).toThrow();
     expect(() => validateFredHttpRuntimeConfig({ apiKeyStorage: 'redis' })).toThrow();
     expect(() => validateFredHttpRuntimeConfig({ rateLimitStorage: { backend: 'memory' } })).toThrow();
+    expect(validateFredHttpRuntimeConfig({ apiKeyVerifier: 'custom-kms-v1' }).apiKeyVerifier).toBe('custom-kms-v1');
+    expect(() => validateFredHttpRuntimeConfig({ apiKeyVerifier: 'Unsafe Verifier' })).toThrow();
   });
 
   test('withHttp rejects invalid config before listener startup', async () => {
