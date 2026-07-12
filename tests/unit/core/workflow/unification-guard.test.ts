@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'bun:test';
 
 describe('Phase 63 workflow unification guard', () => {
-  it('keeps legacy executor modules as compile-and-adapt shims only', async () => {
+  it('keeps executor modules Effect-native without Promise compatibility wrappers', async () => {
     const pipeline = await Bun.file('packages/core/src/pipeline/executor.ts').text();
     const graph = await Bun.file('packages/core/src/pipeline/graph-executor.ts').text();
 
     expect(pipeline).toContain('compilePipelineV2');
     expect(pipeline).toContain('executeWorkflowEffect');
+    expect(pipeline).toContain('export function executePipelineV2Effect(');
+    expect(pipeline).not.toContain('export async function executePipelineV2(');
+    expect(pipeline).not.toContain('Effect.runCallback');
     expect(pipeline).not.toContain('executeStepWithRetry');
     expect(pipeline).not.toContain('executeStepWithHooks');
 
     expect(graph).toContain('compileGraphWorkflow');
     expect(graph).toContain('executeWorkflowEffect');
+    expect(graph).toContain('export function executeGraphWorkflowEffect(');
+    expect(graph).not.toContain('export async function executeGraphWorkflow(');
+    expect(graph).not.toContain('Effect.runCallback');
     expect(graph).not.toContain('topologicalSort');
     expect(graph).not.toContain('function executeNode(');
     expect(graph).not.toContain('function handleHandoff(');
