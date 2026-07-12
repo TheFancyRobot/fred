@@ -36,7 +36,19 @@ async function main() {
   );
 
   // Register custom tool defined with Effect Schema.
-  await fred.tools.register(weatherTool);
+  await fred.tools.register(weatherTool as unknown as Tool);
+
+  // Config-first construction resolves declared tools while agents load.
+  // Re-register this agent after adding the application-defined weather tool.
+  const toolUser = await fred.agents.get('tool-user');
+  if (!toolUser) {
+    throw new Error('Configured tool-user agent not found');
+  }
+  await fred.agents.remove(toolUser.id);
+  await fred.agents.register({
+    ...toolUser.config,
+    tools: ['calculator', weatherTool.id],
+  });
 
   console.log('--- Weather Query ---');
   const weatherResponse = await fred.messages.process('What is the weather in Tokyo right now?');

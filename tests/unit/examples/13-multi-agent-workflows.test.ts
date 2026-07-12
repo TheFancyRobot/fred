@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createFred, MessageRouterService } from '@fancyrobot/fred';
+import { createFred, Fred, MessageRouterService } from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import '@fancyrobot/fred-openrouter';
 import { extractDuckDuckGoResults } from '../../../examples/13-multi-agent-workflows/src/browser-research';
@@ -166,6 +166,26 @@ describe('example 13 helpers', () => {
         expect((await fred.agents.get('web-researcher'))?.config.tools).toContain('agent_browser_research');
         expect((await fred.agents.get('market-researcher'))?.config.tools).toContain('agent_browser_research');
         expect((await fred.agents.get('risk-analyst'))?.config.tools).toContain('agent_browser_research');
+      } finally {
+        await fred.shutdown();
+      }
+    });
+  });
+
+  test('setupExample remains compatible with the CLI legacy runtime hook', async () => {
+    await withTempDir(async (dir) => {
+      const fred = await Fred.create();
+
+      try {
+        const configPath = path.resolve(process.cwd(), 'examples/13-multi-agent-workflows/config.yaml');
+        const result = await setupExample(fred, {
+          configPath,
+          notebookPath: path.join(dir, 'notebook.md'),
+        });
+
+        expect(result.workflows).toEqual(['research-swarm', 'daily-brief']);
+        expect(fred.getAgent('concierge')?.config.tools).toContain('handoff_to_agent');
+        expect(fred.getAgent('research-orchestrator')?.config.tools).toContain('run_research_swarm');
       } finally {
         await fred.shutdown();
       }

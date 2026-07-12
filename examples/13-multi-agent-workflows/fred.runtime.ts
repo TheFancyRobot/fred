@@ -1,11 +1,10 @@
-import type { FredClient } from '@fancyrobot/fred';
+import type { Fred, FredClient } from '@fancyrobot/fred';
 import { setupExample } from './src/runtime';
 
 export async function setupFredProject(
-  fred: FredClient,
+  fred: Fred | FredClient,
   context: { configPath: string; projectRoot: string },
 ): Promise<void> {
   void context.projectRoot;
-  void context.configPath;
-  await setupExample(fred);
+  await setupExample(fred, { configPath: context.configPath });
 }

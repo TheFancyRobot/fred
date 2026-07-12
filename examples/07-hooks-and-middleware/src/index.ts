@@ -107,13 +107,12 @@ async function main() {
   console.log(`Fred exposes ${HOOK_TYPES.length} hook points across the lifecycle.`);
 
   // --- Per-Message Variable Injection ---
-  // addTemplateContext registers a custom namespace whose resolver is called
-  // each time the system prompt is resolved (i.e., per message).
+  // addContext snapshots a custom namespace when it is registered.
   let sessionState = { userId: 'anonymous', requestCount: 0 };
   await fred.templates.addContext('session', () => ({ ...sessionState }));
 
-  // Update session state before each message - the template resolver
-  // captures the latest snapshot, so the agent prompt reflects current values.
+  // Re-register the namespace before each message so the agent prompt receives
+  // the latest session-state snapshot.
   sessionState = { userId: 'user-42', requestCount: 1 };
   await fred.templates.addContext('session', () => ({ ...sessionState }));
 
@@ -123,8 +122,7 @@ async function main() {
 
   console.log('\nResponse:', response?.content ?? '<no response>');
 
-  // Second message with updated session state - demonstrates that
-  // the template re-resolves with fresh values on every processMessage.
+  // Second message with an explicitly refreshed session-state snapshot.
   sessionState = { userId: 'user-42', requestCount: 2 };
   await fred.templates.addContext('session', () => ({ ...sessionState }));
 
@@ -132,7 +130,7 @@ async function main() {
   console.log('\nFollow-up:', followUp?.content ?? '<no response>');
 
   console.log('\n--- Per-Message Variable Demo ---');
-  console.log('Session state was injected dynamically via addTemplateContext.');
+  console.log('Session state was refreshed with templates.addContext before each message.');
   console.log('The agent prompt resolved session.userId and session.requestCount per message.');
 
   console.log('\nStructured log records captured:', structuredLogs.length);

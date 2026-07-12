@@ -80,8 +80,8 @@ async function main() {
         Effect.flatMap((router) => router.route(message))
       )
     );
-    console.log('Routed to agent:', route.agentId ?? 'none');
-    console.log('Route type:', route.type);
+    console.log('Routed to agent:', route.agent ?? 'none');
+    console.log('Route type:', route.matchType);
     console.log('Route result:', JSON.stringify(route, null, 2));
 
     const transcript = buildIntentTranscript(message, intents);

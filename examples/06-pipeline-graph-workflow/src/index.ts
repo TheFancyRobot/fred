@@ -83,6 +83,9 @@ async function main() {
     'research-flow',
     'What causes the northern lights?'
   );
+  if (!('executedNodes' in factualResult) || !('outputs' in factualResult)) {
+    throw new Error('Research flow did not return a graph workflow result');
+  }
   console.log('Executed nodes:', factualResult.executedNodes.join(' -> '));
   console.log('Final output:', extractText(factualResult.outputs.synthesizer));
 
@@ -91,6 +94,9 @@ async function main() {
     'research-flow',
     'Imagine a world where gravity works in reverse.'
   );
+  if (!('executedNodes' in creativeResult) || !('outputs' in creativeResult)) {
+    throw new Error('Research flow did not return a graph workflow result');
+  }
   console.log('Executed nodes:', creativeResult.executedNodes.join(' -> '));
   console.log('Final output:', extractText(creativeResult.outputs.synthesizer));
 

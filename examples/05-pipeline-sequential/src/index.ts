@@ -22,6 +22,9 @@ async function main() {
   });
   await fred.workflows.define(nativePreflight);
   const preflight = await fred.workflows.run('native-sequential-preflight', ' TypeScript ');
+  if (!('finalOutput' in preflight)) {
+    throw new Error('Native preflight did not return a WorkflowIR result');
+  }
   console.log('[WorkflowIR] Preflight:', preflight.finalOutput);
 
   const built = new PipelineBuilder('classify-plan-summarize')
@@ -60,7 +63,7 @@ async function main() {
     { sessionId: session.id }
   );
 
-  if (firstRun.status === 'paused' && firstRun.runId) {
+  if ('status' in firstRun && firstRun.status === 'paused' && firstRun.runId) {
     console.log('[Pipeline] Paused for human input.');
     console.log('[Pipeline] Simulating restart and resuming from checkpoint...');
 
@@ -72,7 +75,14 @@ async function main() {
     console.log('[Pipeline] Resumed status:', resumed.status ?? 'unknown');
     console.log('[Pipeline] Final output:', resumed.finalOutput);
   } else {
-    console.log('[Pipeline] Final output:', firstRun.finalOutput);
+    console.log(
+      '[Pipeline] Final output:',
+      'finalOutput' in firstRun
+        ? firstRun.finalOutput
+        : 'content' in firstRun
+          ? firstRun.content
+          : JSON.stringify(firstRun),
+    );
   }
 
   await fred.shutdown();
