@@ -1,11 +1,8 @@
 /**
  * Effect Schema for Fred's framework config (Phase 61, STEP-61-02).
  *
- * `FrameworkConfigSchema` is the declarative replacement for the imperative
- * validation in `loader.ts`. This step models the structure and wires the
- * schema in as an accepted-parity validator; cross-field semantic rules
- * (required fields, policy XOR, reference integrity) land in STEP-61-03, and
- * `loader.ts` keeps owning validation until STEP-61-05 flips the decode path.
+ * `FrameworkConfigSchema` is the declarative source of truth for framework
+ * configuration structure. Cross-field rules are applied by `validate.ts`.
  *
  * Design notes:
  * - Config-owned sections (providers, MCP, persistence, observability,

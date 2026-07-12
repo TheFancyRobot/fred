@@ -9,7 +9,7 @@ import type {
   ToolPolicyRule,
   MCPGlobalServerConfig,
 } from './types';
-import { parseConfigFile } from './parser';
+import { loadValidatedConfig } from './load';
 import type { Intent } from '../intent/intent';
 import type { AgentConfig } from '../agent/agent';
 import type { PipelineConfigV2 } from '../pipeline/pipeline';
@@ -49,7 +49,7 @@ export function clearPipelineFunctions(): void {
  * Load configuration from a file
  */
 export function loadConfig(filePath: string): FrameworkConfig {
-  return parseConfigFile(filePath);
+  return loadValidatedConfig(filePath);
 }
 
 /**

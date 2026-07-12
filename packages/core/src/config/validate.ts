@@ -7,8 +7,8 @@
  * `validateConfig` in `loader.ts` but returning `ConfigError`s (with
  * remediation) instead of throwing on the first problem.
  *
- * This function is not yet wired into `loadConfig`; STEP-61-05 makes the
- * loader run schema-decode + this pass and surface the aggregated errors.
+ * The canonical loader runs this pass after schema decoding and surfaces the
+ * accumulated issues as one `ConfigValidationError`.
  */
 import { ConfigError } from './errors';
 import type { FrameworkConfigSchemaType } from './schema';
