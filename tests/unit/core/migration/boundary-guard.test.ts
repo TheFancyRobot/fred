@@ -131,7 +131,7 @@ describe('Effect runtime boundary guards', () => {
       'packages/cli/src/commands/session.ts',
       'packages/cli/src/eval.ts',
       'packages/cli/src/tui/session.ts',
-      'packages/dev/src/dev-chat.ts',
+      'packages/cli/src/commands/chat.ts',
     ].map((relativePath) => join(PROJECT_ROOT, relativePath));
 
     const forbidden = ['ContextManager', 'AgentManager', 'PipelineManager', 'HookManager', 'ProviderRegistry', 'ToolRegistry'];

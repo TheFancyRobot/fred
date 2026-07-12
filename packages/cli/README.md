@@ -25,6 +25,11 @@ bun add @fancyrobot/fred-cli
 fred chat
 ```
 
+The former `fred dev` command is a deprecated alias for `fred chat` and will be
+removed in the next major release. Development chat, provider auto-detection,
+default-agent setup, config hot reload, and terminal cleanup are all owned by
+this package.
+
 The default command. Launches a full-screen TUI built on [OpenTUI](https://github.com/anthropics/opentui) with:
 
 - **3-pane layout** -- session sidebar (toggleable), scrollable transcript, and input bar
@@ -43,6 +48,19 @@ The default command. Launches a full-screen TUI built on [OpenTUI](https://githu
 ### Project Setup Hook
 
 If your project exports a `setup(fred)` function from `src/index.ts` or `index.ts`, the TUI executes it before starting the chat session. This lets you register agents, tools, and providers programmatically.
+
+Legacy programmatic consumers can temporarily import `startDevChat` from the
+package root. Provider/default-agent helpers are exported from
+`@fancyrobot/fred-cli/chat-defaults`. Prefer the `fred chat` command for new code.
+
+```ts
+import { startDevChat } from '@fancyrobot/fred-cli';
+
+await startDevChat(setup);
+```
+
+Await the returned promise so startup failures are observable and follow-up
+cleanup does not run while the chat lifecycle is still active.
 
 ### Keyboard Shortcuts
 

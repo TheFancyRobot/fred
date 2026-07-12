@@ -16,7 +16,7 @@ import {
   detectAvailableProvider as detectAvailableProviderFromDev,
   loadProviderPackage as loadProviderPackageFromDev,
   ensureDefaultChatAgent,
-} from '@fancyrobot/fred-dev/chat-defaults';
+} from '../chat-defaults.js';
 import { detectTerminalMode } from '../runtime/tty-mode.js';
 import { withTerminalLifecycle } from '../runtime/terminal-lifecycle.js';
 import { createFredTuiApp, type PluginSlashCommandRuntime } from '../tui/app.js';
@@ -44,6 +44,8 @@ export interface ChatDependencies {
   ensureDefaultChatAgent: typeof ensureDefaultChatAgent;
   /** Create the TUI app. */
   createFredTuiApp: typeof createFredTuiApp;
+  /** Optional programmatic setup hook used by the deprecated dev-chat adapter. */
+  projectSetupHook?: (fred: Fred) => Promise<void> | void;
 }
 
 const DEFAULT_DEPS: ChatDependencies = {
@@ -424,6 +426,8 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
         await fred.initializeFromConfig(configResult.configPath);
       }
 
+      await deps.projectSetupHook?.(fred);
+
       const result = await deps.ensureDefaultChatAgent(fred, {
         agentId: '__tui_agent__',
       });
@@ -455,6 +459,8 @@ async function initializeFred(deps: ChatDependencies = DEFAULT_DEPS): Promise<{
 
   // No config or config failed - apply shared dev-chat fallback behavior
   configureChatFallbackPersistence(fred, undefined, deps.createStorage);
+
+  await deps.projectSetupHook?.(fred);
 
   const result = await deps.ensureDefaultChatAgent(fred, {
     agentId: '__tui_agent__',
@@ -518,6 +524,33 @@ export const TERMINAL_RECOVERY_GUIDANCE =
   'Terminal may be in an inconsistent state. ' +
   'Run `reset` or `stty sane` to restore normal terminal behavior.';
 
+export const CHAT_SHUTDOWN_TIMEOUT_MS = 5_000;
+
+export async function shutdownFredBeforeExit(
+  fred: Pick<Fred, 'shutdown'>,
+  timeoutMs = CHAT_SHUTDOWN_TIMEOUT_MS,
+): Promise<number> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Fred shutdown timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    await Promise.race([fred.shutdown(), timeout]);
+    return 0;
+  } catch (error) {
+    console.error(`Failed to shut down Fred cleanly: ${sanitizeErrorForCli(error)}`);
+    return 1;
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
 /**
  * Handle chat command
  *
@@ -547,6 +580,7 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
 
       // Track active stream abort controller for explicit exit cancellation
       let activeStreamAbort: AbortController | null = null;
+      let isQuitting = false;
 
       // Create TUI app — resolves a long-lived app that runs until quit
       const app = yield* Effect.tryPromise({
@@ -772,10 +806,15 @@ export async function handleChatCommand(deps: Partial<ChatDependencies> = {}): P
                 });
               },
               onQuit: () => {
+                if (isQuitting) {
+                  return;
+                }
+                isQuitting = true;
                 // Abort any active stream before exiting
                 activeStreamAbort?.abort();
                 console.log('Exiting Fred chat...');
-                process.exit(0);
+                queueMicrotask(() => app.stop());
+                void shutdownFredBeforeExit(fred).then((exitCode) => process.exit(exitCode));
               },
               onError: (_error) => {
                 // Abort the active stream so the for-await loop exits cleanly.

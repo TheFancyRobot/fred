@@ -67,8 +67,8 @@ See the [core package documentation](packages/core/README.md) for the full getti
 | Package | Description |
 |---------|-------------|
 | [@fancyrobot/fred](packages/core/README.md) | Core framework |
-| [@fancyrobot/fred-cli](packages/cli/README.md) | CLI and TUI |
-| [@fancyrobot/fred-dev](packages/dev/README.md) | Development tooling |
+| [@fancyrobot/fred-cli](packages/cli/README.md) | CLI, development chat, and interactive TUI |
+| [@fancyrobot/fred-dev](packages/dev/README.md) | Deprecated one-release CLI compatibility shim |
 | [@fancyrobot/fred-http](packages/fred-http/README.md) | Bun HTTP server and composable API layer |
 | [@fancyrobot/fred-openai](packages/provider-openai/README.md) | OpenAI provider |
 | [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | Anthropic provider |

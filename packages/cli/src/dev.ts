@@ -9,12 +9,12 @@ import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { Fred } from '@fancyrobot/fred';
-import { startDevChat } from '@fancyrobot/fred-dev';
+import { handleChatCommand } from './commands/chat.js';
 
 /**
  * Try to load and call project's setup() function if it exists
  */
-async function loadProjectSetup(fred: Fred): Promise<void> {
+export async function loadProjectSetup(fred: Fred): Promise<void> {
   // Try to find project's index.ts or src/index.ts
   const possiblePaths = [
     resolve(process.cwd(), 'src', 'index.ts'),
@@ -49,15 +49,9 @@ async function loadProjectSetup(fred: Fred): Promise<void> {
 
 /**
  * Handle dev command
- * Uses BunRuntime.runMain internally via startDevChat for proper signal handling.
- * This function never returns - it runs until interrupted.
+ * Delegates to the CLI-owned chat lifecycle and resolves only when that lifecycle ends.
  */
-export function handleDevCommand(): void {
-  const setupHook = async (fred: Fred) => {
-    await loadProjectSetup(fred);
-  };
-
-  // startDevChat uses BunRuntime.runMain internally
-  // It will handle signals and cleanup, and never returns
-  startDevChat(setupHook);
+export async function handleDevCommand(): Promise<void> {
+  console.warn("The 'fred dev' command is deprecated and will be removed in the next major release. Use 'fred chat'.");
+  await handleChatCommand({ projectSetupHook: loadProjectSetup });
 }

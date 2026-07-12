@@ -131,7 +131,7 @@ function enterTerminalMode(options: TerminalLifecycleOptions): Effect.Effect<voi
 
     // Guard: Only allow interactive mode in interactive-tty
     if (detection.mode !== 'interactive-tty') {
-      yield* Effect.fail(
+      return yield* Effect.fail(
         new Error(
           `Cannot enter interactive terminal mode: ${detection.reason}. ` +
             `Terminal mode is ${detection.mode}, but interactive-tty is required.`
@@ -157,7 +157,7 @@ function enterTerminalMode(options: TerminalLifecycleOptions): Effect.Effect<voi
       try {
         stdin.setRawMode(true);
       } catch (error) {
-        yield* Effect.fail(
+        return yield* Effect.fail(
           new Error(
             `Failed to enable raw mode: ${error instanceof Error ? error.message : String(error)}`
           )
@@ -173,7 +173,7 @@ function enterTerminalMode(options: TerminalLifecycleOptions): Effect.Effect<voi
           currentState.cursorHidden = true;
         }
       } catch (error) {
-        yield* Effect.fail(
+        return yield* Effect.fail(
           new Error(
             `Failed to hide cursor: ${error instanceof Error ? error.message : String(error)}`
           )
@@ -189,7 +189,7 @@ function enterTerminalMode(options: TerminalLifecycleOptions): Effect.Effect<voi
           currentState.alternateScreenActive = true;
         }
       } catch (error) {
-        yield* Effect.fail(
+        return yield* Effect.fail(
           new Error(
             `Failed to enter alternate screen: ${error instanceof Error ? error.message : String(error)}`
           )

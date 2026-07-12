@@ -1,5 +1,5 @@
 import { Either, Schema } from 'effect';
-import type { PluginDeclaration, PluginObjectDeclaration } from '../../../core/src/config/types';
+import type { PluginDeclaration, PluginObjectDeclaration } from '@fancyrobot/fred';
 
 const PluginObjectDeclarationSchema = Schema.Struct({
   id: Schema.String.pipe(Schema.minLength(1)),

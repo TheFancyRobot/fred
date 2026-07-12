@@ -6,7 +6,7 @@
  */
 
 import { handleTestCommand } from './test';
-import { handleDevCommand } from './dev';
+import { handleDevCommand, loadProjectSetup } from './dev';
 import { handleEvalCommand } from './eval';
 import { handleChatCommand } from './commands/chat';
 import { handleSessionCommand } from './commands/session';
@@ -279,14 +279,11 @@ async function main(): Promise<void> {
       case 'chat':
       case 'tui':
         // handleChatCommand is async — OpenTUI manages terminal lifecycle
-        await handleChatCommand();
+        await handleChatCommand({ projectSetupHook: loadProjectSetup });
         return;
 
       case 'dev':
-        // handleDevCommand uses BunRuntime.runMain internally and never returns
-        // It handles signals and cleanup, and exits the process
-        handleDevCommand();
-        // This line is never reached
+        await handleDevCommand();
         return;
 
       case 'test':
@@ -498,5 +495,19 @@ function emitPluginStartupDiagnostics(
 
 // Run if executed directly
 if (import.meta.main) {
-  main();
+  void main().catch((error) => {
+    console.error('Fatal CLI error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
 }
+
+export { handleChatCommand } from './commands/chat.js';
+export { startDevChat, type DevChatSetupHook } from './dev-chat.js';
+export {
+  DEV_CHAT_PROVIDER_PACKAGES,
+  detectAvailableProvider,
+  loadProviderPackage,
+  ensureDefaultChatAgent,
+  type EnsureDefaultChatAgentOptions,
+  type EnsureDefaultChatAgentResult,
+} from './chat-defaults.js';

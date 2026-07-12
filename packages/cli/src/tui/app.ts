@@ -644,7 +644,7 @@ export class FredTuiApp {
       // Insert pasted text at cursor position (flatten newlines for single-line input)
       // Cap paste length to prevent resource exhaustion from extremely large pastes
       const MAX_PASTE_LENGTH = 100_000;
-      const text = event.text
+      const text = new TextDecoder().decode(event.bytes)
         .slice(0, MAX_PASTE_LENGTH)
         .replace(/\n/g, ' ')
         // Strip control chars except tab/carriage return to prevent terminal control abuse.

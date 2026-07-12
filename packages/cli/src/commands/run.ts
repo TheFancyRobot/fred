@@ -12,7 +12,7 @@
 import { Fred, hasRetryDiagnostics } from '@fancyrobot/fred';
 import {
   ensureDefaultChatAgent,
-} from '@fancyrobot/fred-dev/chat-defaults';
+} from '../chat-defaults.js';
 import { Effect } from 'effect';
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { RunJsonChannel } from '../runtime/json-channel.js';

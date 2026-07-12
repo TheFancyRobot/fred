@@ -8,14 +8,14 @@ import {
   detectAvailableProvider,
   loadProviderPackage,
   PROVIDER_PACKAGES,
+  shutdownFredBeforeExit,
   TERMINAL_RECOVERY_GUIDANCE,
 } from '../../../packages/cli/src/commands/chat';
 
 /**
  * Tests for chat command routing and launch-path behavior
  *
- * Note: We can't directly test handleChatCommand() because it calls startDevChat()
- * which uses BunRuntime.runMain and never returns. Instead, we test:
+ * Note: Interactive handleChatCommand() runs until the TUI exits. Instead, we test:
  * 1. Terminal mode detection (which drives routing)
  * 2. CLI help text includes chat command
  * 3. Command parsing handles chat case
@@ -430,6 +430,40 @@ describe('Chat Command', () => {
       // The lifecycle wrapper should only appear within the interactive-tty branch.
       // Verify the non-interactive path still uses createNonInteractiveFallbackPayload directly.
       expect(chatSource).toContain('createNonInteractiveFallbackPayload(mode.reason)');
+    });
+
+    test('interactive quit shuts down Fred resources before exiting', async () => {
+      const chatPath = path.resolve(import.meta.dir, '../../../packages/cli/src/commands/chat.ts');
+      const content = await Bun.file(chatPath).text();
+
+      expect(content).toContain('shutdownFredBeforeExit(fred)');
+      expect(content).toContain('process.exit(exitCode)');
+      expect(content).toContain('queueMicrotask(() => app.stop())');
+    });
+
+    test('bounded shutdown reports success, failure, and timeout exit codes', async () => {
+      const originalConsoleError = console.error;
+      const consoleError = mock(() => undefined);
+      console.error = consoleError;
+
+      try {
+        expect(await shutdownFredBeforeExit({ shutdown: async () => undefined }, 25)).toBe(0);
+        expect(
+          await shutdownFredBeforeExit(
+            { shutdown: async () => Promise.reject(new Error('close failed')) },
+            25,
+          ),
+        ).toBe(1);
+        expect(
+          await shutdownFredBeforeExit(
+            { shutdown: () => new Promise<void>(() => undefined) },
+            1,
+          ),
+        ).toBe(1);
+        expect(consoleError).toHaveBeenCalledTimes(2);
+      } finally {
+        console.error = originalConsoleError;
+      }
     });
   });
 

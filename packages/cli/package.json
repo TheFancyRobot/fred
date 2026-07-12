@@ -22,6 +22,12 @@
       "bun": "./src/plugin/api.ts",
       "import": "./dist/plugin/api.js",
       "default": "./dist/plugin/api.js"
+    },
+    "./chat-defaults": {
+      "types": "./dist/chat-defaults.d.ts",
+      "bun": "./src/chat-defaults.ts",
+      "import": "./dist/chat-defaults.js",
+      "default": "./dist/chat-defaults.js"
     }
   },
   "bin": {
@@ -33,13 +39,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/plugin/api.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-dev --external @fancyrobot/fred-http --external pg --external @opentui/core --external semver",
+    "build": "bun build src/index.ts src/plugin/api.ts src/chat-defaults.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-http --external pg --external @opentui/core --external semver",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {
     "@fancyrobot/fred": "workspace:^",
     "@fancyrobot/fred-anthropic": "workspace:^",
-    "@fancyrobot/fred-dev": "workspace:^",
     "@fancyrobot/fred-google": "workspace:^",
     "@fancyrobot/fred-groq": "workspace:^",
     "@fancyrobot/fred-openai": "workspace:^",
@@ -55,6 +60,7 @@
   },
   "devDependencies": {
     "effect": "^3.21.0",
+    "@types/semver": "^7.7.1",
     "@types/bun": "latest"
   },
   "publishConfig": {

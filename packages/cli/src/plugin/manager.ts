@@ -4,7 +4,7 @@ import { loadPluginModules, type PluginDiscoverIssue } from './loader.js';
 import { stagePluginContributions, type RegisteredPluginContributions } from './registry.js';
 import { resolvePluginDeclarations } from './resolver.js';
 import { validateLoadedPlugins, type PluginValidationIssue } from './validator.js';
-import type { PluginDeclaration } from '../../../core/src/config/types';
+import type { PluginDeclaration } from '@fancyrobot/fred';
 
 export interface PluginStartupIssue {
   code: string;

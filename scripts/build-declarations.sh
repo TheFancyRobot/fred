@@ -11,14 +11,13 @@
 set -uo pipefail
 
 # Explicit topological order: packages/* globs alphabetically, which builds
-# `dev` before `fred-http` even though dev imports fred-http's declared
-# types (dev/src/server.ts imports startServer from @fancyrobot/fred-http).
-# On a clean checkout that leaves no dist/ for the import to resolve
-# against. `core` has no sibling dependencies and must come first; `cli`
-# depends on `dev`, so it comes last. Any package not listed here still
+# `dev` before `cli` even though the final dev compatibility shim re-exports
+# CLI declarations. On a clean checkout that leaves no dist/ for the import
+# to resolve against. `core` has no sibling dependencies and must come first;
+# `dev` depends on `cli`, so it comes last. Any package not listed here still
 # gets built, appended at the end, so a new package works without needing
 # this list updated unless it introduces a new inter-package dependency.
-ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http dev cli"
+ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
 
 status=0
 build_one() {

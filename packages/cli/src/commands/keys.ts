@@ -93,11 +93,12 @@ export async function handleKeysCommand(
     }
 
     const expiresAt = parseIsoTimestamp(options['expires-at']);
-    if (options.verifier !== undefined && ![
+    const supportedVerifierIds: ReadonlySet<string> = new Set([
       http.API_KEY_VERIFIER_IDS.argon2id,
       http.API_KEY_VERIFIER_IDS.scrypt,
       http.API_KEY_VERIFIER_IDS.pbkdf2,
-    ].includes(options.verifier)) {
+    ]);
+    if (options.verifier !== undefined && !supportedVerifierIds.has(options.verifier)) {
       throw new Error('--verifier must be argon2id-v1, scrypt-v1, or pbkdf2-sha256-v1; HMAC and custom verifiers require a programmatic registry');
     }
     const generated = await Effect.runPromise(http.generateApiKey(scopes, {

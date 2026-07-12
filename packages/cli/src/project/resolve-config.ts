@@ -5,11 +5,10 @@
  * or structured diagnostics.
  */
 
-import { loadConfig, validateConfig } from '../../../core/src/config/loader';
-import type { FrameworkConfig } from '../../../core/src/config/types';
+import { loadValidatedConfig, type FrameworkConfig } from '@fancyrobot/fred';
 import { AggregatedPluginValidationError, loadPluginsFromConfig } from '../plugin/manager.js';
 import { detectProjectRoot } from './detect';
-import { formatConfigDiagnostic, formatDiagnostics, formatPluginDiagnostics } from './diagnostics';
+import { formatConfigDiagnostic, formatPluginDiagnostics } from './diagnostics';
 import type { ConfigResolutionResult, ConfigDiagnostic } from './types';
 
 /**
@@ -53,7 +52,7 @@ export function resolveProjectConfig(
     // Step 2: Load config file
     let config: FrameworkConfig;
     try {
-      config = loadConfig(detection.configPath);
+      config = loadValidatedConfig(detection.configPath);
     } catch (error) {
       // Parse/load errors
       diagnostics.push(formatConfigDiagnostic(error as Error, detection.configPath));
@@ -65,13 +64,7 @@ export function resolveProjectConfig(
     }
 
     // Step 3: Validate config
-    const validationErrors = collectValidationErrors(config);
-
-    if (validationErrors.length > 0) {
-      diagnostics.push(...formatDiagnostics(validationErrors, detection.configPath));
-    }
-
-    // Step 4: Validate plugin declarations and compatibility through plugin manager
+    // Step 3: Validate plugin declarations and compatibility through plugin manager
     if (config.plugins && config.plugins.length > 0) {
       try {
         loadPluginsFromConfig(config.plugins, detection.configPath);
@@ -113,31 +106,6 @@ export function resolveProjectConfig(
       diagnostics,
     };
   }
-}
-
-/**
- * Collect all validation errors without throwing
- *
- * The validateConfig function throws on first error. This wrapper
- * catches errors and can be extended to collect multiple errors in the future.
- *
- * @param config - Config to validate
- * @returns Array of validation errors (empty if valid)
- */
-function collectValidationErrors(config: FrameworkConfig): Error[] {
-  const errors: Error[] = [];
-
-  try {
-    validateConfig(config);
-  } catch (error) {
-    if (error instanceof Error) {
-      errors.push(error);
-    } else {
-      errors.push(new Error(String(error)));
-    }
-  }
-
-  return errors;
 }
 
 /**
