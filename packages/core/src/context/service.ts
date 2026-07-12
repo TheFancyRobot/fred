@@ -360,7 +360,7 @@ class ContextStorageServiceImpl implements ContextStorageService {
 
   replaceStorage(adapter: ContextStorage): Effect.Effect<void> {
     return Effect.sync(() => {
-      (this as any).storage = new ExternalStorageAdapter(adapter);
+      this.storage = new ExternalStorageAdapter(adapter);
     });
   }
 
@@ -429,16 +429,25 @@ class ContextStorageServiceImpl implements ContextStorageService {
   }
 }
 
-/**
- * Live layer providing ContextStorageService (in-memory)
- */
-export const ContextStorageServiceLive = Layer.effect(
-  ContextStorageService,
+const makeContextStorageService = (adapter?: ContextStorage) =>
   Effect.gen(function* () {
     const contexts = yield* Ref.make(new Map<string, ConversationContext>());
-    const storage = new InMemoryStorage(contexts);
+    const storage = adapter
+      ? new ExternalStorageAdapter(adapter)
+      : new InMemoryStorage(contexts);
     const defaultMetadata = yield* Ref.make<Partial<ConversationMetadata>>({});
     const defaultPolicy = yield* Ref.make<ConversationPolicy>({});
     return new ContextStorageServiceImpl(storage, defaultMetadata, defaultPolicy);
-  })
+  });
+
+/** Live layer providing ContextStorageService (in-memory). */
+export const ContextStorageServiceLive = Layer.effect(
+  ContextStorageService,
+  makeContextStorageService(),
+);
+
+/** Live layer backed by an explicitly owned external adapter. */
+export const ContextStorageServiceLiveWithAdapter = (adapter: ContextStorage) => Layer.effect(
+  ContextStorageService,
+  makeContextStorageService(adapter),
 );
