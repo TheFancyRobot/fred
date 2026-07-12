@@ -1,14 +1,14 @@
 /**
- * @fancyrobot/fred-dev - Fred AI framework development tools
+ * @fancyrobot/fred-dev - final compatibility shim
  *
- * This package provides dev-only tooling for Fred contributors.
- * Reusable HTTP server APIs now live in @fancyrobot/fred-http.
+ * @deprecated Install @fancyrobot/fred-cli and use `fred chat` directly.
+ * This package will be removed in the next major release.
  */
 
-export { startDevChat } from './dev-chat';
+export { startDevChat } from '@fancyrobot/fred-cli';
 export {
   DEV_CHAT_PROVIDER_PACKAGES,
   detectAvailableProvider,
   loadProviderPackage,
   ensureDefaultChatAgent,
-} from './chat-defaults';
+} from '@fancyrobot/fred-cli/chat-defaults';

@@ -9,7 +9,7 @@
 import { resolveProjectConfig } from '../project/resolve-config.js';
 import { aggregateDiagnostics } from '../project/diagnostics.js';
 import type { ConfigDiagnostic, ConfigResolutionResult } from '../project/types.js';
-import type { FrameworkConfig } from '../../../core/src/config/types';
+import type { FrameworkConfig } from '@fancyrobot/fred';
 
 // ---------------------------------------------------------------------------
 // Types

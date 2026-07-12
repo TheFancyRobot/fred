@@ -431,6 +431,14 @@ describe('Chat Command', () => {
       // Verify the non-interactive path still uses createNonInteractiveFallbackPayload directly.
       expect(chatSource).toContain('createNonInteractiveFallbackPayload(mode.reason)');
     });
+
+    test('interactive quit shuts down Fred resources before exiting', async () => {
+      const chatPath = path.resolve(import.meta.dir, '../../../packages/cli/src/commands/chat.ts');
+      const content = await Bun.file(chatPath).text();
+
+      expect(content).toContain('fred.shutdown().finally(() => process.exit(0))');
+      expect(content).toContain('queueMicrotask(() => app.stop())');
+    });
   });
 
   describe('Terminal recovery guidance', () => {

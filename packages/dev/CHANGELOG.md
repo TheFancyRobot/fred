@@ -1,5 +1,12 @@
 # @fred/dev
 
+## Unreleased
+
+### Major Changes
+
+- Reduce `@fancyrobot/fred-dev` to its final deprecated compatibility shim, forwarding root and `./chat-defaults` APIs to `@fancyrobot/fred-cli`.
+- Remove the duplicate dev-chat, workflow-context, watcher, and server-command implementations. Install `@fancyrobot/fred-cli` and use `fred chat`; this shim will be removed in the next major release.
+
 ## 1.0.0-alpha.0
 
 ### Patch Changes

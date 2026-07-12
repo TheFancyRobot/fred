@@ -6,7 +6,7 @@
     "url": "git+https://github.com/TheFancyRobot/fred.git",
     "directory": "packages/dev"
   },
-  "description": "Fred dev-only tooling and contributor workflows",
+  "description": "Deprecated compatibility shim for @fancyrobot/fred-cli",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,28 +30,20 @@
     }
   },
   "scripts": {
-    "dev": "bun run src/dev-chat.ts",
-    "server": "bun run src/server.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/platform-bun --external @fancyrobot/fred --external @fancyrobot/fred-http",
-    "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
-  },
-  "dependencies": {
-    "chokidar": "^5.0.0"
+    "build": "bun build src/index.ts src/chat-defaults.ts --root src --outdir dist --target bun --format esm --external @fancyrobot/fred-cli",
+    "build:declarations": "rm -rf dist tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^2.0.0-alpha.0",
-    "@fancyrobot/fred-http": "^1.0.0-alpha.0",
-    "effect": "^3.21.0",
-    "@effect/platform-bun": "^0.89.0"
+    "@fancyrobot/fred-cli": "^0.5.1-alpha.0"
   },
   "devDependencies": {
-    "effect": "^3.21.0",
-    "@effect/platform-bun": "^0.89.0",
+    "@fancyrobot/fred-cli": "workspace:^",
     "@types/bun": "latest"
   },
   "publishConfig": {
     "access": "public"
   },
+  "deprecated": "Compatibility shim only. Install @fancyrobot/fred-cli and use `fred chat`; @fancyrobot/fred-dev will be removed in the next major release.",
   "keywords": [
     "fred",
     "dev",

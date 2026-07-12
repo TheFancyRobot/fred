@@ -283,10 +283,7 @@ async function main(): Promise<void> {
         return;
 
       case 'dev':
-        // handleDevCommand uses BunRuntime.runMain internally and never returns
-        // It handles signals and cleanup, and exits the process
-        handleDevCommand();
-        // This line is never reached
+        await handleDevCommand();
         return;
 
       case 'test':
@@ -500,3 +497,14 @@ function emitPluginStartupDiagnostics(
 if (import.meta.main) {
   main();
 }
+
+export { handleChatCommand } from './commands/chat.js';
+export { startDevChat, type DevChatSetupHook } from './dev-chat.js';
+export {
+  DEV_CHAT_PROVIDER_PACKAGES,
+  detectAvailableProvider,
+  loadProviderPackage,
+  ensureDefaultChatAgent,
+  type EnsureDefaultChatAgentOptions,
+  type EnsureDefaultChatAgentResult,
+} from './chat-defaults.js';

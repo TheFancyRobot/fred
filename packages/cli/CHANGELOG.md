@@ -1,5 +1,13 @@
 # @fred/cli
 
+## Unreleased
+
+### Minor Changes
+
+- Own development chat, provider auto-detection/default-agent helpers, project setup, hot reload, and the deprecated `fred dev` alias directly.
+- Export the compatibility helpers from the package root and `./chat-defaults`; remove the runtime dependency on `@fancyrobot/fred-dev`.
+- Close Fred resources, including agent-file watchers, before interactive chat exits.
+
 ## 0.5.1-alpha.0
 
 ### Patch Changes
