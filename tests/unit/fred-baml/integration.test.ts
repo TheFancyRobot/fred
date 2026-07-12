@@ -3,7 +3,7 @@ import { Effect, Layer, Schema } from 'effect';
 import { LanguageModel } from '@effect/ai';
 import {
   AgentService,
-  Fred,
+  createFred,
   PromptSourceService,
   ProviderRegistryService,
   makeFredRuntimeLayer,
@@ -49,7 +49,7 @@ function isStubBamlPromptClient(
 }
 
 describe('fred-baml integration', () => {
-  test('registers and executes a BAML-backed tool through Fred', async () => {
+  test('registers and executes a BAML-backed tool through the scoped client', async () => {
     const runtime = initFredBamlRuntime({
       moduleId: 'tests/unit/fred-baml/fixtures/baml_client.stub',
       loadClient: () => import('./fixtures/baml_client.stub'),
@@ -74,15 +74,20 @@ describe('fred-baml integration', () => {
       },
     });
 
-    const fred = await Fred.create();
-    fred.registerTool(tool);
+    const fred = await createFred();
+    try {
+      await fred.tools.register(tool);
+      const registeredTool = (await fred.tools.list()).find(
+        (candidate) => candidate.id === BamlAgent.toolId('summarizeSong'),
+      );
 
-    const registeredTool = fred.getTool(BamlAgent.toolId('summarizeSong'));
-
-    expect(registeredTool).toBeDefined();
-    await expect(registeredTool?.execute({ title: 'Evergreen', lyrics: 'la la la' })).resolves.toBe(
-      'summary:Evergreen:8',
-    );
+      expect(registeredTool).toBeDefined();
+      await expect(registeredTool?.execute({ title: 'Evergreen', lyrics: 'la la la' })).resolves.toBe(
+        'summary:Evergreen:8',
+      );
+    } finally {
+      await fred.shutdown();
+    }
   });
 
   test('resolves an agent prompt through a consumer-owned generated client', async () => {

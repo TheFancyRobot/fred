@@ -56,7 +56,7 @@ afterEach(async () => {
 });
 
 async function registerMockProvider(client: FredClient): Promise<void> {
-  await Runtime.runPromise(client.runtime)(
+  await client.effects.run(
     Effect.flatMap(ProviderRegistryService, (s) =>
       s.registerDefinition({ ...createMockProvider('mock'), aliases: [] })
     )
@@ -108,14 +108,14 @@ describe('createFred client', () => {
     try {
       const client = track(await createFred({ configPath }));
       expect((await client.agents.list()).map((agent) => agent.id)).toEqual(['config-agent']);
-      const conversationId = await Runtime.runPromise(client.runtime)(Effect.gen(function* () {
+      const conversationId = await client.effects.run(Effect.gen(function* () {
         const context = yield* ContextStorageService;
         const id = yield* context.generateConversationId();
         yield* context.addMessages(id, [{ role: 'user', content: 'persisted' }]);
         return id;
       }));
       expect((await client.sessions.list()).map((session) => session.id)).toContain(conversationId);
-      const checkpointStorage = await Runtime.runPromise(client.runtime)(
+      const checkpointStorage = await client.effects.run(
         Effect.flatMap(CheckpointService, (service) => service.getStorage()),
       );
       expect(checkpointStorage).toBeInstanceOf(SqliteCheckpointStorage);
@@ -448,7 +448,7 @@ describe('createFred client', () => {
     // An Effect user on the same runtime observes state written via the
     // Promise sub-API (and vice versa: the mock provider was registered
     // through the escape hatch and consumed by agents.register above).
-    const agentIds = await Runtime.runPromise(client.runtime)(
+    const agentIds = await client.effects.run(
       Effect.map(
         Effect.flatMap(AgentService, (s) => s.getAllAgents()),
         (agents) => agents.map((a) => a.id)
@@ -457,7 +457,7 @@ describe('createFred client', () => {
     expect(agentIds).toContain('shared-agent');
 
     // Built-in calculator tool is registered during createFred init.
-    const toolIds = await Runtime.runPromise(client.runtime)(
+    const toolIds = await client.effects.run(
       Effect.map(
         Effect.flatMap(ToolRegistryService, (s) => s.getAllTools()),
         (tools) => tools.map((t) => t.id)
@@ -706,7 +706,7 @@ describe('createFred client', () => {
     const client = track(await createFred());
 
     // Seed a conversation through the shared runtime.
-    const conversationId = await Runtime.runPromise(client.runtime)(
+    const conversationId = await client.effects.run(
       Effect.gen(function* () {
         const context = yield* ContextStorageService;
         const id = yield* context.generateConversationId();
@@ -740,12 +740,12 @@ describe('createFred client', () => {
     expect(await client.sessions.list()).toEqual([]);
 
     const storage = createMockStorage();
-    await Runtime.runPromise(client.runtime)(
+    await client.effects.run(
       Effect.flatMap(ContextStorageService, (s) => s.replaceStorage(storage))
     );
 
     // Seed a session through the client's normal write path.
-    const conversationId = await Runtime.runPromise(client.runtime)(
+    const conversationId = await client.effects.run(
       Effect.gen(function* () {
         const context = yield* ContextStorageService;
         const id = yield* context.generateConversationId();
@@ -769,7 +769,7 @@ describe('createFred client', () => {
     const client = track(await createFred());
     await registerMockProvider(client);
 
-    const definition = await Runtime.runPromise(client.runtime)(
+    const definition = await client.effects.run(
       Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('mock'))
     );
     expect(definition.id).toBe('mock');

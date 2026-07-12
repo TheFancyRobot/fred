@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import type { AgentConfig, AgentInstance } from '../../../../packages/core/src/agent/agent';
+import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import type { AgentFileWatcher } from '../../../../packages/core/src/agent/file-watcher';
 import { AgentFileParseError } from '../../../../packages/core/src/agent/errors';
-import { ConfigInitializer, type FredLike } from '../../../../packages/core/src/config/initializer';
+import {
+  ConfigInitializer,
+  type ConfigInitializationTarget,
+} from '../../../../packages/core/src/config/initializer';
 import { validateConfig } from '../../../../packages/core/src/config/loader';
 import type { FrameworkConfig } from '../../../../packages/core/src/config/types';
 
@@ -59,7 +62,7 @@ const createBaseAgent = (id: string, systemMessage = 'Config agent prompt'): Age
 });
 
 const createFredMock = (): {
-  fred: FredLike;
+  fred: ConfigInitializationTarget;
   createdAgents: AgentConfig[];
   removedAgents: string[];
   watcher?: AgentFileWatcher;
@@ -68,48 +71,33 @@ const createFredMock = (): {
   const removedAgents: string[] = [];
   let watcher: AgentFileWatcher | undefined;
 
-  const fred: FredLike = {
-    getAgentManager: () => ({
-      setDefaultSystemMessage: () => {},
-      hasAgent: (id: string) => createdAgents.some((agent) => agent.id === id),
-    }),
-    getPipelineManager: () => ({
-      setCheckpointManager: () => {},
-    }),
-    getProviderRegistry: () => ({
-      register: async () => {},
-      markInitialized: () => {},
-    }),
-    getProviderService: () => ({
-      syncProviderRegistry: () => {},
-      registerDefaultProviders: async () => {},
-      loadDefaultProviders: async () => {},
-    }),
-    setDefaultPolicy: () => {},
-    setStorage: () => {},
-    registerTool: () => {},
-    registerIntents: () => {},
-    createAgent: async (config: AgentConfig): Promise<AgentInstance> => {
-      createdAgents.push(config);
-      return {
-        id: config.id,
-        config,
-        processMessage: async () => ({ content: '' }),
-      } as AgentInstance;
-    },
-    removeAgent: async (id: string): Promise<boolean> => {
-      removedAgents.push(id);
-      return true;
-    },
-    createPipeline: async () => ({ id: 'pipeline' } as any),
-    configureRouting: () => {},
-    configureWorkflows: () => {},
-    configureObservability: () => {},
+  const fred: ConfigInitializationTarget = {
+    setDefaultSystemMessage: async () => {},
+    setMemoryDefaults: async () => {},
+    setContextPolicy: async () => {},
     setToolPolicies: async () => {},
-    setAgentFileWatcher: (value: AgentFileWatcher) => {
+    registerProvider: async () => {},
+    registerDefaultProviders: async () => {},
+    configureMCPServers: async () => {},
+    registerTool: async () => {},
+    configureRouting: async () => {},
+    configureWorkflows: async () => {},
+    registerIntents: async () => {},
+    createAgent: async (config: AgentConfig): Promise<void> => {
+      createdAgents.push(config);
+    },
+    removeAgent: async (id: string): Promise<void> => {
+      removedAgents.push(id);
+    },
+    hasAgent: async (id: string) => createdAgents.some((agent) => agent.id === id),
+    createPipeline: async () => {},
+    getGlobalVariables: async () => ({}),
+    invalidateTemplateCache: async () => {},
+    ownAgentFileWatcher: (value: AgentFileWatcher) => {
       watcher = value;
       activeWatchers.push(value);
     },
+    emitWarning: () => {},
   };
 
   return {
@@ -156,7 +144,7 @@ describe('config initializer agent file integration', () => {
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents.map((agent) => agent.id)).toEqual(['file-agent', 'config-agent']);
   });
@@ -174,7 +162,7 @@ describe('config initializer agent file integration', () => {
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents.map((agent) => agent.id)).toEqual(['default-agent', 'config-agent']);
   });
@@ -188,7 +176,7 @@ describe('config initializer agent file integration', () => {
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents.map((agent) => agent.id)).toEqual(['config-only-agent']);
   });
@@ -207,7 +195,7 @@ describe('config initializer agent file integration', () => {
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await expect(initializer.initialize(fred, configPath)).rejects.toThrow(
+    await expect(initializer.initializeServices(fred, configPath)).rejects.toThrow(
       'Duplicate agent ID "duplicate-id" found across agent sources. Agent IDs must be unique across .md files, config agents, and programmatic registrations.'
     );
     expect(createdAgents).toHaveLength(0);
@@ -228,7 +216,7 @@ describe('config initializer agent file integration', () => {
     const initializer = new ConfigInitializer();
     const { fred } = createFredMock();
 
-    await expect(initializer.initialize(fred, configPath)).rejects.toThrow(
+    await expect(initializer.initializeServices(fred, configPath)).rejects.toThrow(
       'Duplicate agent ID "duplicate-id" found across agent sources. Agent IDs must be unique across .md files, config agents, and programmatic registrations.'
     );
   });
@@ -256,7 +244,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const { fred } = createFredMock();
 
-    await expect(initializer.initialize(fred, configPath)).rejects.toThrow(
+    await expect(initializer.initializeServices(fred, configPath)).rejects.toThrow(
       'Agent "config-agent" references "./prompts/ambiguous.md" as systemMessage, but that file contains YAML frontmatter.'
     );
   });
@@ -274,7 +262,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents).toHaveLength(1);
     expect(createdAgents[0]?.systemMessage).toBe('You are a plain markdown prompt file.');
@@ -294,7 +282,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents.map((agent) => agent.id)).toEqual(['config-agent']);
   });
@@ -316,7 +304,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const { fred, createdAgents } = createFredMock();
 
-    await initializer.initialize(fred, configPath);
+    await initializer.initializeServices(fred, configPath);
 
     expect(createdAgents.map((agent) => agent.id)).toEqual(['relative-agent', 'config-agent']);
   });
@@ -335,7 +323,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const { fred } = createFredMock();
 
-    await expect(initializer.initialize(fred, configPath)).rejects.toBeInstanceOf(AgentFileParseError);
+    await expect(initializer.initializeServices(fred, configPath)).rejects.toBeInstanceOf(AgentFileParseError);
   });
 
   it('registers a file watcher after loading markdown agents', async () => {
@@ -352,7 +340,7 @@ This file is both a prompt and an agent definition.
     const initializer = new ConfigInitializer();
     const mock = createFredMock();
 
-    await initializer.initialize(mock.fred, configPath);
+    await initializer.initializeServices(mock.fred, configPath);
 
     expect(mock.watcher).toBeDefined();
   });

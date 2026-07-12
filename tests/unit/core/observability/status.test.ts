@@ -17,6 +17,7 @@ import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
 import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import {
   type AgentRunState,
+  type AgentStatusListener,
   type AgentStatusSnapshot,
   type AgentStatusUnsubscribe,
   AgentStatusService,
@@ -27,7 +28,8 @@ import {
 import { AgentStatusService as EffectAgentStatusService } from '../../../../packages/core/src/effect/services';
 import {
   AgentStatusService as PublicAgentStatusService,
-  Fred,
+  createFred,
+  type FredClient,
 } from '../../../../packages/core/src/index';
 import { makeFredRuntimeLayer } from '../../../../packages/core/src/services';
 import {
@@ -58,6 +60,29 @@ const runningAgentGaugeValue = Effect.map(Metric.snapshot, (metrics) => {
     ? gauge.metricState.value
     : 0;
 });
+
+const subscribeAgentStatus = (
+  fred: FredClient,
+  listener: AgentStatusListener,
+): Promise<AgentStatusUnsubscribe> => fred.effects.run(
+  Effect.gen(function* () {
+    const status = yield* AgentStatusService;
+    const fiber = yield* status.changes.pipe(
+      Stream.runForEach((snapshot) =>
+        Effect.sync(() => listener(snapshot)).pipe(
+          Effect.catchAllCause(() => Effect.void),
+        )
+      ),
+      Effect.forkDaemon,
+    );
+    let active = true;
+    return async () => {
+      if (!active) return;
+      active = false;
+      await fred.effects.run(Fiber.interrupt(fiber));
+    };
+  }),
+);
 
 describe('AgentStatusService', () => {
   test('ignores unannotated fibers', async () => {
@@ -526,7 +551,7 @@ describe('AgentStatusService', () => {
     );
   });
 
-  test('aggregates the running gauge across two independent Fred runtimes', async () => {
+  test('aggregates the running gauge across two independent service runtimes', async () => {
     const firstRuntime = ManagedRuntime.make(makeFredRuntimeLayer());
     const secondRuntime = ManagedRuntime.make(makeFredRuntimeLayer());
     const [firstStarted, firstRelease, secondStarted, secondRelease] =
@@ -717,7 +742,7 @@ describe('AgentStatusService', () => {
     }
   });
 
-  test('is supervised by the Fred runtime layer and exported publicly', async () => {
+  test('is supervised by the core runtime layer and exported publicly', async () => {
     const [active, completed] = await Effect.runPromise(
       Effect.gen(function* () {
         const status = yield* AgentStatusService;
@@ -744,8 +769,8 @@ describe('AgentStatusService', () => {
     expect(PublicAgentStatusService).toBe(AgentStatusService);
   });
 
-  test('facade subscription stays live after Fred.create and disposes idempotently', async () => {
-    const fred = await Fred.create();
+  test('Effect-native subscription stays live and disposes idempotently', async () => {
+    const fred = await createFred();
     const snapshots: Array<ReadonlyArray<{ agentId: string; state: string }>> = [];
     let throwOnInitialSnapshot = true;
     let resolveActive: (() => void) | undefined;
@@ -755,7 +780,7 @@ describe('AgentStatusService', () => {
     let unsubscribe: (() => Promise<void>) | undefined;
 
     try {
-      unsubscribe = await fred.subscribeAgentStatus((snapshot) => {
+      unsubscribe = await subscribeAgentStatus(fred, (snapshot) => {
         if (throwOnInitialSnapshot) {
           throwOnInitialSnapshot = false;
           throw new Error('listener failure must stay isolated');
@@ -766,14 +791,13 @@ describe('AgentStatusService', () => {
 
       const started = await Effect.runPromise(Deferred.make<void>());
       const release = await Effect.runPromise(Deferred.make<void>());
-      const runtime = await fred.getRuntime();
-      const run = Runtime.runFork(runtime)(
+      const run = await fred.effects.run(Effect.forkDaemon(
         trackAgentRun(annotation)(
           Deferred.succeed(started, undefined).pipe(
             Effect.zipRight(Deferred.await(release)),
           ),
         ),
-      );
+      ));
 
       await Effect.runPromise(Deferred.await(started));
       await activeObserved;
@@ -794,18 +818,17 @@ describe('AgentStatusService', () => {
     }
   });
 
-  test('facade subscription starts with an active run and observes its cleanup', async () => {
-    const fred = await Fred.create();
+  test('Effect-native subscription starts with an active run and observes cleanup', async () => {
+    const fred = await createFred();
     const started = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
-    const runtime = await fred.getRuntime();
-    const run = Runtime.runFork(runtime)(
+    const run = await fred.effects.run(Effect.forkDaemon(
       trackAgentRun(annotation)(
         Deferred.succeed(started, undefined).pipe(
           Effect.zipRight(Deferred.await(release)),
         ),
       ),
-    );
+    ));
     const snapshots: AgentStatusSnapshot[] = [];
     let resolveActive: (() => void) | undefined;
     const activeObserved = new Promise<void>((resolve) => {
@@ -819,7 +842,7 @@ describe('AgentStatusService', () => {
 
     try {
       await Effect.runPromise(Deferred.await(started));
-      unsubscribe = await fred.subscribeAgentStatus((snapshot) => {
+      unsubscribe = await subscribeAgentStatus(fred, (snapshot) => {
         snapshots.push(snapshot);
         if (snapshot.length === 1) resolveActive?.();
         if (snapshot.length === 0) resolveCleanup?.();
