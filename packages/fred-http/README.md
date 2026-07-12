@@ -167,10 +167,10 @@ be removed in the next major release.
 The fetch adapter continues to support consumer-defined routes:
 
 ```ts
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import { createFredHttpApp } from '@fancyrobot/fred-http';
 
-const fred = new Fred();
+const fred = await createFred();
 const app = createFredHttpApp({
   fred,
   // Supply the remote address from the trusted embedding runtime.

@@ -50,13 +50,12 @@ routing:
 Use it from TypeScript:
 
 ```typescript
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
-const fred = await Fred.create();
-await fred.initializeFromConfig('config.yaml');
-const response = await fred.processMessage('Hello!', { conversationId: 'demo' });
-console.log(response.content);
+const fred = await createFred({ configPath: 'config.yaml' });
+const response = await fred.messages.process('Hello!', { conversationId: 'demo' });
+console.log(response?.content);
 await fred.shutdown();
 ```
 

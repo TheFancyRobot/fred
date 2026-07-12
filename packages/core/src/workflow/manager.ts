@@ -2,8 +2,11 @@
  * WorkflowManager for registering and validating workflows
  */
 
-import type { Fred } from '../index';
 import type { RoutingConfig } from '../routing/types';
+
+interface AgentLookup {
+  getAgent(id: string): unknown;
+}
 
 /** Workflow definition — a named entry point that groups related agents. */
 export interface Workflow {
@@ -21,9 +24,9 @@ export interface Workflow {
  */
 export class WorkflowManager {
   private workflows: Map<string, Workflow> = new Map();
-  private fred: Fred;
+  private fred: AgentLookup;
 
-  constructor(fred: Fred) {
+  constructor(fred: AgentLookup) {
     this.fred = fred;
   }
 

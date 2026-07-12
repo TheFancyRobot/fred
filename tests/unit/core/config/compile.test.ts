@@ -46,7 +46,7 @@ describe('configToLayerOptions', () => {
 describe('configToLayers', () => {
   it('compiles into a runnable Fred runtime with the full service set present', async () => {
     // The compiled layer provides services; runtime initialization (calculator
-    // registration etc.) is a separate concern owned by createFred/the facade.
+    // registration etc.) is a separate concern owned by createFred/the client.
     // Here we only assert the layer composes a complete, runnable service set.
     const runtime = track(ManagedRuntime.make(configToLayers({})));
     const [tools, intents] = await runtime.runPromise(

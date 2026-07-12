@@ -79,7 +79,6 @@ describe('Effect runtime boundary guards', () => {
   ];
 
   const boundaryFiles = new Set([
-    'index.ts',
     'client.ts',
     'services.ts',
     'eval/replay.ts',

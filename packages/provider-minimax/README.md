@@ -33,11 +33,11 @@ The provider registers itself on import — no manual `registerProvider()` call 
 ### Programmatic
 
 ```typescript
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-minimax';
 
-const fred = new Fred();
-fred.registerDefaultProviders();
+const fred = await createFred();
+await fred.providers.use('minimax');
 ```
 
 ### Config File (YAML)

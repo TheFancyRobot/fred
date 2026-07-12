@@ -4,10 +4,10 @@ This example shows the fastest path to getting your first response with Fred usi
 
 ## What you'll learn
 
-- `Fred.create()` to initialize the runtime
-- Config-driven startup with `initializeFromConfig('./config.yaml')`
+- `createFred()` to initialize the runtime
+- Config-driven startup with `createFred({ configPath: './config.yaml' })`
 - Agent definition in `agents/assistant.md` with YAML frontmatter
-- Message processing with `processMessage(...)`
+- Message processing with `fred.messages.process(...)`
 
 ## Prerequisites
 

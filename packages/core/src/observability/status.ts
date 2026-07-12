@@ -268,10 +268,10 @@ export const transitionAgentRun = (
   );
 
 const makeAgentStatusLayer = Effect.gen(function* () {
-  // The Fred facade retains its runtime after Layer.toRuntime returns, while
+  // The scoped client retains its runtime after Layer.toRuntime returns, while
   // the temporary construction Scope closes. This PubSub owns no external
   // resource, so keeping it runtime-owned avoids ending `changes` as soon as
-  // Fred.create() resolves. Stream subscribers still release their scoped
+  // createFred() resolves. Stream subscribers still release their scoped
   // PubSub subscriptions when their consumer fibers are interrupted.
   const changes = yield* PubSub.unbounded<AgentStatusChange>();
   const status = MutableRef.make<AgentStatusState>({

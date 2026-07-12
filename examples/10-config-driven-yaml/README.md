@@ -8,7 +8,7 @@ This example shows two ways to configure the same Fred app:
 ## What you'll learn
 
 - How to define providers and routing in YAML while defining agents in markdown files
-- How `initializeFromConfig('./config.yaml')` auto-discovers `./agents`
+- How `createFred({ configPath: './config.yaml' })` auto-discovers `./agents`
 - How config + markdown maps to equivalent Fred API concepts
 - When to choose static config vs dynamic code
 
@@ -39,10 +39,10 @@ bun run start:programmatic
 | YAML (`config.yaml`) | Programmatic (`src/programmatic-equivalent.ts`) |
 | --- | --- |
 | `providers[].id: openrouter` | provider pack registration via side-effect import |
-| `agents/*.md` | parsed files passed to `createAgent(...)` conceptually |
-| `utterances` in frontmatter | `registerIntent(...)` conceptually |
-| `routing.defaultAgent` + `routing.rules` | `fred.configureRouting({ defaultAgent, rules })` |
-| Entire file load | `await fred.initializeFromConfig('./config.yaml')` |
+| `agents/*.md` | parsed files registered through `fred.agents` conceptually |
+| `utterances` in frontmatter | intents registered through the Effect service layer |
+| `routing.defaultAgent` + `routing.rules` | routing applied while `createFred()` builds the client |
+| Entire file load | `await createFred({ configPath: './config.yaml' })` |
 
 ## Config vs code
 
@@ -51,12 +51,15 @@ bun run start:programmatic
 
 ## Pipeline function note
 
-If your YAML config uses pipeline function steps (`functionId`), register them in code before loading config (via the config loader API):
+Pass runtime tool executors when loading config:
 
 ```typescript
-registerPipelineFunction('summarize-results', async (ctx) => {
-  return { summary: `Done: ${String(ctx.input)}` };
+const fred = await createFred({
+  configPath: './config.yaml',
+  configOptions: {
+    toolExecutors: new Map([
+      ['summarize-results', async (input) => ({ summary: `Done: ${String(input)}` })],
+    ]),
+  },
 });
-
-await fred.initializeFromConfig('./config.yaml');
 ```
