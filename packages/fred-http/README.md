@@ -89,11 +89,74 @@ server:
 
 ```bash
 fred keys create --sqlite ./fred.db --scopes workflows:run,workflows:stream
+fred keys create --sqlite ./fred.db --verifier scrypt-v1 --expires-at 2027-01-01T00:00:00Z
 ```
 
-Only the hash is persisted. The raw key is printed once after persistence
-succeeds; store it in a secret manager, rotate by issuing a replacement, and
-revoke the old record. The CLI rejects in-memory storage.
+New keys use `argon2id-v1` by default. `scrypt-v1` and
+`pbkdf2-sha256-v1` are also registered by the default verifier registry;
+PBKDF2-HMAC-SHA-256 is the built-in choice for FIPS-oriented deployments.
+`hmac-sha256-v1` is available when the application supplies current/previous
+pepper keys programmatically. Verifier IDs are registry keys, not a closed
+enum, so a deployment can register a reviewed KMS/HSM-backed implementation.
+
+Only a one-way verifier, its stable algorithm/version, and verifier-owned
+non-secret metadata are persisted. The raw key is printed once after
+persistence succeeds. Pepper values are never record metadata and must come
+from a secret manager. The CLI rejects in-memory storage and rejects unknown or
+disabled verifier IDs before emitting a token.
+
+```ts
+import {
+  makeApiKeyVerifierRegistry,
+  makeArgon2idApiKeyVerifier,
+  makeHmacApiKeyVerifier,
+  makeMemoryApiKeyStore,
+  withHttp,
+} from '@fancyrobot/fred-http';
+
+const verifiers = makeApiKeyVerifierRegistry([
+  makeArgon2idApiKeyVerifier(),
+  makeHmacApiKeyVerifier({
+    currentKeyId: 'pepper-2026-07',
+    keys: {
+      'pepper-2026-07': currentPepperFromSecretManager,
+      'pepper-2026-06': previousPepperFromSecretManager,
+    },
+  }),
+]);
+
+const fred = withHttp(core, {
+  apiKeyStore: makeMemoryApiKeyStore(),
+  apiKeyVerifierRegistry: verifiers,
+});
+```
+
+### Migration, rotation, and rollback
+
+SQLite and Postgres initialization add verifier and expiration columns with
+idempotent migrations. Rows without a verifier descriptor decode as the
+read-only `sha256-v1` legacy format. They cannot be converted offline because
+Fred never stores the raw token. After a legacy token authenticates and passes
+revocation, expiration, and scope checks, Fred derives the configured default
+and performs a compare-and-swap update; concurrent requests can upgrade the row
+only once. A failed upgrade leaves the verified legacy row intact.
+
+For pepper rotation, keep both key IDs available, make the new ID current, and
+reissue or lazily migrate keys before removing the previous secret. Rollback
+means restoring the prior registry/default while its pepper remains available.
+Dormant SHA-256 records should be revoked and reissued by a deployment-defined
+retirement date; they cannot be silently bulk-rehashed.
+
+### Capacity and parameter bounds
+
+Defaults are bounded before cryptographic work: Argon2id memory 19,456 KiB and
+time cost 2 (allowed 4,096-262,144 KiB / 1-10), scrypt N=16,384/r=8/p=1
+(allowed N 4,096-65,536, r 8-16, p 1-4), and PBKDF2 600,000 iterations
+(allowed 100,000-2,000,000). On the project validation machine, a three-sample
+serial derive+verify smoke measured approximately 29 ms Argon2id, 52 ms scrypt,
+84 ms PBKDF2, and under 1 ms HMAC. Treat these as a smoke envelope, benchmark on
+production hardware, and cap authentication concurrency according to the
+chosen memory-hard settings.
 
 ## Deprecated compatibility adapters
 

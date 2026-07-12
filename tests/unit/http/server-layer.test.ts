@@ -53,8 +53,8 @@ describe('FredHttpServerLive security middleware', () => {
 
   test('uses API key identity before IP and honors per-key policy overrides', async () => {
     const apiKeyStore = makeMemoryApiKeyStore();
-    const first = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
-    const second = generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } });
+    const first = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } }));
+    const second = await Effect.runPromise(generateApiKey([], { rateLimit: { maxRequests: 1, windowMs: 60_000 } }));
     await Effect.runPromise(Effect.all([
       apiKeyStore.insert(first.record),
       apiKeyStore.insert(second.record),

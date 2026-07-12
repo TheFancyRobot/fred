@@ -7,6 +7,8 @@ interface KeysCommandOptions {
   readonly scopes?: string;
   readonly scope?: string;
   readonly id?: string;
+  readonly verifier?: string;
+  readonly 'expires-at'?: string;
   readonly 'rate-limit-max'?: string;
   readonly 'rate-limit-window-ms'?: string;
 }
@@ -37,7 +39,7 @@ export async function handleKeysCommand(
   loadFredHttp: () => Promise<FredHttpApiKeyModule> = () => import('@fancyrobot/fred-http'),
 ): Promise<number> {
   if (args[0] !== 'create') {
-    console.error('Usage: fred keys create (--sqlite <path> | --postgres <url>) [--scopes <a,b>]');
+    console.error('Usage: fred keys create (--sqlite <path> | --postgres <url>) [--scopes <a,b>] [--verifier <id>] [--expires-at <ISO-8601>]');
     return 1;
   }
   if (options.memory !== undefined) {
@@ -69,12 +71,18 @@ export async function handleKeysCommand(
       store = http.makePostgresApiKeyStore(pool);
     }
 
-    const generated = http.generateApiKey(scopes, {
+    const expiresAt = options['expires-at'] === undefined ? undefined : new Date(options['expires-at']);
+    if (expiresAt !== undefined && Number.isNaN(expiresAt.getTime())) {
+      throw new Error('--expires-at must be a valid ISO-8601 timestamp');
+    }
+    const generated = await Effect.runPromise(http.generateApiKey(scopes, {
       ...(options.id === undefined ? {} : { id: options.id }),
+      ...(options.verifier === undefined ? {} : { verifierId: options.verifier }),
+      ...(expiresAt === undefined ? {} : { expiresAt }),
       ...(maxRequests === undefined || windowMs === undefined
         ? {}
         : { rateLimit: { maxRequests, windowMs } }),
-    });
+    }));
     await Effect.runPromise(store.initialize.pipe(Effect.andThen(store.insert(generated.record))));
     console.log(generated.token);
     return 0;
