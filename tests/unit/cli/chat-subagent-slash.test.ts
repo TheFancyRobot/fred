@@ -1,70 +1,48 @@
-import { describe, expect, test } from 'bun:test';
-import type { Fred } from '@fancyrobot/fred';
+import { afterEach, describe, expect, test } from 'bun:test';
+import type { FredClient, SubagentInfo } from '@fancyrobot/fred';
 import { buildBuiltinSlashCommands } from '../../../packages/cli/src/commands/chat';
+import { createMockFredClient, shutdownMockFredClients } from './fixtures/fred-smoke-contract';
+
+afterEach(shutdownMockFredClients);
+
+const activeSubagent = {
+  id: 'subagent-1',
+  name: 'researcher',
+  command: 'node',
+  args: ['worker.js'],
+  cwd: '/tmp/work',
+  envKeys: ['API_KEY'],
+  metadata: { kind: 'research' },
+  status: 'running',
+  createdAt: '2026-03-08T10:00:00.000Z',
+  updatedAt: '2026-03-08T10:00:10.000Z',
+  executionCount: 2,
+  currentExecution: {
+    args: ['run'],
+    startedAt: '2026-03-08T10:00:05.000Z',
+    pid: 4242,
+  },
+  lastExecution: {
+    args: ['warmup'],
+    startedAt: '2026-03-08T09:59:00.000Z',
+    endedAt: '2026-03-08T09:59:03.000Z',
+    exitCode: 0,
+    signal: null,
+    stdoutPreview: 'ready',
+  },
+} satisfies SubagentInfo;
 
 describe('chat subagent slash commands', () => {
   test('lists and inspects active subagents', async () => {
-    const fred = {
+    const base = await createMockFredClient();
+    const fred: FredClient = { ...base,
       subagents: {
-        list: async () => [
-          {
-            id: 'subagent-1',
-            name: 'researcher',
-            command: 'node',
-            args: ['worker.js'],
-            cwd: '/tmp/work',
-            envKeys: ['API_KEY'],
-            metadata: { kind: 'research' },
-            status: 'running',
-            createdAt: '2026-03-08T10:00:00.000Z',
-            updatedAt: '2026-03-08T10:00:10.000Z',
-            executionCount: 2,
-            currentExecution: {
-              args: ['run'],
-              startedAt: '2026-03-08T10:00:05.000Z',
-              pid: 4242,
-            },
-            lastExecution: {
-              args: ['warmup'],
-              startedAt: '2026-03-08T09:59:00.000Z',
-              endedAt: '2026-03-08T09:59:03.000Z',
-              exitCode: 0,
-              signal: null,
-              stdoutPreview: 'ready',
-            },
-          },
-        ],
-        inspect: async (id: string) => id === 'subagent-1'
-          ? {
-              id: 'subagent-1',
-              name: 'researcher',
-              command: 'node',
-              args: ['worker.js'],
-              cwd: '/tmp/work',
-              envKeys: ['API_KEY'],
-              metadata: { kind: 'research' },
-              status: 'running',
-              createdAt: '2026-03-08T10:00:00.000Z',
-              updatedAt: '2026-03-08T10:00:10.000Z',
-              executionCount: 2,
-              currentExecution: {
-                args: ['run'],
-                startedAt: '2026-03-08T10:00:05.000Z',
-                pid: 4242,
-              },
-              lastExecution: {
-                args: ['warmup'],
-                startedAt: '2026-03-08T09:59:00.000Z',
-                endedAt: '2026-03-08T09:59:03.000Z',
-                exitCode: 0,
-                signal: null,
-                stdoutPreview: 'ready',
-              },
-            }
-          : null,
+        ...base.subagents,
+        list: async () => [activeSubagent],
+        inspect: async (id: string) => id === 'subagent-1' ? activeSubagent : null,
         destroy: async () => false,
       },
-    } as unknown as Fred;
+    };
 
     const commands = buildBuiltinSlashCommands(fred);
     const listOutput = await commands.find((command) => command.commandId === 'subagents')!.execute('', {
@@ -87,8 +65,10 @@ describe('chat subagent slash commands', () => {
 
   test('destroys a subagent and reports missing ids', async () => {
     let destroyedId: string | null = null;
-    const fred = {
+    const base = await createMockFredClient();
+    const fred: FredClient = { ...base,
       subagents: {
+        ...base.subagents,
         list: async () => [],
         inspect: async () => null,
         destroy: async (id: string) => {
@@ -96,7 +76,7 @@ describe('chat subagent slash commands', () => {
           return id === 'subagent-2';
         },
       },
-    } as unknown as Fred;
+    };
 
     const commands = buildBuiltinSlashCommands(fred);
     const destroyCommand = commands.find((command) => command.commandId === 'subagent-destroy');

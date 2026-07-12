@@ -11,14 +11,16 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
+import { Stream } from 'effect';
+import type { StreamEvent } from '@fancyrobot/fred';
 import { FredTuiApp } from '../../../packages/cli/src/tui/app';
 import {
   createMockContextManager,
-  createMockFredClass,
   createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
   restoreProcessDoubles,
+  shutdownMockFredClients,
 } from './fixtures/fred-smoke-contract';
 
 const mockApp = {
@@ -58,15 +60,10 @@ const mockCreateFredTuiApp = mock(async () => mockApp);
 const mockContextManager = createMockContextManager({
   generateConversationId: () => 'conv_phase28_smoke',
 });
-const MockFred = createMockFredClass({
-  contextManager: mockContextManager,
-  defaultStreamDelta: 'test',
-});
-
 /** Build DI deps for tests that exercise handleChatCommand */
-function buildDeps() {
+function buildDeps(stream?: () => Stream.Stream<StreamEvent>) {
   return createSmokeTestDeps({
-    FredClass: MockFred,
+    client: { contextManager: mockContextManager, stream },
     createFredTuiApp: mockCreateFredTuiApp,
   });
 }
@@ -117,7 +114,7 @@ describe('Phase 28 streaming smoke', () => {
     mockApp.failAssistantStream.mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore process globals first
     restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
@@ -132,6 +129,7 @@ describe('Phase 28 streaming smoke', () => {
 
     // Reset all mock call history and restore spies
     mock.restore();
+    await shutdownMockFredClients();
   });
 
   test('launches interactive TTY mode via handleChatCommand', async () => {
@@ -166,34 +164,13 @@ describe('Phase 28 streaming smoke', () => {
   });
 
   test('uses project runtime hook when available', async () => {
-    const BaseFred = createMockFredClass();
-    const createdFreds: Array<InstanceType<typeof BaseFred> & { initializeCalls: number }> = [];
-
-    class HookFred extends BaseFred {
-      initializeCalls = 0;
-
-      override async initializeFromConfig() {
-        this.initializeCalls += 1;
-        await super.initializeFromConfig();
-      }
-    }
-
-    const runtimeHook = mock(async (fred: any) => {
-      await fred.createAgent({
-        id: 'hook-agent',
-        platform: 'openrouter',
-        model: 'google/gemini-2.5-flash',
-      });
-    });
+    const createOptions: Array<unknown> = [];
+    const runtimeHook = mock(async () => undefined);
 
     const deps = createSmokeTestDeps({
       createFredTuiApp: mockCreateFredTuiApp,
+      onCreate: (options) => createOptions.push(options),
     });
-    deps.createFred = () => {
-      const fred = new HookFred() as InstanceType<typeof HookFred> & { initializeCalls: number };
-      createdFreds.push(fred);
-      return fred as any;
-    };
     deps.resolveProjectConfig = () => ({
       success: true,
       config: {},
@@ -226,7 +203,7 @@ describe('Phase 28 streaming smoke', () => {
     }
 
     expect(runtimeHook).toHaveBeenCalledTimes(1);
-    expect(createdFreds[0]?.initializeCalls).toBe(0);
+    expect(createOptions).toEqual([undefined]);
 
     void chatPromise;
   });
@@ -324,14 +301,10 @@ describe('Phase 28 streaming smoke', () => {
     // XML pseudo-tool-calls from appearing in the transcript.
     const chunk = '/function=brave_search>{"query":"annual potato production"}</function>';
     const expectedFiltered = '/function=brave_search>{"query":"annual potato production"}';
-    const originalStreamMessage = MockFred.prototype.streamMessage;
-    (MockFred.prototype as any).streamMessage = function () {
-      return {
-        fullStream: (async function* () {
-          yield { type: 'token', delta: chunk };
-        })(),
-      };
-    };
+    const stream = () => Stream.fromIterable<StreamEvent>([{
+      type: 'token', runId: 'run_1', threadId: 'conv_1', sequence: 1, emittedAt: 1,
+      messageId: 'message_1', step: 0, delta: chunk, accumulated: chunk,
+    }]);
 
     const mockStdin = createStdinDouble({
       isTTY: true,
@@ -348,12 +321,11 @@ describe('Phase 28 streaming smoke', () => {
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
-    try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
 
       // handleChatCommand runs Effect.never in interactive mode. Fire-and-forget
       // and poll for the mock call so we can exercise the onSubmit callback.
-      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps(stream)).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
@@ -376,34 +348,36 @@ describe('Phase 28 streaming smoke', () => {
         .join('');
       expect(rendered).toBe(expectedFiltered);
       expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
-    } finally {
-      MockFred.prototype.streamMessage = originalStreamMessage;
-    }
   });
 
   test('stream callback falls back to run-end content when no token deltas arrive', async () => {
-    const originalStreamMessage = MockFred.prototype.streamMessage;
-    (MockFred.prototype as any).streamMessage = function () {
-      return {
-        fullStream: (async function* () {
-          yield {
+    const stream = () => Stream.fromIterable([
+          {
             type: 'tool-call',
+            runId: 'run_1',
+            sequence: 1,
+            emittedAt: 1,
             messageId: 'msg_1',
             step: 0,
             toolCallId: 'tool_1',
             toolName: 'fetch_latest_news',
             input: { topic: 'trump' },
             startedAt: Date.now(),
-          };
-          yield {
+          },
+          {
             type: 'tool-result',
+            runId: 'run_1',
+            sequence: 2,
+            emittedAt: 2,
+            messageId: 'msg_1',
+            step: 0,
             toolCallId: 'tool_1',
             toolName: 'fetch_latest_news',
             output: { digest: 'news digest' },
             completedAt: Date.now(),
             durationMs: 25,
-          };
-          yield {
+          },
+          {
             type: 'run-end',
             sequence: 4,
             emittedAt: Date.now(),
@@ -414,10 +388,8 @@ describe('Phase 28 streaming smoke', () => {
               content: 'Top developments\n- Item 1',
               toolCalls: [],
             },
-          };
-        })(),
-      };
-    };
+          },
+        ] satisfies StreamEvent[]);
 
     const mockStdin = createStdinDouble({
       isTTY: true,
@@ -434,9 +406,8 @@ describe('Phase 28 streaming smoke', () => {
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
-    try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps(stream)).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
@@ -462,18 +433,15 @@ describe('Phase 28 streaming smoke', () => {
       expect(mockApp.completeAssistantStream).toHaveBeenCalledTimes(1);
 
       void chatPromise;
-    } finally {
-      MockFred.prototype.streamMessage = originalStreamMessage;
-    }
   });
 
   test('stream callback surfaces handoffs and nested tool depth', async () => {
-    const originalStreamMessage = MockFred.prototype.streamMessage;
-    (MockFred.prototype as any).streamMessage = function () {
-      return {
-        fullStream: (async function* () {
-          yield { type: 'run-start', runId: 'run_root' };
-          yield {
+    const stream = () => Stream.fromIterable([
+          {
+            type: 'run-start', runId: 'run_root', sequence: 0, emittedAt: 0,
+            startedAt: 0, input: { message: 'research this', previousMessages: [] },
+          },
+          {
             type: 'handoff-start',
             runId: 'run_root',
             sequence: 1,
@@ -482,26 +450,37 @@ describe('Phase 28 streaming smoke', () => {
             toAgentId: 'research-orchestrator',
             message: 'research this',
             handoffDepth: 1,
-          };
-          yield { type: 'run-start', runId: 'run_child' };
-          yield {
+          },
+          {
+            type: 'run-start', runId: 'run_child', sequence: 2, emittedAt: 2,
+            startedAt: 2, input: { message: 'research this', previousMessages: [] },
+          },
+          {
             type: 'tool-call',
+            runId: 'run_child',
+            sequence: 3,
+            emittedAt: 3,
             messageId: 'msg_child',
             step: 0,
             toolCallId: 'tool_nested',
             toolName: 'run_research_swarm',
             input: { question: 'history' },
             startedAt: Date.now(),
-          };
-          yield {
+          },
+          {
             type: 'tool-result',
+            runId: 'run_child',
+            sequence: 4,
+            emittedAt: 4,
+            messageId: 'msg_child',
+            step: 0,
             toolCallId: 'tool_nested',
             toolName: 'run_research_swarm',
             output: 'done',
             completedAt: Date.now(),
             durationMs: 25,
-          };
-          yield {
+          },
+          {
             type: 'run-end',
             sequence: 5,
             emittedAt: Date.now(),
@@ -509,10 +488,8 @@ describe('Phase 28 streaming smoke', () => {
             finishedAt: Date.now(),
             durationMs: 100,
             result: { content: 'final', toolCalls: [] },
-          };
-        })(),
-      };
-    };
+          },
+        ] satisfies StreamEvent[]);
 
     const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
     const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
@@ -521,9 +498,8 @@ describe('Phase 28 streaming smoke', () => {
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
-    try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps(stream)).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
@@ -547,21 +523,21 @@ describe('Phase 28 streaming smoke', () => {
       });
 
       void chatPromise;
-    } finally {
-      MockFred.prototype.streamMessage = originalStreamMessage;
-    }
   });
 
   test('stream callback splits large visible deltas into smaller display segments', async () => {
-    const originalStreamMessage = MockFred.prototype.streamMessage;
-    (MockFred.prototype as any).streamMessage = function () {
-      return {
-        fullStream: (async function* () {
-          yield {
+    const stream = () => Stream.fromIterable([
+          {
             type: 'token',
+            runId: 'run_1',
+            sequence: 1,
+            emittedAt: 1,
+            messageId: 'message_1',
+            step: 0,
             delta: 'Hello world.',
-          };
-          yield {
+            accumulated: 'Hello world.',
+          },
+          {
             type: 'run-end',
             sequence: 2,
             emittedAt: Date.now(),
@@ -572,10 +548,8 @@ describe('Phase 28 streaming smoke', () => {
               content: 'Hello world.',
               toolCalls: [],
             },
-          };
-        })(),
-      };
-    };
+          },
+        ] satisfies StreamEvent[]);
 
     const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
     const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
@@ -584,9 +558,8 @@ describe('Phase 28 streaming smoke', () => {
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
-    try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps(stream)).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
@@ -605,36 +578,45 @@ describe('Phase 28 streaming smoke', () => {
       expect(mockApp.pushAssistantToken.mock.calls.map((call: any[]) => call[0])).toEqual(['Hello', ' ', 'world', '.']);
 
       void chatPromise;
-    } finally {
-      MockFred.prototype.streamMessage = originalStreamMessage;
-    }
   });
 
   test('handoff tool calls clear narrated transfer text from the transcript', async () => {
-    const originalStreamMessage = MockFred.prototype.streamMessage;
-    (MockFred.prototype as any).streamMessage = function () {
-      return {
-        fullStream: (async function* () {
-          yield { type: 'run-start', runId: 'run_root' };
-          yield { type: 'token', delta: "I've handed off your request to the research orchestrator." };
-          yield {
+    const narrated = "I've handed off your request to the research orchestrator.";
+    const stream = () => Stream.fromIterable([
+          {
+            type: 'run-start', runId: 'run_root', sequence: 0, emittedAt: 0,
+            startedAt: 0, input: { message: 'research this', previousMessages: [] },
+          },
+          {
+            type: 'token', runId: 'run_root', sequence: 1, emittedAt: 1,
+            messageId: 'message_root', step: 0, delta: narrated, accumulated: narrated,
+          },
+          {
             type: 'tool-call',
+            runId: 'run_root',
+            sequence: 2,
+            emittedAt: 2,
             messageId: 'msg_root',
             step: 0,
             toolCallId: 'handoff_tool',
             toolName: 'handoff_to_agent',
             input: { agentId: 'research-orchestrator' },
             startedAt: Date.now(),
-          };
-          yield {
+          },
+          {
             type: 'tool-result',
+            runId: 'run_root',
+            sequence: 3,
+            emittedAt: 3,
+            messageId: 'msg_root',
+            step: 0,
             toolCallId: 'handoff_tool',
             toolName: 'handoff_to_agent',
             output: { type: 'handoff', agentId: 'research-orchestrator', message: 'research this' },
             completedAt: Date.now(),
             durationMs: 10,
-          };
-          yield {
+          },
+          {
             type: 'run-end',
             sequence: 4,
             emittedAt: Date.now(),
@@ -642,11 +624,11 @@ describe('Phase 28 streaming smoke', () => {
             finishedAt: Date.now(),
             durationMs: 20,
             result: {
-              content: "I've handed off your request to the research orchestrator.",
+              content: narrated,
               handoff: { type: 'handoff', agentId: 'research-orchestrator', message: 'research this' },
             },
-          };
-          yield {
+          },
+          {
             type: 'handoff-start',
             runId: 'run_root',
             sequence: 5,
@@ -655,10 +637,16 @@ describe('Phase 28 streaming smoke', () => {
             toAgentId: 'research-orchestrator',
             message: 'research this',
             handoffDepth: 1,
-          };
-          yield { type: 'run-start', runId: 'run_child' };
-          yield { type: 'token', delta: 'Final answer' };
-          yield {
+          },
+          {
+            type: 'run-start', runId: 'run_child', sequence: 6, emittedAt: 6,
+            startedAt: 6, input: { message: 'research this', previousMessages: [] },
+          },
+          {
+            type: 'token', runId: 'run_child', sequence: 7, emittedAt: 7,
+            messageId: 'message_child', step: 0, delta: 'Final answer', accumulated: 'Final answer',
+          },
+          {
             type: 'run-end',
             sequence: 8,
             emittedAt: Date.now(),
@@ -666,10 +654,8 @@ describe('Phase 28 streaming smoke', () => {
             finishedAt: Date.now(),
             durationMs: 40,
             result: { content: 'Final answer' },
-          };
-        })(),
-      };
-    };
+          },
+        ] satisfies StreamEvent[]);
 
     const mockStdin = createStdinDouble({ isTTY: true, isRaw: false, setRawMode: mock(() => {}) });
     const mockStdout = createStdoutDouble({ isTTY: true, columns: 120, rows: 40 });
@@ -678,9 +664,8 @@ describe('Phase 28 streaming smoke', () => {
     Object.defineProperty(process, 'stdout', { value: mockStdout, configurable: true });
     (process as any).exit = mock(() => {});
 
-    try {
       const { handleChatCommand } = await import('../../../packages/cli/src/commands/chat');
-      const chatPromise = handleChatCommand(buildDeps()).catch(() => {});
+      const chatPromise = handleChatCommand(buildDeps(stream)).catch(() => {});
 
       const deadline = Date.now() + 2000;
       while (mockCreateFredTuiApp.mock.calls.length === 0 && Date.now() < deadline) {
@@ -700,8 +685,5 @@ describe('Phase 28 streaming smoke', () => {
       expect(mockApp.pushToolCall).not.toHaveBeenCalledWith(expect.objectContaining({ toolName: 'handoff_to_agent' }));
 
       void chatPromise;
-    } finally {
-      MockFred.prototype.streamMessage = originalStreamMessage;
-    }
   });
 });

@@ -18,11 +18,11 @@ import path from 'node:path';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import {
   createMockContextManager,
-  createMockFredClass,
   createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
   restoreProcessDoubles,
+  shutdownMockFredClients,
 } from './fixtures/fred-smoke-contract';
 
 const mockApp = {
@@ -44,15 +44,10 @@ const expectedNonInteractivePayload = {
 const mockContextManager = createMockContextManager({
   generateConversationId: () => 'conv_smoke_test',
 });
-const MockFred = createMockFredClass({
-  contextManager: mockContextManager,
-  defaultStreamDelta: 'test',
-});
-
 /** Build DI deps for tests that exercise handleChatCommand */
 function buildDeps() {
   return createSmokeTestDeps({
-    FredClass: MockFred,
+    client: { contextManager: mockContextManager },
     createFredTuiApp: mockCreateFredTuiApp,
   });
 }
@@ -89,7 +84,7 @@ describe('phase 27 smoke', () => {
     mockCreateFredTuiApp.mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore process globals first (before mock cleanup)
     restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
@@ -104,6 +99,7 @@ describe('phase 27 smoke', () => {
 
     // Reset all mock call history and restore spies
     mock.restore();
+    await shutdownMockFredClients();
   });
 
   describe('bare command path launch parity', () => {

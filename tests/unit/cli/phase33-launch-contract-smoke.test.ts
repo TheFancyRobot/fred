@@ -12,15 +12,18 @@ import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
 import path from 'node:path';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
+import type { SessionSummary } from '@fancyrobot/fred';
 import { detectTerminalMode } from '../../../packages/cli/src/runtime/tty-mode';
 import { FredTuiApp } from '../../../packages/cli/src/tui/app';
+import type { SessionContextService } from '../../../packages/cli/src/tui/session';
 import {
   createMockContextManager,
-  createMockFredClass,
   createSmokeTestDeps,
   createStdinDouble,
   createStdoutDouble,
+  MockSqliteContextStorage,
   restoreProcessDoubles,
+  shutdownMockFredClients,
 } from './fixtures/fred-smoke-contract';
 
 const mockApp = {
@@ -39,15 +42,10 @@ const mockContextManager = createMockContextManager({
   generateConversationId: () => 'conv_phase33_smoke',
   setStorage: mock(() => {}),
 });
-const MockFred = createMockFredClass({
-  contextManager: mockContextManager,
-  defaultStreamDelta: 'test',
-});
-
 /** Build DI deps for tests that exercise handleChatCommand */
 function buildDeps() {
   return createSmokeTestDeps({
-    FredClass: MockFred,
+    client: { contextManager: mockContextManager },
     createFredTuiApp: mockCreateFredTuiApp,
   });
 }
@@ -66,26 +64,33 @@ function makeKey(overrides: Partial<KeyEvent> & { name: string }): KeyEvent {
 }
 
 function createSessionServiceFixture(options: { serializeDates?: boolean; includeExistingSessions?: boolean } = {}) {
-  const asUpdatedAt = (iso: string) => options.serializeDates ? (iso as unknown as Date) : new Date(iso);
+  const asSummary = (summary: SessionSummary): SessionSummary => {
+    if (options.serializeDates) {
+      Reflect.set(summary, 'updatedAt', summary.updatedAt.toISOString());
+    }
+    return summary;
+  };
   const includeExistingSessions = options.includeExistingSessions ?? true;
 
   const sessions = includeExistingSessions ? [
-    {
+    asSummary({
       id: 's-latest',
-      updatedAt: asUpdatedAt('2026-02-14T12:00:00Z'),
+      createdAt: new Date('2026-02-14T12:00:00Z'),
+      updatedAt: new Date('2026-02-14T12:00:00Z'),
       title: 'Latest',
       messageCount: 1,
       preview: 'latest preview',
       agent: { id: 'default', name: 'default' },
-    },
-    {
+    }),
+    asSummary({
       id: 's-older',
-      updatedAt: asUpdatedAt('2026-02-14T10:00:00Z'),
+      createdAt: new Date('2026-02-14T10:00:00Z'),
+      updatedAt: new Date('2026-02-14T10:00:00Z'),
       title: 'Older',
       messageCount: 1,
       preview: 'older preview',
       agent: { id: 'default', name: 'default' },
-    },
+    }),
   ] : [];
 
   const transcripts: Record<string, Array<{ role: string; content: string }>> = {
@@ -94,7 +99,7 @@ function createSessionServiceFixture(options: { serializeDates?: boolean; includ
     's-new': [],
   };
 
-  const contextManager = {
+  const contextManager: SessionContextService = {
     listSessions: async () => sessions,
     generateConversationId: () => 's-new',
     getContext: async (_id: string) => ({ id: _id }),
@@ -102,14 +107,15 @@ function createSessionServiceFixture(options: { serializeDates?: boolean; includ
     getSession: async (id: string) => {
       const summary = sessions.find((session) => session.id === id)
         ?? (id === 's-new'
-          ? {
+          ? asSummary({
               id: 's-new',
-              updatedAt: asUpdatedAt('2026-02-14T12:30:00Z'),
+              createdAt: new Date('2026-02-14T12:30:00Z'),
+              updatedAt: new Date('2026-02-14T12:30:00Z'),
               title: null,
               messageCount: 0,
               preview: null,
               agent: { id: 'default', name: 'default' },
-            }
+            })
           : null);
       if (!summary) {
         return null;
@@ -117,6 +123,7 @@ function createSessionServiceFixture(options: { serializeDates?: boolean; includ
 
       return {
         summary,
+        metadata: { createdAt: new Date(), updatedAt: new Date() },
         messages: (transcripts[id] ?? []).map((message) => ({
           ...message,
           timestamp: new Date(),
@@ -128,7 +135,7 @@ function createSessionServiceFixture(options: { serializeDates?: boolean; includ
 
   return {
     sessionService: {
-      contextManager: contextManager as any,
+      contextManager,
     },
   };
 }
@@ -153,12 +160,13 @@ describe('phase 33 launch contract smoke', () => {
     mockContextManager.setStorage.mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Restore process globals first
     restoreProcessDoubles({ stdin: originalStdin, stdout: originalStdout, exit: originalExit });
 
     // Reset all mock call history and restore spies
     mock.restore();
+    await shutdownMockFredClients();
   });
 
   test('chat is the canonical interactive command and no-args/tui are aliases of the same launch handler', async () => {
@@ -208,10 +216,13 @@ describe('phase 33 launch contract smoke', () => {
     const mode = detectTerminalMode();
     expect(mode.mode).toBe('interactive-tty');
 
-    const { configureChatFallbackPersistence } = await import('../../../packages/cli/src/commands/chat');
-    configureChatFallbackPersistence(new MockFred() as unknown as any);
+    const storage = new MockSqliteContextStorage({ path: '/tmp/phase33.db' });
+    const createStorage = mock(() => storage);
+    const { createChatFallbackOptions } = await import('../../../packages/cli/src/commands/chat');
+    const fallbackOptions = createChatFallbackOptions('/tmp/phase33.db', createStorage);
 
-    expect(mockContextManager.setStorage).toHaveBeenCalledTimes(1);
+    expect(createStorage).toHaveBeenCalledWith({ path: '/tmp/phase33.db' });
+    expect(fallbackOptions.storage).toBe(storage);
 
     const resolveCommand = (args: string[]) => {
       const firstArg = args[0];
