@@ -13,7 +13,7 @@ forwards the former root and `./chat-defaults` exports to
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d --exact @fancyrobot/fred-cli@0.5.1-alpha.0
+bun add -d @fancyrobot/fred-cli@^0.6.0-alpha.0
 ```
 
 Replace programmatic imports:

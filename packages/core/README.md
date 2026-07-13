@@ -272,7 +272,7 @@ const resumed = await fred.workflows.resume(runId, {
 
 ## Hooks
 
-Fred exposes 21 hook points across the message lifecycle.
+Fred exposes 22 hook points across the message lifecycle.
 
 ```typescript
 await fred.hooks.register('beforeMessageReceived', async (event) => {
