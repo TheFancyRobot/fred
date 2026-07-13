@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createFred, Fred, type FredClient } from '@fancyrobot/fred';
+import { createFred, type FredClient } from '@fancyrobot/fred';
 import { Effect } from 'effect';
 import { createFredHttpApp as createFredHttpAppBase } from '../../../packages/fred-http/src/index';
 import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
@@ -15,7 +15,6 @@ describe('createFredHttpApp', () => {
   let now = 0;
   const createdApps: Array<{ dispose: () => Promise<void> }> = [];
   const createdClients: FredClient[] = [];
-  const createdFacades: Fred[] = [];
 
   const createClient = async (): Promise<FredClient> => {
     const client = await createFred();
@@ -34,7 +33,6 @@ describe('createFredHttpApp', () => {
       await app.dispose();
     }
     await Promise.all(createdClients.splice(0).map((client) => client.shutdown()));
-    await Promise.all(createdFacades.splice(0).map((facade) => facade.shutdown()));
   });
 
   it('exposes a dispose method for composable apps', async () => {
@@ -59,19 +57,6 @@ describe('createFredHttpApp', () => {
     const response = await app.fetch(new Request('http://localhost/health'));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: 'ok' });
-  });
-
-  it('preserves the deprecated Fred facade compatibility path', async () => {
-    const fred = new Fred();
-    createdFacades.push(fred);
-    const app = createFredHttpApp({
-      fred,
-      security: { requireAuth: false },
-    });
-    createdApps.push(app);
-
-    const response = await app.fetch(new Request('http://localhost/health'));
-    expect(response.status).toBe(200);
   });
 
   it('adds CORS headers exactly once for built-in adapter routes', async () => {

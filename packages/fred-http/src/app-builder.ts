@@ -1,5 +1,5 @@
 import { HttpApiBuilder, HttpServer } from '@effect/platform';
-import type { Fred, FredClient } from '@fancyrobot/fred';
+import type { FredClient } from '@fancyrobot/fred';
 import type { FredServices } from '@fancyrobot/fred/effect';
 import { Effect, Either, Layer, Option, Schema } from 'effect';
 import { isIP } from 'node:net';
@@ -36,7 +36,7 @@ export interface FredHttpCustomRoute {
 }
 
 export interface CreateFredHttpAppOptions {
-  fred: Fred | FredClient;
+  fred: FredClient;
   security?: Partial<ServerSecurityConfig>;
   routes?: ReadonlyArray<FredHttpCustomRoute>;
   trustProxy?: boolean;
@@ -56,9 +56,6 @@ interface NormalizedCustomRoute extends FredHttpCustomRoute {
   method: string;
   visibility: FredHttpRouteVisibility;
 }
-
-const isFredClient = (framework: Fred | FredClient): framework is FredClient =>
-  'effects' in framework;
 
 class RequestBodyTooLargeError extends Schema.TaggedError<RequestBodyTooLargeError>()(
   'RequestBodyTooLargeError',
@@ -207,9 +204,7 @@ export function createFredHttpApp(options: CreateFredHttpAppOptions): FredHttpAp
 
   const getWebHandler = async () => {
     if (webHandler) return webHandler;
-    const context = isFredClient(options.fred)
-      ? await options.fred.effects.run(Effect.context<FredServices>())
-      : (await options.fred.getRuntime()).context;
+    const context = await options.fred.effects.run(Effect.context<FredServices>());
     const fredApiLayer = FredHttpApiLive.pipe(
       Layer.provide(Layer.succeedContext(context)),
     );

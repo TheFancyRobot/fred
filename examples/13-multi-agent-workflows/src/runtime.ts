@@ -1,16 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-  Fred,
   type FredClient,
   GraphWorkflowBuilder,
-  SessionService,
   compileGraphWorkflow,
   createHandoffTool,
   defineWorkflow,
   type Tool,
 } from '@fancyrobot/fred';
-import { Effect, Runtime, Schema } from 'effect';
+import { Effect, Schema } from 'effect';
 import { appendNotebookEntry, ensureNotebook, queryNotebook } from './notes';
 import { fetchLatestNewsDigest } from './news';
 import {
@@ -30,47 +28,6 @@ export const DEFAULT_NOTEBOOK_PATH = fileURLToPath(
 export interface SetupExampleOptions {
   configPath?: string;
   notebookPath?: string;
-}
-
-type ExampleFred = Fred | FredClient;
-
-function isFredClient(fred: ExampleFred): fred is FredClient {
-  return 'agents' in fred && 'workflows' in fred;
-}
-
-function adaptLegacyFred(fred: Fred): FredClient {
-  return {
-    agents: {
-      get: async (id) => fred.getAgent(id),
-      list: async () => fred.getAgents(),
-      remove: (id) => fred.removeAgent(id),
-      register: (config) => fred.registerAgent(config),
-    },
-    effects: {
-      run: (effect) => fred.runSafe(effect as never),
-    },
-    sessions: {
-      open: async () => {
-        const runtime = await fred.getRuntime();
-        return Runtime.runPromise(runtime)(
-          Effect.flatMap(SessionService, (sessions) => sessions.open()),
-        );
-      },
-    },
-    subagents: fred.subagents,
-    tools: {
-      register: async (tool) => { fred.registerTool(tool); },
-    },
-    variables: {
-      registerAll: (variables) => fred.registerGlobalVariables(variables),
-    },
-    workflows: {
-      define: (workflow) => fred.defineWorkflow(workflow),
-      run: (id, input, options) => fred.executeGraphWorkflow(String(id), String(input), {
-        conversationId: options?.sessionId,
-      }),
-    },
-  } as FredClient;
 }
 
 export interface DeterministicSmokeResult {
@@ -930,10 +887,10 @@ function createDailyBriefTool(fred: FredClient): Tool<{ readonly focus?: string 
 }
 
 export async function setupExample(
-  fred: ExampleFred,
+  fred: FredClient,
   options: SetupExampleOptions = {},
 ): Promise<{ notebookPath: string; workflows: string[] }> {
-  const client = isFredClient(fred) ? fred : adaptLegacyFred(fred);
+  const client = fred;
   const notebookPath = options.notebookPath ?? DEFAULT_NOTEBOOK_PATH;
   const directSpecialists = [
     'research-orchestrator',
@@ -953,7 +910,7 @@ export async function setupExample(
   const agents = new Map((await client.agents.list()).map((agent) => [agent.id, agent]));
   await client.tools.register(
     createHandoffTool(
-      (agentId) => isFredClient(fred) ? agents.get(agentId) : fred.getAgent(agentId),
+      (agentId) => agents.get(agentId),
       () => directSpecialists,
     ) as unknown as Tool,
   );
@@ -963,10 +920,6 @@ export async function setupExample(
   await client.tools.register(createBrowserResearchTool(client, searchBaseUrl) as unknown as Tool);
   await client.tools.register(createResearchTool(notebookPath, client) as unknown as Tool);
   await client.tools.register(createDailyBriefTool(client) as unknown as Tool);
-
-  if (!isFredClient(fred)) {
-    await fred.initializeFromConfig(options.configPath ?? './config.yaml');
-  }
 
   // Config-first construction loads agent content before application-defined
   // tools exist. Re-register the tool-using agents through the supported
@@ -982,15 +935,13 @@ export async function setupExample(
     'risk-analyst': ['agent_browser_research'],
     'web-researcher': ['agent_browser_research'],
   };
-  if (isFredClient(fred)) {
-    for (const [agentId, toolIds] of Object.entries(toolAssignments)) {
-      const agent = await client.agents.get(agentId);
-      if (!agent) {
-        throw new Error(`Configured example agent not found: ${agentId}`);
-      }
-      await client.agents.remove(agentId);
-      await client.agents.register({ ...agent.config, tools: [...toolIds] });
+  for (const [agentId, toolIds] of Object.entries(toolAssignments)) {
+    const agent = await client.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Configured example agent not found: ${agentId}`);
     }
+    await client.agents.remove(agentId);
+    await client.agents.register({ ...agent.config, tools: [...toolIds] });
   }
 
   // Builders remain ergonomic sugar; compiling them here makes the canonical
