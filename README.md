@@ -98,10 +98,12 @@ layer. Start here: [examples/README.md](examples/README.md).
 
 ## Documentation
 
-Full guides and API reference:
-[TheFancyRobot.github.io/fred](https://TheFancyRobot.github.io/fred)
-
-Release operators should also read the [release runbook](RELEASE.md).
+For the current prerelease, use the [Phase 68 migration guide](MIGRATION.md),
+the package READMEs above, and the [release runbook](RELEASE.md). The
+[published Phase 68 migration page](https://TheFancyRobot.github.io/fred/migration/v0.4.0/)
+mirrors the canonical guide. Older guides and API-reference pages on that site
+describe the pre-Phase-68 facade and should not be used with these package
+lines until they are refreshed.
 
 ## Contributing
 

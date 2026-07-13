@@ -4,13 +4,20 @@ This guide is the source of truth for the Phase 68 breaking release. Fred's
 packages do not share one synchronized `v0.4.0` version. Each package remains
 on its existing major line, and compatible prereleases are published together.
 
-The versions below are the versions in this repository before release
-promotion. They are prereleases: do not describe them as `latest` or stable
-until the release workflow promotes them.
+> [!WARNING]
+> Older guides and API-reference pages on the published documentation site
+> describe the removed pre-Phase-68 facade. Until they are refreshed, use this
+> guide and the linked package READMEs for the current prerelease API.
+
+The version column records the manifests in this repository before release
+versioning. It is not an installable candidate set until the release workflow
+updates the exact versions and publishes them under a prerelease tag. Peer
+ranges already describe the code being shipped and can therefore target the
+next candidate line.
 
 ## Package compatibility matrix
 
-| Package | Current version | Compatible Fred/peer line | Purpose |
+| Package | Checkout version (before versioning) | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
 | `@fancyrobot/fred` | `2.0.0-alpha.0` | `effect ^3.21.0`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
 | `@fancyrobot/fred-cli` | `0.5.1-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
@@ -25,8 +32,15 @@ until the release workflow promotes them.
 | `@fancyrobot/fred-openai` | `4.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
-Install an exact prerelease set while validating a release candidate. Do not
-mix these packages with older Fred majors:
+In particular, the final `@fancyrobot/fred-dev` shim requires CLI `^0.6.0-alpha.0`
+because the forwarded `startDevChat` and `./chat-defaults` exports do not exist
+on CLI `0.5.1-alpha.0`. Prefer removing the shim. To validate it, wait until
+release versioning replaces the CLI checkout version above with an exact 0.6
+candidate; do not combine the shim with CLI 0.5.1.
+
+After the table has been updated with published candidate versions, install an
+exact prerelease set for validation. Do not mix these packages with older Fred
+majors:
 
 ```bash
 bun add --exact \

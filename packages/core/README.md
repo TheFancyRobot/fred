@@ -272,7 +272,7 @@ const resumed = await fred.workflows.resume(runId, {
 
 ## Hooks
 
-Fred exposes 22 hook points across the message lifecycle.
+Fred exposes hooks across the message lifecycle.
 
 ```typescript
 await fred.hooks.register('beforeMessageReceived', async (event) => {
@@ -362,6 +362,7 @@ Fred is built on Effect and exposes service tags for custom Layer composition.
 
 ```typescript
 import { Effect } from 'effect';
+import { createFred } from '@fancyrobot/fred';
 import {
   AgentService,
   PipelineService,
@@ -382,8 +383,10 @@ const program = Effect.gen(function* () {
 
 // Reuse the client's scoped services. Application entry points own this
 // Promise boundary; domain logic stays as Effect.
+const fred = await createFred();
 const result = await fred.effects.run(program);
 console.log(result);
+await fred.shutdown();
 ```
 
 Use this path when you need low-level service control or custom runtime wiring.
