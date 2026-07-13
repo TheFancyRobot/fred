@@ -4,7 +4,7 @@ This guide is the source of truth for the Phase 68 breaking release. Fred's
 packages do not share one synchronized `v0.4.0` version. Each package remains
 on its existing major line, and compatible prereleases are published together.
 
-> [!WARNING]
+> **Warning:**
 > Older guides and API-reference pages on the published documentation site
 > describe the removed pre-Phase-68 facade. Until they are refreshed, use this
 > guide and the linked package READMEs for the current prerelease API.
