@@ -388,6 +388,39 @@ describe('unified WorkflowIR executor', () => {
     });
   });
 
+  it('uses join sources as the authoritative predecessor input set', async () => {
+    const workflow = {
+      id: 'join-source-input',
+      source: 'native' as const,
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function' as const, fn: () => 'start' },
+        { id: 'left', kind: 'function' as const, fn: () => 'left' },
+        { id: 'right', kind: 'function' as const, fn: () => 'right' },
+        { id: 'extra', kind: 'function' as const, fn: () => 'extra' },
+        {
+          id: 'join',
+          kind: 'function' as const,
+          fn: (context: { input: unknown }) => context.input,
+          join: { type: 'all' as const, merge: 'array' as const, sources: ['left', 'right'] },
+        },
+      ],
+      edges: [
+        { from: 'start', to: 'left' },
+        { from: 'start', to: 'right' },
+        { from: 'start', to: 'extra' },
+        { from: 'left', to: 'join' },
+        { from: 'right', to: 'join' },
+        { from: 'extra', to: 'join' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+    }));
+
+    expect(result.finalOutput).toEqual({ left: 'left', right: 'right' });
+  });
+
   it('selects graph branches and joins fan-out results', async () => {
     const workflow = compileGraphWorkflow({
       id: 'parallel',

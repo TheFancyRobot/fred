@@ -141,16 +141,15 @@ export interface GraphWorkflowConfig {
  * @returns true if config is GraphWorkflowConfig
  */
 export function isGraphWorkflowConfig(config: unknown): config is GraphWorkflowConfig {
-  return (
-    typeof config === 'object' &&
-    config !== null &&
-    'type' in config &&
-    config.type === 'graph' &&
-    'nodes' in config &&
-    Array.isArray((config as any).nodes) &&
-    'edges' in config &&
-    Array.isArray((config as any).edges) &&
-    'entryNode' in config &&
-    typeof (config as any).entryNode === 'string'
-  );
+  if (typeof config !== 'object' || config === null) return false;
+  const candidate = config as Readonly<Record<string, unknown>>;
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(candidate, key);
+  return hasOwn('type') &&
+    candidate.type === 'graph' &&
+    hasOwn('nodes') &&
+    Array.isArray(candidate.nodes) &&
+    hasOwn('edges') &&
+    Array.isArray(candidate.edges) &&
+    hasOwn('entryNode') &&
+    typeof candidate.entryNode === 'string';
 }

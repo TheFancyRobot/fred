@@ -153,8 +153,10 @@ function inputForNode(
   input: unknown,
   runtimeOutputs: Readonly<Record<string, unknown>>,
 ): unknown {
-  const predecessors = inEdges(workflow, node.id)
-    .map((edge) => edge.from)
+  const predecessorIds = node.join?.type === 'all'
+    ? node.join.sources
+    : inEdges(workflow, node.id).map((edge) => edge.from);
+  const predecessors = predecessorIds
     .filter((source) => hasOwn(runtimeOutputs, source));
   if (predecessors.length === 0) return input;
 

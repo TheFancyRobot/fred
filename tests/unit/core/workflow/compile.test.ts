@@ -14,6 +14,30 @@ describe('workflow compilers', () => {
     );
   });
 
+  it('rejects workflow definitions whose required fields are inherited', () => {
+    const inheritedDefinitions = [
+      Object.create({ id: 'inherited-v2', steps: [] }),
+      Object.create({
+        id: 'inherited-graph',
+        type: 'graph',
+        entryNode: 'done',
+        nodes: [],
+        edges: [],
+      }),
+      Object.create({
+        id: 'inherited-native',
+        entry: 'done',
+        nodes: [],
+        edges: [],
+      }),
+    ];
+    for (const inherited of inheritedDefinitions) {
+      expect(() => compileWorkflow(inherited as never)).toThrow(
+        /Unsupported workflow definition/,
+      );
+    }
+  });
+
   it('rejects unsupported runtime WorkflowIR source tags', () => {
     expect(() => compileWorkflow({
       id: 'removed-source',

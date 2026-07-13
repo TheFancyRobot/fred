@@ -331,19 +331,22 @@ export function compileGraphWorkflow(config: GraphWorkflowConfig): WorkflowIR {
   return ir;
 }
 
+function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 /** Structural guard for already-native workflow definitions. */
 export function isWorkflowIR(value: unknown): value is WorkflowIR {
   if (typeof value !== 'object' || value === null) return false;
-  return (
-    'id' in value &&
-    typeof value.id === 'string' &&
-    'entry' in value &&
-    typeof value.entry === 'string' &&
-    'nodes' in value &&
-    Array.isArray(value.nodes) &&
-    'edges' in value &&
-    Array.isArray(value.edges)
-  );
+  const candidate = value as Readonly<Record<string, unknown>>;
+  return hasOwn(candidate, 'id') &&
+    typeof candidate.id === 'string' &&
+    hasOwn(candidate, 'entry') &&
+    typeof candidate.entry === 'string' &&
+    hasOwn(candidate, 'nodes') &&
+    Array.isArray(candidate.nodes) &&
+    hasOwn(candidate, 'edges') &&
+    Array.isArray(candidate.edges);
 }
 
 export type CompilableWorkflow =
@@ -356,14 +359,12 @@ export const UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE =
 
 /** Runtime guard for unchecked callers crossing the workflow compilation boundary. */
 export function isPipelineV2Definition(value: unknown): value is PipelineConfigV2 {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof value.id === 'string' &&
-    'steps' in value &&
-    Array.isArray(value.steps)
-  );
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Readonly<Record<string, unknown>>;
+  return hasOwn(candidate, 'id') &&
+    typeof candidate.id === 'string' &&
+    hasOwn(candidate, 'steps') &&
+    Array.isArray(candidate.steps);
 }
 
 /** Compile any supported workflow definition, validating native IR unchanged. */
