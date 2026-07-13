@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseConfigFileTextToJson } from 'typescript';
 
 type PackageManifest = {
   name: string;
@@ -28,6 +29,12 @@ function readManifest(packageDir: string): PackageManifest {
   return JSON.parse(
     readFileSync(join(PACKAGES_ROOT, packageDir, 'package.json'), 'utf8'),
   ) as PackageManifest;
+}
+
+function readBunLock(): BunLock {
+  const parsed = parseConfigFileTextToJson(LOCK_PATH, readFileSync(LOCK_PATH, 'utf8'));
+  if (parsed.error) throw new Error(`Unable to parse bun.lock: TS${parsed.error.code}`);
+  return parsed.config as BunLock;
 }
 
 function matrixRow(document: string, packageName: string): string {
@@ -65,7 +72,7 @@ function bashBlockUnderHeading(document: string, heading: string): string {
 describe('release documentation contract', () => {
   const migration = readFileSync(MIGRATION_PATH, 'utf8');
   const rootReadme = readFileSync(ROOT_README_PATH, 'utf8');
-  const lock = Bun.JSONC.parse(readFileSync(LOCK_PATH, 'utf8')) as BunLock;
+  const lock = readBunLock();
 
   test('canonical matrices track every independent package version and peer range', () => {
     for (const packageDir of PACKAGE_DIRS) {
