@@ -127,7 +127,9 @@ function messageForNode(
   input: unknown,
   runtimeOutputs: Readonly<Record<string, unknown>>,
 ): string {
-  if (workflow.source !== 'native') return workflowInputToMessage(input);
+  if (workflow.source !== 'native' && node.kind !== 'subworkflow') {
+    return workflowInputToMessage(input);
+  }
 
   const predecessors = inEdges(workflow, node.id)
     .map((edge) => edge.from)
@@ -310,7 +312,7 @@ function runNodeBody(
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     case 'subworkflow': {
-      const nestedInput = workflow.source === 'native' ? message : context.input;
+      const nestedInput = message;
       const resolved = options.workflowResolver?.(node.workflowId, nestedInput);
       if (resolved) {
         return resolved.pipe(
