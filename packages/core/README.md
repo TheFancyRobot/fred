@@ -58,7 +58,7 @@ const response = await fred.messages.process('Hello Fred!', {
   conversationId: 'quickstart',
 });
 
-console.log(response?.content);
+console.log(response.content);
 await fred.shutdown();
 ```
 

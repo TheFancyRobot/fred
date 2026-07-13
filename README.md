@@ -55,7 +55,7 @@ import '@fancyrobot/fred-openrouter';
 
 const fred = await createFred({ configPath: 'config.yaml' });
 const response = await fred.messages.process('Hello!', { conversationId: 'demo' });
-console.log(response?.content);
+console.log(response.content);
 await fred.shutdown();
 ```
 
