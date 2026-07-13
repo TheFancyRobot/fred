@@ -1,5 +1,6 @@
 ---
 "@fancyrobot/fred": major
+"@fancyrobot/fred-http": major
 ---
 
 Effect-first core rewrite: `createFred()`/`FredClient` and the Effect service entrypoint replace the legacy `Fred` facade.
@@ -11,6 +12,7 @@ Breaking changes:
 - The built-in calculator tool now lives in the runtime tool registry (previously snapshot-only and invisible to agents).
 - `shutdown()` followed by reuse rebuilds a fresh runtime with instance-level settings only — registered tools/agents/intents are not replayed.
 - `registerIntents` is an additive upsert by intent id (previously replaced the full set).
+- `@fancyrobot/fred-http` removes the deprecated `ServerApp`, `startServer`, and `createFredHttpApp` adapters, along with the legacy `conversation_id` request fields. Use `withHttp()` and session ids instead.
 
 New APIs:
 
