@@ -42,6 +42,7 @@ describe('unified WorkflowIR executor', () => {
 
     expect(result.success).toBe(true);
     expect(result.finalOutput).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
+    expect(result.finalOutputNodeId).toBe('b');
     expect(result.context.outputs).toEqual({
       a: { content: 'a<-hi', toolCalls: [] },
       b: { content: 'b<-a<-hi', toolCalls: [] },
@@ -86,6 +87,27 @@ describe('unified WorkflowIR executor', () => {
     });
     expect(Object.keys(result.context.outputs).some((key) => key.startsWith('__fred:'))).toBe(false);
     expect(result.finalOutput).toEqual(result.context.outputs.branch);
+    expect(result.finalOutputNodeId).toBe('branch');
+  });
+
+  it('tracks final-output provenance when an internal node executes afterward', async () => {
+    const workflow = {
+      id: 'internal-tail',
+      source: 'native' as const,
+      entry: 'answer',
+      nodes: [
+        { id: 'answer', kind: 'agent' as const, agentId: 'answerer' },
+        { id: 'tail', kind: 'function' as const, internal: true, fn: () => 'internal' },
+      ],
+      edges: [{ from: 'answer', to: 'tail' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'question', {
+      agentManager: agentManager({ answerer: echoAgent('answerer') }),
+    }));
+
+    expect(result.executedNodes).toEqual(['answer', 'tail']);
+    expect(result.finalOutputNodeId).toBe('answer');
+    expect(result.finalOutput).toEqual({ content: 'answerer<-question', toolCalls: [] });
   });
 
   it('passes every completed predecessor output to a native synthesis agent', async () => {

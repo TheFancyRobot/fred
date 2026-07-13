@@ -176,8 +176,10 @@ export async function executeWorkflowViaRuntime(
           retryable: true,
         });
       }
-      const finalNodeId = nestedResult.executedNodes[nestedResult.executedNodes.length - 1];
-      return agentResponseContent(findNode(nestedWorkflow, finalNodeId ?? ''), nestedResult.finalOutput) ??
+      return agentResponseContent(
+        findNode(nestedWorkflow, nestedResult.finalOutputNodeId ?? ''),
+        nestedResult.finalOutput,
+      ) ??
         nestedResult.finalOutput;
     });
 
