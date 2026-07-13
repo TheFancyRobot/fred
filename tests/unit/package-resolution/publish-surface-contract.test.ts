@@ -166,20 +166,21 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
 }
 
 function pack(packageDir: string, destination: string, dryRun: boolean): PackResult {
-  const dryRunArg = dryRun ? '--dry-run' : '--dry-run=false';
   const resultPath = join(destination, `${packageDir}-${dryRun ? 'dry-run' : 'pack'}.json`);
   const stageDir = stagedPackageDirs.get(packageDir);
   if (!stageDir) throw new Error(`Package stage is missing: ${packageDir}`);
   // Invoke npm behind a shell boundary so Bun's child-process compatibility
   // mode cannot swallow npm's JSON pipe while this file runs under bun:test.
+  const packCommand = dryRun
+    ? 'unset BUN_BE_BUN; npm pack --json --pack-destination "$1" --dry-run > "$2"'
+    : 'unset BUN_BE_BUN; npm pack --json --pack-destination "$1" > "$2"';
   run(
     '/bin/sh',
     [
       '-c',
-      'unset BUN_BE_BUN; npm pack --json --pack-destination "$1" "$2" > "$3"',
+      packCommand,
       'fred-npm-pack',
       destination,
-      dryRunArg,
       resultPath,
     ],
     stageDir,
