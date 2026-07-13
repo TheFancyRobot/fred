@@ -8,6 +8,12 @@ import { validateWorkflowIR, WorkflowValidationError } from '../../../../package
 import { findNode, outEdges, type WorkflowIR } from '../../../../packages/core/src/workflow/ir';
 
 describe('workflow compilers', () => {
+  it('rejects unchecked legacy definitions with migration guidance', () => {
+    expect(() => compileWorkflow({ id: 'legacy', agents: ['a'] } as never)).toThrow(
+      /steps array.*Legacy agent-list pipelines are no longer supported/,
+    );
+  });
+
   it('lowers V2 conditional nesting to guarded edges without a conditional node kind', () => {
     const ir = compilePipelineV2({
       id: 'branching',

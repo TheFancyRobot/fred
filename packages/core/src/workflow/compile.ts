@@ -351,6 +351,18 @@ export type CompilableWorkflow =
   | GraphWorkflowConfig
   | WorkflowIR;
 
+/** Runtime guard for unchecked callers crossing the workflow compilation boundary. */
+export function isPipelineV2Definition(value: unknown): value is PipelineConfigV2 {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'steps' in value &&
+    Array.isArray(value.steps)
+  );
+}
+
 /** Compile any supported workflow definition, validating native IR unchanged. */
 export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
   if (isGraphWorkflowConfig(config)) return compileGraphWorkflow(config);
@@ -359,7 +371,10 @@ export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
     validateWorkflowIR(native);
     return native;
   }
-  return compilePipelineV2(config);
+  if (isPipelineV2Definition(config)) return compilePipelineV2(config);
+  throw new TypeError(
+    'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR. Legacy agent-list pipelines are no longer supported.',
+  );
 }
 
 /** Define a native workflow with validation and an explicit native source tag. */

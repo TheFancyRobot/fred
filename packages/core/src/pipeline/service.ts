@@ -50,6 +50,7 @@ import {
   compileGraphWorkflow,
   compilePipelineV2,
   compileWorkflow,
+  isPipelineV2Definition,
   isWorkflowIR,
   type CompilableWorkflow,
 } from '../workflow/compile';
@@ -191,17 +192,6 @@ export interface PipelineService {
 
 export const PipelineService = Context.GenericTag<PipelineService>('PipelineService');
 
-function isPipelineConfigV2(config: unknown): config is PipelineConfigV2 {
-  return (
-    typeof config === 'object' &&
-    config !== null &&
-    'id' in config &&
-    typeof config.id === 'string' &&
-    'steps' in config &&
-    Array.isArray(config.steps)
-  );
-}
-
 /**
  * Implementation of PipelineService
  */
@@ -233,7 +223,7 @@ class PipelineServiceImpl implements PipelineService {
     const self = this;
     if (isGraphWorkflowConfig(config)) return self.registerGraphWorkflow(config);
     if (!isWorkflowIR(config)) {
-      if (!isPipelineConfigV2(config)) {
+      if (!isPipelineV2Definition(config)) {
         const unsupportedConfig: unknown = config;
         const pipelineId = typeof unsupportedConfig === 'object' &&
           unsupportedConfig !== null &&
