@@ -16,6 +16,7 @@ import ts from 'typescript';
 
 type ExportTarget = {
   types: string;
+  browser?: string;
   bun: string;
   import: string;
   default: string;
@@ -228,6 +229,9 @@ describe('publishable package contract', () => {
         expect(target.import).toStartWith('./dist/');
         expect(target.default).toBe(target.import);
         expect(target.bun).toStartWith('./src/');
+        if (entry.subpath === './lyrics') {
+          expect(target.browser).toBe(target.import);
+        }
         expect(declarationExports(resolve(REPO_ROOT, 'packages', packageDir, target.types))).toEqual(
           entry.declarations,
         );
@@ -279,9 +283,15 @@ describe('publishable package contract', () => {
         throw new Error(`npm pack did not create ${tarball}; found: ${readdirSync(packDir).join(', ')}`);
       }
       const packedManifestPath = join(tempDir, `${packageDir}-package.json`);
-      writeFileSync(
-        packedManifestPath,
-        run('tar', ['-xOf', tarball, 'package/package.json']),
+      run(
+        '/bin/sh',
+        [
+          '-c',
+          'unset BUN_BE_BUN; tar -xOzf "$1" package/package.json > "$2"',
+          'fred-tar-extract',
+          tarball,
+          packedManifestPath,
+        ],
       );
       const packedManifest = JSON.parse(readFileSync(packedManifestPath, 'utf8')) as PackageManifest;
       expect(packedManifest.name).toBe(manifest.name);
@@ -357,10 +367,46 @@ describe('publishable package contract', () => {
         '  }\n' +
         '}\n',
     );
+    writeFileSync(
+      join(consumerDir, 'browser.ts'),
+      "import { createMiniMaxLyricsAdapter } from '@fancyrobot/fred-minimax/lyrics';\n" +
+        "void createMiniMaxLyricsAdapter('test-key');\n",
+    );
 
     run('bun', ['install', '--offline', '--ignore-scripts'], consumerDir);
     run(join(consumerDir, 'node_modules', '.bin', 'tsc'), ['--pretty', 'false'], consumerDir);
     run('bun', ['runtime.mjs'], consumerDir);
+    const browserMetafilePath = join(consumerDir, 'browser-meta.json');
+    run(
+      'bun',
+      [
+        'build',
+        'browser.ts',
+        '--target',
+        'browser',
+        '--format',
+        'esm',
+        '--outdir',
+        'browser-dist',
+        `--metafile=${browserMetafilePath}`,
+      ],
+      consumerDir,
+    );
+    expect(existsSync(join(consumerDir, 'browser-dist', 'browser.js'))).toBe(true);
+    const browserMetafile = JSON.parse(readFileSync(browserMetafilePath, 'utf8')) as {
+      inputs: Record<string, unknown>;
+    };
+    const browserInputs = Object.keys(browserMetafile.inputs).map((path) => path.replaceAll('\\', '/'));
+    expect(
+      browserInputs.some((path) =>
+        path.endsWith('node_modules/@fancyrobot/fred-minimax/dist/lyrics.js')
+      ),
+    ).toBe(true);
+    expect(
+      browserInputs.some((path) =>
+        path.endsWith('node_modules/@fancyrobot/fred-minimax/src/lyrics.ts')
+      ),
+    ).toBe(false);
 
     for (const [name] of tarballs) {
       const packagePath = join(consumerDir, 'node_modules', ...name.split('/'));
