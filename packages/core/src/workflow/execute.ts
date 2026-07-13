@@ -107,6 +107,15 @@ function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
+function setOwn(record: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(record, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 /** Extract conversational content only from agent or nested-workflow results. */
 function conversationalContent(node: IRNode | undefined, value: unknown): string | undefined {
   return (node?.kind === 'agent' || node?.kind === 'subworkflow') &&
@@ -154,12 +163,12 @@ function inputForNode(
   if (predecessors.length === 0) return input;
 
   if (predecessors.length > 1) {
-    return Object.fromEntries(
-      predecessors.map((source) => {
-        const output = runtimeOutputs[source];
-        return [source, predecessorInput(workflow, node, source, output)];
-      }),
-    );
+    const joined: Record<string, unknown> = {};
+    for (const source of predecessors) {
+      const output = runtimeOutputs[source];
+      setOwn(joined, source, predecessorInput(workflow, node, source, output));
+    }
+    return joined;
   }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
@@ -173,7 +182,7 @@ export function getPublicWorkflowOutputs(
   const visible: Record<string, unknown> = {};
   for (const node of workflow.nodes) {
     if (!node.internal && node.recordOutput !== false && hasOwn(outputs, node.id)) {
-      visible[node.id] = outputs[node.id];
+      setOwn(visible, node.id, outputs[node.id]);
     }
   }
   return visible;
@@ -580,7 +589,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
 
   // The legacy lifecycle records a step's output before afterStep hooks run.
   // Preserve that ordering while exposing only source-level outputs to hooks.
-  if (node.recordOutput !== false) runtimeOutputs[node.id] = result;
+  if (node.recordOutput !== false) setOwn(runtimeOutputs, node.id, result);
   baseContext.outputs = getPublicWorkflowOutputs(workflow, runtimeOutputs);
   const afterHookContext = stepHookContext(workflow, baseContext, runtimeOutputs, node);
   const afterStepData = stepDataForNode(workflow, afterHookContext, node);
@@ -911,7 +920,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         }
 
         if (!execution.skipped || workflow.source === 'graph') {
-          if (node.recordOutput !== false) runtimeOutputs[node.id] = result;
+          if (node.recordOutput !== false) setOwn(runtimeOutputs, node.id, result);
           executedNodes.push(node.id);
           completed.add(node.id);
           if (!node.internal && node.recordOutput !== false && !execution.skipped) {

@@ -323,6 +323,23 @@ describe('unified WorkflowIR executor', () => {
     expect(result.finalOutput).toEqual({ content: 'target<-original', toolCalls: [] });
   });
 
+  it('stores prototype-looking node ids as safe own output properties', async () => {
+    const workflow = {
+      id: 'prototype-safe-output',
+      source: 'native' as const,
+      entry: '__proto__',
+      nodes: [{ id: '__proto__', kind: 'function' as const, fn: () => ({ safe: true }) }],
+      edges: [],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+    }));
+
+    expect(Object.getPrototypeOf(result.outputs)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(result.outputs, '__proto__')).toBe(true);
+    expect(result.outputs['__proto__']).toEqual({ safe: true });
+  });
+
   it('passes every completed predecessor output to a native synthesis agent', async () => {
     const workflow = {
       id: 'native-fan-in',
