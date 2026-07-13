@@ -326,9 +326,14 @@ describe('publishable package contract', () => {
       join(consumerDir, 'consumer.ts'),
       specifiers.map((name, index) => `import type * as Surface${index} from '${name}';\ntype T${index} = keyof typeof Surface${index};`).join('\n') +
         "\nimport type { FredClient, Tool } from '@fancyrobot/fred';\n" +
+        "import type { ToolRegistryService } from '@fancyrobot/fred/effect';\n" +
         "declare const client: FredClient;\n" +
         "declare const tool: Tool<{ readonly value: string }, string, never>;\n" +
-        "client.tools.register(tool);\n",
+        "declare const numericTool: Tool<{ readonly value: number }, number, never>;\n" +
+        "declare const registry: ToolRegistryService;\n" +
+        "client.tools.register(tool);\n" +
+        "registry.registerTool(tool);\n" +
+        "registry.registerTools([tool, numericTool]);\n",
     );
     const builtEntrypoints = inventory.map((entry) => {
       const manifest = readManifest(entry.packageDir);

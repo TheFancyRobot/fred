@@ -4,7 +4,17 @@ import {
   type Tool,
   type ToolCapability,
   type ToolCapabilityMetadata,
+  type ToolSchemaMetadata,
 } from './tool';
+
+type CapabilityTool = Pick<
+  Tool,
+  'id' | 'name' | 'capabilities' | 'capabilityMetadata'
+> & {
+  readonly schema?: {
+    readonly metadata?: ToolSchemaMetadata;
+  };
+};
 
 const BUILTIN_CAPABILITY_SET = new Set<ToolCapability>(BUILTIN_TOOL_CAPABILITIES);
 
@@ -64,9 +74,7 @@ const hasPatternHint = (text: string, patterns: RegExp[]): boolean => {
   return false;
 };
 
-const hasExternalMetadataHint = <Input, Output, Failure>(
-  tool: Tool<Input, Output, Failure>,
-): boolean => {
+const hasExternalMetadataHint = (tool: CapabilityTool): boolean => {
   const metadata = tool.schema?.metadata;
   if (!metadata) {
     return false;
@@ -76,18 +84,14 @@ const hasExternalMetadataHint = <Input, Output, Failure>(
   return EXTERNAL_METADATA_HINTS.test(metadataBlob);
 };
 
-const getManualCapabilities = <Input, Output, Failure>(
-  tool: Tool<Input, Output, Failure>,
-): ToolCapability[] => {
+const getManualCapabilities = (tool: CapabilityTool): ToolCapability[] => {
   if (tool.capabilityMetadata?.manual) {
     return toStableCapabilities(tool.capabilityMetadata.manual);
   }
   return toStableCapabilities(tool.capabilities ?? []);
 };
 
-export const inferToolCapabilities = <Input, Output, Failure>(
-  tool: Tool<Input, Output, Failure>,
-): ToolCapabilityInference => {
+export const inferToolCapabilities = (tool: CapabilityTool): ToolCapabilityInference => {
   const idAndName = `${tool.id} ${tool.name}`.toLowerCase();
   const inferred = new Set<ToolCapability>();
 
@@ -120,9 +124,7 @@ export const inferToolCapabilities = <Input, Output, Failure>(
   };
 };
 
-export const withInferredCapabilities = <Input, Output, Failure>(
-  tool: Tool<Input, Output, Failure>,
-): Tool<Input, Output, Failure> => {
+export const withInferredCapabilities = <T extends CapabilityTool>(tool: T): T => {
   const inferred = inferToolCapabilities(tool);
   const capabilityMetadata: ToolCapabilityMetadata = {
     inferred: inferred.inferred,
