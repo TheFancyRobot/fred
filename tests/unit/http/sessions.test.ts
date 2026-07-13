@@ -8,9 +8,8 @@ import {
 } from '../../../packages/fred-http/src/handlers/session';
 
 describe('HTTP session binding', () => {
-  test('uses header, then legacy body id, then a generated id', () => {
-    expect(resolveSessionId('header', 'body')).toBe('header');
-    expect(resolveSessionId(undefined, 'body')).toBe('body');
+  test('uses the session header or requests a generated id', () => {
+    expect(resolveSessionId('header')).toBe('header');
     expect(resolveSessionId(undefined)).toBeUndefined();
   });
 

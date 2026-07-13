@@ -13,7 +13,7 @@ export const FredOpenAiHandlersLive = HttpApiBuilder.group(
   (handlers) =>
     handlers.handle('chatCompletions', ({ headers, payload }) =>
       Effect.gen(function* () {
-        const sessionId = resolveSessionId(headers['x-session-id'], payload.conversation_id);
+        const sessionId = resolveSessionId(headers['x-session-id']);
         const message = lastUserMessage(payload.messages);
         const model = payload.model ?? 'fred-agent';
 

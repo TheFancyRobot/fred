@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
 import { createFred } from '../../../packages/core/src/client';
+import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
 import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src/client';
 import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
 import { RateLimitStoreError, type RateLimitStoreService } from '../../../packages/fred-http/src/rate-limiter';
@@ -18,6 +19,189 @@ const start = async (options: Parameters<typeof withHttp>[1]) => {
 };
 
 describe('FredHttpServerLive security middleware', () => {
+  test('mounts public custom routes on the canonical Effect router', async () => {
+    const handle = await start({
+      routes: [{
+        method: 'GET',
+        path: '/public/ping',
+        visibility: 'public',
+        handler: () => new Response('pong'),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/public/ping`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('pong');
+  });
+
+  test('preserves custom-route request bodies', async () => {
+    const handle = await start({
+      security: { requireAuth: false },
+      routes: [{
+        method: 'POST',
+        path: '/echo',
+        visibility: 'public',
+        handler: async (request) => new Response(await request.text()),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/echo`, {
+      method: 'POST',
+      body: 'body survives conversion',
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('body survives conversion');
+  });
+
+  test('applies auth and CORS methods to custom routes', async () => {
+    const handle = await start({
+      security: {
+        authToken: 'route-secret',
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      routes: [{
+        method: 'PUT',
+        path: '/private/resource',
+        handler: () => new Response('updated'),
+      }],
+    });
+
+    expect((await fetch(`${handle.url}/private/resource`, { method: 'PUT' })).status).toBe(401);
+    const response = await fetch(`${handle.url}/private/resource`, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer route-secret' },
+    });
+    expect(response.status).toBe(200);
+    const preflight = await fetch(`${handle.url}/private/resource`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('PUT');
+  });
+
+  test('advertises custom CORS methods only on their matching path', async () => {
+    const handle = await start({
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      routes: [
+        {
+          method: 'GET',
+          path: '/reports',
+          visibility: 'public',
+          handler: () => new Response('reports'),
+        },
+        {
+          method: 'DELETE',
+          path: '/admin/cache',
+          visibility: 'public',
+          handler: () => new Response('cleared'),
+        },
+      ],
+    });
+
+    const reportsPreflight = await fetch(`${handle.url}/reports`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    const reportsMethods = reportsPreflight.headers.get('access-control-allow-methods');
+    expect(reportsMethods).toContain('GET');
+    expect(reportsMethods).not.toContain('DELETE');
+
+    const adminPreflight = await fetch(`${handle.url}/admin/cache`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    expect(adminPreflight.headers.get('access-control-allow-methods')).toContain('DELETE');
+  });
+
+  test('sanitizes custom-route failures', async () => {
+    const handle = await start({
+      security: { requireAuth: false },
+      routes: [{
+        method: 'GET',
+        path: '/boom',
+        visibility: 'public',
+        handler: () => {
+          throw new Error('sensitive failure details');
+        },
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/boom`);
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ success: false, error: 'Request failed' });
+    expect(JSON.stringify(body)).not.toContain('sensitive failure details');
+  });
+
+  test('times out custom routes and aborts their request signal', async () => {
+    let aborted = false;
+    const handle = await start({
+      security: { requireAuth: false, requestTimeoutSeconds: 1 },
+      routes: [{
+        method: 'GET',
+        path: '/slow',
+        visibility: 'public',
+        handler: (request) => new Promise<Response>(() => {
+          request.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+        }),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/slow`);
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({ success: false, error: 'Request timed out' });
+    expect(aborted).toBe(true);
+  });
+
+  test('rejects custom routes that collide with built-in security paths', async () => {
+    await expect(start({
+      routes: [{
+        method: 'PUT',
+        path: '/health',
+        visibility: 'public',
+        handler: () => new Response('unsafe'),
+      }],
+    })).rejects.toThrow('Reserved custom route path: /health');
+  });
+
+  test('rejects custom OPTIONS routes that preflight handling would intercept', async () => {
+    await expect(start({
+      routes: [{
+        method: 'OPTIONS',
+        path: '/unreachable',
+        visibility: 'public',
+        handler: () => new Response('unreachable'),
+      }],
+    })).rejects.toThrow('OPTIONS custom routes are intercepted');
+  });
+
+  test('rejects custom routes that canonically collide with workflow paths', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'encoded',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      workflowEndpoints: { encoded: { path: '/workflow%2fendpoint' } },
+      routes: [{
+        method: 'GET',
+        path: '/workflow%2Fendpoint',
+        visibility: 'public',
+        handler: () => new Response('collision'),
+      }],
+    });
+    clients.push(fred);
+
+    await expect(fred.server.listen()).rejects.toThrow(
+      'Reserved custom route path: /workflow%2Fendpoint',
+    );
+  });
+
   test('authenticates built-in routes and emits the session CORS contract', async () => {
     const handle = await start({
       security: {
@@ -36,8 +220,37 @@ describe('FredHttpServerLive security middleware', () => {
       headers: { origin: 'https://console.example' },
     });
     expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('GET');
+    expect(preflight.headers.get('access-control-allow-methods')).not.toContain('POST');
     expect(preflight.headers.get('access-control-allow-headers')).toContain('X-Session-Id');
     expect(preflight.headers.get('access-control-expose-headers')).toContain('X-Session-Id');
+  });
+
+  test('advertises POST only for workflow endpoint preflights', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'cors-workflow',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      workflowEndpoints: { 'cors-workflow': { path: '/workflows/cors' } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const preflight = await fetch(`${handle.url}/workflows/cors`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    const methods = preflight.headers.get('access-control-allow-methods');
+    expect(methods).toContain('POST');
+    expect(methods).not.toContain('GET');
   });
 
   test('rate limits before routing and returns retry metadata', async () => {

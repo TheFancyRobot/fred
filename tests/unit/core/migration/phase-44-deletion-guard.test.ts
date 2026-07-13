@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const PROJECT_ROOT = process.cwd();
 const CORE_SRC = join(PROJECT_ROOT, 'packages/core/src');
+const HTTP_SRC = join(PROJECT_ROOT, 'packages/fred-http/src');
 
 function collectProductionTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -158,5 +159,25 @@ describe('Phase 44 deletion guards', () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  test('deprecated fred-http adapters and request aliases stay deleted', () => {
+    for (const relativePath of ['app.ts', 'app-builder.ts', 'server.ts']) {
+      expect(existsSync(join(HTTP_SRC, relativePath))).toBe(false);
+    }
+
+    const productionContent = collectProductionTsFiles(HTTP_SRC)
+      .map((filePath) => readFileSync(filePath, 'utf-8'))
+      .join('\n');
+    for (const symbol of [
+      'ServerApp',
+      'startServer',
+      'createFredHttpApp',
+      'CreateFredHttpAppOptions',
+      'FredHttpApp',
+      'conversation_id',
+    ]) {
+      expect(productionContent).not.toMatch(new RegExp(`\\b${symbol}\\b`));
+    }
   });
 });

@@ -239,19 +239,17 @@ describe('consumer-surface regression: barrel type re-exports', () => {
     });
   }
 
-  // --- fred-http types that should be re-exported from barrel ---
+  // --- supported fred-http route types that should be re-exported from barrel ---
 
   const HTTP_EXPECTED_TYPE_EXPORTS = [
-    'CreateFredHttpAppOptions',
-    'FredHttpApp',
-    'FredHttpCustomRoute',
+    'FredHttpRoute',
     'FredHttpRouteVisibility',
   ];
 
-  test('@fancyrobot/fred-http barrel re-exports app-builder types', () => {
+  test('@fancyrobot/fred-http barrel re-exports withHttp route types', () => {
     for (const typeName of HTTP_EXPECTED_TYPE_EXPORTS) {
       // RED expectation: barrel does NOT contain re-export for these types
-      // GREEN target: barrel has `export type { ... ${typeName} ... } from './app-builder'`
+      // GREEN target: barrel has `export type { ... ${typeName} ... } from './layers/server'`
       const hasReExport =
         HTTP_BARREL.includes(typeName) &&
         (HTTP_BARREL.match(new RegExp(`export\\s+(type\\s+)?\\{[^}]*\\b${typeName}\\b`, 'm')) !== null);
@@ -458,9 +456,8 @@ describe('consumer-surface regression: temp-consumer typecheck', () => {
     ['@fancyrobot/fred-minimax', 'LyricsGenerationInput'],
     ['@fancyrobot/fred-minimax', 'LyricsGenerationResult'],
     ['@fancyrobot/fred-minimax', 'MiniMaxLyricsAdapter'],
-    // fred-http app-builder types
-    ['@fancyrobot/fred-http', 'CreateFredHttpAppOptions'],
-    ['@fancyrobot/fred-http', 'FredHttpApp'],
+    // fred-http supported custom route type
+    ['@fancyrobot/fred-http', 'FredHttpRoute'],
   ];
 
   /**
