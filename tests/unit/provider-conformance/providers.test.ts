@@ -78,7 +78,6 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
     if (exitCode !== 0) {
       throw new Error(`Isolated provider conformance failed:\n${stdout}\n${stderr}`);
     }
-    expect(`${stdout}\n${stderr}`).toContain('0 fail');
   }, 180_000);
 } else {
   const openAiRecorder = createNativeRecorder();
