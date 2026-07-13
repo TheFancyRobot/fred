@@ -36,7 +36,7 @@ jobs:
         run: bash scripts/build-declarations.sh
 
       - name: Run tests
-        run: bun test
+        run: bun run test
 
   lint:
     name: Lint
