@@ -21,6 +21,7 @@
     "generic-tool-registration",
     "http-workflow-endpoints",
     "local-adapter-resolution",
+    "minimax-browser-entrypoint",
     "minimax-file-dependency-resolution",
     "phase68-release-documentation",
     "quiet-dev-chat-shim",

@@ -27,7 +27,7 @@ the compatible package lines and intentionally remain semver ranges.
 | `@fancyrobot/fred-anthropic` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
 | `@fancyrobot/fred-google` | `4.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
 | `@fancyrobot/fred-groq` | `4.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
-| `@fancyrobot/fred-minimax` | `2.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
+| `@fancyrobot/fred-minimax` | `2.0.0-alpha.3` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
 | `@fancyrobot/fred-openai` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
@@ -51,7 +51,7 @@ Do not mix the candidate with older Fred majors:
 bun add \
   @fancyrobot/fred@2.0.0-alpha.2 \
   @fancyrobot/fred-http@1.0.0-alpha.2 \
-  @fancyrobot/fred-minimax@2.0.0-alpha.2 \
+  @fancyrobot/fred-minimax@2.0.0-alpha.3 \
   effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 

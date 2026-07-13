@@ -84,7 +84,7 @@ See the [core package documentation](packages/core/README.md) for the full getti
 | [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0-alpha.2` | Google (Gemini) provider |
 | [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0-alpha.2` | Groq provider |
 | [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0-alpha.1` | OpenRouter provider |
-| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.2` | MiniMax multi-modality provider |
+| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.3` | MiniMax multi-modality provider |
 
 Packages intentionally retain independent major lines. The
 [compatibility matrix](MIGRATION.md#package-compatibility-matrix), not a shared

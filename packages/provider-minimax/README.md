@@ -10,7 +10,7 @@ line and the Stanza provider migration recipe.
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-minimax@2.0.0-alpha.2 \
+bun add @fancyrobot/fred-minimax@2.0.0-alpha.3 \
   @fancyrobot/fred@2.0.0-alpha.2 effect@^3.21.5 \
   @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
