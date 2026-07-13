@@ -35,10 +35,10 @@
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^2.0.0-alpha.0",
-    "effect": "^3.21.5"
+    "effect": "^3.21.0"
   },
   "devDependencies": {
-    "effect": "^3.21.5"
+    "effect": "^3.21.0"
   },
   "publishConfig": {
     "access": "public"

@@ -53,13 +53,13 @@
     "semver": "^7.7.4"
   },
   "peerDependencies": {
-    "effect": "^3.21.5"
+    "effect": "^3.21.0"
   },
   "optionalDependencies": {
     "pg": "^8.22.0"
   },
   "devDependencies": {
-    "effect": "^3.21.5",
+    "effect": "^3.21.0",
     "@types/semver": "^7.7.1",
     "@types/bun": "latest"
   },

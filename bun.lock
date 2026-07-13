@@ -182,13 +182,13 @@
       "devDependencies": {
         "@types/bun": "latest",
         "@types/semver": "^7.7.1",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "optionalDependencies": {
         "pg": "^8.22.0",
       },
       "peerDependencies": {
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
     "packages/core": {
@@ -233,11 +233,11 @@
       "name": "@fancyrobot/fred-baml",
       "version": "1.0.0-alpha.1",
       "devDependencies": {
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
     "packages/fred-convex": {
@@ -245,12 +245,12 @@
       "version": "1.0.0-alpha.1",
       "devDependencies": {
         "convex": "^1.42.1",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@fancyrobot/fred": "^2.0.0-alpha.0",
         "convex": "^1.42.1",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
     "packages/fred-http": {
@@ -275,13 +275,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-anthropic": "^0.25.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-anthropic": "^0.25.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
     "packages/provider-google": {
@@ -337,13 +337,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
     "packages/provider-openrouter": {
@@ -352,13 +352,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openrouter": "^0.10.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openrouter": "^0.10.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.5",
+        "effect": "^3.21.0",
       },
     },
   },
