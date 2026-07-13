@@ -9,8 +9,16 @@ edit_uri: edit/main/docs/
 
 exclude_docs: |
   README.md
+  advanced/**
+  api-reference/**
+  examples/**
+  getting-started/**
+  guides/**
   idea_refinement/**
+  migration/*.patch
+  migration/v0.2.5.md
   plans/**
+  requirements.txt
   superpowers/**
 
 theme:
@@ -57,47 +65,10 @@ markdown_extensions:
   - md_in_html
 
 nav:
-  - Home: index.md
-  - Getting Started:
-    - getting-started/installation.md
-    - getting-started/quick-start.md
-    - getting-started/configuration.md
-  - Guides:
-    - guides/agents.md
-    - guides/intents.md
-    - guides/tools.md
-    - guides/providers.md
-    - guides/models.md
-    - guides/default-agent.md
-    - guides/context-management.md
-    - guides/hooks.md
-    - guides/evaluation.md
-    - guides/observability.md
-    - guides/chat-api.md
-    - guides/dev-chat.md
-    - guides/cli.md
-  - API Reference:
-    - api-reference/fred-class.md
-    - api-reference/agents.md
-    - api-reference/intents.md
-    - api-reference/tools.md
-    - api-reference/providers.md
-    - api-reference/context.md
-  - Examples:
-    - examples/basic-usage.md
-    - examples/default-agent.md
-    - examples/chat-tool-integration.md
-    - examples/mcp-server-integration.md
-    - examples/server-mode.md
-  - Advanced:
-    - advanced/custom-providers.md
-    - advanced/custom-tools.md
-    - advanced/observability.md
-    - advanced/flox-integration.md
-    - advanced/deployment.md
-  - Migration:
-    - Phase 68 independent package lines: migration/v0.4.0.md
-    - migration/v0.2.5.md
+  - Current release: index.md
+  - Phase 68 migration: migration/v0.4.0.md
+  - Package documentation: https://github.com/TheFancyRobot/fred#packages
+  - Release runbook: https://github.com/TheFancyRobot/fred/blob/main/RELEASE.md
 
 plugins:
   - search

@@ -1,135 +1,21 @@
-# Fred Documentation
+# Fred Phase 68 documentation
 
-Welcome to the Fred framework documentation! Fred is a flexible framework for building AI agents with intent-based routing, configurable agents with system messages and tool assignments, and support for multiple AI platforms.
+Fred's Phase 68 prerelease removes the legacy `Fred` facade and publishes its
+packages on independent version lines. The older guides and API-reference pages
+have been removed from this published site until they are rewritten for the new
+surface.
 
-## What is Fred?
+Use these current sources:
 
-Fred is a powerful framework that allows you to:
+- [Phase 68 migration guide](migration/v0.4.0.md) for compatible package lines
+  and API replacements.
+- [Package documentation](https://github.com/TheFancyRobot/fred#packages) for
+  install commands and package-specific examples.
+- [Core package guide](https://github.com/TheFancyRobot/fred/blob/main/packages/core/README.md)
+  for the `createFred()` client and grouped capabilities.
+- [Release runbook](https://github.com/TheFancyRobot/fred/blob/main/RELEASE.md)
+  for candidate validation, promotion, and rollback.
 
-- **Build AI Agents**: Create intelligent agents with custom system messages and behaviors
-- **Intent-Based Routing**: Route messages to specific agents based on user intents
-- **Agent-Level Utterances**: Define utterances directly on agents for direct routing (bypasses intent matching)
-- **Markdown System Prompts**: Store system prompts in markdown files for better organization
-- **Dynamic Agent Handoff**: Agents can seamlessly transfer conversations to other agents
-- **Pipeline Hooks**: Intercept and modify the message pipeline at 12 strategic points
-- **MCP Server Integration**: Connect agents to MCP (Model Context Protocol) servers for automatic tool discovery
-- **Multi-Platform Support**: Use any AI provider supported by the Vercel AI SDK (OpenAI, Anthropic, Google, Groq, and 20+ more)
-- **Tool Integration**: Assign reusable tools to agents for extended capabilities, including built-in tools like the calculator
-- **Global Context**: Maintain conversation context across multiple agents seamlessly
-- **OpenAI-Compatible API**: Works with standard AI chat tools like Misty, Chatbox, etc.
-
-## Quick Start
-
-```typescript
-import { Fred } from 'fred';
-
-const fred = new Fred();
-
-// Use a provider
-await fred.useProvider('openai', { apiKey: 'your-key' });
-
-// Create an agent
-await fred.createAgent({
-  id: 'my-agent',
-  systemMessage: 'You are a helpful assistant.',
-  platform: 'openai',
-  model: 'gpt-4',
-});
-
-// Set as default agent
-fred.setDefaultAgent('my-agent');
-
-// Process messages
-const response = await fred.processMessage('Hello!');
-console.log(response.content);
-```
-
-## Key Features
-
-### 🎯 Intent-Based Routing
-
-Match user messages to intents using exact, regex, or semantic matching, then route to the appropriate agent.
-
-### 🤖 Configurable Agents
-
-Define agents with custom system messages, AI platform integration, and tool assignments.
-
-### 🛠️ Tool Registry
-
-Create custom reusable tools or use production-ready built-in tools (like calculator) that can be shared across multiple agents.
-
-### 📦 Built-in Tools
-
-Production-ready tools included with Fred (calculator tool for safe arithmetic evaluation) for immediate use - no configuration needed.
-
-### 🌐 Multi-Platform Support
-
-Supports all @ai-sdk providers including OpenAI, Anthropic, Google, Groq, Mistral, Cohere, and 15+ more.
-
-### 💬 Global Context
-
-Maintain conversation history across all agents for seamless multi-agent conversations.
-
-### 🔌 OpenAI-Compatible API
-
-Standard `/v1/chat/completions` endpoint works with AI chat tools like Misty and Chatbox.
-
-### 📝 Markdown System Prompts
-
-Store complex system prompts in markdown files for better organization and maintainability.
-
-### 🔄 Dynamic Agent Handoff
-
-Agents can seamlessly transfer conversations to other agents when needed.
-
-### 🪝 Pipeline Hooks
-
-Intercept and modify the message processing pipeline at 12 strategic points for context injection, logging, and custom processing.
-
-### 🔌 MCP Server Integration
-
-Connect agents to MCP (Model Context Protocol) servers to automatically discover and use tools, resources, and prompts. MCP tools are seamlessly integrated with the AI SDK.
-
-### ⚡ Embedded CLI
-
-Built-in CLI commands for managing providers, agents, and tools - no additional packages required.
-
-## Documentation Structure
-
-- **[Getting Started](getting-started/installation.md)** - Installation and setup
-- **[Guides](guides/agents.md)** - Step-by-step guides for using Fred
-- **[API Reference](api-reference/fred-class.md)** - Complete API documentation
-- **[Examples](examples/basic-usage.md)** - Code examples and tutorials
-- **[Advanced](advanced/custom-providers.md)** - Advanced topics and customization
-
-## Installation
-
-### Quick Start with create-fred
-
-The easiest way to get started:
-
-```bash
-bunx create-fred my-project
-```
-
-This creates a complete project with all dependencies installed and the embedded CLI ready to use.
-
-### Manual Installation
-
-```bash
-bun add fred
-```
-
-Or with npm:
-
-```bash
-npm install fred
-```
-
-## Next Steps
-
-- Read the [Installation Guide](getting-started/installation.md)
-- Try the [Quick Start](getting-started/quick-start.md)
-- Learn about the [Embedded CLI](guides/cli.md)
-- Explore the [Examples](examples/basic-usage.md)
-
+Historical pages remain in the repository for later migration work, but they
+are intentionally excluded from this release's navigation, search index, and
+published output.
