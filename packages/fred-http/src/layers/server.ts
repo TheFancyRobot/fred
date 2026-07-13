@@ -61,10 +61,15 @@ const validateCustomRoutes = (
     FRED_DOCS_PATH,
     FRED_OPENAPI_PATH,
     ...workflowPaths,
-  ]);
+  ].map((path) => canonicalizeHttpPath(path) ?? path));
   const methodsAndPaths = new Set<string>();
   const visibilityByPath = new Map<string, FredHttpRouteVisibility>();
   for (const route of routes) {
+    if (route.method === 'OPTIONS') {
+      throw new FredHttpRouteConfigurationError({
+        message: `OPTIONS custom routes are intercepted by CORS preflight handling: ${route.path}`,
+      });
+    }
     if (!HttpMethod.isHttpMethod(route.method) || canonicalizeHttpPath(route.path) !== route.path) {
       throw new FredHttpRouteConfigurationError({
         message: `Invalid custom route: ${String(route.method)} ${String(route.path)}`,

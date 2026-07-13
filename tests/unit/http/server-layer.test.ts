@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
 import { createFred } from '../../../packages/core/src/client';
+import { defineWorkflow } from '../../../packages/core/src/workflow/compile';
 import { withHttp, type FredWithHttp } from '../../../packages/fred-http/src/client';
 import { generateApiKey, makeMemoryApiKeyStore } from '../../../packages/fred-http/src/api-keys';
 import { RateLimitStoreError, type RateLimitStoreService } from '../../../packages/fred-http/src/rate-limiter';
@@ -31,6 +32,25 @@ describe('FredHttpServerLive security middleware', () => {
     const response = await fetch(`${handle.url}/public/ping`);
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('pong');
+  });
+
+  test('preserves custom-route request bodies', async () => {
+    const handle = await start({
+      security: { requireAuth: false },
+      routes: [{
+        method: 'POST',
+        path: '/echo',
+        visibility: 'public',
+        handler: async (request) => new Response(await request.text()),
+      }],
+    });
+
+    const response = await fetch(`${handle.url}/echo`, {
+      method: 'POST',
+      body: 'body survives conversion',
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('body survives conversion');
   });
 
   test('applies auth and CORS methods to custom routes', async () => {
@@ -145,6 +165,41 @@ describe('FredHttpServerLive security middleware', () => {
         handler: () => new Response('unsafe'),
       }],
     })).rejects.toThrow('Reserved custom route path: /health');
+  });
+
+  test('rejects custom OPTIONS routes that preflight handling would intercept', async () => {
+    await expect(start({
+      routes: [{
+        method: 'OPTIONS',
+        path: '/unreachable',
+        visibility: 'public',
+        handler: () => new Response('unreachable'),
+      }],
+    })).rejects.toThrow('OPTIONS custom routes are intercepted');
+  });
+
+  test('rejects custom routes that canonically collide with workflow paths', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'encoded',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      workflowEndpoints: { encoded: { path: '/workflow%2fendpoint' } },
+      routes: [{
+        method: 'GET',
+        path: '/workflow%2Fendpoint',
+        visibility: 'public',
+        handler: () => new Response('collision'),
+      }],
+    });
+    clients.push(fred);
+
+    await expect(fred.server.listen()).rejects.toThrow(
+      'Reserved custom route path: /workflow%2Fendpoint',
+    );
   });
 
   test('authenticates built-in routes and emits the session CORS contract', async () => {
