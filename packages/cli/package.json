@@ -43,12 +43,12 @@
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {
-    "@fancyrobot/fred": "workspace:^",
-    "@fancyrobot/fred-anthropic": "workspace:^",
-    "@fancyrobot/fred-google": "workspace:^",
-    "@fancyrobot/fred-groq": "workspace:^",
-    "@fancyrobot/fred-openai": "workspace:^",
-    "@fancyrobot/fred-openrouter": "workspace:^",
+    "@fancyrobot/fred": "^2.0.0-alpha.0",
+    "@fancyrobot/fred-anthropic": "^4.0.0-alpha.0",
+    "@fancyrobot/fred-google": "^4.0.0-alpha.0",
+    "@fancyrobot/fred-groq": "^4.0.0-alpha.0",
+    "@fancyrobot/fred-openai": "^4.0.0-alpha.0",
+    "@fancyrobot/fred-openrouter": "^5.0.0-alpha.0",
     "@opentui/core": "^0.1.92",
     "semver": "^7.7.4"
   },
