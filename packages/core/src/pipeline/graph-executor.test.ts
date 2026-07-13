@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { Effect } from 'effect';
 import {
-  executeGraphWorkflow,
+  executeGraphWorkflowEffect,
   evaluateCondition,
   selectNextNodes,
   type GraphExecutionResult,
@@ -18,6 +18,12 @@ import type { AgentManagerLike, HookManagerLike } from './executor';
 import type { GraphWorkflowConfig, BranchCondition, GraphEdge } from './graph';
 import type { PipelineContext } from './context';
 import type { AgentResponse } from '../agent/agent';
+
+const executeGraphWorkflow = (
+  config: GraphWorkflowConfig,
+  input: string,
+  options: GraphExecutorOptions,
+) => Effect.runPromise(executeGraphWorkflowEffect(config, input, options));
 
 // Mock agent manager
 function createMockAgentManager(): AgentManagerLike {

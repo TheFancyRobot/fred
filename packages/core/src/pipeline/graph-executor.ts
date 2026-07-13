@@ -3,7 +3,7 @@
  * Graph configs now compile to WorkflowIR and execute through the single
  * Effect-native workflow executor.
  */
-import { Cause, Context, Effect, Exit, Layer } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import type { AgentResponse } from '../agent/agent';
 import type { PipelineContext } from './context';
 import type { AgentManagerLike, ExecutorOptions, HookManagerLike } from './executor';
@@ -33,11 +33,6 @@ export interface GraphExecutorOptions extends ExecutorOptions {
   tracer?: Tracer;
   pipelineManager?: {
     getPipeline: (id: string) => { execute: (message: string) => Promise<AgentResponse> } | undefined;
-    executePipelineV2?: (
-      config: unknown,
-      input: string,
-      options: unknown,
-    ) => Promise<unknown>;
   };
 }
 
@@ -51,10 +46,6 @@ export interface GraphExecutorService {
 
 export const GraphExecutorService =
   Context.GenericTag<GraphExecutorService>('GraphExecutorService');
-
-function toError(cause: unknown): Error {
-  return cause instanceof Error ? cause : new Error(String(cause));
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -126,35 +117,3 @@ export function executeGraphWorkflowEffect(
 export const GraphExecutorServiceLive = Layer.succeed(GraphExecutorService, {
   executeGraphWorkflow: executeGraphWorkflowEffect,
 });
-
-/** @deprecated Use `GraphExecutorService.executeGraphWorkflow` for Effect-native composition. */
-export async function executeGraphWorkflow(
-  config: GraphWorkflowConfig,
-  input: string,
-  options: GraphExecutorOptions,
-): Promise<GraphExecutionResult> {
-  return new Promise((resolve) => {
-    Effect.runCallback(executeGraphWorkflowEffect(config, input, options), {
-      onExit: (exit) => {
-        if (Exit.isSuccess(exit)) {
-          resolve(exit.value);
-          return;
-        }
-        resolve({
-          success: false,
-          context: {
-            pipelineId: config.id,
-            input,
-            outputs: {},
-            history: [],
-            metadata: {},
-            conversationId: options.conversationId,
-          },
-          outputs: {},
-          executedNodes: [],
-          error: toError(Cause.squash(exit.cause)),
-        });
-      },
-    });
-  });
-}

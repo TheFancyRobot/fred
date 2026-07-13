@@ -7,14 +7,33 @@
  */
 
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
-import { executePipelineV2 } from '../../../../packages/core/src/pipeline/executor';
-import { executeGraphWorkflow } from '../../../../packages/core/src/pipeline/graph-executor';
+import { Effect } from 'effect';
+import {
+  executePipelineV2Effect,
+  type ExtendedExecutionOptions,
+} from '../../../../packages/core/src/pipeline/executor';
+import {
+  executeGraphWorkflowEffect,
+  type GraphExecutorOptions,
+} from '../../../../packages/core/src/pipeline/graph-executor';
 import { AgentFactory } from '../../../../packages/core/src/agent/factory';
 import { Tracer, Span } from '../../../../packages/core/src/tracing';
 import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import type { PipelineConfigV2 } from '../../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../../packages/core/src/pipeline/graph';
 import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
+
+const executePipelineV2 = (
+  config: PipelineConfigV2,
+  input: string,
+  options: ExtendedExecutionOptions,
+) => Effect.runPromise(executePipelineV2Effect(config, input, options));
+
+const executeGraphWorkflow = (
+  config: GraphWorkflowConfig,
+  input: string,
+  options: GraphExecutorOptions,
+) => Effect.runPromise(executeGraphWorkflowEffect(config, input, options));
 
 /**
  * Mock tracer for capturing span events and attributes

@@ -5,7 +5,7 @@
  * V2 surface to WorkflowIR and maps the unified result/error shapes back to the
  * public legacy contract.
  */
-import { Cause, Context, Effect, Exit, Layer } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import type { AgentMessage, AgentResponse, AnyAgentInstance } from '../agent/agent';
 import { normalizeMessages } from '../messages';
 import type { Tracer } from '../tracing';
@@ -85,26 +85,6 @@ export interface ExecutorService {
 
 export const ExecutorService = Context.GenericTag<ExecutorService>('ExecutorService');
 
-function toError(cause: unknown): Error {
-  return cause instanceof Error ? cause : new Error(String(cause));
-}
-
-function fallbackContext(
-  config: PipelineConfigV2,
-  input: string,
-  options: ExtendedExecutionOptions,
-): PipelineContext {
-  if (options.restoredContext) return options.restoredContext;
-  return {
-    pipelineId: config.id,
-    input,
-    outputs: {},
-    history: normalizeMessages(options.history ?? []),
-    metadata: {},
-    conversationId: options.conversationId,
-  };
-}
-
 function toWorkflowOptions(options: ExtendedExecutionOptions): WorkflowExecutionOptions {
   return {
     agentManager: options.agentManager,
@@ -173,40 +153,5 @@ export function executePipelineV2Effect(
 export const ExecutorServiceLive = Layer.succeed(ExecutorService, {
   executePipelineV2: executePipelineV2Effect,
 });
-
-/** @deprecated Use `ExecutorService.executePipelineV2` for Effect-native composition. */
-export async function executePipelineV2(
-  config: PipelineConfigV2,
-  input: string,
-  options: ExtendedExecutionOptions,
-): Promise<PipelineResult> {
-  const runId = options.runId ?? options.checkpointManager?.generateRunId() ?? crypto.randomUUID();
-  const executionOptions = { ...options, runId };
-  return new Promise((resolve, reject) => {
-    Effect.runCallback(
-      executePipelineV2Effect(config, input, executionOptions).pipe(
-        Effect.catchTag('PipelineExecutionError', (error) =>
-          Effect.succeed({
-            success: false,
-            status: 'failed' as const,
-            context: fallbackContext(config, input, executionOptions),
-            executedNodes: [],
-            error: toError(error.cause),
-            runId,
-          }),
-        ),
-      ),
-      {
-        onExit: (exit) => {
-          if (Exit.isSuccess(exit)) {
-            resolve(exit.value);
-            return;
-          }
-          reject(Cause.squash(exit.cause));
-        },
-      },
-    );
-  });
-}
 
 export type { AgentMessage };
