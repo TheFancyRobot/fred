@@ -18,7 +18,7 @@ the compatible package lines and intentionally remain semver ranges.
 
 | Package | Release candidate | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
-| `@fancyrobot/fred` | `2.0.0-alpha.1` | `effect ^3.21.0`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
+| `@fancyrobot/fred` | `2.0.0-alpha.1` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
 | `@fancyrobot/fred-cli` | `0.6.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
 | `@fancyrobot/fred-dev` | `1.0.0-alpha.1` | CLI `^0.6.0-alpha.0` | Final deprecated compatibility shim |
 | `@fancyrobot/fred-http` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
@@ -52,7 +52,7 @@ bun add \
   @fancyrobot/fred@2.0.0-alpha.1 \
   @fancyrobot/fred-http@1.0.0-alpha.1 \
   @fancyrobot/fred-minimax@2.0.0-alpha.1 \
-  effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
+  effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 
 Use the versions from the selected release candidate's published matrix if
