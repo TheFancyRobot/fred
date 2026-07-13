@@ -42,7 +42,7 @@ jobs:
         run: bash scripts/build-declarations.sh
 
       - name: Run tests
-        run: bun test
+        run: bun run test
 
       - name: Create Release Pull Request or Publish
         id: changesets
