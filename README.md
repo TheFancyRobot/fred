@@ -71,25 +71,26 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 ## Packages
 
-| Package | Checkout prerelease (before versioning) | Description |
+| Package | Release candidate | Description |
 |---------|--------------------|-------------|
-| [@fancyrobot/fred](packages/core/README.md) | `2.0.0-alpha.0` | Core framework |
-| [@fancyrobot/fred-cli](packages/cli/README.md) | `0.5.1-alpha.0` | CLI, development chat, and interactive TUI |
-| [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0-alpha.0` | Deprecated one-release CLI compatibility shim |
-| [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0-alpha.0` | Bun HTTP server and composable API layer |
-| [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0-alpha.0` | Consumer-owned BAML integration |
-| [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0-alpha.0` | Convex integration helpers |
-| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0-alpha.0` | OpenAI provider |
-| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.0.0-alpha.0` | Anthropic provider |
-| [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0-alpha.0` | Google (Gemini) provider |
-| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0-alpha.0` | Groq provider |
-| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0-alpha.0` | OpenRouter provider |
-| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.0` | MiniMax multi-modality provider |
+| [@fancyrobot/fred](packages/core/README.md) | `2.0.0-alpha.1` | Core framework |
+| [@fancyrobot/fred-cli](packages/cli/README.md) | `0.6.0-alpha.1` | CLI, development chat, and interactive TUI |
+| [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0-alpha.1` | Deprecated one-release CLI compatibility shim |
+| [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0-alpha.1` | Bun HTTP server and composable API layer |
+| [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0-alpha.1` | Consumer-owned BAML integration |
+| [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0-alpha.1` | Convex integration helpers |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0-alpha.1` | OpenAI provider |
+| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.0.0-alpha.1` | Anthropic provider |
+| [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0-alpha.1` | Google (Gemini) provider |
+| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0-alpha.1` | Groq provider |
+| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0-alpha.1` | OpenRouter provider |
+| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.1` | MiniMax multi-modality provider |
 
 Packages intentionally retain independent major lines. The
 [compatibility matrix](MIGRATION.md#package-compatibility-matrix), not a shared
-Fred version number, defines a release set. Release versioning updates these
-manifest versions and every exact documentation pin before publication.
+Fred version number, defines a release set. The Changesets release branch keeps
+these manifest versions and every exact documentation pin synchronized before
+publication.
 
 ## Examples
 

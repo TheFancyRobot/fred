@@ -9,11 +9,10 @@ This final compatibility release contains no development-chat implementation. It
 forwards the former root and `./chat-defaults` exports to
 `@fancyrobot/fred-cli` and will be removed in the next major release.
 
-Those forwarded exports are present in the source checkout but first publish
-on the CLI 0.6 line because they carry a minor Changeset. The checked-in CLI
-manifest remains `0.5.1-alpha.0` until release versioning; an earlier published
-CLI 0.5.1 artifact is not a valid shim peer. During candidate validation, use
-the exact published CLI 0.6 prerelease recorded in the migration matrix.
+Those forwarded exports first publish on the CLI 0.6 line because they carry a
+minor Changeset. The generated release candidate pins CLI `0.6.0-alpha.1`; an
+earlier published CLI 0.5.1 artifact is not a valid shim peer. During candidate
+validation, use the exact CLI prerelease recorded in the migration matrix.
 
 ## Migration
 
