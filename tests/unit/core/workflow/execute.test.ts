@@ -88,6 +88,39 @@ describe('unified WorkflowIR executor', () => {
     expect(result.finalOutput).toEqual(result.context.outputs.branch);
   });
 
+  it('passes every completed predecessor output to a native synthesis agent', async () => {
+    const workflow = {
+      id: 'native-fan-in',
+      source: 'native' as const,
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function' as const, fn: () => 'start' },
+        { id: 'left', kind: 'function' as const, fn: () => 'left result' },
+        { id: 'right', kind: 'function' as const, fn: () => ({ result: 'right result' }) },
+        {
+          id: 'synthesize',
+          kind: 'agent' as const,
+          agentId: 'synthesizer',
+          join: { type: 'all' as const, merge: 'array' as const, sources: ['left', 'right'] },
+        },
+      ],
+      edges: [
+        { from: 'start', to: 'left' },
+        { from: 'start', to: 'right' },
+        { from: 'left', to: 'synthesize' },
+        { from: 'right', to: 'synthesize' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ synthesizer: echoAgent('synthesizer') }),
+    }));
+
+    expect(result.finalOutput).toEqual({
+      content: 'synthesizer<-{"left":"left result","right":{"result":"right result"}}',
+      toolCalls: [],
+    });
+  });
+
   it('selects graph branches and joins fan-out results', async () => {
     const workflow = compileGraphWorkflow({
       id: 'parallel',

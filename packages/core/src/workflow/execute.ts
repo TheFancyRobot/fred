@@ -130,7 +130,16 @@ function messageForNode(
   const predecessors = inEdges(workflow, node.id)
     .map((edge) => edge.from)
     .filter((source) => source in runtimeOutputs);
-  if (predecessors.length !== 1) return workflowInputToMessage(input);
+  if (predecessors.length === 0) return workflowInputToMessage(input);
+
+  if (predecessors.length > 1) {
+    return workflowInputToMessage(Object.fromEntries(
+      predecessors.map((source) => {
+        const output = runtimeOutputs[source];
+        return [source, agentResponseContent(output) ?? output];
+      }),
+    ));
+  }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
   return agentResponseContent(predecessorOutput) ?? workflowInputToMessage(predecessorOutput);
