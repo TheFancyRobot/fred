@@ -279,9 +279,15 @@ describe('publishable package contract', () => {
         throw new Error(`npm pack did not create ${tarball}; found: ${readdirSync(packDir).join(', ')}`);
       }
       const packedManifestPath = join(tempDir, `${packageDir}-package.json`);
-      writeFileSync(
-        packedManifestPath,
-        run('tar', ['-xOf', tarball, 'package/package.json']),
+      run(
+        '/bin/sh',
+        [
+          '-c',
+          'unset BUN_BE_BUN; tar -xOzf "$1" package/package.json > "$2"',
+          'fred-tar-extract',
+          tarball,
+          packedManifestPath,
+        ],
       );
       const packedManifest = JSON.parse(readFileSync(packedManifestPath, 'utf8')) as PackageManifest;
       expect(packedManifest.name).toBe(manifest.name);
@@ -357,10 +363,21 @@ describe('publishable package contract', () => {
         '  }\n' +
         '}\n',
     );
+    writeFileSync(
+      join(consumerDir, 'browser.ts'),
+      "import { createMiniMaxLyricsAdapter } from '@fancyrobot/fred-minimax/lyrics';\n" +
+        "void createMiniMaxLyricsAdapter('test-key');\n",
+    );
 
     run('bun', ['install', '--offline', '--ignore-scripts'], consumerDir);
     run(join(consumerDir, 'node_modules', '.bin', 'tsc'), ['--pretty', 'false'], consumerDir);
     run('bun', ['runtime.mjs'], consumerDir);
+    run(
+      'bun',
+      ['build', 'browser.ts', '--target', 'browser', '--format', 'esm', '--outdir', 'browser-dist'],
+      consumerDir,
+    );
+    expect(existsSync(join(consumerDir, 'browser-dist', 'browser.js'))).toBe(true);
 
     for (const [name] of tarballs) {
       const packagePath = join(consumerDir, 'node_modules', ...name.split('/'));

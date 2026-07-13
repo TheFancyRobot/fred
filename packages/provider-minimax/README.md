@@ -45,6 +45,16 @@ const fred = await createFred();
 await fred.providers.use('minimax');
 ```
 
+### Browser-safe lyrics adapter
+
+Browser bundles that only need lyrics generation can import the focused subpath:
+
+```typescript
+import { createMiniMaxLyricsAdapter } from '@fancyrobot/fred-minimax/lyrics';
+```
+
+This entrypoint does not auto-register the provider or import Fred core.
+
 ### Config File (YAML)
 
 ```yaml
@@ -150,7 +160,7 @@ export { createMiniMaxSpeechAdapter, MiniMaxSpeechError } from '@fancyrobot/fred
 export { createMiniMaxVoiceAdapter, MiniMaxVoiceError } from '@fancyrobot/fred-minimax';
 
 // Lyrics
-export { createMiniMaxLyricsAdapter, MiniMaxLyricsError } from '@fancyrobot/fred-minimax';
+export { createMiniMaxLyricsAdapter, MiniMaxLyricsError } from '@fancyrobot/fred-minimax/lyrics';
 ```
 
 ## Environment Variables

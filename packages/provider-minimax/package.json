@@ -16,6 +16,12 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./lyrics": {
+      "types": "./dist/lyrics.d.ts",
+      "bun": "./src/lyrics.ts",
+      "import": "./dist/lyrics.js",
+      "default": "./dist/lyrics.js"
     }
   },
   "files": [
@@ -27,7 +33,7 @@
     "!dist/**/*.test.d.ts.map"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/platform --external @effect/platform-bun --external @fancyrobot/fred",
+    "build": "bun build src/index.ts src/lyrics.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/platform --external @effect/platform-bun --external @fancyrobot/fred",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
