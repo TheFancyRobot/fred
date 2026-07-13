@@ -16,6 +16,7 @@ import ts from 'typescript';
 
 type ExportTarget = {
   types: string;
+  browser?: string;
   bun: string;
   import: string;
   default: string;
@@ -228,6 +229,9 @@ describe('publishable package contract', () => {
         expect(target.import).toStartWith('./dist/');
         expect(target.default).toBe(target.import);
         expect(target.bun).toStartWith('./src/');
+        if (entry.subpath === './lyrics') {
+          expect(target.browser).toBe(target.import);
+        }
         expect(declarationExports(resolve(REPO_ROOT, 'packages', packageDir, target.types))).toEqual(
           entry.declarations,
         );
@@ -372,12 +376,37 @@ describe('publishable package contract', () => {
     run('bun', ['install', '--offline', '--ignore-scripts'], consumerDir);
     run(join(consumerDir, 'node_modules', '.bin', 'tsc'), ['--pretty', 'false'], consumerDir);
     run('bun', ['runtime.mjs'], consumerDir);
+    const browserMetafilePath = join(consumerDir, 'browser-meta.json');
     run(
       'bun',
-      ['build', 'browser.ts', '--target', 'browser', '--format', 'esm', '--outdir', 'browser-dist'],
+      [
+        'build',
+        'browser.ts',
+        '--target',
+        'browser',
+        '--format',
+        'esm',
+        '--outdir',
+        'browser-dist',
+        `--metafile=${browserMetafilePath}`,
+      ],
       consumerDir,
     );
     expect(existsSync(join(consumerDir, 'browser-dist', 'browser.js'))).toBe(true);
+    const browserMetafile = JSON.parse(readFileSync(browserMetafilePath, 'utf8')) as {
+      inputs: Record<string, unknown>;
+    };
+    const browserInputs = Object.keys(browserMetafile.inputs).map((path) => path.replaceAll('\\', '/'));
+    expect(
+      browserInputs.some((path) =>
+        path.endsWith('node_modules/@fancyrobot/fred-minimax/dist/lyrics.js')
+      ),
+    ).toBe(true);
+    expect(
+      browserInputs.some((path) =>
+        path.endsWith('node_modules/@fancyrobot/fred-minimax/src/lyrics.ts')
+      ),
+    ).toBe(false);
 
     for (const [name] of tarballs) {
       const packagePath = join(consumerDir, 'node_modules', ...name.split('/'));

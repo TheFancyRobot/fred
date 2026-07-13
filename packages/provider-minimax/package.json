@@ -19,6 +19,7 @@
     },
     "./lyrics": {
       "types": "./dist/lyrics.d.ts",
+      "browser": "./dist/lyrics.js",
       "bun": "./src/lyrics.ts",
       "import": "./dist/lyrics.js",
       "default": "./dist/lyrics.js"
