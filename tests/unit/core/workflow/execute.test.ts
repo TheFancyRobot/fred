@@ -515,4 +515,29 @@ describe('unified WorkflowIR executor', () => {
       handoffChain: ['source'],
     });
   });
+
+  it('preserves predecessor-derived input across a handoff chain', async () => {
+    const source = echoAgent('source');
+    source.processMessage = () => Effect.succeed({
+      type: 'handoff_request',
+      targetAgent: 'target',
+      reason: 'specialist',
+    } as never);
+    const workflow = {
+      id: 'handoff-input',
+      source: 'native' as const,
+      entry: 'prepare',
+      nodes: [
+        { id: 'prepare', kind: 'function' as const, fn: () => 'prepared input' },
+        { id: 'source-node', kind: 'agent' as const, agentId: 'source' },
+      ],
+      edges: [{ from: 'prepare', to: 'source-node' }],
+      handoffs: { source: ['target'] },
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ source, target: echoAgent('target') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'target<-prepared input', toolCalls: [] });
+  });
 });
