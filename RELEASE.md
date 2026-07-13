@@ -18,7 +18,10 @@ candidate compatibility matrix.
    bun run ci:version
    ```
 
-   Re-run the gates after versioning.
+   Re-run the gates after versioning. In an existing prerelease cycle, do not
+   infer the suffix from a package's new semver line: Changesets increments the
+   recorded prerelease counter. Read every exact candidate from the versioned
+   manifests. For the current plan, one pass produces CLI `0.6.0-alpha.1`.
 4. Update the exact versions in `MIGRATION.md`, the repository README, and all
    package README install snippets if manifests changed. No documentation pin
    may name an earlier prerelease artifact while describing the new candidate.

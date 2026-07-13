@@ -40,6 +40,11 @@ removing the shim. To validate it, wait until release versioning replaces the
 CLI checkout version above with an exact 0.6 candidate; do not combine the shim
 with a published CLI 0.5.1 artifact.
 
+This repository is already in an alpha prerelease cycle, and
+`.changeset/pre.json` records earlier `alpha.0` releases. Therefore one
+`changeset version` pass from this checkout produces CLI `0.6.0-alpha.1`, not
+`0.6.0-alpha.0`; no extra versioning pass is required.
+
 After the table has been updated with published candidate versions, install an
 exact prerelease set for validation. Do not mix these packages with older Fred
 majors:
@@ -133,9 +138,10 @@ messages; use an explicit intent/routing rule or call `workflows.run()`.
 ## Development chat moves to the CLI
 
 `@fancyrobot/fred-cli` owns development chat, provider detection, default-agent
-setup, hot reload, and terminal cleanup. The current Changesets plan produces
-CLI `0.6.0-alpha.1`; after release versioning, use the exact 0.6 candidate from
-the updated matrix if it differs. Remove the compatibility package:
+setup, hot reload, and terminal cleanup. As explained above, the current
+Changesets plan produces CLI `0.6.0-alpha.1` in one versioning pass. Use the
+exact 0.6 candidate from the updated matrix if the release plan changes. Remove
+the compatibility package:
 
 ```bash
 bun remove @fancyrobot/fred-dev
