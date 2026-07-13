@@ -1,5 +1,11 @@
 # @fancyrobot/fred-minimax
 
+## 2.0.0-alpha.3
+
+### Patch Changes
+
+- [#89](https://github.com/TheFancyRobot/fred/pull/89) [`77a1ef6`](https://github.com/TheFancyRobot/fred/commit/77a1ef6cfb2a5adf7f1c6dc3470cb32fe2946b77) Thanks [@sincspecv](https://github.com/sincspecv)! - Expose a focused browser-safe lyrics entrypoint without provider auto-registration or server-only core imports.
+
 ## 2.0.0-alpha.2
 
 ### Patch Changes
