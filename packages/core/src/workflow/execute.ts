@@ -126,33 +126,33 @@ export function workflowInputToMessage(input: unknown): string {
   }
 }
 
-function messageForNode(
+function inputForNode(
   workflow: WorkflowIR,
   node: IRNode,
   input: unknown,
   runtimeOutputs: Readonly<Record<string, unknown>>,
-): string {
+): unknown {
   if (workflow.source !== 'native' && node.kind !== 'subworkflow') {
-    return workflowInputToMessage(input);
+    return input;
   }
 
   const predecessors = inEdges(workflow, node.id)
     .map((edge) => edge.from)
     .filter((source) => hasOwn(runtimeOutputs, source));
-  if (predecessors.length === 0) return workflowInputToMessage(input);
+  if (predecessors.length === 0) return input;
 
   if (predecessors.length > 1) {
-    return workflowInputToMessage(Object.fromEntries(
+    return Object.fromEntries(
       predecessors.map((source) => {
         const output = runtimeOutputs[source];
         return [source, conversationalContent(findNode(workflow, source), output) ?? output];
       }),
-    ));
+    );
   }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
   return conversationalContent(findNode(workflow, predecessors[0]!), predecessorOutput) ??
-    workflowInputToMessage(predecessorOutput);
+    predecessorOutput;
 }
 
 export function getPublicWorkflowOutputs(
@@ -286,7 +286,7 @@ function runNodeBody(
   node: IRNode,
   context: PipelineContext,
   options: WorkflowExecutionOptions,
-  message: string,
+  input: unknown,
 ): Effect.Effect<unknown, WorkflowNodeExecutionError> {
   switch (node.kind) {
     case 'agent': {
@@ -299,7 +299,7 @@ function runNodeBody(
           true,
         );
       }
-      return agent.processMessage(message, context.history, {
+      return agent.processMessage(workflowInputToMessage(input), context.history, {
         workflowId: workflow.id,
         sessionId: context.conversationId,
       }).pipe(
@@ -317,7 +317,7 @@ function runNodeBody(
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     case 'subworkflow': {
-      const nestedInput = message;
+      const nestedInput = input;
       const resolved = options.workflowResolver?.(node.workflowId, nestedInput);
       if (resolved) {
         return resolved.pipe(
@@ -440,7 +440,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
   baseContext: PipelineContext,
   runtimeOutputs: Record<string, unknown>,
   options: WorkflowExecutionOptions,
-  message: string,
+  input: unknown,
   runId: string,
   skipBeforeHooks = false,
 ) {
@@ -519,7 +519,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
       });
     }
     const exit = yield* Effect.either(
-      runNodeBody(workflow, node, bodyContext, options, message),
+      runNodeBody(workflow, node, bodyContext, options, input),
     );
     if (exit._tag === 'Right') {
       result = exit.right;
@@ -808,7 +808,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             context,
             runtimeOutputs,
             options,
-            messageForNode(workflow, node, context.input, runtimeOutputs),
+            inputForNode(workflow, node, context.input, runtimeOutputs),
             runId,
             skipBeforeHooks,
           )).pipe(Effect.map((outcome) => ({ node, outcome })));
@@ -879,7 +879,9 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
 
         const execution = outcome.right;
         const { result } = execution;
-        const nodeMessage = messageForNode(workflow, node, context.input, runtimeOutputs);
+        const nodeMessage = workflowInputToMessage(
+          inputForNode(workflow, node, context.input, runtimeOutputs),
+        );
         if (execution.abortedBy) {
           workflowSpan?.setStatus('ok');
           workflowSpan?.end();
