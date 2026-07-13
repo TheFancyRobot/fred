@@ -5,6 +5,7 @@ outside the core client.
 
 ```typescript
 import { createCalculatorTool, createFred } from '@fancyrobot/fred';
+import '@fancyrobot/fred-openai';
 import { withHttp } from '@fancyrobot/fred-http';
 
 async function main() {

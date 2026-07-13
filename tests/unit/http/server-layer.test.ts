@@ -220,8 +220,37 @@ describe('FredHttpServerLive security middleware', () => {
       headers: { origin: 'https://console.example' },
     });
     expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('GET');
+    expect(preflight.headers.get('access-control-allow-methods')).not.toContain('POST');
     expect(preflight.headers.get('access-control-allow-headers')).toContain('X-Session-Id');
     expect(preflight.headers.get('access-control-expose-headers')).toContain('X-Session-Id');
+  });
+
+  test('advertises POST only for workflow endpoint preflights', async () => {
+    const core = await createFred();
+    await core.workflows.define(defineWorkflow({
+      id: 'cors-workflow',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'ok' }],
+      edges: [],
+    }));
+    const fred = withHttp(core, {
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      workflowEndpoints: { 'cors-workflow': { path: '/workflows/cors' } },
+    });
+    clients.push(fred);
+    const handle = await fred.server.listen();
+
+    const preflight = await fetch(`${handle.url}/workflows/cors`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    const methods = preflight.headers.get('access-control-allow-methods');
+    expect(methods).toContain('POST');
+    expect(methods).not.toContain('GET');
   });
 
   test('rate limits before routing and returns retry metadata', async () => {

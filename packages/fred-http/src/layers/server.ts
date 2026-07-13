@@ -113,6 +113,17 @@ const customRoutesLayer = (routes: ReadonlyArray<FredHttpRoute>) =>
     { discard: true }),
   );
 
+const addAllowedMethod = (
+  methodsByPath: Map<string, string[]>,
+  path: string,
+  method: HttpMethod.HttpMethod,
+): void => {
+  const canonicalPath = canonicalizeHttpPath(path) ?? path;
+  const methods = methodsByPath.get(canonicalPath) ?? ['OPTIONS'];
+  if (!methods.includes(method)) methods.unshift(method);
+  methodsByPath.set(canonicalPath, methods);
+};
+
 export const FredHttpApiLive = HttpApiBuilder.api(FredHttpApi).pipe(
   Layer.provide(FredHttpHandlersLive),
 );
@@ -150,12 +161,23 @@ export const FredHttpServerLive = (
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
   const allowedMethodsByPath = new Map<string, string[]>();
+  for (const [path, operations] of Object.entries(FredOpenApiSpec.paths)) {
+    for (const method of Object.keys(operations)) {
+      const normalizedMethod = method.toUpperCase();
+      if (HttpMethod.isHttpMethod(normalizedMethod)) {
+        addAllowedMethod(allowedMethodsByPath, path, normalizedMethod);
+      }
+    }
+  }
+  addAllowedMethod(allowedMethodsByPath, FRED_DOCS_PATH, 'GET');
+  addAllowedMethod(allowedMethodsByPath, FRED_OPENAPI_PATH, 'GET');
+  for (const endpoint of endpoints) {
+    addAllowedMethod(allowedMethodsByPath, endpoint.path, 'POST');
+  }
   for (const route of routes) {
     const path = canonicalizeHttpPath(route.path) ?? route.path;
     authRequirements.set(path, route.visibility === 'public' ? false : []);
-    const methods = allowedMethodsByPath.get(path) ?? ['OPTIONS'];
-    if (!methods.includes(route.method)) methods.unshift(route.method);
-    allowedMethodsByPath.set(path, methods);
+    addAllowedMethod(allowedMethodsByPath, path, route.method);
   }
   const api = buildFredHttpApi(endpoints);
   const apiHandlers = fred === undefined
