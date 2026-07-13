@@ -196,9 +196,9 @@ function pack(packageDir: string, destination: string, dryRun: boolean): PackRes
 
 function dependencyVersions(manifest: PackageManifest): Array<[string, string]> {
   return Object.entries({
-    ...manifest.dependencies,
-    ...manifest.optionalDependencies,
-    ...manifest.peerDependencies,
+    ...(manifest.dependencies ?? {}),
+    ...(manifest.optionalDependencies ?? {}),
+    ...(manifest.peerDependencies ?? {}),
   });
 }
 
@@ -266,7 +266,8 @@ describe('publishable package contract', () => {
     const packDir = join(tempDir, 'packs');
     const consumerDir = join(tempDir, 'consumer');
     tempDirs.push(tempDir);
-    run('mkdir', ['-p', packDir, consumerDir]);
+    mkdirSync(packDir, { recursive: true });
+    mkdirSync(consumerDir, { recursive: true });
 
     const tarballs = new Map<string, string>();
     const externalDependencies: Record<string, string> = { typescript: '^5.9.3' };
