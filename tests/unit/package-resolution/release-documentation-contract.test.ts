@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 type PackageManifest = {
@@ -8,27 +8,25 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
+type BunLock = {
+  workspaces: Record<string, PackageManifest>;
+};
+
 const REPO_ROOT = resolve(import.meta.dir, '../../..');
 const MIGRATION_PATH = join(REPO_ROOT, 'MIGRATION.md');
 const ROOT_README_PATH = join(REPO_ROOT, 'README.md');
-const PACKAGE_DIRS = [
-  'core',
-  'cli',
-  'dev',
-  'fred-http',
-  'fred-baml',
-  'fred-convex',
-  'provider-anthropic',
-  'provider-google',
-  'provider-groq',
-  'provider-minimax',
-  'provider-openai',
-  'provider-openrouter',
-] as const;
+const LOCK_PATH = join(REPO_ROOT, 'bun.lock');
+const PACKAGES_ROOT = join(REPO_ROOT, 'packages');
+const PACKAGE_DIRS = readdirSync(PACKAGES_ROOT, { withFileTypes: true })
+  .filter(
+    (entry) => entry.isDirectory() && existsSync(join(PACKAGES_ROOT, entry.name, 'package.json')),
+  )
+  .map((entry) => entry.name)
+  .sort();
 
 function readManifest(packageDir: string): PackageManifest {
   return JSON.parse(
-    readFileSync(join(REPO_ROOT, 'packages', packageDir, 'package.json'), 'utf8'),
+    readFileSync(join(PACKAGES_ROOT, packageDir, 'package.json'), 'utf8'),
   ) as PackageManifest;
 }
 
@@ -56,6 +54,7 @@ function installVersion(command: string, packageName: string): string {
 describe('release documentation contract', () => {
   const migration = readFileSync(MIGRATION_PATH, 'utf8');
   const rootReadme = readFileSync(ROOT_README_PATH, 'utf8');
+  const lock = Bun.JSONC.parse(readFileSync(LOCK_PATH, 'utf8')) as BunLock;
 
   test('canonical matrices track every independent package version and peer range', () => {
     for (const packageDir of PACKAGE_DIRS) {
@@ -75,14 +74,26 @@ describe('release documentation contract', () => {
   test('Fred Convex install guidance tracks the enforced manifest peer floor', () => {
     const manifest = readManifest('fred-convex');
     const convexPeer = manifest.peerDependencies?.convex;
+    if (!convexPeer) throw new Error('Missing Fred Convex peer dependency');
     const packageReadme = readFileSync(
       join(REPO_ROOT, 'packages', 'fred-convex', 'README.md'),
       'utf8',
     );
 
-    expect(convexPeer).toBe('^1.42.1');
     expect(matrixRow(migration, manifest.name)).toContain(`\`convex ${convexPeer}\``);
     expect(packageReadme).toContain(`convex@${convexPeer}`);
+  });
+
+  test('workspace lock metadata tracks every package manifest', () => {
+    for (const packageDir of PACKAGE_DIRS) {
+      const manifest = readManifest(packageDir);
+      const workspace = lock.workspaces[`packages/${packageDir}`];
+      if (!workspace) throw new Error(`Missing lock workspace for ${manifest.name}`);
+
+      expect(workspace.name).toBe(manifest.name);
+      expect(workspace.version).toBe(manifest.version);
+      expect(workspace.peerDependencies ?? {}).toEqual(manifest.peerDependencies ?? {});
+    }
   });
 
   test('root quick-start install guidance tracks the selected provider peer contract', () => {
