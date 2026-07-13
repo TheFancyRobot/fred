@@ -1,6 +1,6 @@
 # @fancyrobot/fred-convex
 
-Convex integration helpers for the [Fred](https://github.com/fancyrobot/fred) AI framework.
+Convex integration helpers for the [Fred](https://github.com/TheFancyRobot/fred) AI framework.
 
 See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the compatible core,
 Effect, and Convex peer lines.
