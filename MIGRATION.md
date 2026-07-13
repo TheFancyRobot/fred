@@ -32,11 +32,13 @@ next candidate line.
 | `@fancyrobot/fred-openai` | `4.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.0.0-alpha.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
-In particular, the final `@fancyrobot/fred-dev` shim requires CLI `^0.6.0-alpha.0`
-because the forwarded `startDevChat` and `./chat-defaults` exports do not exist
-on CLI `0.5.1-alpha.0`. Prefer removing the shim. To validate it, wait until
-release versioning replaces the CLI checkout version above with an exact 0.6
-candidate; do not combine the shim with CLI 0.5.1.
+In particular, the final `@fancyrobot/fred-dev` shim requires CLI `^0.6.0-alpha.0`.
+The forwarded `startDevChat` and `./chat-defaults` exports are present in this
+source checkout, but they were added after the earlier CLI 0.5.1 prerelease and
+carry a minor Changeset, so they first publish on the CLI 0.6 line. Prefer
+removing the shim. To validate it, wait until release versioning replaces the
+CLI checkout version above with an exact 0.6 candidate; do not combine the shim
+with a published CLI 0.5.1 artifact.
 
 After the table has been updated with published candidate versions, install an
 exact prerelease set for validation. Do not mix these packages with older Fred
