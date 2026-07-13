@@ -36,7 +36,7 @@ import {
   ObservabilityService,
   ObservabilityServiceLive,
 } from '../../../../packages/core/src/observability/service';
-import { compilePipelineV1 } from '../../../../packages/core/src/workflow/compile';
+import { compileWorkflow } from '../../../../packages/core/src/workflow/compile';
 import { executeWorkflowEffect } from '../../../../packages/core/src/workflow/execute';
 import { createMockProvider } from '../../helpers/mock-provider';
 import { createMockToolRegistry } from '../../helpers/mock-tool-registry';
@@ -196,7 +196,13 @@ describe('AgentStatusService', () => {
 
           const fibers = yield* Effect.forEach(fixtures, ({ workflowId, sessionId }) =>
             executeWorkflowEffect(
-              compilePipelineV1({ id: workflowId, agents: [agent.id] }),
+              compileWorkflow({
+                id: workflowId,
+                source: 'native',
+                entry: 'agent',
+                nodes: [{ id: 'agent', name: agent.id, kind: 'agent', agentId: agent.id }],
+                edges: [],
+              }),
               `message for ${sessionId}`,
               { agentManager, conversationId: sessionId },
             ).pipe(Effect.fork),

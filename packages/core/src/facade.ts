@@ -17,13 +17,10 @@ import type { Intent } from './intent/intent';
 import type {
   AgentConfig,
   AgentInstance,
-  AgentMessage,
   AgentResponse,
   AnyAgentInstance,
 } from './agent/agent';
-import type { PipelineConfig, PipelineInstance } from './pipeline';
-import type { AnyPipelineConfig } from './pipeline/pipeline';
-import { isPipelineConfigV2 } from './pipeline/pipeline';
+import type { PipelineConfigV2 } from './pipeline/pipeline';
 import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { ResumeResult } from './pipeline/resume';
 import type { PendingPause, HumanInputResumeOptions } from './pipeline/pause/types';
@@ -473,52 +470,15 @@ export abstract class FredBase {
 
   // --- Pipeline Management ---
 
-  async createPipeline(config: AnyPipelineConfig): Promise<PipelineInstance | void> {
-    if (isPipelineConfigV2(config)) {
-      return this.runEffect(
-        Effect.flatMap(PipelineService, (s) => s.createPipelineV2(config)),
-        `Failed to create pipeline: ${config.id}`
-      );
-    }
-
+  async createPipeline(config: PipelineConfigV2): Promise<void> {
     return this.runEffect(
-      Effect.flatMap(PipelineService, (s) => s.createPipeline(config as PipelineConfig)),
+      Effect.flatMap(PipelineService, (s) => s.createPipelineV2(config)),
       `Failed to create pipeline: ${config.id}`
     );
   }
 
   registerGraphWorkflow(config: GraphWorkflowConfig): void {
     this.runSync(Effect.flatMap(PipelineService, (s) => s.registerGraphWorkflow(config)));
-  }
-
-  async executePipeline(
-    pipelineId: string,
-    message: string,
-    previousMessages: AgentMessage[] = [],
-    options?: {
-      conversationId?: string;
-      appendToContext?: boolean;
-      sequentialVisibility?: boolean;
-    }
-  ): Promise<AgentResponse> {
-    return this.runEffect(
-      Effect.flatMap(PipelineService, (s) =>
-        s.executePipeline(pipelineId, message, previousMessages, options)
-      ),
-      `Failed to execute pipeline: ${pipelineId}`
-    );
-  }
-
-  getPipeline(id: string): PipelineInstance | undefined {
-    return this.runSync(Effect.flatMap(PipelineService, (s) => s.getPipelineOptional(id)));
-  }
-
-  getAllPipelines(): PipelineInstance[] {
-    return this.runSync(Effect.flatMap(PipelineService, (s) => s.getAllPipelines()));
-  }
-
-  removePipeline(id: string): boolean {
-    return this.runSync(Effect.flatMap(PipelineService, (s) => s.removePipeline(id)));
   }
 
   async routeMessage(message: string, options?: ProcessingOptions): Promise<RouteResult> {

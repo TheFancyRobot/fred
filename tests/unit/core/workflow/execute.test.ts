@@ -4,7 +4,6 @@ import type { AgentInstance, AgentResponse } from '../../../../packages/core/src
 import type { AgentManagerLike } from '../../../../packages/core/src/pipeline/executor';
 import {
   compileGraphWorkflow,
-  compilePipelineV1,
   compilePipelineV2,
 } from '../../../../packages/core/src/workflow/compile';
 import { executeWorkflowEffect } from '../../../../packages/core/src/workflow/execute';
@@ -26,20 +25,48 @@ function agentManager(entries: Record<string, AgentInstance>): AgentManagerLike 
 }
 
 describe('unified WorkflowIR executor', () => {
-  it('preserves V1 message threading and accumulated history', async () => {
-    const workflow = compilePipelineV1({ id: 'chain', agents: ['a', 'b'] });
+  it('executes native IR agent nodes with canonical input and outputs', async () => {
+    const workflow = {
+      id: 'chain',
+      source: 'native' as const,
+      entry: 'a',
+      nodes: [
+        { id: 'a', name: 'a', kind: 'agent' as const, agentId: 'a' },
+        { id: 'b', name: 'b', kind: 'agent' as const, agentId: 'b' },
+      ],
+      edges: [{ from: 'a', to: 'b' }],
+    };
     const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'hi', {
       agentManager: agentManager({ a: echoAgent('a'), b: echoAgent('b') }),
     }));
 
     expect(result.success).toBe(true);
-    expect(result.finalResponse).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
+    expect(result.finalOutput).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
+    expect(result.context.outputs).toEqual({
+      a: { content: 'a<-hi', toolCalls: [] },
+      b: { content: 'b<-a<-hi', toolCalls: [] },
+    });
     expect(result.context.history).toEqual([
       { role: 'user', content: 'hi' },
       { role: 'assistant', content: 'a<-hi' },
       { role: 'user', content: 'a<-hi' },
       { role: 'assistant', content: 'b<-a<-hi' },
     ]);
+  });
+
+  it('threads predecessor content through V2 agent sequences', async () => {
+    const workflow = compilePipelineV2({
+      id: 'v2-agent-chain',
+      steps: [
+        { name: 'first', type: 'agent', agentId: 'a' },
+        { name: 'second', type: 'agent', agentId: 'b' },
+      ],
+    });
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'hi', {
+      agentManager: agentManager({ a: echoAgent('a'), b: echoAgent('b') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
   });
 
   it('preserves V2 accumulation and hides compiler-generated conditional outputs', async () => {
@@ -74,6 +101,324 @@ describe('unified WorkflowIR executor', () => {
     });
     expect(Object.keys(result.context.outputs).some((key) => key.startsWith('__fred:'))).toBe(false);
     expect(result.finalOutput).toEqual(result.context.outputs.branch);
+  });
+
+  it('preserves the last public output when an internal node executes afterward', async () => {
+    const workflow = {
+      id: 'internal-tail',
+      source: 'native' as const,
+      entry: 'answer',
+      nodes: [
+        { id: 'answer', kind: 'agent' as const, agentId: 'answerer' },
+        { id: 'tail', kind: 'function' as const, internal: true, fn: () => 'internal' },
+      ],
+      edges: [{ from: 'answer', to: 'tail' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'question', {
+      agentManager: agentManager({ answerer: echoAgent('answerer') }),
+    }));
+
+    expect(result.executedNodes).toEqual(['answer', 'tail']);
+    expect(result.finalOutput).toEqual({ content: 'answerer<-question', toolCalls: [] });
+  });
+
+  it('passes native predecessor output into a nested workflow', async () => {
+    const workflow = {
+      id: 'native-nested-sequence',
+      source: 'native' as const,
+      entry: 'prepare',
+      nodes: [
+        { id: 'prepare', kind: 'agent' as const, agentId: 'preparer' },
+        { id: 'nested', kind: 'subworkflow' as const, workflowId: 'child' },
+      ],
+      edges: [{ from: 'prepare', to: 'nested' }],
+    };
+    let nestedInput: unknown;
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ preparer: echoAgent('preparer') }),
+      workflowResolver: (_workflowId, input) => {
+        nestedInput = input;
+        return Effect.succeed(`child<-${String(input)}`);
+      },
+    }));
+
+    expect(nestedInput).toBe('preparer<-original');
+    expect(result.finalOutput).toBe('child<-preparer<-original');
+  });
+
+  it('passes V2 predecessor output into a nested workflow', async () => {
+    const workflow = compilePipelineV2({
+      id: 'v2-nested-sequence',
+      steps: [
+        { name: 'prepare', type: 'agent', agentId: 'preparer' },
+        { name: 'nested', type: 'pipeline', pipelineId: 'child' },
+      ],
+    });
+    let nestedInput: unknown;
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ preparer: echoAgent('preparer') }),
+      workflowResolver: (_workflowId, input) => {
+        nestedInput = input;
+        return Effect.succeed(`child<-${String(input)}`);
+      },
+    }));
+
+    expect(nestedInput).toBe('preparer<-original');
+    expect(result.finalOutput).toBe('child<-preparer<-original');
+  });
+
+  it('preserves structured predecessor input for a typed subworkflow', async () => {
+    const structured = { name: 'Ada' };
+    const workflow = compilePipelineV2({
+      id: 'typed-nested-input',
+      steps: [
+        { name: 'prepare', type: 'function', fn: () => structured },
+        { name: 'nested', type: 'pipeline', pipelineId: 'child' },
+      ],
+    });
+    let nestedInput: unknown;
+    await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+      workflowResolver: (_workflowId, input) => {
+        nestedInput = input;
+        return Effect.succeed('done');
+      },
+    }));
+
+    expect(nestedInput).toBe(structured);
+  });
+
+  it('preserves structured input through the pipeline-manager fallback', async () => {
+    const structured = { left: 'draft', right: 'critique' };
+    const workflow = compilePipelineV2({
+      id: 'fallback-nested-input',
+      steps: [
+        { name: 'prepare', type: 'function', fn: () => structured },
+        { name: 'nested', type: 'pipeline', pipelineId: 'child' },
+      ],
+    });
+    let nestedInput: unknown;
+    await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+      pipelineManager: {
+        getPipeline: () => ({
+          execute: async (input) => {
+            nestedInput = input;
+            return { content: 'done', toolCalls: [] };
+          },
+        }),
+      },
+    }));
+
+    expect(nestedInput).toBe(structured);
+  });
+
+  it('passes nested agent content into the next native agent', async () => {
+    const workflow = {
+      id: 'nested-agent-sequence',
+      source: 'native' as const,
+      entry: 'draft',
+      nodes: [
+        { id: 'draft', kind: 'subworkflow' as const, workflowId: 'drafter' },
+        { id: 'review', kind: 'agent' as const, agentId: 'reviewer' },
+      ],
+      edges: [{ from: 'draft', to: 'review' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ reviewer: echoAgent('reviewer') }),
+      workflowResolver: () => Effect.succeed({ content: 'draft', toolCalls: [] }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'reviewer<-draft', toolCalls: [] });
+  });
+
+  it('preserves structured subworkflow output for native function consumers', async () => {
+    const structured = { content: 'draft', audit: { approved: true } };
+    let functionInput: unknown;
+    const workflow = {
+      id: 'nested-function-sequence',
+      source: 'native' as const,
+      entry: 'draft',
+      nodes: [
+        { id: 'draft', kind: 'subworkflow' as const, workflowId: 'drafter' },
+        {
+          id: 'inspect',
+          kind: 'function' as const,
+          fn: (context: { input: unknown }) => {
+            functionInput = context.input;
+            return 'done';
+          },
+        },
+      ],
+      edges: [{ from: 'draft', to: 'inspect' }],
+    };
+    await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+      workflowResolver: () => Effect.succeed(structured),
+    }));
+
+    expect(functionInput).toBe(structured);
+  });
+
+  it('records the exact scheduling-time input in native agent history', async () => {
+    let receivedMessage = '';
+    const target = echoAgent('target');
+    target.processMessage = (message) => {
+      receivedMessage = message;
+      return Effect.succeed({ content: `target<-${message}`, toolCalls: [] });
+    };
+    const workflow = {
+      id: 'stable-history-input',
+      source: 'native' as const,
+      entry: 'source',
+      nodes: [
+        { id: 'source', kind: 'function' as const, fn: () => 'source output' },
+        { id: 'sibling', kind: 'function' as const, fn: () => 'sibling output' },
+        { id: 'target', kind: 'agent' as const, agentId: 'target' },
+      ],
+      edges: [
+        { from: 'source', to: 'sibling' },
+        { from: 'source', to: 'target' },
+        { from: 'sibling', to: 'target' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ target }),
+    }));
+
+    expect(receivedMessage).toBe('source output');
+    expect(result.context.history[0]).toEqual({ role: 'user', content: receivedMessage });
+  });
+
+  it('does not leak isolated native agent turns into shared history', async () => {
+    let observerHistory: readonly unknown[] | undefined;
+    const observer = echoAgent('observer');
+    observer.processMessage = (message, history) => {
+      observerHistory = [...history];
+      return Effect.succeed({ content: `observer<-${message}`, toolCalls: [] });
+    };
+    const workflow = {
+      id: 'isolated-agent-history',
+      source: 'native' as const,
+      entry: 'isolated',
+      nodes: [
+        {
+          id: 'isolated',
+          kind: 'agent' as const,
+          agentId: 'isolated',
+          contextView: 'isolated' as const,
+        },
+        { id: 'observer', kind: 'agent' as const, agentId: 'observer' },
+      ],
+      edges: [{ from: 'isolated', to: 'observer' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ isolated: echoAgent('isolated'), observer }),
+    }));
+
+    expect(observerHistory).toEqual([]);
+    expect(result.context.history).toEqual([
+      { role: 'user', content: 'isolated<-original' },
+      { role: 'assistant', content: 'observer<-isolated<-original' },
+    ]);
+  });
+
+  it('ignores inherited object keys when resolving predecessor outputs', async () => {
+    const workflow = {
+      id: 'prototype-safe-input',
+      source: 'native' as const,
+      entry: 'target',
+      nodes: [{ id: 'target', kind: 'agent' as const, agentId: 'target' }],
+      edges: [{ from: 'toString', to: 'target' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ target: echoAgent('target') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'target<-original', toolCalls: [] });
+  });
+
+  it('stores prototype-looking node ids as safe own output properties', async () => {
+    const workflow = {
+      id: 'prototype-safe-output',
+      source: 'native' as const,
+      entry: '__proto__',
+      nodes: [{ id: '__proto__', kind: 'function' as const, fn: () => ({ safe: true }) }],
+      edges: [],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+    }));
+
+    expect(Object.getPrototypeOf(result.outputs)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(result.outputs, '__proto__')).toBe(true);
+    expect(result.outputs['__proto__']).toEqual({ safe: true });
+  });
+
+  it('passes every completed predecessor output to a native synthesis agent', async () => {
+    const workflow = {
+      id: 'native-fan-in',
+      source: 'native' as const,
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function' as const, fn: () => 'start' },
+        { id: 'left', kind: 'function' as const, fn: () => 'left result' },
+        { id: 'right', kind: 'function' as const, fn: () => ({ result: 'right result' }) },
+        {
+          id: 'synthesize',
+          kind: 'agent' as const,
+          agentId: 'synthesizer',
+          join: { type: 'all' as const, merge: 'array' as const, sources: ['left', 'right'] },
+        },
+      ],
+      edges: [
+        { from: 'start', to: 'left' },
+        { from: 'start', to: 'right' },
+        { from: 'left', to: 'synthesize' },
+        { from: 'right', to: 'synthesize' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ synthesizer: echoAgent('synthesizer') }),
+    }));
+
+    expect(result.finalOutput).toEqual({
+      content: 'synthesizer<-{"left":"left result","right":{"result":"right result"}}',
+      toolCalls: [],
+    });
+  });
+
+  it('uses join sources as the authoritative predecessor input set', async () => {
+    const workflow = {
+      id: 'join-source-input',
+      source: 'native' as const,
+      entry: 'start',
+      nodes: [
+        { id: 'start', kind: 'function' as const, fn: () => 'start' },
+        { id: 'left', kind: 'function' as const, fn: () => 'left' },
+        { id: 'right', kind: 'function' as const, fn: () => 'right' },
+        { id: 'extra', kind: 'function' as const, fn: () => 'extra' },
+        {
+          id: 'join',
+          kind: 'function' as const,
+          fn: (context: { input: unknown }) => context.input,
+          join: { type: 'all' as const, merge: 'array' as const, sources: ['left', 'right'] },
+        },
+      ],
+      edges: [
+        { from: 'start', to: 'left' },
+        { from: 'start', to: 'right' },
+        { from: 'start', to: 'extra' },
+        { from: 'left', to: 'join' },
+        { from: 'right', to: 'join' },
+        { from: 'extra', to: 'join' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+    }));
+
+    expect(result.finalOutput).toEqual({ left: 'left', right: 'right' });
   });
 
   it('selects graph branches and joins fan-out results', async () => {
@@ -202,5 +547,30 @@ describe('unified WorkflowIR executor', () => {
       handoffReason: 'specialist',
       handoffChain: ['source'],
     });
+  });
+
+  it('preserves predecessor-derived input across a handoff chain', async () => {
+    const source = echoAgent('source');
+    source.processMessage = () => Effect.succeed({
+      type: 'handoff_request',
+      targetAgent: 'target',
+      reason: 'specialist',
+    } as never);
+    const workflow = {
+      id: 'handoff-input',
+      source: 'native' as const,
+      entry: 'prepare',
+      nodes: [
+        { id: 'prepare', kind: 'function' as const, fn: () => 'prepared input' },
+        { id: 'source-node', kind: 'agent' as const, agentId: 'source' },
+      ],
+      edges: [{ from: 'prepare', to: 'source-node' }],
+      handoffs: { source: ['target'] },
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ source, target: echoAgent('target') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'target<-prepared input', toolCalls: [] });
   });
 });

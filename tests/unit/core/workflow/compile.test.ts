@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
   compileGraphWorkflow,
-  compilePipelineV1,
   compilePipelineV2,
   compileWorkflow,
 } from '../../../../packages/core/src/workflow/compile';
@@ -9,13 +8,44 @@ import { validateWorkflowIR, WorkflowValidationError } from '../../../../package
 import { findNode, outEdges, type WorkflowIR } from '../../../../packages/core/src/workflow/ir';
 
 describe('workflow compilers', () => {
-  it('lowers a V1 agent list to a linear graph', () => {
-    const ir = compilePipelineV1({ id: 'chain', agents: ['a', 'b'] });
+  it('rejects unchecked legacy definitions with migration guidance', () => {
+    expect(() => compileWorkflow({ id: 'legacy', agents: ['a'] } as never)).toThrow(
+      /steps array.*Legacy agent-list pipelines are no longer supported/,
+    );
+  });
 
-    expect(ir.source).toBe('v1');
-    expect(ir.entry).toBe('chain:agent:0');
-    expect(ir.nodes.map((node) => node.kind)).toEqual(['agent', 'agent']);
-    expect(ir.edges).toEqual([{ from: 'chain:agent:0', to: 'chain:agent:1' }]);
+  it('rejects workflow definitions whose required fields are inherited', () => {
+    const inheritedDefinitions = [
+      Object.create({ id: 'inherited-v2', steps: [] }),
+      Object.create({
+        id: 'inherited-graph',
+        type: 'graph',
+        entryNode: 'done',
+        nodes: [],
+        edges: [],
+      }),
+      Object.create({
+        id: 'inherited-native',
+        entry: 'done',
+        nodes: [],
+        edges: [],
+      }),
+    ];
+    for (const inherited of inheritedDefinitions) {
+      expect(() => compileWorkflow(inherited as never)).toThrow(
+        /Unsupported workflow definition/,
+      );
+    }
+  });
+
+  it('rejects unsupported runtime WorkflowIR source tags', () => {
+    expect(() => compileWorkflow({
+      id: 'removed-source',
+      source: 'v1',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'done' }],
+      edges: [],
+    } as never)).toThrow(/Unsupported WorkflowIR source "v1"/);
   });
 
   it('lowers V2 conditional nesting to guarded edges without a conditional node kind', () => {

@@ -6,7 +6,6 @@ import type { AgentPrompt } from '../../../../packages/core/src/agent/agent';
 import type { FrameworkConfig } from '../../../../packages/core/src/config/types';
 import {
   extractAgents,
-  extractPipelines,
   validateConfig,
   validateNoAmbiguousPromptFiles,
 } from '../../../../packages/core/src/config/loader';
@@ -52,40 +51,6 @@ describe('config prompt source loading', () => {
     expect(agents[0]?.systemMessage).toBe('Prompt loaded from Markdown.');
     expect(agents[1]?.systemMessage).toBe(templatePrompt);
     expect(agents[2]?.systemMessage).toBe(bamlPrompt);
-  });
-
-  it('preserves object prompt sources on inline pipeline agents', () => {
-    const directory = makeTemporaryDirectory();
-    const configPath = join(directory, 'fred.yaml');
-    const templatePrompt = {
-      template: 'Review as <%= vars.role %>',
-      variables: { role: 'editor' },
-    } as const satisfies AgentPrompt;
-    const bamlPrompt = {
-      baml: { function: 'BuildReviewerPrompt' },
-    } as const satisfies AgentPrompt;
-    const config = {
-      pipelines: [
-        {
-          id: 'review',
-          agents: [
-            { id: 'template', platform: 'openai', model: 'gpt-4', systemMessage: templatePrompt },
-            { id: 'baml', platform: 'openai', model: 'gpt-4', systemMessage: bamlPrompt },
-          ],
-        },
-      ],
-    } satisfies FrameworkConfig;
-
-    validateConfig(config);
-    const [pipeline] = extractPipelines(config, configPath);
-    const [templateAgent, bamlAgent] = pipeline?.agents ?? [];
-
-    expect(typeof templateAgent).not.toBe('string');
-    expect(typeof bamlAgent).not.toBe('string');
-    if (typeof templateAgent !== 'string' && typeof bamlAgent !== 'string') {
-      expect(templateAgent?.systemMessage).toBe(templatePrompt);
-      expect(bamlAgent?.systemMessage).toBe(bamlPrompt);
-    }
   });
 
   it('does not interpret object prompt contents as Markdown paths', () => {

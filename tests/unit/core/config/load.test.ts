@@ -12,6 +12,7 @@ import {
   loadValidatedConfig,
   validateParsedConfig,
 } from '../../../../packages/core/src/config/load';
+import { validateConfig } from '../../../../packages/core/src/config/loader';
 import {
   ConfigError,
   ConfigValidationError,
@@ -74,6 +75,23 @@ describe('validateParsedConfig — passthrough & losslessness', () => {
 });
 
 describe('validateParsedConfig — aggregated errors', () => {
+  it('rejects removed V1 pipelines with migration guidance', () => {
+    let thrown: unknown;
+    try {
+      validateParsedConfig({ pipelines: { legacy: { agents: ['a'] } } });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ConfigValidationError);
+    expect(String(thrown)).toMatch(/pipelinesV2.*native workflow/);
+    expect(() => validateConfig({ pipelines: {} } as never)).toThrow(
+      /pipelinesV2.*native workflow/,
+    );
+    const inherited = Object.create({ pipelines: {} }) as Record<string, unknown>;
+    expect(() => validateConfig(inherited as never)).not.toThrow();
+    expect(() => validateParsedConfig(inherited)).not.toThrow();
+  });
+
   it('throws ConfigValidationError listing every semantic problem at once', () => {
     let thrown: unknown;
     try {

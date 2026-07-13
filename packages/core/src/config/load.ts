@@ -20,7 +20,7 @@ import { Schema } from 'effect';
 import { parseConfigFile } from './parser';
 import { FrameworkConfigSchema } from './schema';
 import { validateFrameworkConfig } from './validate';
-import { configValidationError, formatConfigIssues } from './errors';
+import { ConfigError, configValidationError, formatConfigIssues } from './errors';
 import type { FrameworkConfig } from './types';
 
 const decode = Schema.decodeUnknownEither(FrameworkConfigSchema);
@@ -35,6 +35,21 @@ const decode = Schema.decodeUnknownEither(FrameworkConfigSchema);
  * about types hold.
  */
 export function validateParsedConfig(config: unknown): FrameworkConfig {
+  if (
+    typeof config === 'object' &&
+    config !== null &&
+    Object.prototype.hasOwnProperty.call(config, 'pipelines')
+  ) {
+    throw configValidationError([
+      new ConfigError({
+        path: 'pipelines',
+        issue: 'legacy V1 pipeline configuration is no longer supported',
+        message: 'pipelines: legacy V1 pipeline configuration is no longer supported',
+        remediation: 'Migrate the configuration to "pipelinesV2" or define a native workflow.',
+      }),
+    ]);
+  }
+
   const decoded = decode(config, { errors: 'all' });
   if (decoded._tag === 'Left') {
     throw configValidationError(formatConfigIssues(decoded.left));

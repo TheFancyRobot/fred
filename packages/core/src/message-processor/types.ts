@@ -39,11 +39,10 @@ export function isToolFailureRecord(result: unknown): result is ToolFailureRecor
  * Result of routing a message to a handler
  */
 export interface RouteResult {
-  type: 'agent' | 'pipeline' | 'intent' | 'default' | 'none';
+  type: 'agent' | 'intent' | 'default' | 'none';
   agent?: AgentInstance;
   agentId?: string;
   intentId?: string;
-  pipelineId?: string;
   response?: AgentResponse;
   /** Routing decision (when MessageRouter is used) */
   routingDecision?: import('../routing/types').RoutingDecision;
@@ -103,22 +102,6 @@ interface ProcessorAgentManager {
   matchAgentByUtterance(message: string, semanticMatcher?: SemanticMatcherFn): Promise<ProcessorAgentMatch | null>;
 }
 
-interface ProcessorPipelineMatch {
-  pipelineId: string;
-  confidence: number;
-  matchType: 'exact' | 'regex' | 'semantic';
-}
-
-interface ProcessorPipelineManager {
-  matchPipelineByUtterance(message: string, semanticMatcher?: SemanticMatcherFn): Promise<ProcessorPipelineMatch | null>;
-  executePipeline(
-    id: string,
-    message: string,
-    previousMessages: AgentMessage[],
-    options?: { conversationId?: string; sequentialVisibility?: boolean }
-  ): Promise<AgentResponse>;
-}
-
 interface ProcessorHookManager {
   executeHooks(hookName: string, event: unknown): Promise<void>;
 }
@@ -133,7 +116,6 @@ interface ProcessorMessageRouter {
 export interface MessageProcessorDeps {
   contextManager: ProcessorContextManager;
   agentManager: ProcessorAgentManager;
-  pipelineManager: ProcessorPipelineManager;
   intentMatcher: IntentMatcher;
   intentRouter: IntentRouter;
   tracer?: Tracer;

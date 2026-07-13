@@ -12,11 +12,10 @@ import type {
 import { parseConfigFile } from './parser';
 import type { Intent } from '../intent/intent';
 import type { AgentConfig } from '../agent/agent';
-import type { PipelineConfig, PipelineConfigV2 } from '../pipeline/pipeline';
+import type { PipelineConfigV2 } from '../pipeline/pipeline';
 import type { PipelineStep } from '../pipeline/steps';
 import type { Tool, ToolSchemaMetadata } from '../tool/tool';
 import { loadPromptFile } from '../utils/prompt-loader';
-import { validateId, validatePipelineAgentCount } from '../utils/validation';
 import type { Workflow } from '../workflow/manager';
 import type { ProviderConfig } from '../platform/provider';
 import { Schema, ParseResult } from 'effect';
@@ -57,6 +56,12 @@ export function loadConfig(filePath: string): FrameworkConfig {
  * Validate config structure
  */
 export function validateConfig(config: FrameworkConfig): void {
+  if (Object.prototype.hasOwnProperty.call(config, 'pipelines')) {
+    throw new Error(
+      'The legacy top-level "pipelines" configuration has been removed. Migrate it to "pipelinesV2" or define a native workflow.',
+    );
+  }
+
   const hasDefaultSystemMessage = Boolean(config.defaultSystemMessage);
   const policies = getPolicyConfig(config);
 
@@ -117,58 +122,6 @@ export function validateConfig(config: FrameworkConfig): void {
       }
       if (schemaMetadata) {
         validateSchemaMetadata(tool.id, schemaMetadata);
-      }
-    }
-  }
-
-  if (config.pipelines) {
-    // Check for duplicate pipeline IDs
-    const seenPipelineIds = new Set<string>();
-    for (const pipeline of config.pipelines) {
-      if (!pipeline.id) {
-        throw new Error('Pipeline must have an id');
-      }
-      // Validate pipeline ID format
-      validateId(pipeline.id, 'Pipeline ID');
-      
-      // Check for duplicate IDs
-      if (seenPipelineIds.has(pipeline.id)) {
-        throw new Error(`Duplicate pipeline ID found: "${pipeline.id}"`);
-      }
-      seenPipelineIds.add(pipeline.id);
-      
-      if (!pipeline.agents || pipeline.agents.length === 0) {
-        throw new Error(`Pipeline "${pipeline.id}" must have at least one agent`);
-      }
-      
-      // Validate agent count
-      validatePipelineAgentCount(pipeline.agents.length);
-      
-      // Validate agent references (strings) or inline agent configs
-      for (let i = 0; i < pipeline.agents.length; i++) {
-        const agentRef = pipeline.agents[i];
-        if (typeof agentRef === 'string') {
-          // Validate agent ID format
-          validateId(agentRef, `Agent ID in pipeline "${pipeline.id}"`);
-        } else {
-          // Inline agent config - validate it
-          if (!agentRef.id) {
-            throw new Error(`Pipeline "${pipeline.id}" has inline agent at index ${i} without an id`);
-          }
-          // Validate inline agent ID format
-          validateId(agentRef.id, `Inline agent ID in pipeline "${pipeline.id}"`);
-          if (!agentRef.systemMessage && !hasDefaultSystemMessage) {
-            throw new Error(
-              `Pipeline "${pipeline.id}" has inline agent "${agentRef.id}" without a systemMessage or defaultSystemMessage`
-            );
-          }
-          if (!agentRef.platform) {
-            throw new Error(`Pipeline "${pipeline.id}" has inline agent "${agentRef.id}" without a platform`);
-          }
-          if (!agentRef.model) {
-            throw new Error(`Pipeline "${pipeline.id}" has inline agent "${agentRef.id}" without a model`);
-          }
-        }
       }
     }
   }
@@ -259,7 +212,7 @@ export function extractAgents(config: FrameworkConfig, basePath?: string): Agent
   const defaultSystemMessage = config.defaultSystemMessage
     ? loadPromptFile(config.defaultSystemMessage, basePath, false)
     : undefined;
-  
+
   // If basePath is provided, resolve prompt file paths
   // Paths are sandboxed to the config file's directory to prevent path traversal attacks
   if (basePath && agents.length > 0) {
@@ -386,45 +339,6 @@ export function extractToolPolicies(config: FrameworkConfig): ToolPoliciesConfig
       },
     })),
   };
-}
-
-/**
- * Extract pipelines from config
- * @param config - Framework configuration
- * @param basePath - Optional base path for resolving relative prompt file paths (usually config file path)
- */
-export function extractPipelines(config: FrameworkConfig, basePath?: string): PipelineConfig[] {
-  const pipelines = config.pipelines || [];
-  const defaultSystemMessage = config.defaultSystemMessage
-    ? loadPromptFile(config.defaultSystemMessage, basePath, false)
-    : undefined;
-  
-  // Always return a new array of deep-copied pipeline objects to prevent mutation
-  // of the original configuration
-  return pipelines.map(pipeline => ({
-    id: pipeline.id,
-    description: pipeline.description,
-    utterances: pipeline.utterances ? [...pipeline.utterances] : undefined,
-    agents: pipeline.agents.map(agentRef => {
-      if (typeof agentRef === 'string') {
-        return agentRef;
-      }
-      if (!basePath) {
-        return {
-          ...agentRef,
-          systemMessage: agentRef.systemMessage ?? defaultSystemMessage ?? '',
-        };
-      }
-      // Inline agent config - resolve systemMessage path
-      // Pass allowAbsolutePaths=false to prevent absolute path attacks
-      return {
-        ...agentRef,
-        systemMessage: typeof agentRef.systemMessage === 'string'
-          ? loadPromptFile(agentRef.systemMessage, basePath, false)
-          : agentRef.systemMessage ?? defaultSystemMessage ?? '',
-      };
-    }),
-  }));
 }
 
 function validateSchemaMetadata(toolId: string, metadata: ToolSchemaMetadata): void {

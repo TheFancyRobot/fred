@@ -111,7 +111,7 @@ describe('FredLayers', () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const service = yield* PipelineService;
-        return yield* service.getAllPipelines();
+        return yield* service.listWorkflows();
       }).pipe(Effect.provide(FredLayers))
     );
     expect(result).toEqual([]);
@@ -424,7 +424,7 @@ describe('Phase 42 Standalone Service Integration', () => {
           const processorService = yield* MessageProcessorService;
 
           // Both services should be accessible in the same context
-          const pipelines = yield* pipelineService.getAllPipelines();
+          const pipelines = yield* pipelineService.listWorkflows();
           const config = yield* processorService.getConfig();
 
           return {
@@ -595,45 +595,6 @@ describe('Phase 43 scoped client boundary', () => {
         restore();
 
         expect(result.type).toBe('none');
-        expect(calls).toBe(1);
-      } finally {
-        await fred.shutdown();
-      }
-    }
-  });
-
-  test('executePipeline delegates through PipelineService executePipeline', async () => {
-    const fred = await createFred();
-    {
-
-      try {
-        let calls = 0;
-
-        const restore = await fred.effects.run(
-          Effect.gen(function* () {
-            const service = yield* PipelineService;
-            const original = service.executePipeline;
-
-            (service as { executePipeline: typeof service.executePipeline }).executePipeline = () => {
-              calls += 1;
-              return Effect.succeed({ content: 'phase-43-pipeline' } as any);
-            };
-
-            return () => {
-              (service as { executePipeline: typeof service.executePipeline }).executePipeline = original;
-            };
-          })
-        );
-
-        const result = await fred.effects.run(
-          Effect.flatMap(
-            PipelineService,
-            (service) => service.executePipeline('phase-43-pipeline-id', 'hello'),
-          ),
-        );
-        restore();
-
-        expect(result.content).toBe('phase-43-pipeline');
         expect(calls).toBe(1);
       } finally {
         await fred.shutdown();

@@ -118,54 +118,6 @@ const runWithService = <A, E>(effect: Effect.Effect<A, E, PipelineService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(TestLayer)));
 
 describe('PipelineService', () => {
-  describe('hasPipeline', () => {
-    test('returns false when no pipelines registered', async () => {
-      const result = await runWithService(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          return yield* service.hasPipeline('test-pipeline');
-        })
-      );
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('getPipeline', () => {
-    test('fails with PipelineNotFoundError when not exists', async () => {
-      const result = await Effect.runPromiseExit(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          return yield* service.getPipeline('nonexistent');
-        }).pipe(Effect.provide(TestLayer))
-      );
-      expect(result._tag).toBe('Failure');
-    });
-  });
-
-  describe('getPipelineOptional', () => {
-    test('returns undefined when not exists', async () => {
-      const result = await runWithService(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          return yield* service.getPipelineOptional('nonexistent');
-        })
-      );
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('getAllPipelines', () => {
-    test('returns empty array when no pipelines', async () => {
-      const result = await runWithService(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          return yield* service.getAllPipelines();
-        })
-      );
-      expect(result).toEqual([]);
-    });
-  });
-
   describe('hasPipelineV2', () => {
     test('returns false when no V2 pipelines', async () => {
       const result = await runWithService(
@@ -220,80 +172,51 @@ describe('PipelineService', () => {
         Effect.gen(function* () {
           const service = yield* PipelineService;
           yield* service.clear();
-          const pipelines = yield* service.getAllPipelines();
           const v2 = yield* service.getAllPipelinesV2();
           const graphs = yield* service.getAllGraphWorkflows();
-          return { pipelines: pipelines.length, v2: v2.length, graphs: graphs.length };
+          const workflows = yield* service.listWorkflows();
+          return { v2: v2.length, graphs: graphs.length, workflows: workflows.length };
         })
       );
-      expect(result.pipelines).toBe(0);
       expect(result.v2).toBe(0);
       expect(result.graphs).toBe(0);
-    });
-  });
-
-  describe('removePipeline', () => {
-    test('removes V2, graph, and native workflows from every registry', async () => {
-      const result = await runWithService(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          yield* service.createPipelineV2({
-            id: 'remove-v2',
-            steps: [{ name: 'step', type: 'function', fn: () => 'v2' }],
-          });
-          yield* service.registerGraphWorkflow({
-            id: 'remove-graph',
-            type: 'graph',
-            entryNode: 'start',
-            nodes: [{ id: 'start', type: 'function', fn: () => 'graph' }],
-            edges: [],
-          });
-          yield* service.defineWorkflow({
-            id: 'remove-native',
-            source: 'native',
-            entry: 'start',
-            nodes: [{ id: 'start', kind: 'function', fn: () => 'native' }],
-            edges: [],
-          });
-
-          const removed = {
-            v2: yield* service.removePipeline('remove-v2'),
-            graph: yield* service.removePipeline('remove-graph'),
-            native: yield* service.removePipeline('remove-native'),
-          };
-          const remaining = {
-            v2: yield* service.hasPipelineV2('remove-v2'),
-            graph: yield* service.hasGraphWorkflow('remove-graph'),
-            v2Ir: yield* service.hasWorkflowIR('remove-v2'),
-            graphIr: yield* service.hasWorkflowIR('remove-graph'),
-            nativeIr: yield* service.hasWorkflowIR('remove-native'),
-          };
-
-          yield* service.createPipelineV2({
-            id: 'remove-v2',
-            steps: [{ name: 'replacement', type: 'function', fn: () => 'replacement' }],
-          });
-          return {
-            removed,
-            remaining,
-            redefined: yield* service.hasPipelineV2('remove-v2'),
-          };
-        })
-      );
-
-      expect(result.removed).toEqual({ v2: true, graph: true, native: true });
-      expect(result.remaining).toEqual({
-        v2: false,
-        graph: false,
-        v2Ir: false,
-        graphIr: false,
-        nativeIr: false,
-      });
-      expect(result.redefined).toBe(true);
+      expect(result.workflows).toBe(0);
     });
   });
 
   describe('defineWorkflow', () => {
+    test('rejects legacy workflow shapes before mutating registry state', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          const rejected = yield* Effect.either(service.defineWorkflow({
+            id: 'legacy-shape',
+            agents: ['test-agent'],
+          } as never));
+          const registeredAfterRejection = yield* service.hasWorkflowIR('legacy-shape');
+          yield* service.defineWorkflow({
+            id: 'legacy-shape',
+            steps: [{ name: 'replacement', type: 'function', fn: () => 'ok' }],
+          });
+          return {
+            rejected,
+            registeredAfterRejection,
+            registeredAfterCorrection: yield* service.hasWorkflowIR('legacy-shape'),
+          };
+        }),
+      );
+
+      expect(result.rejected._tag).toBe('Left');
+      expect(result.rejected.left).toBeInstanceOf(PipelineExecutionError);
+      if (result.rejected.left instanceof PipelineExecutionError) {
+        expect(String(result.rejected.left.cause)).toContain(
+          'Legacy agent-list pipelines are no longer supported',
+        );
+      }
+      expect(result.registeredAfterRejection).toBe(false);
+      expect(result.registeredAfterCorrection).toBe(true);
+    });
+
     test('rejects invalid native workflow ids consistently', async () => {
       const result = await Effect.runPromiseExit(
         Effect.gen(function* () {
@@ -313,18 +236,6 @@ describe('PipelineService', () => {
         expect(result.cause.error).toBeInstanceOf(GraphValidationError);
         expect(result.cause.error.message).toContain('invalid characters');
       }
-    });
-  });
-
-  describe('matchPipelineByUtterance', () => {
-    test('returns null when no pipelines with utterances', async () => {
-      const result = await runWithService(
-        Effect.gen(function* () {
-          const service = yield* PipelineService;
-          return yield* service.matchPipelineByUtterance('hello');
-        })
-      );
-      expect(result).toBeNull();
     });
   });
 

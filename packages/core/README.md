@@ -221,16 +221,17 @@ Priority: `utterances` -> `intents` -> `routing.defaultAgent`.
 ### Sequential Pipelines
 
 ```typescript
-import { PipelineBuilder } from '@fancyrobot/fred';
+import { PipelineBuilder, createFred } from '@fancyrobot/fred';
 
+const fred = await createFred();
 const pipeline = new PipelineBuilder('classify-plan-summarize')
   .addAgentStep('classifier')
   .addAgentStep('planner')
   .addAgentStep('summarizer')
   .build();
 
-await fred.createPipeline({ ...pipeline, checkpoint: { enabled: true } });
-const result = await fred.executePipeline('classify-plan-summarize', 'Draft launch checklist');
+await fred.workflows.define({ ...pipeline, checkpoint: { enabled: true } });
+const result = await fred.workflows.run('classify-plan-summarize', 'Draft launch checklist');
 console.log(result.finalOutput);
 ```
 
@@ -369,8 +370,8 @@ const program = Effect.gen(function* () {
 
   return {
     providers: yield* providers.listProviders(),
-    agents: yield* agents.listAgents(),
-    pipelines: yield* pipelines.listPipelines(),
+    agents: yield* agents.getAllAgents(),
+    pipelines: yield* pipelines.listWorkflows(),
   };
 }).pipe(Effect.provide(FredLayers));
 

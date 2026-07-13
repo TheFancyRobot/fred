@@ -23,7 +23,7 @@ export interface WorkflowExecutionOptions {
   readonly pipelineManager?: {
     readonly getPipeline: (
       id: string,
-    ) => { readonly execute: (message: string) => Promise<AgentResponse> } | undefined;
+    ) => { readonly execute: (input: unknown) => Promise<AgentResponse> } | undefined;
   };
   readonly workflowResolver?: (
     workflowId: string,
@@ -45,7 +45,6 @@ export interface WorkflowExecutionResult {
   readonly outputs: Record<string, unknown>;
   readonly executedNodes: string[];
   readonly finalOutput?: unknown;
-  readonly finalResponse?: AgentResponse;
   readonly error?: Error;
   readonly failedNodeId?: string;
   readonly abortedBy?: string;
@@ -104,8 +103,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function agentResponseContent(value: unknown): string | undefined {
-  return isRecord(value) && typeof value.content === 'string' ? value.content : undefined;
+function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function setOwn(record: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(record, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/** Extract conversational content only from agent or nested-workflow results. */
+function conversationalContent(node: IRNode | undefined, value: unknown): string | undefined {
+  return (node?.kind === 'agent' || node?.kind === 'subworkflow') &&
+    isRecord(value) && typeof value.content === 'string'
+    ? value.content
+    : undefined;
+}
+
+function predecessorInput(
+  workflow: WorkflowIR,
+  target: IRNode,
+  source: string,
+  output: unknown,
+): unknown {
+  const producer = findNode(workflow, source);
+  const shouldUseContent = target.kind === 'agent' ||
+    (target.kind === 'subworkflow' && producer?.kind === 'agent');
+  return shouldUseContent ? conversationalContent(producer, output) ?? output : output;
 }
 
 /** Convert structured workflow input only when it crosses a conversational string boundary. */
@@ -119,14 +147,40 @@ export function workflowInputToMessage(input: unknown): string {
   }
 }
 
+function inputForNode(
+  workflow: WorkflowIR,
+  node: IRNode,
+  input: unknown,
+  runtimeOutputs: Readonly<Record<string, unknown>>,
+): unknown {
+  const predecessorIds = node.join?.type === 'all'
+    ? node.join.sources
+    : inEdges(workflow, node.id).map((edge) => edge.from);
+  const predecessors = predecessorIds
+    .filter((source) => hasOwn(runtimeOutputs, source));
+  if (predecessors.length === 0) return input;
+
+  if (predecessors.length > 1) {
+    const joined: Record<string, unknown> = {};
+    for (const source of predecessors) {
+      const output = runtimeOutputs[source];
+      setOwn(joined, source, predecessorInput(workflow, node, source, output));
+    }
+    return joined;
+  }
+
+  const predecessorOutput = runtimeOutputs[predecessors[0]!];
+  return predecessorInput(workflow, node, predecessors[0]!, predecessorOutput);
+}
+
 export function getPublicWorkflowOutputs(
   workflow: WorkflowIR,
   outputs: Record<string, unknown>,
 ): Record<string, unknown> {
   const visible: Record<string, unknown> = {};
   for (const node of workflow.nodes) {
-    if (!node.internal && node.recordOutput !== false && node.id in outputs) {
-      visible[node.id] = outputs[node.id];
+    if (!node.internal && node.recordOutput !== false && hasOwn(outputs, node.id)) {
+      setOwn(visible, node.id, outputs[node.id]);
     }
   }
   return visible;
@@ -197,6 +251,7 @@ const executeHandoff = Effect.fn('WorkflowExecutor.executeHandoff')(function* (
   workflow: WorkflowIR,
   context: PipelineContext,
   options: WorkflowExecutionOptions,
+  input: unknown,
 ): Effect.fn.Return<AgentResponse | HandoffError, WorkflowNodeExecutionError> {
   const allowedTargets = workflow.handoffs?.[sourceAgentId] ?? [];
   if (!allowedTargets.includes(signal.targetAgent)) {
@@ -227,7 +282,7 @@ const executeHandoff = Effect.fn('WorkflowExecutor.executeHandoff')(function* (
     handoffChain: [...chain, sourceAgentId],
   });
 
-  const result = yield* target.processMessage(workflowInputToMessage(context.input), context.history, {
+  const result = yield* target.processMessage(workflowInputToMessage(input), context.history, {
     workflowId: workflow.id,
     sessionId: context.conversationId,
   }).pipe(
@@ -240,6 +295,7 @@ const executeHandoff = Effect.fn('WorkflowExecutor.executeHandoff')(function* (
       workflow,
       context,
       options,
+      input,
     );
   }
   return result;
@@ -250,7 +306,7 @@ function runNodeBody(
   node: IRNode,
   context: PipelineContext,
   options: WorkflowExecutionOptions,
-  message: string,
+  input: unknown,
 ): Effect.Effect<unknown, WorkflowNodeExecutionError> {
   switch (node.kind) {
     case 'agent': {
@@ -263,28 +319,28 @@ function runNodeBody(
           true,
         );
       }
-      const history = workflow.source === 'v1' && options.sequentialVisibility === false
-        ? []
-        : context.history;
-      return agent.processMessage(message, history, {
+      return agent.processMessage(workflowInputToMessage(input), context.history, {
         workflowId: workflow.id,
         sessionId: context.conversationId,
       }).pipe(
         Effect.mapError((cause) => nodeFailure(workflow.id, node.id, cause, true)),
         Effect.flatMap((result) =>
           isHandoffSignal(result)
-            ? executeHandoff(result, node.agentId, workflow, context, options)
+            ? executeHandoff(result, node.agentId, workflow, context, options, input)
             : Effect.succeed(result),
         ),
       );
     }
     case 'function':
       return Effect.tryPromise({
-        try: () => Promise.resolve(node.fn(context)),
+        try: () => Promise.resolve(node.fn(
+          workflow.source === 'native' ? { ...context, input } : context,
+        )),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     case 'subworkflow': {
-      const resolved = options.workflowResolver?.(node.workflowId, context.input);
+      const nestedInput = input;
+      const resolved = options.workflowResolver?.(node.workflowId, nestedInput);
       if (resolved) {
         return resolved.pipe(
           Effect.mapError((cause) => nodeFailure(workflow.id, node.id, cause, true)),
@@ -300,7 +356,7 @@ function runNodeBody(
         );
       }
       return Effect.tryPromise({
-        try: () => nested.execute(workflowInputToMessage(context.input)),
+        try: () => nested.execute(nestedInput),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     }
@@ -406,7 +462,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
   baseContext: PipelineContext,
   runtimeOutputs: Record<string, unknown>,
   options: WorkflowExecutionOptions,
-  message: string,
+  input: unknown,
   runId: string,
   skipBeforeHooks = false,
 ) {
@@ -485,7 +541,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
       });
     }
     const exit = yield* Effect.either(
-      runNodeBody(workflow, node, bodyContext, options, message),
+      runNodeBody(workflow, node, bodyContext, options, input),
     );
     if (exit._tag === 'Right') {
       result = exit.right;
@@ -533,7 +589,7 @@ const executeNode = Effect.fn('WorkflowExecutor.executeNode')(function* (
 
   // The legacy lifecycle records a step's output before afterStep hooks run.
   // Preserve that ordering while exposing only source-level outputs to hooks.
-  if (node.recordOutput !== false) runtimeOutputs[node.id] = result;
+  if (node.recordOutput !== false) setOwn(runtimeOutputs, node.id, result);
   baseContext.outputs = getPublicWorkflowOutputs(workflow, runtimeOutputs);
   const afterHookContext = stepHookContext(workflow, baseContext, runtimeOutputs, node);
   const afterStepData = stepDataForNode(workflow, afterHookContext, node);
@@ -663,8 +719,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         .map((node) => node.id)
     : [workflow.entry];
   let finalOutput: unknown;
-  let finalResponse: AgentResponse | undefined;
-  let currentMessage = workflowInputToMessage(context.input);
   const retryAttempts = new Map<string, number>();
 
   const workflowSpan = options.tracer?.startSpan(
@@ -770,22 +824,23 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           const retryScope = workflow.retryScopes?.find((scope) => scope.nodeIds.includes(node.id));
           const skipBeforeHooks = retryScope?.entry === node.id &&
             (retryAttempts.get(retryScope.id) ?? 0) > 0;
+          const nodeInput = inputForNode(workflow, node, context.input, runtimeOutputs);
           return Effect.either(executeNode(
             workflow,
             node,
             context,
             runtimeOutputs,
             options,
-            workflow.source === 'v1' ? currentMessage : workflowInputToMessage(context.input),
+            nodeInput,
             runId,
             skipBeforeHooks,
-          )).pipe(Effect.map((outcome) => ({ node, outcome })));
+          )).pipe(Effect.map((outcome) => ({ node, nodeInput, outcome })));
         },
         { concurrency: 'unbounded' },
       );
 
       for (const nodeOutcome of executions) {
-        const { node, outcome } = nodeOutcome;
+        const { node, nodeInput, outcome } = nodeOutcome;
         const retryScope = workflow.retryScopes?.find((scope) => scope.nodeIds.includes(node.id));
         if (outcome._tag === 'Left') {
           const failure = outcome.left;
@@ -813,7 +868,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
                   outputs,
                   executedNodes: [...executedNodes],
                   finalOutput,
-                  finalResponse,
                   abortedBy,
                   runId,
                 } satisfies WorkflowExecutionResult;
@@ -848,6 +902,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
 
         const execution = outcome.right;
         const { result } = execution;
+        const nodeMessage = workflowInputToMessage(nodeInput);
         if (execution.abortedBy) {
           workflowSpan?.setStatus('ok');
           workflowSpan?.end();
@@ -859,19 +914,31 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             outputs,
             executedNodes,
             finalOutput,
-            finalResponse,
             abortedBy: execution.abortedBy,
             runId,
           } satisfies WorkflowExecutionResult;
         }
 
         if (!execution.skipped || workflow.source === 'graph') {
-          if (node.recordOutput !== false) runtimeOutputs[node.id] = result;
+          if (node.recordOutput !== false) setOwn(runtimeOutputs, node.id, result);
           executedNodes.push(node.id);
           completed.add(node.id);
-          if (!node.internal && node.recordOutput !== false && !execution.skipped) finalOutput = result;
+          if (!node.internal && node.recordOutput !== false && !execution.skipped) {
+            finalOutput = result;
+          }
         } else {
           completed.add(node.id);
+        }
+
+        if (
+          workflow.source === 'native' &&
+          node.kind === 'agent' &&
+          node.contextView !== 'isolated' &&
+          !execution.skipped
+        ) {
+          const content = conversationalContent(node, result);
+          context.history.push({ role: 'user', content: nodeMessage });
+          if (content !== undefined) context.history.push({ role: 'assistant', content });
         }
 
         if (execution.skipped && retryScope?.entry === node.id) {
@@ -885,16 +952,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             if (!scheduled.has(nextId)) ready.push(nextId);
           }
           continue;
-        }
-
-        if (workflow.source === 'v1' && node.kind === 'agent' && !execution.skipped) {
-          const content = agentResponseContent(result);
-          context.history.push({ role: 'user', content: currentMessage });
-          if (content) context.history.push({ role: 'assistant', content });
-          if (content !== undefined) currentMessage = content;
-          if (isRecord(result) && typeof result.content === 'string') {
-            finalResponse = { ...result, content: result.content };
-          }
         }
 
         context.outputs = getPublicWorkflowOutputs(workflow, runtimeOutputs);
@@ -919,7 +976,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             outputs: context.outputs,
             executedNodes,
             finalOutput,
-            finalResponse,
             runId,
             pauseRequest: {
               prompt: execution.pause.signal.prompt,
@@ -1010,7 +1066,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       outputs: context.outputs,
       executedNodes,
       finalOutput: validatedFinalOutput,
-      finalResponse,
       runId,
     } satisfies WorkflowExecutionResult;
   });
@@ -1028,7 +1083,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         outputs,
         executedNodes: [...executedNodes],
         finalOutput,
-        finalResponse,
         error: toError(failure.cause),
         failedNodeId: failure.nodeId,
         runId,

@@ -32,12 +32,12 @@ describe('Phase 63 workflow unification guard', () => {
     expect(client).not.toContain('hasPipelineV2(id)');
   });
 
-  it('keeps V1, V2, graph, and native definitions in one compiled registry', async () => {
+  it('keeps V2, graph, and native definitions in one compiled registry', async () => {
     const service = await Bun.file('packages/core/src/pipeline/service.ts').text();
     expect(service).toContain('private workflows: Ref.Ref<Map<string, WorkflowIR>>');
-    expect(service).toContain('compilePipelineV1(config)');
     expect(service).toContain('compilePipelineV2(config)');
     expect(service).toContain('compileGraphWorkflow(config)');
     expect(service).toContain('compileWorkflow(config)');
+    expect(service).not.toContain('compilePipelineV1');
   });
 });

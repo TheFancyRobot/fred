@@ -9,7 +9,7 @@ import {
   extractIntents,
   extractAgents,
   validateNoAmbiguousPromptFiles,
-  extractPipelines,
+  extractPipelinesV2,
   extractWorkflows,
   extractProviders,
   extractObservability,
@@ -80,7 +80,7 @@ export interface FredLike {
   registerIntents(intents: import('../intent/intent').Intent[]): void;
   createAgent(config: import('../agent/agent').AgentConfig): Promise<import('../agent/agent').AgentInstance>;
   removeAgent(id: string): Promise<boolean>;
-  createPipeline(config: import('../pipeline').PipelineConfig): Promise<import('../pipeline').PipelineInstance>;
+  createPipeline(config: import('../pipeline').PipelineConfigV2): Promise<void>;
   configureRouting(config: import('../routing/types').RoutingConfig): void;
   configureWorkflows(workflows: import('../workflow/manager').Workflow[]): void;
   configureObservability(config: import('./types').ObservabilityConfig): void;
@@ -125,7 +125,7 @@ export interface ConfigInitializationTarget {
   createAgent(config: AgentConfig): Promise<void>;
   removeAgent(id: string): Promise<void>;
   hasAgent(id: string): Promise<boolean>;
-  createPipeline(config: import('../pipeline').PipelineConfig): Promise<void>;
+  defineWorkflow(config: import('../pipeline').PipelineConfigV2): Promise<void>;
   getGlobalVariables(): Promise<Record<string, string | number | boolean>>;
   invalidateTemplateCache(): Promise<void>;
   ownAgentFileWatcher(watcher: AgentFileWatcher): void;
@@ -365,9 +365,7 @@ export class ConfigInitializer {
       fred.setAgentFileWatcher?.(watcher);
     }
 
-    // Create pipelines (resolve prompt files in inline agents relative to config path)
-    const pipelines = extractPipelines(config, configPath);
-    for (const pipelineConfig of pipelines) {
+    for (const pipelineConfig of extractPipelinesV2(config)) {
       await fred.createPipeline(pipelineConfig);
     }
 
@@ -475,8 +473,8 @@ export class ConfigInitializer {
       target.ownAgentFileWatcher(watcher);
     }
 
-    for (const pipeline of extractPipelines(config, configPath)) {
-      await target.createPipeline(pipeline);
+    for (const pipeline of extractPipelinesV2(config)) {
+      await target.defineWorkflow(pipeline);
     }
 
     if (config.routing?.defaultAgent && !(await target.hasAgent(config.routing.defaultAgent))) {

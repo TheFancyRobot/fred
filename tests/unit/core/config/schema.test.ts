@@ -151,10 +151,9 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
     );
   });
 
-  it('pipelines (open) and pipelinesV2 with nested conditional steps', () => {
+  it('pipelinesV2 with nested conditional steps', () => {
     expectAccepted(
       {
-        pipelines: [{ id: 'p1', agents: ['a1', 'a2'] }],
         pipelinesV2: {
           review: {
             description: 'review flow',
@@ -171,7 +170,7 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
           },
         },
       },
-      'pipelines + pipelinesV2',
+      'pipelinesV2',
     );
   });
 
@@ -246,6 +245,10 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
 });
 
 describe('FrameworkConfigSchema — clearly-invalid inputs are rejected', () => {
+  it('rejects the removed top-level pipelines field', () => {
+    expect(decode({ pipelines: {} })._tag).toBe('Left');
+  });
+
   it('rejects a wrong-typed known field', () => {
     const result = decode({ agentDirs: 'not-an-array' });
     expect(result._tag).toBe('Left');

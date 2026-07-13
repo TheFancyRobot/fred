@@ -1,13 +1,12 @@
 /**
- * Lossless compilers from Fred's three historical workflow dialects into the
+ * Lossless compilers from Fred's supported workflow dialects into the
  * unified `WorkflowIR` representation.
  *
  * Compilation is deliberately pure: registration, dependency lookup, and
  * execution remain service concerns. Control flow is always emitted as edges;
  * compiler-generated function nodes only adapt source-level result contracts.
  */
-import type { PipelineConfig, PipelineConfigV2 } from '../pipeline/pipeline';
-import { isPipelineConfigV2 } from '../pipeline/pipeline';
+import type { PipelineConfigV2 } from '../pipeline/pipeline';
 import type { PipelineStep } from '../pipeline/steps';
 import type { AnyGraphNode, GraphWorkflowConfig } from '../pipeline/graph';
 import { isGraphWorkflowConfig } from '../pipeline/graph';
@@ -189,30 +188,6 @@ function compileV2Step(
   }
 }
 
-/** Compile a legacy ordered agent-list pipeline. */
-export function compilePipelineV1(config: PipelineConfig): WorkflowIR {
-  const nodes: IRNode[] = config.agents.map((agent, index) => ({
-    id: `${config.id}:agent:${index}`,
-    name: typeof agent === 'string' ? agent : agent.id,
-    kind: 'agent',
-    agentId: typeof agent === 'string' ? agent : agent.id,
-    sourceIndex: index,
-  }));
-  const edges: IREdge[] = nodes.slice(1).map((node, index) => ({
-    from: nodes[index]!.id,
-    to: node.id,
-  }));
-  const ir: WorkflowIR = {
-    id: config.id,
-    nodes,
-    edges,
-    entry: nodes[0]?.id ?? '',
-    source: 'v1',
-  };
-  validateWorkflowIR(ir);
-  return ir;
-}
-
 /** Compile a V2 typed-step pipeline, lowering nested conditions to guarded edges. */
 export function compilePipelineV2(config: PipelineConfigV2): WorkflowIR {
   const state = createV2CompileState(config);
@@ -356,37 +331,63 @@ export function compileGraphWorkflow(config: GraphWorkflowConfig): WorkflowIR {
   return ir;
 }
 
+function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 /** Structural guard for already-native workflow definitions. */
 export function isWorkflowIR(value: unknown): value is WorkflowIR {
   if (typeof value !== 'object' || value === null) return false;
-  return (
-    'id' in value &&
-    typeof value.id === 'string' &&
-    'entry' in value &&
-    typeof value.entry === 'string' &&
-    'nodes' in value &&
-    Array.isArray(value.nodes) &&
-    'edges' in value &&
-    Array.isArray(value.edges)
-  );
+  const candidate = value as Readonly<Record<string, unknown>>;
+  return hasOwn(candidate, 'id') &&
+    typeof candidate.id === 'string' &&
+    hasOwn(candidate, 'entry') &&
+    typeof candidate.entry === 'string' &&
+    hasOwn(candidate, 'nodes') &&
+    Array.isArray(candidate.nodes) &&
+    hasOwn(candidate, 'edges') &&
+    Array.isArray(candidate.edges);
 }
 
 export type CompilableWorkflow =
-  | PipelineConfig
   | PipelineConfigV2
   | GraphWorkflowConfig
   | WorkflowIR;
+
+export const UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE =
+  'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR. Legacy agent-list pipelines are no longer supported.';
+
+/** Runtime guard for unchecked callers crossing the workflow compilation boundary. */
+export function isPipelineV2Definition(value: unknown): value is PipelineConfigV2 {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Readonly<Record<string, unknown>>;
+  return hasOwn(candidate, 'id') &&
+    typeof candidate.id === 'string' &&
+    hasOwn(candidate, 'steps') &&
+    Array.isArray(candidate.steps);
+}
 
 /** Compile any supported workflow definition, validating native IR unchanged. */
 export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
   if (isGraphWorkflowConfig(config)) return compileGraphWorkflow(config);
   if (isWorkflowIR(config)) {
-    const native: WorkflowIR = config.source ? config : { ...config, source: 'native' };
+    const source: unknown = config.source;
+    if (
+      source !== undefined &&
+      source !== 'v2' &&
+      source !== 'graph' &&
+      source !== 'native'
+    ) {
+      throw new TypeError(
+        `Unsupported WorkflowIR source "${String(source)}". Expected "v2", "graph", or "native".`,
+      );
+    }
+    const native: WorkflowIR = source === undefined ? { ...config, source: 'native' } : config;
     validateWorkflowIR(native);
     return native;
   }
-  if (isPipelineConfigV2(config)) return compilePipelineV2(config);
-  return compilePipelineV1(config);
+  if (isPipelineV2Definition(config)) return compilePipelineV2(config);
+  throw new TypeError(UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE);
 }
 
 /** Define a native workflow with validation and an explicit native source tag. */

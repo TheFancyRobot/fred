@@ -30,7 +30,7 @@ import type {
   AgentResponse,
   AnyAgentInstance,
 } from './agent/agent';
-import type { AnyPipelineConfig } from './pipeline/pipeline';
+import type { PipelineConfigV2 } from './pipeline/pipeline';
 import type { GraphWorkflowConfig } from './pipeline/graph';
 import type { GraphExecutionResult } from './pipeline/graph-executor';
 import type { AgentManagerLike, HookManagerLike, PipelineResult } from './pipeline/executor';
@@ -175,7 +175,7 @@ export async function executeWorkflowViaRuntime(
           retryable: true,
         });
       }
-      return nestedResult.finalResponse ?? nestedResult.finalOutput;
+      return nestedResult.finalOutput;
     });
 
   const executionOptions: WorkflowExecutionOptions = {
@@ -272,8 +272,8 @@ export interface CreateFredOptions {
   promptSourceLayer?: FredLayerOptions['promptSourceLayer'];
 }
 
-/** A workflow definition: a V1 pipeline, a V2 pipeline, or a graph workflow. */
-export type WorkflowDefinition = AnyPipelineConfig | GraphWorkflowConfig | WorkflowIR;
+/** A supported V2, graph, or native-IR workflow definition. */
+export type WorkflowDefinition = PipelineConfigV2 | GraphWorkflowConfig | WorkflowIR;
 
 /** Failures workflows.define can produce across the three workflow kinds. */
 export type WorkflowDefineError =
@@ -283,7 +283,6 @@ export type WorkflowDefineError =
 
 /** Result of workflows.run — shape depends on the workflow kind. */
 export type WorkflowRunResult =
-  | AgentResponse
   | PipelineResult
   | GraphExecutionResult
   | WorkflowExecutionResult;
@@ -740,9 +739,6 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           tracer: options.tracer,
         });
         switch (workflow.source) {
-          case 'v1':
-            if (!result.finalResponse) throw new Error(`Workflow did not produce a response: ${id}`);
-            return result.finalResponse;
           case 'v2':
             return {
               success: result.success,
@@ -1069,7 +1065,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       createAgent: async (config) => { await client.agents.register(config); },
       removeAgent: async (id) => { await client.agents.remove(id); },
       hasAgent: async (id) => (await client.agents.get(id)) !== null,
-      createPipeline: async (config) => { await client.workflows.define(config); },
+      defineWorkflow: async (config) => { await client.workflows.define(config); },
       getGlobalVariables: () => client.variables.snapshot(),
       invalidateTemplateCache: () => client.templates.invalidate(),
       ownAgentFileWatcher: (watcher) => {

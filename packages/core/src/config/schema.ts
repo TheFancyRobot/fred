@@ -11,7 +11,7 @@
  * - Config-owned sections (providers, MCP, persistence, observability,
  *   policies, template, memory, pipelinesV2) are modelled precisely against
  *   `types.ts`.
- * - Cross-module sections (agents, intents, pipelines, routing) are modelled
+ * - Cross-module sections (agents, intents, routing) are modelled
  *   as *open* structs — known identifying fields plus an index signature that
  *   preserves everything else — so decoding is lossless and every existing
  *   fixture is accepted. Their required-field rules are semantic and belong
@@ -374,13 +374,6 @@ export const AgentConfigSchema = Schema.Struct(
   passthrough,
 );
 
-export const PipelineConfigSchema = Schema.Struct(
-  {
-    id: Schema.optional(Schema.String),
-  },
-  passthrough,
-);
-
 export const RoutingConfigSchema = Schema.Struct(
   {
     defaultAgent: Schema.optional(Schema.String),
@@ -407,7 +400,8 @@ export const FrameworkConfigSchema = Schema.Struct({
   intents: Schema.optional(Schema.Array(IntentConfigSchema)),
   agents: Schema.optional(Schema.Array(AgentConfigSchema)),
   agentDirs: Schema.optional(Schema.Array(Schema.String)),
-  pipelines: Schema.optional(Schema.Array(PipelineConfigSchema)),
+  /** Removed V1 surface: presence is rejected instead of being silently stripped. */
+  pipelines: Schema.optional(Schema.Never),
   pipelinesV2: Schema.optional(
     Schema.Record({ key: Schema.String, value: ExtendedPipelineConfigSchema }),
   ),

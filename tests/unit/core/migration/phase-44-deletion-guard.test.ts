@@ -56,6 +56,32 @@ describe('Phase 44 deletion guards', () => {
     expect(/export\s*{\s*MessageProcessor\s*}/.test(indexContent)).toBe(false);
   });
 
+  test('V1 pipeline config, compiler, service, and routing surfaces stay deleted', () => {
+    const files = collectProductionTsFiles(CORE_SRC);
+    const forbiddenSymbols = [
+      'PipelineConfig',
+      'PipelineInstance',
+      'AnyPipelineConfig',
+      'compilePipelineV1',
+      'matchPipelineByUtterance',
+    ];
+    const violations: string[] = [];
+
+    for (const filePath of files) {
+      const relativePath = filePath.replace(`${CORE_SRC}/`, '');
+      const content = readFileSync(filePath, 'utf-8');
+      for (const symbol of forbiddenSymbols) {
+        if (new RegExp(`\\b${symbol}\\b`).test(content)) {
+          violations.push(`${relativePath}: ${symbol}`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+    const configTypes = readFileSync(join(CORE_SRC, 'config/types.ts'), 'utf-8');
+    expect(configTypes).not.toMatch(/^\s*pipelines\??:/m);
+  });
+
   test('no new XxxManager() or new ToolRegistry() constructors in production code', () => {
     const forbiddenConstructors = [
       'ToolRegistry',

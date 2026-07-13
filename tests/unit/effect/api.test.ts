@@ -100,7 +100,7 @@ describe('Effect API exports', () => {
       const program = Effect.gen(function* () {
         const fred = yield* FredService;
         const agents = yield* fred.agents.getAllAgents();
-        const pipelines = yield* fred.pipelines.getAllPipelines();
+        const pipelines = yield* fred.pipelines.listWorkflows();
         return { agents: agents.length, pipelines: pipelines.length };
       });
 

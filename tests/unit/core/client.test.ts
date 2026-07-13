@@ -101,6 +101,12 @@ describe('createFred client', () => {
       '    platform: openai',
       '    model: gpt-4o-mini',
       '    systemMessage: Configured agent',
+      'pipelinesV2:',
+      '  config-workflow:',
+      '    steps:',
+      '      - type: agent',
+      '        name: respond',
+      '        agentId: config-agent',
       'persistence:',
       '  adapter: sqlite',
     ].join('\n'));
@@ -108,6 +114,7 @@ describe('createFred client', () => {
     try {
       const client = track(await createFred({ configPath }));
       expect((await client.agents.list()).map((agent) => agent.id)).toEqual(['config-agent']);
+      expect((await client.workflows.list()).map((workflow) => workflow.id)).toEqual(['config-workflow']);
       const conversationId = await client.effects.run(Effect.gen(function* () {
         const context = yield* ContextStorageService;
         const id = yield* context.generateConversationId();
@@ -515,6 +522,27 @@ describe('createFred client', () => {
     expect(result.finalOutput).toBe('child:hello');
   });
 
+  it('preserves structured data returned by a nested workflow', async () => {
+    const client = track(await createFred());
+    await client.workflows.define(defineWorkflow({
+      id: 'agent-child-workflow',
+      entry: 'respond',
+      nodes: [{
+        id: 'respond',
+        kind: 'function',
+        fn: (context) => ({ content: `child:${context.input}`, toolCalls: [] }),
+      }],
+      edges: [],
+    }));
+    await client.workflows.define({
+      id: 'agent-parent-workflow',
+      steps: [{ type: 'pipeline', name: 'nested', pipelineId: 'agent-child-workflow' }],
+    });
+
+    const result = await client.workflows.run('agent-parent-workflow', 'hello');
+    expect(result.finalOutput).toEqual({ content: 'child:hello', toolCalls: [] });
+  });
+
   it('workflows sub-API defines and runs native WorkflowIR directly', async () => {
     const client = track(await createFred());
     await client.workflows.define(defineWorkflow({
@@ -537,15 +565,6 @@ describe('createFred client', () => {
 
   it('discovers immutable transport-neutral descriptors for every workflow source', async () => {
     const client = track(await createFred());
-    await registerMockProvider(client);
-    await client.agents.register({
-      id: 'descriptor-agent',
-      platform: 'mock',
-      model: 'mock-model',
-      systemMessage: 'Descriptor test',
-    } as any);
-
-    await client.workflows.define({ id: 'descriptor-v1', agents: ['descriptor-agent'] });
     await client.workflows.define({
       id: 'descriptor-v2',
       steps: [{ type: 'function', name: 'done', fn: () => 'done' }],
@@ -571,7 +590,6 @@ describe('createFred client', () => {
     const descriptors = await client.workflows.list();
     expect(Object.isFrozen(descriptors)).toBe(true);
     expect(descriptors.map(({ id, source }) => ({ id, source }))).toEqual([
-      { id: 'descriptor-v1', source: 'v1' },
       { id: 'descriptor-v2', source: 'v2' },
       { id: 'descriptor-graph', source: 'graph' },
       { id: 'descriptor-native', source: 'native' },
