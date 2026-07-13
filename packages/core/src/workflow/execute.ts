@@ -115,6 +115,18 @@ function conversationalContent(node: IRNode | undefined, value: unknown): string
     : undefined;
 }
 
+function predecessorInput(
+  workflow: WorkflowIR,
+  target: IRNode,
+  source: string,
+  output: unknown,
+): unknown {
+  const producer = findNode(workflow, source);
+  const shouldUseContent = target.kind === 'agent' ||
+    (target.kind === 'subworkflow' && producer?.kind === 'agent');
+  return shouldUseContent ? conversationalContent(producer, output) ?? output : output;
+}
+
 /** Convert structured workflow input only when it crosses a conversational string boundary. */
 export function workflowInputToMessage(input: unknown): string {
   if (typeof input === 'string') return input;
@@ -145,14 +157,13 @@ function inputForNode(
     return Object.fromEntries(
       predecessors.map((source) => {
         const output = runtimeOutputs[source];
-        return [source, conversationalContent(findNode(workflow, source), output) ?? output];
+        return [source, predecessorInput(workflow, node, source, output)];
       }),
     );
   }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
-  return conversationalContent(findNode(workflow, predecessors[0]!), predecessorOutput) ??
-    predecessorOutput;
+  return predecessorInput(workflow, node, predecessors[0]!, predecessorOutput);
 }
 
 export function getPublicWorkflowOutputs(
@@ -313,7 +324,9 @@ function runNodeBody(
     }
     case 'function':
       return Effect.tryPromise({
-        try: () => Promise.resolve(node.fn(context)),
+        try: () => Promise.resolve(node.fn(
+          workflow.source === 'native' ? { ...context, input } : context,
+        )),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     case 'subworkflow': {
@@ -802,22 +815,23 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           const retryScope = workflow.retryScopes?.find((scope) => scope.nodeIds.includes(node.id));
           const skipBeforeHooks = retryScope?.entry === node.id &&
             (retryAttempts.get(retryScope.id) ?? 0) > 0;
+          const nodeInput = inputForNode(workflow, node, context.input, runtimeOutputs);
           return Effect.either(executeNode(
             workflow,
             node,
             context,
             runtimeOutputs,
             options,
-            inputForNode(workflow, node, context.input, runtimeOutputs),
+            nodeInput,
             runId,
             skipBeforeHooks,
-          )).pipe(Effect.map((outcome) => ({ node, outcome })));
+          )).pipe(Effect.map((outcome) => ({ node, nodeInput, outcome })));
         },
         { concurrency: 'unbounded' },
       );
 
       for (const nodeOutcome of executions) {
-        const { node, outcome } = nodeOutcome;
+        const { node, nodeInput, outcome } = nodeOutcome;
         const retryScope = workflow.retryScopes?.find((scope) => scope.nodeIds.includes(node.id));
         if (outcome._tag === 'Left') {
           const failure = outcome.left;
@@ -879,9 +893,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
 
         const execution = outcome.right;
         const { result } = execution;
-        const nodeMessage = workflowInputToMessage(
-          inputForNode(workflow, node, context.input, runtimeOutputs),
-        );
+        const nodeMessage = workflowInputToMessage(nodeInput);
         if (execution.abortedBy) {
           workflowSpan?.setStatus('ok');
           workflowSpan?.end();

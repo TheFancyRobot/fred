@@ -217,6 +217,64 @@ describe('unified WorkflowIR executor', () => {
     expect(result.finalOutput).toEqual({ content: 'reviewer<-draft', toolCalls: [] });
   });
 
+  it('preserves structured subworkflow output for native function consumers', async () => {
+    const structured = { content: 'draft', audit: { approved: true } };
+    let functionInput: unknown;
+    const workflow = {
+      id: 'nested-function-sequence',
+      source: 'native' as const,
+      entry: 'draft',
+      nodes: [
+        { id: 'draft', kind: 'subworkflow' as const, workflowId: 'drafter' },
+        {
+          id: 'inspect',
+          kind: 'function' as const,
+          fn: (context: { input: unknown }) => {
+            functionInput = context.input;
+            return 'done';
+          },
+        },
+      ],
+      edges: [{ from: 'draft', to: 'inspect' }],
+    };
+    await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+      workflowResolver: () => Effect.succeed(structured),
+    }));
+
+    expect(functionInput).toBe(structured);
+  });
+
+  it('records the exact scheduling-time input in native agent history', async () => {
+    let receivedMessage = '';
+    const target = echoAgent('target');
+    target.processMessage = (message) => {
+      receivedMessage = message;
+      return Effect.succeed({ content: `target<-${message}`, toolCalls: [] });
+    };
+    const workflow = {
+      id: 'stable-history-input',
+      source: 'native' as const,
+      entry: 'source',
+      nodes: [
+        { id: 'source', kind: 'function' as const, fn: () => 'source output' },
+        { id: 'sibling', kind: 'function' as const, fn: () => 'sibling output' },
+        { id: 'target', kind: 'agent' as const, agentId: 'target' },
+      ],
+      edges: [
+        { from: 'source', to: 'sibling' },
+        { from: 'source', to: 'target' },
+        { from: 'sibling', to: 'target' },
+      ],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ target }),
+    }));
+
+    expect(receivedMessage).toBe('source output');
+    expect(result.context.history[0]).toEqual({ role: 'user', content: receivedMessage });
+  });
+
   it('does not leak isolated native agent turns into shared history', async () => {
     let observerHistory: readonly unknown[] | undefined;
     const observer = echoAgent('observer');
