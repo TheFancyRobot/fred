@@ -38,6 +38,7 @@ export interface FredHttpSecurityOptions {
   readonly rateLimitStore?: RateLimitStoreService;
   readonly authRequirements?: ReadonlyMap<string, false | readonly string[]>;
   readonly allowedMethods?: ReadonlyArray<string>;
+  readonly allowedMethodsByPath?: ReadonlyMap<string, ReadonlyArray<string>>;
 }
 
 class HttpRequestTimeoutError extends Schema.TaggedError<HttpRequestTimeoutError>()(
@@ -113,19 +114,23 @@ const makeSecurityMiddleware = (
   apiKeyUpgradeVerifierId: string | false | undefined,
   authRequirements: ReadonlyMap<string, false | readonly string[]>,
   allowedMethods: ReadonlyArray<string>,
+  allowedMethodsByPath: ReadonlyMap<string, ReadonlyArray<string>>,
 ) => (app: HttpApp.Default): HttpApp.Default =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const origin = request.headers.origin;
+    const path = canonicalizeHttpPath(request.url);
+    const requestAllowedMethods = path === undefined
+      ? allowedMethods
+      : allowedMethodsByPath.get(path) ?? allowedMethods;
 
     if (request.method === 'OPTIONS') {
       return origin && matchOrigin(origin, config.corsAllowedOrigins)
-        ? HttpServerResponse.empty({ status: 204, headers: corsHeaders(origin, allowedMethods) })
+        ? HttpServerResponse.empty({ status: 204, headers: corsHeaders(origin, requestAllowedMethods) })
         : HttpServerResponse.empty({ status: 204 });
     }
 
     const ip = clientIp(request, trustProxy);
-    const path = canonicalizeHttpPath(request.url);
     const routeRequirement = path === undefined ? undefined : authRequirements.get(path);
     const authIsOptional = routeRequirement === false
       || !config.requireAuth
@@ -148,11 +153,11 @@ const makeSecurityMiddleware = (
           : authResult.left instanceof ApiKeyStoreError
             ? unavailable
             : unauthorized;
-        return withCors(response, origin, config, allowedMethods);
+        return withCors(response, origin, config, requestAllowedMethods);
       }
       identity = Option.some(authResult.right);
     } else if (!authIsOptional && (!token || !authorization || !secureEqual(authorization, `Bearer ${token}`))) {
-        return withCors(unauthorized, origin, config, allowedMethods);
+        return withCors(unauthorized, origin, config, requestAllowedMethods);
     }
 
     const policy = Option.match(identity, {
@@ -170,7 +175,7 @@ const makeSecurityMiddleware = (
       onSome: (authenticated) => `key:${authenticated.id}`,
     });
     const limited = yield* Effect.either(limiter.consume({ key: bucketKey, policy }));
-    if (Either.isLeft(limited)) return withCors(unavailable, origin, config, allowedMethods);
+    if (Either.isLeft(limited)) return withCors(unavailable, origin, config, requestAllowedMethods);
     if (!limited.right.allowed) {
       const retryAfter = Math.max(1, Math.ceil(limited.right.retryAfterMs / 1_000));
       return withCors(
@@ -180,7 +185,7 @@ const makeSecurityMiddleware = (
         }),
         origin,
         config,
-        allowedMethods,
+        requestAllowedMethods,
       );
     }
 
@@ -210,7 +215,7 @@ const makeSecurityMiddleware = (
         ));
       }),
     );
-    return withCors(response, origin, config, allowedMethods);
+    return withCors(response, origin, config, requestAllowedMethods);
   });
 
 export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
@@ -245,6 +250,7 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
         options.apiKeyUpgradeVerifierId,
         options.authRequirements ?? new Map(),
         allowedMethods,
+        options.allowedMethodsByPath ?? new Map(),
       );
     }),
   ).pipe(Layer.provide(RateLimitServiceLive(options.rateLimitStore)));

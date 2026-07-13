@@ -144,11 +144,13 @@ export const FredHttpServerLive = (
     canonicalizeHttpPath(endpoint.path) ?? endpoint.path,
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
+  const allowedMethodsByPath = new Map<string, string[]>();
   for (const route of routes) {
-    authRequirements.set(
-      canonicalizeHttpPath(route.path) ?? route.path,
-      route.visibility === 'public' ? false : [],
-    );
+    const path = canonicalizeHttpPath(route.path) ?? route.path;
+    authRequirements.set(path, route.visibility === 'public' ? false : []);
+    const methods = allowedMethodsByPath.get(path) ?? ['OPTIONS'];
+    if (!methods.includes(route.method)) methods.unshift(route.method);
+    allowedMethodsByPath.set(path, methods);
   }
   const api = buildFredHttpApi(endpoints);
   const apiHandlers = fred === undefined
@@ -166,7 +168,7 @@ export const FredHttpServerLive = (
     Layer.provide(FredHttpSecurityLive({
       ...resolvedOptions,
       authRequirements,
-      allowedMethods: routes.map((route) => route.method),
+      allowedMethodsByPath,
     })),
     Layer.provide(apiLive),
     Layer.provideMerge(BunHttpServer.layer({

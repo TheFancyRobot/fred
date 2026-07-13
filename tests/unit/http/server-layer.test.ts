@@ -59,6 +59,43 @@ describe('FredHttpServerLive security middleware', () => {
     expect(preflight.headers.get('access-control-allow-methods')).toContain('PUT');
   });
 
+  test('advertises custom CORS methods only on their matching path', async () => {
+    const handle = await start({
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      routes: [
+        {
+          method: 'GET',
+          path: '/reports',
+          visibility: 'public',
+          handler: () => new Response('reports'),
+        },
+        {
+          method: 'DELETE',
+          path: '/admin/cache',
+          visibility: 'public',
+          handler: () => new Response('cleared'),
+        },
+      ],
+    });
+
+    const reportsPreflight = await fetch(`${handle.url}/reports`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    const reportsMethods = reportsPreflight.headers.get('access-control-allow-methods');
+    expect(reportsMethods).toContain('GET');
+    expect(reportsMethods).not.toContain('DELETE');
+
+    const adminPreflight = await fetch(`${handle.url}/admin/cache`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    expect(adminPreflight.headers.get('access-control-allow-methods')).toContain('DELETE');
+  });
+
   test('sanitizes custom-route failures', async () => {
     const handle = await start({
       security: { requireAuth: false },
