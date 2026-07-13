@@ -1,5 +1,18 @@
 # @fancyrobot/fred-http
 
+## 1.0.0-alpha.1
+
+### Minor Changes
+
+- [#66](https://github.com/TheFancyRobot/fred/pull/66) [`c3d92d2`](https://github.com/TheFancyRobot/fred/commit/c3d92d2831a936a9ab6bf0ef43afb920bf88b1ce) Thanks [@sincspecv](https://github.com/sincspecv)! - Add transport-neutral typed workflow discovery and execution, opt-in generated
+  JSON/SSE workflow endpoints, scoped hash-only API keys with durable stores,
+  persistent rate limiting, hardened HTTP configuration, and the keys CLI.
+
+### Patch Changes
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+
 ## 1.0.0-alpha.0
 
 ### Patch Changes

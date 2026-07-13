@@ -165,17 +165,17 @@
     },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
-      "version": "0.5.1-alpha.0",
+      "version": "0.6.0-alpha.1",
       "bin": {
         "fred": "./dist/index.js",
       },
       "dependencies": {
-        "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "@fancyrobot/fred-anthropic": "^4.0.0-alpha.0",
-        "@fancyrobot/fred-google": "^4.0.0-alpha.0",
-        "@fancyrobot/fred-groq": "^4.0.0-alpha.0",
-        "@fancyrobot/fred-openai": "^4.0.0-alpha.0",
-        "@fancyrobot/fred-openrouter": "^5.0.0-alpha.0",
+        "@fancyrobot/fred": "^2.0.0-alpha.1",
+        "@fancyrobot/fred-anthropic": "^4.0.0-alpha.1",
+        "@fancyrobot/fred-google": "^4.0.0-alpha.1",
+        "@fancyrobot/fred-groq": "^4.0.0-alpha.1",
+        "@fancyrobot/fred-openai": "^4.0.0-alpha.1",
+        "@fancyrobot/fred-openrouter": "^5.0.0-alpha.1",
         "@opentui/core": "^0.1.92",
         "semver": "^7.7.4",
       },
@@ -193,7 +193,7 @@
     },
     "packages/core": {
       "name": "@fancyrobot/fred",
-      "version": "2.0.0-alpha.0",
+      "version": "2.0.0-alpha.1",
       "dependencies": {
         "@effect/opentelemetry": "^0.63.0",
         "@effect/platform-bun": "^0.89.0",
@@ -220,7 +220,7 @@
     },
     "packages/dev": {
       "name": "@fancyrobot/fred-dev",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-alpha.1",
       "devDependencies": {
         "@fancyrobot/fred-cli": "workspace:^",
         "@types/bun": "latest",
@@ -231,7 +231,7 @@
     },
     "packages/fred-baml": {
       "name": "@fancyrobot/fred-baml",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-alpha.1",
       "devDependencies": {
         "effect": "^3.21.0",
       },
@@ -242,7 +242,7 @@
     },
     "packages/fred-convex": {
       "name": "@fancyrobot/fred-convex",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-alpha.1",
       "devDependencies": {
         "convex": "^1.42.1",
         "effect": "^3.21.0",
@@ -255,7 +255,7 @@
     },
     "packages/fred-http": {
       "name": "@fancyrobot/fred-http",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-alpha.1",
       "devDependencies": {
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",
@@ -271,7 +271,7 @@
     },
     "packages/provider-anthropic": {
       "name": "@fancyrobot/fred-anthropic",
-      "version": "4.0.0-alpha.0",
+      "version": "4.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-anthropic": "^0.25.0",
@@ -286,7 +286,7 @@
     },
     "packages/provider-google": {
       "name": "@fancyrobot/fred-google",
-      "version": "4.0.0-alpha.0",
+      "version": "4.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-google": "^0.14.0",
@@ -303,7 +303,7 @@
     },
     "packages/provider-groq": {
       "name": "@fancyrobot/fred-groq",
-      "version": "4.0.0-alpha.0",
+      "version": "4.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
@@ -318,7 +318,7 @@
     },
     "packages/provider-minimax": {
       "name": "@fancyrobot/fred-minimax",
-      "version": "2.0.0-alpha.0",
+      "version": "2.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
@@ -333,7 +333,7 @@
     },
     "packages/provider-openai": {
       "name": "@fancyrobot/fred-openai",
-      "version": "4.0.0-alpha.0",
+      "version": "4.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
@@ -348,7 +348,7 @@
     },
     "packages/provider-openrouter": {
       "name": "@fancyrobot/fred-openrouter",
-      "version": "5.0.0-alpha.0",
+      "version": "5.0.0-alpha.1",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openrouter": "^0.10.0",

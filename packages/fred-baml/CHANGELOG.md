@@ -1,5 +1,16 @@
 # @fancyrobot/fred-baml
 
+## 1.0.0-alpha.1
+
+### Minor Changes
+
+- [#62](https://github.com/TheFancyRobot/fred/pull/62) [`b51ebb1`](https://github.com/TheFancyRobot/fred/commit/b51ebb1f7861647b562411399642eacd4d404c0c) Thanks [@sincspecv](https://github.com/sincspecv)! - Add text, template, and BAML-backed agent prompt sources plus programmatic Effect Schema input/output validation, malformed-output repair, typed direct agent execution, structured evaluation artifacts, and a consumer-owned BAML prompt adapter layer.
+
+### Patch Changes
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+
 ## 1.0.0-alpha.0
 
 ### Patch Changes
