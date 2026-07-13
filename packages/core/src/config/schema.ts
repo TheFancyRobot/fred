@@ -400,6 +400,8 @@ export const FrameworkConfigSchema = Schema.Struct({
   intents: Schema.optional(Schema.Array(IntentConfigSchema)),
   agents: Schema.optional(Schema.Array(AgentConfigSchema)),
   agentDirs: Schema.optional(Schema.Array(Schema.String)),
+  /** Removed V1 surface: presence is rejected instead of being silently stripped. */
+  pipelines: Schema.optional(Schema.Never),
   pipelinesV2: Schema.optional(
     Schema.Record({ key: Schema.String, value: ExtendedPipelineConfigSchema }),
   ),

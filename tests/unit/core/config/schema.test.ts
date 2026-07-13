@@ -245,6 +245,10 @@ describe('FrameworkConfigSchema — rich section fixtures decode', () => {
 });
 
 describe('FrameworkConfigSchema — clearly-invalid inputs are rejected', () => {
+  it('rejects the removed top-level pipelines field', () => {
+    expect(decode({ pipelines: {} })._tag).toBe('Left');
+  });
+
   it('rejects a wrong-typed known field', () => {
     const result = decode({ agentDirs: 'not-an-array' });
     expect(result._tag).toBe('Left');

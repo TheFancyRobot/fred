@@ -57,6 +57,12 @@ export function loadConfig(filePath: string): FrameworkConfig {
  * Validate config structure
  */
 export function validateConfig(config: FrameworkConfig): void {
+  if ('pipelines' in (config as FrameworkConfig & { readonly pipelines?: unknown })) {
+    throw new Error(
+      'The legacy top-level "pipelines" configuration has been removed. Migrate it to "pipelinesV2" or define a native workflow.',
+    );
+  }
+
   const hasDefaultSystemMessage = Boolean(config.defaultSystemMessage);
   const policies = getPolicyConfig(config);
 

@@ -41,12 +41,17 @@ describe('unified WorkflowIR executor', () => {
     }));
 
     expect(result.success).toBe(true);
-    expect(result.finalOutput).toEqual({ content: 'b<-hi', toolCalls: [] });
+    expect(result.finalOutput).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
     expect(result.context.outputs).toEqual({
       a: { content: 'a<-hi', toolCalls: [] },
-      b: { content: 'b<-hi', toolCalls: [] },
+      b: { content: 'b<-a<-hi', toolCalls: [] },
     });
-    expect(result.context.history).toEqual([]);
+    expect(result.context.history).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'a<-hi' },
+      { role: 'user', content: 'a<-hi' },
+      { role: 'assistant', content: 'b<-a<-hi' },
+    ]);
   });
 
   it('preserves V2 accumulation and hides compiler-generated conditional outputs', async () => {

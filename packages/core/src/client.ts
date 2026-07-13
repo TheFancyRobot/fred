@@ -47,6 +47,7 @@ import {
 } from './workflow/errors';
 import type { WorkflowDescriptor } from './workflow/contracts';
 import {
+  agentResponseContent,
   executeWorkflowEffect,
   type WorkflowExecutionOptions,
   type WorkflowExecutionResult,
@@ -175,7 +176,7 @@ export async function executeWorkflowViaRuntime(
           retryable: true,
         });
       }
-      return nestedResult.finalOutput;
+      return agentResponseContent(nestedResult.finalOutput) ?? nestedResult.finalOutput;
     });
 
   const executionOptions: WorkflowExecutionOptions = {

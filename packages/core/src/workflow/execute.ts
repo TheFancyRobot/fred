@@ -103,6 +103,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Return conversational content from an agent response, when one is present. */
+export function agentResponseContent(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.content === 'string' ? value.content : undefined;
+}
+
 /** Convert structured workflow input only when it crosses a conversational string boundary. */
 export function workflowInputToMessage(input: unknown): string {
   if (typeof input === 'string') return input;
@@ -112,6 +117,23 @@ export function workflowInputToMessage(input: unknown): string {
   } catch {
     return String(input);
   }
+}
+
+function messageForNode(
+  workflow: WorkflowIR,
+  node: IRNode,
+  input: unknown,
+  runtimeOutputs: Readonly<Record<string, unknown>>,
+): string {
+  if (workflow.source !== 'native') return workflowInputToMessage(input);
+
+  const predecessors = inEdges(workflow, node.id)
+    .map((edge) => edge.from)
+    .filter((source) => source in runtimeOutputs);
+  if (predecessors.length !== 1) return workflowInputToMessage(input);
+
+  const predecessorOutput = runtimeOutputs[predecessors[0]!];
+  return agentResponseContent(predecessorOutput) ?? workflowInputToMessage(predecessorOutput);
 }
 
 export function getPublicWorkflowOutputs(
@@ -766,7 +788,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
             context,
             runtimeOutputs,
             options,
-            workflowInputToMessage(context.input),
+            messageForNode(workflow, node, context.input, runtimeOutputs),
             runId,
             skipBeforeHooks,
           )).pipe(Effect.map((outcome) => ({ node, outcome })));
@@ -837,6 +859,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
 
         const execution = outcome.right;
         const { result } = execution;
+        const nodeMessage = messageForNode(workflow, node, context.input, runtimeOutputs);
         if (execution.abortedBy) {
           workflowSpan?.setStatus('ok');
           workflowSpan?.end();
@@ -860,6 +883,12 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           if (!node.internal && node.recordOutput !== false && !execution.skipped) finalOutput = result;
         } else {
           completed.add(node.id);
+        }
+
+        if (workflow.source === 'native' && node.kind === 'agent' && !execution.skipped) {
+          const content = agentResponseContent(result);
+          context.history.push({ role: 'user', content: nodeMessage });
+          if (content !== undefined) context.history.push({ role: 'assistant', content });
         }
 
         if (execution.skipped && retryScope?.entry === node.id) {
