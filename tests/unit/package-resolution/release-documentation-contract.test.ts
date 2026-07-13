@@ -51,6 +51,17 @@ function installVersion(command: string, packageName: string): string {
   return token.slice(prefix.length);
 }
 
+function bashBlockUnderHeading(document: string, heading: string): string {
+  const marker = `## ${heading}\n`;
+  const start = document.indexOf(marker);
+  if (start < 0) throw new Error(`Missing ${heading} section`);
+  const nextHeading = document.indexOf('\n## ', start + marker.length);
+  const section = document.slice(start, nextHeading < 0 ? undefined : nextHeading);
+  const block = section.match(/```bash\n([\s\S]*?)\n```/)?.[1];
+  if (!block) throw new Error(`Missing bash command under ${heading}`);
+  return block;
+}
+
 describe('release documentation contract', () => {
   const migration = readFileSync(MIGRATION_PATH, 'utf8');
   const rootReadme = readFileSync(ROOT_README_PATH, 'utf8');
@@ -79,9 +90,10 @@ describe('release documentation contract', () => {
       join(REPO_ROOT, 'packages', 'fred-convex', 'README.md'),
       'utf8',
     );
+    const installBlock = bashBlockUnderHeading(packageReadme, 'Installation');
 
     expect(matrixRow(migration, manifest.name)).toContain(`\`convex ${convexPeer}\``);
-    expect(packageReadme).toContain(`convex@${convexPeer}`);
+    expect(installBlock).toContain(`convex@${convexPeer}`);
   });
 
   test('workspace lock metadata tracks every package manifest', () => {
@@ -98,8 +110,7 @@ describe('release documentation contract', () => {
 
   test('root quick-start install guidance tracks the selected provider peer contract', () => {
     const provider = readManifest('provider-openrouter');
-    const block = rootReadme.match(/## Quick Start[\s\S]*?```bash\n([\s\S]*?)\n```/)?.[1];
-    if (!block) throw new Error('Missing root README Quick Start install command');
+    const block = bashBlockUnderHeading(rootReadme, 'Quick Start');
 
     for (const [peerName, range] of Object.entries(provider.peerDependencies ?? {})) {
       const version = installVersion(block, peerName);
