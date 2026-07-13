@@ -16,7 +16,6 @@ import type { PipelineConfigV2 } from '../pipeline/pipeline';
 import type { PipelineStep } from '../pipeline/steps';
 import type { Tool, ToolSchemaMetadata } from '../tool/tool';
 import { loadPromptFile } from '../utils/prompt-loader';
-import { validateId } from '../utils/validation';
 import type { Workflow } from '../workflow/manager';
 import type { ProviderConfig } from '../platform/provider';
 import { Schema, ParseResult } from 'effect';
