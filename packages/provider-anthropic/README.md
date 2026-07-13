@@ -33,11 +33,11 @@ This is the recommended approach -- the provider registers itself when imported.
 ### Programmatic
 
 ```typescript
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-anthropic';
 
-const fred = new Fred();
-fred.registerDefaultProviders();
+const fred = await createFred();
+await fred.providers.use('anthropic');
 ```
 
 ### Config File (YAML)

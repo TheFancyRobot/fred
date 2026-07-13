@@ -43,7 +43,7 @@ describe('Fred OpenAPI surface', () => {
     const requestSchema = FredOpenApiSpec.components.schemas.ChatCompletionRequest;
     expect(requestSchema && 'properties' in requestSchema
       ? requestSchema.properties.conversation_id
-      : undefined).toMatchObject({ deprecated: true });
+      : undefined).toBeUndefined();
   });
 
   it('exports mountable docs layers at the stable paths', () => {

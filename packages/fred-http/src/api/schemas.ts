@@ -61,12 +61,6 @@ export const ChatCompletionRequest = Schema.Struct({
   temperature: Schema.optional(Schema.Number.pipe(Schema.between(0, 2))),
   max_tokens: Schema.optional(Schema.Int.pipe(Schema.between(1, 1_000_000))),
   stream: Schema.optional(Schema.Boolean),
-  conversation_id: Schema.optional(
-    SessionId.annotations({
-      description: 'Deprecated; prefer X-Session-Id.',
-      jsonSchema: { deprecated: true },
-    })
-  ),
 }).annotations({ identifier: 'ChatCompletionRequest' });
 export type ChatCompletionRequest = typeof ChatCompletionRequest.Type;
 
@@ -75,12 +69,6 @@ export const SimpleChatRequest = Schema.Struct({
     Schema.Array(ChatMessage).pipe(Schema.minItems(1), Schema.maxItems(1_000))
   ),
   message: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1_000_000))),
-  conversation_id: Schema.optional(
-    SessionId.annotations({
-      description: 'Deprecated; prefer X-Session-Id.',
-      jsonSchema: { deprecated: true },
-    })
-  ),
   stream: Schema.optional(Schema.Boolean),
 }).pipe(
   Schema.filter(

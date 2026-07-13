@@ -1,0 +1,165 @@
+--- a/src/ai/stanza-fred.ts
++++ b/src/ai/stanza-fred.ts
+@@ -1,4 +1,4 @@
+-import type { FredInstance } from '@fancyrobot/fred'
++import type { FredClient } from '@fancyrobot/fred'
+ 
+ import { createStanzaFredClient } from '@/lib/aiClient'
+ import { configureStanzaBamlClientLoader } from '@/ai/runtime'
+@@ -12,7 +12,7 @@
+ 
+ export async function createStanzaFred(
+   options: CreateStanzaFredOptions = {},
+-): Promise<FredInstance> {
++): Promise<FredClient> {
+   if (options.bamlClientLoader) {
+     configureStanzaBamlClientLoader(
+       options.bamlClientLoader,
+@@ -36,7 +36,7 @@
+ 
+ export async function createStanzaFredForTest(
+   options: CreateStanzaFredForTestOptions = {},
+-): Promise<FredInstance> {
++): Promise<FredClient> {
+   return createStanzaFred({
+     ...options,
+     env: options.env ?? { MINIMAX_API_KEY: 'test-key' },
+--- a/src/lib/aiClient.ts
++++ b/src/lib/aiClient.ts
+@@ -8,16 +8,16 @@
+   isMinimaxApiKeyAvailable,
+   STANZA_MINIMAX_API_KEY_ENV,
+ } from '@/ai/provider'
+-import { Fred, type AgentInstance, type FredInstance, type ProviderConfig } from '@fancyrobot/fred'
++import { createFred, type AgentInstance, type FredClient, type ProviderConfig } from '@fancyrobot/fred'
+ import type { Tool } from '@fancyrobot/fred/tool/tool'
+-import { MiniMaxProviderFactory } from '@fancyrobot/fred-minimax'
++import '@fancyrobot/fred-minimax'
+ import { createStanzaBamlTools } from '@/ai/tools'
+ import { getStanzaBamlRuntime } from '@/ai/runtime'
+ 
+ export const MINIMAX_API_KEY_ENV_VAR = STANZA_MINIMAX_API_KEY_ENV
+ 
+ export interface StanzaFredClient {
+-  fred: FredInstance
++  fred: FredClient
+   agents: {
+     songProject: AgentInstance
+     lyrics: AgentInstance
+@@ -42,8 +42,10 @@
+     throw new Error(`Missing ${MINIMAX_API_KEY_ENV_VAR} for MiniMax agent runtime.`)
+   }
+ 
+-  const fred = await Fred.create()
+-  await fred.registerProviderFactory(MiniMaxProviderFactory, getMinimaxProviderConfig(model))
++  const fred = await createFred({
++    routing: { defaultAgent: STANZA_AGENT_IDS.songProject, rules: [] },
++  })
++  await fred.providers.use('minimax', getMinimaxProviderConfig(model))
+ 
+   const configs = createStanzaAgentConfigs(model)
+ 
+@@ -57,17 +59,15 @@
+     tools.generateMidi,
+     tools.delegateToWorkspace,
+   ] as unknown as Tool[]
+-  fred.registerTools(fredTools)
++  await Promise.all(fredTools.map((tool) => fred.tools.register(tool)))
+ 
+   const agents = {
+-    songProject: await fred.createAgent(configs.songProject),
+-    lyrics: await fred.createAgent(configs.lyrics),
+-    chords: await fred.createAgent(configs.chords),
+-    midi: await fred.createAgent(configs.midi),
++    songProject: await fred.agents.register(configs.songProject),
++    lyrics: await fred.agents.register(configs.lyrics),
++    chords: await fred.agents.register(configs.chords),
++    midi: await fred.agents.register(configs.midi),
+   }
+ 
+-  fred.setDefaultAgent(STANZA_AGENT_IDS.songProject)
+-
+   return {
+     fred,
+     agents,
+--- a/src/server/lyrics-operation-route.ts
++++ b/src/server/lyrics-operation-route.ts
+@@ -1,4 +1,5 @@
+ import type { MiniMaxLyricsAdapter } from '@/lib/ai/lyrics-operation-service'
++import type { FredHttpRoute } from '@fancyrobot/fred-http'
+ import {
+   executeLyricsOperation,
+ } from '@/lib/ai/lyrics-operation-service'
+@@ -27,7 +28,9 @@
+   persistenceTool?: LyricProposalPersistenceTool
+ }
+ 
+-export function createLyricsOperationRoute(options: CreateLyricsOperationRouteOptions = {}) {
++export function createLyricsOperationRoute(
++  options: CreateLyricsOperationRouteOptions = {},
++): FredHttpRoute {
+   return {
+     method: STANZA_FRED_LYRICS_ROUTE_METHOD,
+     path: STANZA_FRED_LYRICS_ROUTE_PATH,
+--- a/src/server/stanza-fred-http.ts
++++ b/src/server/stanza-fred-http.ts
+@@ -1,22 +1,21 @@
+-import type { Fred } from '@fancyrobot/fred'
+-import { createFredHttpApp, type FredHttpApp } from '@fancyrobot/fred-http'
++import type { FredClient } from '@fancyrobot/fred'
++import { withHttp, type FredWithHttp } from '@fancyrobot/fred-http'
+ 
+ import { createStanzaFred } from '@/ai/stanza-fred'
+ import { createLyricsOperationRoute, type CreateLyricsOperationRouteOptions } from '@/server/lyrics-operation-route'
+ 
+ export type CreateStanzaFredHttpRuntimeOptions = CreateLyricsOperationRouteOptions & {
+-  fred?: Fred
++  fred?: FredClient
+   requireAuth?: boolean
+   corsAllowedOrigins?: string[]
+ }
+ 
+ export async function createStanzaFredHttpRuntime(
+   options: CreateStanzaFredHttpRuntimeOptions = {},
+-): Promise<FredHttpApp> {
+-  const fred = options.fred ?? await createStanzaFred({ env: options.env }) as Fred
++): Promise<FredWithHttp> {
++  const fred = options.fred ?? await createStanzaFred({ env: options.env })
+ 
+-  return createFredHttpApp({
+-    fred,
++  return withHttp(fred, {
+     security: {
+       requireAuth: options.requireAuth ?? true,
+       corsAllowedOrigins: options.corsAllowedOrigins,
+--- a/scripts/stanza-fred-http.ts
++++ b/scripts/stanza-fred-http.ts
+@@ -9,7 +9,7 @@
+ }
+ 
+ const port = readPort()
+-const app = await createStanzaFredHttpRuntime({
++const fred = await createStanzaFredHttpRuntime({
+   env: process.env,
+   requireAuth: process.env.STANZA_FRED_HTTP_REQUIRE_AUTH !== 'false',
+   corsAllowedOrigins: [
+@@ -17,16 +17,12 @@
+   ],
+ })
+ 
+-const server = Bun.serve({
+-  port,
+-  fetch: (request) => app.fetch(request),
+-})
++const server = await fred.server.listen({ port })
+ 
+ console.log(`[Stanza Fred HTTP] listening on ${server.url}`)
+ 
+-function shutdown() {
+-  app.dispose()
+-  server.stop(true)
++async function shutdown() {
++  await fred.shutdown()
+ }
+ 
+ process.on('SIGINT', shutdown)

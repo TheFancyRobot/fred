@@ -158,23 +158,16 @@ serial derive+verify smoke measured approximately 29 ms Argon2id, 52 ms scrypt,
 production hardware, and cap authentication concurrency according to the
 chosen memory-hard settings.
 
-## Deprecated compatibility adapters
+## Custom routes
 
-`ServerApp` and `createFredHttpApp` remain available for one release. They now
-delegate built-in routes to the same Effect `HttpApi` implementation and will
-be removed in the next major release.
-
-The fetch adapter continues to support consumer-defined routes:
+Consumer-defined routes compose through `withHttp()` and the canonical Effect
+router:
 
 ```ts
-import { Fred } from '@fancyrobot/fred';
-import { createFredHttpApp } from '@fancyrobot/fred-http';
+import { createFred } from '@fancyrobot/fred';
+import { withHttp } from '@fancyrobot/fred-http';
 
-const fred = new Fred();
-const app = createFredHttpApp({
-  fred,
-  // Supply the remote address from the trusted embedding runtime.
-  getClientIp: () => '127.0.0.1',
+const fred = withHttp(await createFred(), {
   security: { requireAuth: false },
   routes: [
     {
@@ -186,8 +179,9 @@ const app = createFredHttpApp({
   ],
 });
 
-const response = await app.fetch(new Request('http://localhost/public/ping'));
-await app.dispose();
+const server = await fred.server.listen();
+const response = await fetch(`${server.url}/public/ping`);
+await fred.shutdown();
 ```
 
 ## Route visibility
@@ -208,14 +202,10 @@ The package applies a shared security-first request path:
 
 Custom route failures return sanitized error payloads and should not leak raw exception details.
 
-`createFredHttpApp()` does not trust proxy headers by default. Its limiter fails closed
-with `503 Service Unavailable` when neither an authenticated API-key identity nor a
-trusted client IP is available. Pass `getClientIp(request)` from the embedding
-runtime's remote-address metadata. Only set `trustProxy: true` when the deployment
-boundary guarantees `x-forwarded-for` / `x-real-ip` are trustworthy.
-
-Composable apps expose async `dispose()` so callers release both the web-handler
-scope and rate-limiter resources during teardown.
+`withHttp()` uses the listener's remote address and does not trust proxy headers
+by default. Only set `trustProxy: true` when the deployment boundary guarantees
+`x-forwarded-for` / `x-real-ip` are trustworthy. `fred.shutdown()` closes the
+listener scope and the underlying Fred client.
 
 ## Built-in endpoints
 

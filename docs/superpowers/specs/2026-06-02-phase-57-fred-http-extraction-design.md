@@ -46,23 +46,25 @@ Refactor internals first, then publish the new package later.
 Add `packages/fred-http` published as `@fancyrobot/fred-http`.
 
 This package owns:
-- `startServer`
-- `ServerApp`
+- the `withHttp()` client enhancement and scoped server listener
+- composable Effect server layers
 - server security config/types
 - route wiring
 - auth/rate-limit/CORS/error-sanitization behavior
 - Bun HTTP runtime integration required to host a Fred instance over HTTP
-- a composable, Effect-friendly app builder surface for consumer-defined routes and handlers
+- consumer-defined routes and handlers mounted through the canonical secured server layer
 
 ### API shape
-`@fancyrobot/fred-http` should expose two usage modes.
+The Phase 57 extraction originally shipped transitional launcher, standalone
+server, and fetch-adapter entrypoints. Phase 68 removed those adapters; the
+supported surface is now `withHttp()` plus the underlying Effect server layers.
 
-#### Simple mode
-A batteries-included entrypoint for consumers who just want Fred's HTTP API:
-- `startServer(...)`
-- `ServerApp(...)`
+#### Client-enhanced mode
+A batteries-included path for consumers who want Fred's HTTP API:
+- enhance a `FredClient` with `withHttp()`
+- start and stop the scoped listener through `client.server`
 
-#### Composable mode
+#### Effect layer mode
 An Effect-oriented composition surface for consumers who need to build a wider HTTP API around Fred:
 - register consumer-defined routes/handlers
 - mount Fred routes into the same app
@@ -85,7 +87,9 @@ The composable API should follow Effect-TS best practices: small composable serv
 ### Security model
 Security must default to safe composition.
 
-The package should provide a top-level builder/factory that enforces the request pipeline in the correct order and makes the secure path the easiest path for both Fred routes and consumer-defined routes.
+The package should enforce the request pipeline through `withHttp()` and the
+canonical Effect server layers, making the secure path the easiest path for
+both Fred routes and consumer-defined routes.
 
 Required request path:
 - CORS preflight

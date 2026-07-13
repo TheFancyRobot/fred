@@ -113,14 +113,6 @@ exports[`Fred OpenAPI surface keeps the complete generated document deterministi
       "ChatCompletionRequest": {
         "additionalProperties": false,
         "properties": {
-          "conversation_id": {
-            "deprecated": true,
-            "description": "Deprecated; prefer X-Session-Id.",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "maxLength(256)",
-            "type": "string",
-          },
           "max_tokens": {
             "$ref": "#/components/schemas/Int",
             "description": "a number between 1 and 1000000",
@@ -538,14 +530,6 @@ exports[`Fred OpenAPI surface keeps the complete generated document deterministi
       "SimpleChatRequest": {
         "additionalProperties": false,
         "properties": {
-          "conversation_id": {
-            "deprecated": true,
-            "description": "Deprecated; prefer X-Session-Id.",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "maxLength(256)",
-            "type": "string",
-          },
           "message": {
             "description": "a string at most 1000000 character(s) long",
             "maxLength": 1000000,

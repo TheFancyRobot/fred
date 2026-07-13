@@ -1,5 +1,5 @@
 /**
- * Phase 43 static migration contracts for the supported scoped client.
+ * Static migration contracts for the supported scoped client.
  *
  * The client boundary composes Effect services directly, owns one scoped
  * runtime, and must not revive imperative manager or registry facades.
@@ -43,7 +43,7 @@ function extractFunctionBody(sourceText: string, signature: RegExp): string {
   return '';
 }
 
-describe('Phase 43 static migration contracts', () => {
+describe('Scoped client static migration contracts', () => {
   test('client source does not import forbidden imperative seams', () => {
     for (const symbol of FORBIDDEN_SYMBOLS) {
       const importPattern = new RegExp(

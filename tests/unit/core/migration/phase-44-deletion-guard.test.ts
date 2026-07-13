@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const PROJECT_ROOT = process.cwd();
 const CORE_SRC = join(PROJECT_ROOT, 'packages/core/src');
+const HTTP_SRC = join(PROJECT_ROOT, 'packages/fred-http/src');
 
 function collectProductionTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -32,6 +33,7 @@ describe('Phase 44 deletion guards', () => {
     'provider/service.ts',
     'routing/router.ts',
     'message-processor/processor.ts',
+    'facade.ts',
   ];
 
   for (const relativePath of deletedFiles) {
@@ -47,6 +49,46 @@ describe('Phase 44 deletion guards', () => {
     for (const symbolName of deletedExports) {
       const symbolPattern = new RegExp(`\\b${symbolName}\\b`);
       expect(symbolPattern.test(exportsContent)).toBe(false);
+    }
+  });
+
+  test('root entrypoint exposes the scoped client without legacy Fred facades', () => {
+    const indexContent = readFileSync(join(CORE_SRC, 'index.ts'), 'utf-8');
+    const forbiddenPatterns = [
+      /\bclass\s+Fred\b/,
+      /\bFredBase\b/,
+      /\bFredInstance\b/,
+      /from\s+['"]\.\/facade['"]/,
+    ];
+
+    expect(indexContent).toContain('createFred');
+    expect(indexContent).toContain('type FredClient');
+    for (const pattern of forbiddenPatterns) {
+      expect(pattern.test(indexContent)).toBe(false);
+    }
+  });
+
+  test('legacy initializer adapter and manager accessors stay deleted', () => {
+    const initializerContent = readFileSync(join(CORE_SRC, 'config/initializer.ts'), 'utf-8');
+    const productionContent = collectProductionTsFiles(CORE_SRC)
+      .map((filePath) => readFileSync(filePath, 'utf-8'))
+      .join('\n');
+    const forbiddenAccessors = [
+      'getAgentManager',
+      'getPipelineManager',
+      'getProviderRegistry',
+      'getProviderService',
+      'getWorkflowManager',
+      'getContextManager',
+      'getHookManager',
+      'getToolRegistry',
+    ];
+
+    expect(initializerContent).not.toMatch(/\binterface\s+FredLike\b/);
+    expect(initializerContent).not.toMatch(/\basync\s+initialize\s*\(/);
+    expect(initializerContent).toMatch(/\basync\s+initializeServices\s*\(/);
+    for (const accessor of forbiddenAccessors) {
+      expect(productionContent).not.toContain(accessor);
     }
   });
 
@@ -117,5 +159,25 @@ describe('Phase 44 deletion guards', () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  test('deprecated fred-http adapters and request aliases stay deleted', () => {
+    for (const relativePath of ['app.ts', 'app-builder.ts', 'server.ts']) {
+      expect(existsSync(join(HTTP_SRC, relativePath))).toBe(false);
+    }
+
+    const productionContent = collectProductionTsFiles(HTTP_SRC)
+      .map((filePath) => readFileSync(filePath, 'utf-8'))
+      .join('\n');
+    for (const symbol of [
+      'ServerApp',
+      'startServer',
+      'createFredHttpApp',
+      'CreateFredHttpAppOptions',
+      'FredHttpApp',
+      'conversation_id',
+    ]) {
+      expect(productionContent).not.toMatch(new RegExp(`\\b${symbol}\\b`));
+    }
   });
 });

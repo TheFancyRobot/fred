@@ -2,7 +2,7 @@
  * Phase 60 / STEP-60-04: createFred() scoped Promise client.
  *
  * Covers every FredClient sub-API (agents, workflows, sessions, providers),
- * the runtime escape hatch sharing state with the Promise facade, and
+ * the runtime escape hatch sharing state with the Promise client, and
  * shutdown semantics (idempotent; use-after-shutdown is a tagged error).
  */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';

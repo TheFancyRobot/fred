@@ -1,4 +1,3 @@
-export { startServer, ServerApp } from './server';
 export {
   DEFAULT_SECURITY_CONFIG,
   FredHttpRuntimeConfigSchema,
@@ -90,13 +89,6 @@ export type {
   RateLimitRequest,
   RateLimitStoreService,
 } from './rate-limiter';
-export { createFredHttpApp } from './app-builder';
-export type {
-  FredHttpRouteVisibility,
-  FredHttpCustomRoute,
-  CreateFredHttpAppOptions,
-  FredHttpApp,
-} from './app-builder';
 export {
   FRED_DOCS_PATH,
   FRED_OPENAPI_PATH,
@@ -113,8 +105,16 @@ export * from './api/schemas';
 export * from './handlers/index';
 export { FredHttpSecurityLive } from './middleware';
 export type { FredHttpSecurityOptions } from './middleware';
-export { FredHttpApiLive, FredHttpServerLive } from './layers/server';
-export type { FredHttpServerLayerOptions } from './layers/server';
+export {
+  FredHttpApiLive,
+  FredHttpRouteConfigurationError,
+  FredHttpServerLive,
+} from './layers/server';
+export type {
+  FredHttpRoute,
+  FredHttpRouteVisibility,
+  FredHttpServerLayerOptions,
+} from './layers/server';
 export {
   HttpClientClosedError,
   ServerAlreadyRunningError,

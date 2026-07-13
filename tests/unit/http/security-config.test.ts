@@ -2,12 +2,32 @@ import { describe, expect, test } from 'bun:test';
 import { createFred } from '../../../packages/core/src/client';
 import { withHttp } from '../../../packages/fred-http/src/client';
 import {
+  normalizeAllowedMethodsByPath,
+  normalizeAllowedMethodsForPath,
+} from '../../../packages/fred-http/src/middleware';
+import {
   DEFAULT_SECURITY_CONFIG,
   resolveServerSecurityConfig,
   validateFredHttpRuntimeConfig,
 } from '../../../packages/fred-http/src/security';
 
 describe('fred-http configuration Schema', () => {
+  test('normalizes path-specific CORS methods with safe OPTIONS and fallback behavior', () => {
+    const fallback = ['GET', 'POST', 'OPTIONS'];
+
+    expect(normalizeAllowedMethodsForPath([' patch ', 'PATCH'], fallback)).toEqual([
+      'PATCH',
+      'OPTIONS',
+    ]);
+    expect(normalizeAllowedMethodsForPath(['BAD,VALUE', 'INJECTED\r\nHeader: value'], fallback))
+      .toBe(fallback);
+
+    const methodsByPath = normalizeAllowedMethodsByPath(new Map([
+      ['/custom/%7e', ['GET']],
+    ]), fallback);
+    expect(methodsByPath.get('/custom/~')).toEqual(['GET', 'OPTIONS']);
+  });
+
   test('decodes compatible defaults and immutable overrides', () => {
     const resolved = resolveServerSecurityConfig({
       requireAuth: false,

@@ -37,18 +37,6 @@ HTTP is opt-in: the core client has no listener until it is passed to
 `withHttp()`. Call `fred.server.stop()` to stop only HTTP, or `fred.shutdown()`
 to close HTTP and the underlying Fred client together.
 
-## Legacy config launcher
-
-The repository command still accepts config files during the one-release
-compatibility window:
-
-```bash
-bun run server --config config.json --port 3000
-```
-
-`ServerApp` and `createFredHttpApp` are deprecated and will be removed in the
-next major release.
-
 ## API Endpoints
 
 - `POST /v1/chat/completions` - OpenAI-compatible chat

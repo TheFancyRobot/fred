@@ -49,13 +49,12 @@ routing:
 ### 3) Initialize and send a message
 
 ```typescript
-import { Fred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
-const fred = await Fred.create();
-await fred.initializeFromConfig('config.yaml');
+const fred = await createFred({ configPath: 'config.yaml' });
 
-const response = await fred.processMessage('Hello Fred!', {
+const response = await fred.messages.process('Hello Fred!', {
   conversationId: 'quickstart',
 });
 
@@ -66,16 +65,18 @@ await fred.shutdown();
 ### Programmatic alternative (secondary)
 
 ```typescript
-const fred = new Fred();
-fred.registerDefaultProviders();
-await fred.createAgent({
+const fred = await createFred({
+  routing: { defaultAgent: 'assistant', rules: [] },
+});
+await fred.providers.use('openrouter');
+await fred.agents.register({
   id: 'assistant',
   systemMessage: 'You are concise and helpful.',
   platform: 'openrouter',
   model: 'openrouter/auto',
 });
-fred.setDefaultAgent('assistant');
-await fred.processMessage('What can you do?');
+await fred.messages.process('What can you do?');
+await fred.shutdown();
 ```
 
 ## Agents
@@ -312,7 +313,7 @@ routing:
 ### Config API
 
 ```typescript
-await fred.initializeFromConfig('config.yaml');
+const fred = await createFred({ configPath: 'config.yaml' });
 ```
 
 ## Context and Persistence
@@ -322,7 +323,7 @@ await fred.initializeFromConfig('config.yaml');
 ```typescript
 import { SqliteContextStorage } from '@fancyrobot/fred/context/sqlite';
 
-const fred = new Fred({
+const fred = await createFred({
   storage: new SqliteContextStorage({ path: './fred.db' }),
 });
 ```
@@ -332,9 +333,9 @@ const fred = new Fred({
 ```typescript
 import { PostgresContextStorage } from '@fancyrobot/fred/context/postgres';
 
-const fred = new Fred({
+const fred = await createFred({
   storage: new PostgresContextStorage({
-    connectionString: process.env.FRED_POSTGRES_URL,
+    connectionString: process.env.FRED_POSTGRES_URL!,
   }),
 });
 ```

@@ -62,7 +62,7 @@ describe('Scoped-client routing integration', () => {
   });
 
   describe('configureRouting', () => {
-    it('should configure routing through public facade paths', async () => {
+    it('should configure routing through the public client paths', async () => {
       await registerMockAgent(fred, 'support-agent');
       await registerMockAgent(fred, 'sales-agent');
 

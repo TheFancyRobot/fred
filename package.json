@@ -46,7 +46,6 @@
   "private": true,
   "scripts": {
     "dev": "bun run packages/cli/src/index.ts chat",
-    "server": "bun run packages/fred-http/src/server.ts",
     "build": "bun run --filter './packages/*' build",
     "test": "bun test --timeout 180000",
     "test:unit": "bun test --timeout 180000 tests/unit",

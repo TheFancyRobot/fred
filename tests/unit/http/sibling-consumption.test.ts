@@ -41,12 +41,9 @@ describe('fred-http sibling consumption', () => {
     writeFileSync(
       join(tempDir, 'index.ts'),
       `import { createFred } from '@fancyrobot/fred';
-import { createFredHttpApp } from '@fancyrobot/fred-http';
+import { withHttp } from '@fancyrobot/fred-http';
 
-const fred = await createFred();
-const app = createFredHttpApp({
-  fred,
-  getClientIp: () => '203.0.113.10',
+const fred = withHttp(await createFred(), {
   security: { requireAuth: false },
   routes: [
     {
@@ -58,17 +55,14 @@ const app = createFredHttpApp({
   ],
 });
 
-const response = await app.fetch(new Request('http://localhost/public/ping'));
+const server = await fred.server.listen();
+const response = await fetch(server.url + '/public/ping');
 if (response.status !== 200) {
   throw new Error('unexpected status: ' + response.status);
 }
 const body = await response.text();
 if (body !== 'pong') {
   throw new Error('unexpected body: ' + body);
-}
-const dispose = Reflect.get(app, 'dispose');
-if (typeof dispose === 'function') {
-  await dispose.call(app);
 }
 await fred.shutdown();
 process.exit(0);
