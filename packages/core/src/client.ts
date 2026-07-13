@@ -463,7 +463,14 @@ const toMCPToolMetadata = (tool: Tool): MCPToolMetadata => ({
  */
 export async function createFred(options: CreateFredOptions = {}): Promise<FredClient> {
   const loadedConfig = options.configPath ? loadValidatedConfig(options.configPath) : undefined;
-  const compiledConfig = loadedConfig ? configToLayerOptions(loadedConfig) : undefined;
+  const needsConfigRouting = options.routing === undefined;
+  const needsConfigObservability = options.observability === undefined;
+  const compiledConfig = loadedConfig && (needsConfigRouting || needsConfigObservability)
+    ? configToLayerOptions(loadedConfig, {
+        includeRouting: needsConfigRouting,
+        includeObservability: needsConfigObservability,
+      })
+    : undefined;
   const routing = options.routing ?? compiledConfig?.routingConfig;
   const template = options.template ?? loadedConfig?.template;
   const templateBasePath = options.configPath ? dirname(options.configPath) : process.cwd();
@@ -497,7 +504,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const layer = Layer.mergeAll(
     makeFredRuntimeLayer({
       routingConfig: routing,
-      observabilityLayers: options.observability
+      observabilityLayers: options.observability !== undefined
         ? buildObservabilityLayers(options.observability)
         : compiledConfig?.observabilityLayers,
       promptSourceLayer: options.promptSourceLayer,

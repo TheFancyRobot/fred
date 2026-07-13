@@ -41,6 +41,27 @@ describe('configToLayerOptions', () => {
   it('leaves routingConfig unset when the config omits routing', () => {
     expect(configToLayerOptions({}).routingConfig).toBeUndefined();
   });
+
+  it('omits config outputs that are superseded by facade overrides', () => {
+    const config: FrameworkConfig = {
+      routing: { defaultAgent: 'concierge', rules: [] },
+      observability: { logLevel: 'info' },
+    };
+    const routingOnly = configToLayerOptions(config, { includeObservability: false });
+    expect(routingOnly.routingConfig).toEqual(config.routing);
+    expect(routingOnly.observabilityLayers).toBeUndefined();
+
+    const observabilityOnly = configToLayerOptions(config, { includeRouting: false });
+    expect(observabilityOnly.routingConfig).toBeUndefined();
+    expect(observabilityOnly.observabilityLayers).toBeDefined();
+
+    expect(
+      configToLayerOptions(config, {
+        includeRouting: false,
+        includeObservability: false,
+      }),
+    ).toEqual({});
+  });
 });
 
 describe('configToLayers', () => {
