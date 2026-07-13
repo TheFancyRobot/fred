@@ -261,7 +261,7 @@ describe('publishable package contract', () => {
     }
   }, 120_000);
 
-  test('actual tarballs install, typecheck, and load built exports in an isolated consumer', () => {
+  test('actual tarballs install, typecheck, and lock built exports in an isolated consumer', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'fred-packed-consumer-'));
     const packDir = join(tempDir, 'packs');
     const consumerDir = join(tempDir, 'consumer');
@@ -329,11 +329,24 @@ describe('publishable package contract', () => {
     const builtEntrypoints = inventory.map((entry) => {
       const manifest = readManifest(entry.packageDir);
       const target = manifest.exports[entry.subpath]!;
-      return `./node_modules/${manifest.name}/${target.import.replace(/^\.\//, '')}`;
+      return {
+        name: specifier(entry, manifest),
+        path: `./node_modules/${manifest.name}/${target.import.replace(/^\.\//, '')}`,
+        exports: entry.runtime,
+      };
     });
     writeFileSync(
       join(consumerDir, 'runtime.mjs'),
-      `await Promise.all(${JSON.stringify(builtEntrypoints)}.map((name) => import(name)));\n`,
+      `const entrypoints = ${JSON.stringify(builtEntrypoints)};\n` +
+        'for (const entrypoint of entrypoints) {\n' +
+        '  const runtimeModule = await import(entrypoint.path);\n' +
+        '  const actual = Object.keys(runtimeModule).sort();\n' +
+        '  const expected = [...entrypoint.exports].sort();\n' +
+        '  if (JSON.stringify(actual) !== JSON.stringify(expected)) {\n' +
+        "    throw new Error('Built runtime exports mismatch for ' + entrypoint.name + " +
+        "      '\\nexpected: ' + JSON.stringify(expected) + '\\nactual: ' + JSON.stringify(actual));\n" +
+        '  }\n' +
+        '}\n',
     );
 
     run('bun', ['install', '--offline', '--ignore-scripts'], consumerDir);
