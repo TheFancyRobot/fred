@@ -10,7 +10,7 @@ and Effect AI lines.
 ## Installation
 
 ```bash
-bun add --exact @fancyrobot/fred-openai@4.0.0-alpha.1 \
+bun add @fancyrobot/fred-openai@4.0.0-alpha.1 \
   @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0 \
   @effect/ai@^0.35.0 @effect/ai-openai@^0.39.0
 ```

@@ -23,7 +23,7 @@ Fred is a TypeScript framework for building AI agents with intent-based routing,
 Install core + one provider package:
 
 ```bash
-bun add --exact \
+bun add \
   @fancyrobot/fred@2.0.0-alpha.1 \
   @fancyrobot/fred-openrouter@5.0.0-alpha.1 \
   effect@^3.21.0 @effect/ai@^0.35.0 \

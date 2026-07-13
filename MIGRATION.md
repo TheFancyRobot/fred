@@ -45,13 +45,14 @@ This repository is already in an alpha prerelease cycle, and
 `changeset version` pass from this checkout produces CLI `0.6.0-alpha.1`, not
 `0.6.0-alpha.0`; no extra versioning pass is required.
 
-An isolated version-plan preview currently produces the exact candidate subset
-below. After release versioning, confirm these values against the versioned
-manifests and update the published matrix before installing. Do not mix the
-candidate with older Fred majors:
+An isolated version-plan preview currently produces the Fred package candidate
+subset below. The Fred package specs are exact; Effect dependencies use the
+supported peer ranges. After release versioning, confirm these values against
+the versioned manifests and update the published matrix before installing. Do
+not mix the candidate with older Fred majors:
 
 ```bash
-bun add --exact \
+bun add \
   @fancyrobot/fred@2.0.0-alpha.1 \
   @fancyrobot/fred-http@1.0.0-alpha.1 \
   @fancyrobot/fred-minimax@2.0.0-alpha.1 \

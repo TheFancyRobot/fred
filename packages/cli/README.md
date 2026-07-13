@@ -19,7 +19,7 @@ bun add -g @fancyrobot/fred-cli@0.6.0-alpha.1
 Or use within a Fred project (installed as a workspace dependency):
 
 ```bash
-bun add --exact @fancyrobot/fred-cli@0.6.0-alpha.1 effect@^3.21.0
+bun add @fancyrobot/fred-cli@0.6.0-alpha.1 effect@^3.21.0
 ```
 
 ### Requirements

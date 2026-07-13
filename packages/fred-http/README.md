@@ -8,7 +8,7 @@ the [Phase 68 migration matrix and security guide](https://github.com/TheFancyRo
 ## Installation
 
 ```bash
-bun add --exact @fancyrobot/fred-http@1.0.0-alpha.1 \
+bun add @fancyrobot/fred-http@1.0.0-alpha.1 \
   @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0 \
   @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
