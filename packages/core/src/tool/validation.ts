@@ -325,7 +325,13 @@ export function getDecodedToolInputs<Input>(tool: Tool<Input>, input: unknown): 
   };
 }
 
-export function validateToolSchema(tool: Tool): void {
+export function validateToolSchema(
+  tool: Pick<Tool, 'id' | 'strict'> & {
+    readonly schema?: {
+      readonly input?: unknown;
+    };
+  },
+): void {
   if (tool.strict && !tool.schema?.input) {
     throw new Error(`Tool "${tool.id}" requires an input schema when strict mode is enabled`);
   }

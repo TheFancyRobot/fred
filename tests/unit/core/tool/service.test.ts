@@ -1,8 +1,9 @@
 import { describe, test, expect } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ToolNotFoundError, ToolAlreadyExistsError, ToolValidationError } from '../../../../packages/core/src/tool/errors';
 import type { Tool } from '../../../../packages/core/src/tool/tool';
+import { withInferredCapabilities } from '../../../../packages/core/src/tool/capabilities';
 
 const createTestTool = (id: string): Tool => ({
   id,
@@ -41,6 +42,49 @@ describe('ToolRegistryService', () => {
   });
 
   describe('registerTools', () => {
+    test('registers heterogeneous typed tools without casts', async () => {
+      const textTool: Tool<{ readonly value: string }, string, never> & {
+        readonly id: 'typed-text';
+        readonly source: 'fixture';
+      } = {
+        id: 'typed-text',
+        source: 'fixture',
+        name: 'Typed Text Tool',
+        description: 'Returns typed text input',
+        schema: {
+          input: Schema.Struct({ value: Schema.String }),
+          success: Schema.String,
+        },
+        execute: ({ value }) => value,
+      };
+      const numberTool: Tool<{ readonly value: number }, number, never> & {
+        readonly id: 'typed-number';
+      } = {
+        id: 'typed-number',
+        name: 'Typed Number Tool',
+        description: 'Returns typed number input',
+        schema: {
+          input: Schema.Struct({ value: Schema.Number }),
+          success: Schema.Number,
+        },
+        execute: ({ value }) => value,
+      };
+
+      const enrichedTextTool = withInferredCapabilities(textTool);
+      const preservedTextTool: typeof textTool = enrichedTextTool;
+
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* ToolRegistryService;
+          yield* service.registerTools([preservedTextTool, numberTool] as const);
+          return yield* service.getAllTools();
+        })
+      );
+
+      expect(preservedTextTool.source).toBe('fixture');
+      expect(result.map((tool) => tool.id)).toEqual(['typed-text', 'typed-number']);
+    });
+
     test('registers multiple tools at once', async () => {
       const result = await runWithService(
         Effect.gen(function* () {

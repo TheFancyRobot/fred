@@ -4,7 +4,17 @@ import {
   type Tool,
   type ToolCapability,
   type ToolCapabilityMetadata,
+  type ToolSchemaMetadata,
 } from './tool';
+
+type CapabilityTool = Pick<
+  Tool,
+  'id' | 'name' | 'capabilities' | 'capabilityMetadata'
+> & {
+  readonly schema?: {
+    readonly metadata?: ToolSchemaMetadata;
+  };
+};
 
 const BUILTIN_CAPABILITY_SET = new Set<ToolCapability>(BUILTIN_TOOL_CAPABILITIES);
 
@@ -64,7 +74,7 @@ const hasPatternHint = (text: string, patterns: RegExp[]): boolean => {
   return false;
 };
 
-const hasExternalMetadataHint = (tool: Tool): boolean => {
+const hasExternalMetadataHint = (tool: CapabilityTool): boolean => {
   const metadata = tool.schema?.metadata;
   if (!metadata) {
     return false;
@@ -74,14 +84,14 @@ const hasExternalMetadataHint = (tool: Tool): boolean => {
   return EXTERNAL_METADATA_HINTS.test(metadataBlob);
 };
 
-const getManualCapabilities = (tool: Tool): ToolCapability[] => {
+const getManualCapabilities = (tool: CapabilityTool): ToolCapability[] => {
   if (tool.capabilityMetadata?.manual) {
     return toStableCapabilities(tool.capabilityMetadata.manual);
   }
   return toStableCapabilities(tool.capabilities ?? []);
 };
 
-export const inferToolCapabilities = (tool: Tool): ToolCapabilityInference => {
+export const inferToolCapabilities = (tool: CapabilityTool): ToolCapabilityInference => {
   const idAndName = `${tool.id} ${tool.name}`.toLowerCase();
   const inferred = new Set<ToolCapability>();
 
@@ -114,7 +124,7 @@ export const inferToolCapabilities = (tool: Tool): ToolCapabilityInference => {
   };
 };
 
-export const withInferredCapabilities = <T extends Tool>(tool: T): T => {
+export const withInferredCapabilities = <T extends CapabilityTool>(tool: T): T => {
   const inferred = inferToolCapabilities(tool);
   const capabilityMetadata: ToolCapabilityMetadata = {
     inferred: inferred.inferred,

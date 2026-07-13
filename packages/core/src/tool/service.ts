@@ -1,14 +1,30 @@
 import { Context, Effect, Layer, Ref } from 'effect';
-import type { Tool } from './tool';
+import type { Tool, ToolSchemaMetadata } from './tool';
 import { withInferredCapabilities } from './capabilities';
 import { ToolNotFoundError, ToolAlreadyExistsError, ToolValidationError } from './errors';
 import { validateToolSchema } from './validation';
 import { normalizeToolDefinition } from './utils';
 
+/** Internal type erasure for heterogeneous registry storage. */
+type AnyTool = Tool<any, any, any>;
+
+/** Variance-free view used to accept differently typed tools in one batch. */
+type BatchTool = Omit<Tool, 'schema' | 'execute'> & {
+  readonly schema?: {
+    readonly input: unknown;
+    readonly success: unknown;
+    readonly failure?: unknown;
+    readonly metadata?: ToolSchemaMetadata;
+  };
+  readonly execute: (args: never) => unknown;
+};
+
+const eraseToolForStorage = (tool: BatchTool): AnyTool => tool as unknown as AnyTool;
+
 /**
  * Effect-wrapped tool schema validation
  */
-const validateToolSchemaEffect = (tool: Tool): Effect.Effect<void, ToolValidationError> =>
+const validateToolSchemaEffect = (tool: BatchTool): Effect.Effect<void, ToolValidationError> =>
   Effect.try({
     try: () => validateToolSchema(tool),
     catch: (error) => new ToolValidationError({
@@ -24,12 +40,16 @@ export interface ToolRegistryService {
   /**
    * Register a tool in the registry
    */
-  registerTool(tool: Tool): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError>;
+  registerTool<Input, Output, Failure>(
+    tool: Tool<Input, Output, Failure>,
+  ): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError>;
 
   /**
    * Register multiple tools at once
    */
-  registerTools(tools: Tool[]): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError>;
+  registerTools<Tools extends readonly BatchTool[]>(
+    tools: Tools,
+  ): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError>;
 
   /**
    * Get a tool by ID
@@ -90,9 +110,11 @@ export const ToolRegistryService = Context.GenericTag<ToolRegistryService>(
  * Implementation of ToolRegistryService
  */
 class ToolRegistryServiceImpl implements ToolRegistryService {
-  constructor(private tools: Ref.Ref<Map<string, Tool>>) {}
+  constructor(private tools: Ref.Ref<Map<string, AnyTool>>) {}
 
-  registerTool(tool: Tool): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError> {
+  registerTool<Input, Output, Failure>(
+    tool: Tool<Input, Output, Failure>,
+  ): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError> {
     const self = this;
     return Effect.gen(function* () {
       const tools = yield* Ref.get(self.tools);
@@ -107,12 +129,14 @@ class ToolRegistryServiceImpl implements ToolRegistryService {
       yield* validateToolSchemaEffect(toolWithCapabilities);
 
       const newTools = new Map(tools);
-      newTools.set(tool.id, toolWithCapabilities);
+      newTools.set(tool.id, eraseToolForStorage(toolWithCapabilities));
       yield* Ref.set(self.tools, newTools);
     });
   }
 
-  registerTools(tools: Tool[]): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError> {
+  registerTools<Tools extends readonly BatchTool[]>(
+    tools: Tools,
+  ): Effect.Effect<void, ToolAlreadyExistsError | ToolValidationError> {
     const self = this;
     return Effect.gen(function* () {
       const currentTools = yield* Ref.get(self.tools);
@@ -125,7 +149,7 @@ class ToolRegistryServiceImpl implements ToolRegistryService {
 
         const toolWithCapabilities = withInferredCapabilities(tool);
         yield* validateToolSchemaEffect(toolWithCapabilities);
-        nextTools.set(tool.id, toolWithCapabilities);
+        nextTools.set(tool.id, eraseToolForStorage(toolWithCapabilities));
       }
 
       yield* Ref.set(self.tools, nextTools);
@@ -214,7 +238,7 @@ class ToolRegistryServiceImpl implements ToolRegistryService {
 export const ToolRegistryServiceLive = Layer.effect(
   ToolRegistryService,
   Effect.gen(function* () {
-    const tools = yield* Ref.make(new Map<string, Tool>());
+    const tools = yield* Ref.make(new Map<string, AnyTool>());
     return new ToolRegistryServiceImpl(tools);
   })
 );

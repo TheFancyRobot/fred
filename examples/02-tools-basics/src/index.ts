@@ -36,7 +36,7 @@ async function main() {
   );
 
   // Register custom tool defined with Effect Schema.
-  await fred.tools.register(weatherTool as unknown as Tool);
+  await fred.tools.register(weatherTool);
 
   // Config-first construction resolves declared tools while agents load.
   // Re-register this agent after adding the application-defined weather tool.

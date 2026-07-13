@@ -912,14 +912,14 @@ export async function setupExample(
     createHandoffTool(
       (agentId) => agents.get(agentId),
       () => directSpecialists,
-    ) as unknown as Tool,
+    ),
   );
-  await client.tools.register(createSaveNoteTool(notebookPath) as unknown as Tool);
-  await client.tools.register(createReadNotesTool(notebookPath) as unknown as Tool);
-  await client.tools.register(createNewsTool() as unknown as Tool);
-  await client.tools.register(createBrowserResearchTool(client, searchBaseUrl) as unknown as Tool);
-  await client.tools.register(createResearchTool(notebookPath, client) as unknown as Tool);
-  await client.tools.register(createDailyBriefTool(client) as unknown as Tool);
+  await client.tools.register(createSaveNoteTool(notebookPath));
+  await client.tools.register(createReadNotesTool(notebookPath));
+  await client.tools.register(createNewsTool());
+  await client.tools.register(createBrowserResearchTool(client, searchBaseUrl));
+  await client.tools.register(createResearchTool(notebookPath, client));
+  await client.tools.register(createDailyBriefTool(client));
 
   // Config-first construction loads agent content before application-defined
   // tools exist. Re-register the tool-using agents through the supported
