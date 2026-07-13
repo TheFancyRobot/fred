@@ -19,8 +19,8 @@ the exact published CLI 0.6 prerelease recorded in the migration matrix.
 
 ```bash
 bun remove @fancyrobot/fred-dev
-# Replace this range with the exact published 0.6 candidate during RC validation.
-bun add -d @fancyrobot/fred-cli@^0.6.0-alpha.0
+# Confirm this exact candidate in the published migration matrix.
+bun add -d --exact @fancyrobot/fred-cli@0.6.0-alpha.1
 ```
 
 Replace programmatic imports:

@@ -19,7 +19,9 @@ candidate compatibility matrix.
    ```
 
    Re-run the gates after versioning.
-4. Update the exact versions in `MIGRATION.md` if manifests changed.
+4. Update the exact versions in `MIGRATION.md`, the repository README, and all
+   package README install snippets if manifests changed. No documentation pin
+   may name an earlier prerelease artifact while describing the new candidate.
 5. Publish with `bun run ci:publish`. `scripts/publish-packages.sh` reads
    `.changeset/pre.json` and passes `--tag <prerelease-tag>` to every publish,
    so a prerelease never moves npm's `latest` tag.

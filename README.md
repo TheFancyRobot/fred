@@ -71,7 +71,7 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 ## Packages
 
-| Package | Current prerelease | Description |
+| Package | Checkout prerelease (before versioning) | Description |
 |---------|--------------------|-------------|
 | [@fancyrobot/fred](packages/core/README.md) | `2.0.0-alpha.0` | Core framework |
 | [@fancyrobot/fred-cli](packages/cli/README.md) | `0.5.1-alpha.0` | CLI, development chat, and interactive TUI |
@@ -88,7 +88,8 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 Packages intentionally retain independent major lines. The
 [compatibility matrix](MIGRATION.md#package-compatibility-matrix), not a shared
-Fred version number, defines a release set.
+Fred version number, defines a release set. Release versioning updates these
+manifest versions and every exact documentation pin before publication.
 
 ## Examples
 

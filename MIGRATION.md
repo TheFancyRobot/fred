@@ -133,11 +133,13 @@ messages; use an explicit intent/routing rule or call `workflows.run()`.
 ## Development chat moves to the CLI
 
 `@fancyrobot/fred-cli` owns development chat, provider detection, default-agent
-setup, hot reload, and terminal cleanup. Remove the compatibility package:
+setup, hot reload, and terminal cleanup. The current Changesets plan produces
+CLI `0.6.0-alpha.1`; after release versioning, use the exact 0.6 candidate from
+the updated matrix if it differs. Remove the compatibility package:
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d @fancyrobot/fred-cli@0.5.1-alpha.0
+bun add -d --exact @fancyrobot/fred-cli@0.6.0-alpha.1
 fred chat
 ```
 

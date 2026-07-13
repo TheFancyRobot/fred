@@ -7,14 +7,17 @@ CLI prerelease alongside core or replacing `@fancyrobot/fred-dev`.
 
 ## Installation
 
+The current Phase 68 Changesets plan produces CLI `0.6.0-alpha.1`. Confirm the
+exact candidate in the published migration matrix before release validation.
+
 ```bash
-bun add -g @fancyrobot/fred-cli@0.5.1-alpha.0
+bun add -g @fancyrobot/fred-cli@0.6.0-alpha.1
 ```
 
 Or use within a Fred project (installed as a workspace dependency):
 
 ```bash
-bun add --exact @fancyrobot/fred-cli@0.5.1-alpha.0 effect@^3.21.0
+bun add --exact @fancyrobot/fred-cli@0.6.0-alpha.1 effect@^3.21.0
 ```
 
 ### Requirements
