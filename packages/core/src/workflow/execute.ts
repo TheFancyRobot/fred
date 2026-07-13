@@ -312,7 +312,8 @@ function runNodeBody(
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     case 'subworkflow': {
-      const resolved = options.workflowResolver?.(node.workflowId, context.input);
+      const nestedInput = workflow.source === 'native' ? message : context.input;
+      const resolved = options.workflowResolver?.(node.workflowId, nestedInput);
       if (resolved) {
         return resolved.pipe(
           Effect.mapError((cause) => nodeFailure(workflow.id, node.id, cause, true)),
@@ -328,7 +329,7 @@ function runNodeBody(
         );
       }
       return Effect.tryPromise({
-        try: () => nested.execute(workflowInputToMessage(context.input)),
+        try: () => nested.execute(workflowInputToMessage(nestedInput)),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     }

@@ -110,6 +110,30 @@ describe('unified WorkflowIR executor', () => {
     expect(result.finalOutput).toEqual({ content: 'answerer<-question', toolCalls: [] });
   });
 
+  it('passes native predecessor output into a nested workflow', async () => {
+    const workflow = {
+      id: 'native-nested-sequence',
+      source: 'native' as const,
+      entry: 'prepare',
+      nodes: [
+        { id: 'prepare', kind: 'agent' as const, agentId: 'preparer' },
+        { id: 'nested', kind: 'subworkflow' as const, workflowId: 'child' },
+      ],
+      edges: [{ from: 'prepare', to: 'nested' }],
+    };
+    let nestedInput: unknown;
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ preparer: echoAgent('preparer') }),
+      workflowResolver: (_workflowId, input) => {
+        nestedInput = input;
+        return Effect.succeed(`child<-${String(input)}`);
+      },
+    }));
+
+    expect(nestedInput).toBe('preparer<-original');
+    expect(result.finalOutput).toBe('child<-preparer<-original');
+  });
+
   it('passes every completed predecessor output to a native synthesis agent', async () => {
     const workflow = {
       id: 'native-fan-in',
