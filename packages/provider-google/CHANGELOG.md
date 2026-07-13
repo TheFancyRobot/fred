@@ -1,5 +1,12 @@
 # @fred/provider-google
 
+## 4.0.0-alpha.1
+
+### Patch Changes
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+
 ## 4.0.0-alpha.0
 
 ### Patch Changes

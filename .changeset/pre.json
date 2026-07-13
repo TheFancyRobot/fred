@@ -17,7 +17,11 @@
   },
   "changesets": [
     "fred-v2-effect-first-core",
+    "http-workflow-endpoints",
     "local-adapter-resolution",
-    "minimax-file-dependency-resolution"
+    "minimax-file-dependency-resolution",
+    "phase68-release-documentation",
+    "quiet-dev-chat-shim",
+    "typed-agent-prompts"
   ]
 }
