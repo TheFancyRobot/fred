@@ -15,6 +15,32 @@ const makeTempDir = (): string => {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const waitForStableLength = async <T>(
+  values: readonly T[],
+  expectedLength: number,
+  options: { timeoutMs?: number; quietMs?: number } = {}
+): Promise<void> => {
+  const timeoutMs = options.timeoutMs ?? 1_000;
+  const quietMs = options.quietMs ?? 100;
+  const deadline = Date.now() + timeoutMs;
+  let stableSince: number | undefined;
+
+  while (Date.now() < deadline) {
+    if (values.length === expectedLength) {
+      stableSince ??= Date.now();
+      if (Date.now() - stableSince >= quietMs) {
+        return;
+      }
+    } else {
+      stableSince = undefined;
+    }
+
+    await sleep(10);
+  }
+
+  throw new Error(`Expected ${expectedLength} stable events, received ${values.length}`);
+};
+
 const writeAgentDefinition = (filePath: string, id: string): void => {
   writeFileSync(
     filePath,
@@ -93,7 +119,7 @@ describe('AgentFileWatcher', () => {
       writeAgentDefinition(filePath, 'assistant-v2');
       writeAgentDefinition(filePath, 'assistant-v3');
 
-      await sleep(60);
+      await waitForStableLength(events, 1);
 
       expect(events).toHaveLength(1);
       expect(events[0]?.filePath).toBe(filePath);
@@ -111,7 +137,7 @@ describe('AgentFileWatcher', () => {
       watcher.start();
 
       writeAgentDefinition(filePath, 'support-v2');
-      await sleep(60);
+      await waitForStableLength(events, 1);
 
       expect(events).toHaveLength(1);
       expect(events[0]?.previousId).toBe('support-v1');
@@ -203,7 +229,7 @@ describe('AgentFileWatcher', () => {
       const partialPath = join(partialDir, 'safety.md');
       writeFileSync(partialPath, 'always be safe');
 
-      await sleep(60);
+      await waitForStableLength(partialEvents, 1);
 
       expect(partialEvents).toHaveLength(1);
       expect(partialEvents[0]).toEqual({
