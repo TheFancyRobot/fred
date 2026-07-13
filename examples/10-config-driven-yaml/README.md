@@ -48,18 +48,3 @@ bun run start:programmatic
 
 - Use config when setup is mostly static and you want easy environment-driven changes.
 - Use code when setup is dynamic (runtime conditions, generated behavior, or custom branching).
-
-## Pipeline function note
-
-Pass runtime tool executors when loading config:
-
-```typescript
-const fred = await createFred({
-  configPath: './config.yaml',
-  configOptions: {
-    toolExecutors: new Map([
-      ['summarize-results', async (input) => ({ summary: `Done: ${String(input)}` })],
-    ]),
-  },
-});
-```
