@@ -47,8 +47,14 @@ class HttpRequestTimeoutError extends Schema.TaggedError<HttpRequestTimeoutError
 ) {}
 
 const defaultAllowedMethods = ['GET', 'POST', 'OPTIONS'];
+const methodToken = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const allowedHeaders = ['Content-Type', 'Authorization', 'X-Session-Id'];
 const exposedHeaders = ['X-Session-Id'];
+
+const normalizeAllowedMethods = (methods: ReadonlyArray<string>): ReadonlyArray<string> =>
+  Array.from(new Set(methods
+    .map((method) => method.trim().toUpperCase())
+    .filter((method) => methodToken.test(method))));
 
 const extractProxyIp = (headers: Readonly<Record<string, string | undefined>>): string | undefined => {
   const forwarded = headers['x-forwarded-for']?.split(',')[0]?.trim();
@@ -236,10 +242,14 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
       const config = resolved.config;
       if (options.apiKeyStore !== undefined) yield* options.apiKeyStore.initialize;
       const limiter = yield* RateLimitService;
-      const allowedMethods = Array.from(new Set([
+      const allowedMethods = normalizeAllowedMethods([
         ...defaultAllowedMethods,
         ...(options.allowedMethods ?? []),
-      ]));
+      ]);
+      const allowedMethodsByPath = new Map(Array.from(
+        options.allowedMethodsByPath ?? new Map(),
+        ([path, methods]) => [path, normalizeAllowedMethods(methods)] as const,
+      ));
       return makeSecurityMiddleware(
         config,
         options.trustProxy ?? false,
@@ -250,7 +260,7 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
         options.apiKeyUpgradeVerifierId,
         options.authRequirements ?? new Map(),
         allowedMethods,
-        options.allowedMethodsByPath ?? new Map(),
+        allowedMethodsByPath,
       );
     }),
   ).pipe(Layer.provide(RateLimitServiceLive(options.rateLimitStore)));

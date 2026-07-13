@@ -116,6 +116,25 @@ describe('FredHttpServerLive security middleware', () => {
     expect(adminPreflight.headers.get('access-control-allow-methods')).toContain('DELETE');
   });
 
+  test('normalizes configured fallback CORS method tokens', async () => {
+    const handle = await start({
+      security: {
+        requireAuth: false,
+        corsAllowedOrigins: ['https://console.example'],
+      },
+      allowedMethods: [' patch ', 'BAD,VALUE', 'INJECTED\r\nX-Header: value'],
+    });
+
+    const preflight = await fetch(`${handle.url}/not-a-route`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://console.example' },
+    });
+    const methods = preflight.headers.get('access-control-allow-methods');
+    expect(methods).toContain('PATCH');
+    expect(methods).not.toContain('BAD');
+    expect(methods).not.toContain('INJECTED');
+  });
+
   test('sanitizes custom-route failures', async () => {
     const handle = await start({
       security: { requireAuth: false },
