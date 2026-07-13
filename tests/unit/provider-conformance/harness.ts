@@ -19,6 +19,8 @@ import {
   registerBuiltinPack,
 } from '../../../packages/core/src/platform/packs/index';
 
+export const PROVIDER_CONFORMANCE_ISOLATION_ENV = 'FRED_PROVIDER_CONFORMANCE_ISOLATED';
+
 export interface NativeInvocation {
   readonly modelId: string;
   readonly options: unknown;
@@ -101,7 +103,9 @@ function withoutCredential<A>(
   delete process.env[fixture.credentialEnvVar];
 
   return run().finally(() => {
-    if (previous !== undefined) {
+    if (previous === undefined) {
+      delete process.env[fixture.credentialEnvVar];
+    } else {
       process.env[fixture.credentialEnvVar] = previous;
     }
   });
@@ -178,6 +182,10 @@ async function exerciseMockTransport(
 export function defineProviderConformanceSuite(
   fixtures: readonly ProviderConformanceFixture[],
 ): void {
+  if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
+    throw new Error('Provider conformance must run through its isolated-process launcher');
+  }
+
   describe('provider factory matrix', () => {
     test('uses unique canonical IDs and aliases', () => {
       const ids = fixtures.map((fixture) => fixture.id);
@@ -187,9 +195,9 @@ export function defineProviderConformanceSuite(
       expect(new Set(aliases).size).toBe(aliases.length);
     });
 
-    test('remains complete when fixtures are reordered', () => {
-      expect(fixtures.toReversed().map((fixture) => fixture.id).sort()).toEqual(
-        fixtures.map((fixture) => fixture.id).sort(),
+    test('covers every registered provider package', () => {
+      expect(fixtures.map((fixture) => fixture.id).sort()).toEqual(
+        getBuiltinPackIds().sort(),
       );
     });
 

@@ -1,9 +1,10 @@
-import { expect, mock } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { Layer } from 'effect';
 import { resolve } from 'node:path';
 import type { ProviderModelDefaults } from '@fancyrobot/fred';
 import {
   defineProviderConformanceSuite,
+  PROVIDER_CONFORMANCE_ISOLATION_ENV,
   type NativeRecorder,
   type ProviderConformanceFixture,
 } from './harness';
@@ -55,71 +56,119 @@ function nativeModule(
   };
 }
 
-const openAiRecorder = createNativeRecorder();
-const anthropicRecorder = createNativeRecorder();
-const googleRecorder = createNativeRecorder();
-const openRouterRecorder = createNativeRecorder();
+const REPOSITORY_ROOT = resolve(import.meta.dir, '../../..');
 
-mock.module('@effect/ai-openai', () => nativeModule(
-  'openai',
-  openAiRecorder,
-  'OpenAiClient',
-  'OpenAiLanguageModel',
-));
-mock.module('@effect/ai-anthropic', () => nativeModule(
-  'anthropic',
-  anthropicRecorder,
-  'AnthropicClient',
-  'AnthropicLanguageModel',
-));
-mock.module('@effect/ai-google', () => nativeModule(
-  'google',
-  googleRecorder,
-  'GoogleClient',
-  'GoogleLanguageModel',
-));
-mock.module('@effect/ai-openrouter', () => nativeModule(
-  'openrouter',
-  openRouterRecorder,
-  'OpenRouterClient',
-  'OpenRouterLanguageModel',
-));
+if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
+  test('runs provider conformance in an isolated Bun process', async () => {
+    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+      cwd: REPOSITORY_ROOT,
+      env: {
+        ...process.env,
+        [PROVIDER_CONFORMANCE_ISOLATION_ENV]: '1',
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
 
-import OpenAiDefault, {
-  OpenAiProviderFactory,
-  openaiPack,
-} from '../../../packages/provider-openai/src/index';
-import AnthropicDefault, {
-  AnthropicProviderFactory,
-  anthropicPack,
-} from '../../../packages/provider-anthropic/src/index';
-import GoogleDefault, {
-  GoogleProviderFactory,
-  googlePack,
-} from '../../../packages/provider-google/src/index';
-import GroqDefault, {
-  GroqProviderFactory,
-  classifyHttpError as classifyGroqHttpError,
-  groqPack,
-} from '../../../packages/provider-groq/src/index';
-import OpenRouterDefault, {
-  OpenRouterProviderFactory,
-  openrouterPack,
-} from '../../../packages/provider-openrouter/src/index';
-import MiniMaxDefault, {
-  MINIMAX_CAPABILITIES,
-  MiniMaxProviderFactory,
-  minimaxPack,
-} from '../../../packages/provider-minimax/src/index';
-import { classifyHttpError as classifyMiniMaxHttpError } from '../../../packages/provider-minimax/src/config';
+    if (exitCode !== 0) {
+      throw new Error(`Isolated provider conformance failed:\n${stdout}\n${stderr}`);
+    }
+    expect(`${stdout}\n${stderr}`).toContain('0 fail');
+  }, 180_000);
+} else {
+  const openAiRecorder = createNativeRecorder();
+  const anthropicRecorder = createNativeRecorder();
+  const googleRecorder = createNativeRecorder();
+  const openRouterRecorder = createNativeRecorder();
 
-const PACKAGE_ROOT = resolve(import.meta.dir, '../../../packages');
-const MODEL_DEFAULTS = {
-  temperature: 0.25,
-  maxTokens: 321,
-} satisfies ProviderModelDefaults;
+  mock.module('@effect/ai-openai', () => nativeModule(
+    'openai',
+    openAiRecorder,
+    'OpenAiClient',
+    'OpenAiLanguageModel',
+  ));
+  mock.module('@effect/ai-anthropic', () => nativeModule(
+    'anthropic',
+    anthropicRecorder,
+    'AnthropicClient',
+    'AnthropicLanguageModel',
+  ));
+  mock.module('@effect/ai-google', () => nativeModule(
+    'google',
+    googleRecorder,
+    'GoogleClient',
+    'GoogleLanguageModel',
+  ));
+  mock.module('@effect/ai-openrouter', () => nativeModule(
+    'openrouter',
+    openRouterRecorder,
+    'OpenRouterClient',
+    'OpenRouterLanguageModel',
+  ));
 
-const fixtures = [
+  const [
+    openAiModule,
+    anthropicModule,
+    googleModule,
+    groqModule,
+    openRouterModule,
+    miniMaxModule,
+    miniMaxConfig,
+  ] = await Promise.all([
+    import('../../../packages/provider-openai/src/index'),
+    import('../../../packages/provider-anthropic/src/index'),
+    import('../../../packages/provider-google/src/index'),
+    import('../../../packages/provider-groq/src/index'),
+    import('../../../packages/provider-openrouter/src/index'),
+    import('../../../packages/provider-minimax/src/index'),
+    import('../../../packages/provider-minimax/src/config'),
+  ]);
+  const {
+    default: OpenAiDefault,
+    OpenAiProviderFactory,
+    openaiPack,
+  } = openAiModule;
+  const {
+    default: AnthropicDefault,
+    AnthropicProviderFactory,
+    anthropicPack,
+  } = anthropicModule;
+  const {
+    default: GoogleDefault,
+    GoogleProviderFactory,
+    googlePack,
+  } = googleModule;
+  const {
+    default: GroqDefault,
+    GroqProviderFactory,
+    classifyHttpError: classifyGroqHttpError,
+    groqPack,
+  } = groqModule;
+  const {
+    default: OpenRouterDefault,
+    OpenRouterProviderFactory,
+    openrouterPack,
+  } = openRouterModule;
+  const {
+    default: MiniMaxDefault,
+    MINIMAX_CAPABILITIES,
+    MiniMaxProviderFactory,
+    minimaxPack,
+  } = miniMaxModule;
+  const { classifyHttpError: classifyMiniMaxHttpError } = miniMaxConfig;
+
+  const PACKAGE_ROOT = resolve(import.meta.dir, '../../../packages');
+  const MODEL_DEFAULTS = {
+    temperature: 0.25,
+    maxTokens: 321,
+  } satisfies ProviderModelDefaults;
+
+  const fixtures = [
   {
     id: 'openai',
     packageDirectory: resolve(PACKAGE_ROOT, 'provider-openai'),
@@ -317,4 +366,5 @@ const fixtures = [
   },
 ] satisfies readonly ProviderConformanceFixture[];
 
-defineProviderConformanceSuite(fixtures);
+  defineProviderConformanceSuite(fixtures);
+}
