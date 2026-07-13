@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- Replaced the legacy `Fred` facade and Promise workflow wrappers with the
+  scoped `createFred()`/`FredClient` API and unified `workflows` capabilities.
+- Removed deprecated standalone HTTP adapters in favor of the optional
+  `withHttp()` enhancement.
+
+### Documentation
+
+- Added a consolidated independent-version migration matrix, Stanza recipes,
+  API-key verifier migration/rotation guidance, and release/rollback runbook.
+- Updated the root and package documentation for all 15 examples and the final
+  supported package/API layout.
+
 ### Added
 
 - **`@fancyrobot/fred-convex` adapter package** for sibling-app Convex integration

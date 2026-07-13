@@ -16,10 +16,18 @@ Fred is a TypeScript framework for building AI agents with intent-based routing,
 
 ## Quick Start
 
+> Migrating from the legacy `Fred` facade or HTTP adapters? Read the
+> [Phase 68 migration guide](MIGRATION.md) and its exact independent-version
+> compatibility matrix before installing prereleases.
+
 Install core + one provider package:
 
 ```bash
-bun add @fancyrobot/fred @fancyrobot/fred-openrouter effect
+bun add \
+  @fancyrobot/fred@2.0.0-alpha.1 \
+  @fancyrobot/fred-openrouter@5.0.0-alpha.1 \
+  effect@^3.21.0 @effect/ai@^0.35.0 \
+  @effect/platform@^0.96.0 @effect/ai-openrouter@^0.10.0
 ```
 
 Create an agent file at `src/agents/assistant.md`:
@@ -63,26 +71,40 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| [@fancyrobot/fred](packages/core/README.md) | Core framework |
-| [@fancyrobot/fred-cli](packages/cli/README.md) | CLI, development chat, and interactive TUI |
-| [@fancyrobot/fred-dev](packages/dev/README.md) | Deprecated one-release CLI compatibility shim |
-| [@fancyrobot/fred-http](packages/fred-http/README.md) | Bun HTTP server and composable API layer |
-| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | OpenAI provider |
-| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | Anthropic provider |
-| [@fancyrobot/fred-google](packages/provider-google/README.md) | Google (Gemini) provider |
-| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | Groq provider |
-| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | OpenRouter provider |
-| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | MiniMax multi-modality provider |
+| Package | Checkout prerelease (before versioning) | Description |
+|---------|--------------------|-------------|
+| [@fancyrobot/fred](packages/core/README.md) | `2.0.0-alpha.0` | Core framework |
+| [@fancyrobot/fred-cli](packages/cli/README.md) | `0.5.1-alpha.0` | CLI, development chat, and interactive TUI |
+| [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0-alpha.0` | Deprecated one-release CLI compatibility shim |
+| [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0-alpha.0` | Bun HTTP server and composable API layer |
+| [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0-alpha.0` | Consumer-owned BAML integration |
+| [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0-alpha.0` | Convex integration helpers |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0-alpha.0` | OpenAI provider |
+| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.0.0-alpha.0` | Anthropic provider |
+| [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0-alpha.0` | Google (Gemini) provider |
+| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0-alpha.0` | Groq provider |
+| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0-alpha.0` | OpenRouter provider |
+| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.0` | MiniMax multi-modality provider |
+
+Packages intentionally retain independent major lines. The
+[compatibility matrix](MIGRATION.md#package-compatibility-matrix), not a shared
+Fred version number, defines a release set. Release versioning updates these
+manifest versions and every exact documentation pin before publication.
 
 ## Examples
 
-Fred includes 12 progressive examples covering quickstart, tools, routing, pipelines, hooks, MCP, and CLI/TUI usage. Start here: [examples/README.md](examples/README.md).
+Fred includes 15 progressive examples covering quickstart, tools, routing,
+pipelines, hooks, MCP, CLI/TUI, multi-agent orchestration, and the optional HTTP
+layer. Start here: [examples/README.md](examples/README.md).
 
 ## Documentation
 
-Full guides and API reference: [sincspecv.github.io/fred](https://sincspecv.github.io/fred)
+For the current prerelease, use the [Phase 68 migration guide](MIGRATION.md),
+the package READMEs above, and the [release runbook](RELEASE.md). The
+[published Phase 68 migration page](https://TheFancyRobot.github.io/fred/migration/v0.4.0/)
+mirrors the canonical guide. Older guides and API-reference pages on that site
+describe the pre-Phase-68 facade and should not be used with these package
+lines until they are refreshed.
 
 ## Contributing
 

@@ -2,15 +2,25 @@
 
 > Deprecated compatibility shim. Install `@fancyrobot/fred-cli` and use `fred chat`.
 
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the exact compatible
+CLI version and the removal timeline.
+
 This final compatibility release contains no development-chat implementation. It
 forwards the former root and `./chat-defaults` exports to
 `@fancyrobot/fred-cli` and will be removed in the next major release.
+
+Those forwarded exports are present in the source checkout but first publish
+on the CLI 0.6 line because they carry a minor Changeset. The checked-in CLI
+manifest remains `0.5.1-alpha.0` until release versioning; an earlier published
+CLI 0.5.1 artifact is not a valid shim peer. During candidate validation, use
+the exact published CLI 0.6 prerelease recorded in the migration matrix.
 
 ## Migration
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d @fancyrobot/fred-cli
+# Confirm this exact candidate in the published migration matrix.
+bun add -d --exact @fancyrobot/fred-cli@0.6.0-alpha.1
 ```
 
 Replace programmatic imports:
@@ -42,9 +52,9 @@ window and prints migration guidance. HTTP server APIs live in
 
 ## Related
 
-- [@fancyrobot/fred-cli](../cli/README.md)
-- [@fancyrobot/fred core package](../core/README.md)
-- [Repository README hub](../../README.md)
+- [@fancyrobot/fred-cli](https://github.com/TheFancyRobot/fred/blob/main/packages/cli/README.md)
+- [@fancyrobot/fred core package](https://github.com/TheFancyRobot/fred/blob/main/packages/core/README.md)
+- [Repository README hub](https://github.com/TheFancyRobot/fred#packages)
 
 ## License
 

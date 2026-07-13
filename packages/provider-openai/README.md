@@ -4,10 +4,15 @@
 
 OpenAI provider for Fred AI framework.
 
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the compatible core
+and Effect AI lines.
+
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-openai
+bun add @fancyrobot/fred-openai@4.0.0-alpha.1 \
+  @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0 \
+  @effect/ai@^0.35.0 @effect/ai-openai@^0.39.0
 ```
 
 ## Setup
@@ -66,8 +71,8 @@ See [OpenAI documentation](https://platform.openai.com/docs/models) for availabl
 
 ## Related
 
-- [Fred core](../core/README.md) -- main framework documentation
-- [All packages](../../README.md) -- monorepo overview
+- [Fred core](https://github.com/TheFancyRobot/fred/blob/main/packages/core/README.md) -- main framework documentation
+- [All packages](https://github.com/TheFancyRobot/fred#packages) -- monorepo overview
 
 ## License
 

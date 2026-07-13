@@ -4,10 +4,15 @@
 
 Anthropic provider for Fred AI framework.
 
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the compatible core
+and Effect AI lines.
+
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-anthropic
+bun add @fancyrobot/fred-anthropic@4.0.0-alpha.1 \
+  @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0 \
+  @effect/ai@^0.35.0 @effect/ai-anthropic@^0.25.0
 ```
 
 ## Setup
@@ -66,8 +71,8 @@ See [Anthropic documentation](https://docs.anthropic.com/en/docs/about-claude/mo
 
 ## Related
 
-- [Fred core](../core/README.md) -- main framework documentation
-- [All packages](../../README.md) -- monorepo overview
+- [Fred core](https://github.com/TheFancyRobot/fred/blob/main/packages/core/README.md) -- main framework documentation
+- [All packages](https://github.com/TheFancyRobot/fred#packages) -- monorepo overview
 
 ## License
 
