@@ -142,7 +142,7 @@ describe('FredHttpServerLive security middleware', () => {
         corsAllowedOrigins: ['https://console.example'],
       },
       allowedMethodsByPath: new Map([
-        ['/external/%7e', [' patch ', 'BAD,VALUE']],
+        ['/external/%7e', [' propfind ', 'BAD,VALUE']],
       ]),
     });
 
@@ -151,7 +151,7 @@ describe('FredHttpServerLive security middleware', () => {
       headers: { origin: 'https://console.example' },
     });
     const methods = preflight.headers.get('access-control-allow-methods');
-    expect(methods).toContain('PATCH');
+    expect(methods).toContain('PROPFIND');
     expect(methods).toContain('OPTIONS');
     expect(methods).not.toContain('BAD');
   });

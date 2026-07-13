@@ -18,7 +18,11 @@ import {
   FredOpenApiSpec,
 } from '../api';
 import { FredHttpHandlersLive } from '../handlers/index';
-import { FredHttpSecurityLive, type FredHttpSecurityOptions } from '../middleware';
+import {
+  FredHttpSecurityLive,
+  normalizeAllowedMethodsByPath,
+  type FredHttpSecurityOptions,
+} from '../middleware';
 import {
   buildFredHttpApi,
   buildWorkflowHandlersLayer,
@@ -160,15 +164,10 @@ export const FredHttpServerLive = (
     canonicalizeHttpPath(endpoint.path) ?? endpoint.path,
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
-  const allowedMethodsByPath = new Map<string, string[]>();
-  for (const [path, methods] of options.allowedMethodsByPath ?? new Map()) {
-    for (const method of methods) {
-      const normalizedMethod = method.trim().toUpperCase();
-      if (HttpMethod.isHttpMethod(normalizedMethod)) {
-        addAllowedMethod(allowedMethodsByPath, path, normalizedMethod);
-      }
-    }
-  }
+  const allowedMethodsByPath = new Map(Array.from(
+    normalizeAllowedMethodsByPath(options.allowedMethodsByPath ?? new Map(), []),
+    ([path, methods]) => [path, [...methods]] as const,
+  ));
   for (const [path, operations] of Object.entries(FredOpenApiSpec.paths)) {
     for (const method of Object.keys(operations)) {
       const normalizedMethod = method.toUpperCase();
