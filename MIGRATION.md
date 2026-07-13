@@ -18,16 +18,16 @@ the compatible package lines and intentionally remain semver ranges.
 
 | Package | Release candidate | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
-| `@fancyrobot/fred` | `2.0.0-alpha.1` | `effect ^3.21.0`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
+| `@fancyrobot/fred` | `2.0.0-alpha.1` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
 | `@fancyrobot/fred-cli` | `0.6.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
 | `@fancyrobot/fred-dev` | `1.0.0-alpha.1` | CLI `^0.6.0-alpha.0` | Final deprecated compatibility shim |
-| `@fancyrobot/fred-http` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
+| `@fancyrobot/fred-http` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
 | `@fancyrobot/fred-baml` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
 | `@fancyrobot/fred-convex` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
 | `@fancyrobot/fred-anthropic` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
-| `@fancyrobot/fred-google` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
-| `@fancyrobot/fred-groq` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
-| `@fancyrobot/fred-minimax` | `2.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
+| `@fancyrobot/fred-google` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
+| `@fancyrobot/fred-groq` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
+| `@fancyrobot/fred-minimax` | `2.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
 | `@fancyrobot/fred-openai` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
@@ -52,7 +52,7 @@ bun add \
   @fancyrobot/fred@2.0.0-alpha.1 \
   @fancyrobot/fred-http@1.0.0-alpha.1 \
   @fancyrobot/fred-minimax@2.0.0-alpha.1 \
-  effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
+  effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 
 Use the versions from the selected release candidate's published matrix if

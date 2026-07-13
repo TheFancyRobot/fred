@@ -10,6 +10,6 @@
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-baml": "workspace:*",
     "@fancyrobot/fred-openrouter": "workspace:*",
-    "effect": "^3.21.0"
+    "effect": "^3.21.5"
   }
 }

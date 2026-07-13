@@ -119,7 +119,7 @@ describe('local adapter package exports', () => {
             dependencies: {
               '@fancyrobot/fred': `file:${process.cwd()}/packages/core`,
               '@fancyrobot/fred-baml': `file:${process.cwd()}/packages/fred-baml`,
-              effect: '^3.21.0',
+              effect: '^3.21.5',
               typescript: '~5.8.3',
             },
           },

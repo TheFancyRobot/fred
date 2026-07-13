@@ -92,7 +92,7 @@
     "test": "bun test"
   },
   "peerDependencies": {
-    "effect": "^3.21.0",
+    "effect": "^3.21.5",
     "@effect/ai": "^0.35.0",
     "@effect/platform": "^0.96.0"
   },
@@ -109,7 +109,7 @@
     "jsondiffpatch": "^0.7.6"
   },
   "devDependencies": {
-    "effect": "^3.21.0",
+    "effect": "^3.21.5",
     "@effect/ai": "^0.35.0",
     "@effect/platform": "^0.96.0",
     "@types/js-yaml": "^4.0.9"

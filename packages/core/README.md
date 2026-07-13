@@ -9,7 +9,7 @@ TypeScript AI agent framework with intent-based routing and pipeline orchestrati
 ## Installation
 ```bash
 bun add @fancyrobot/fred@2.0.0-alpha.1 \
-  effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.0
+  effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 
 Add at least one provider package:
