@@ -234,8 +234,11 @@ class PipelineServiceImpl implements PipelineService {
     if (isGraphWorkflowConfig(config)) return self.registerGraphWorkflow(config);
     if (!isWorkflowIR(config)) {
       if (!isPipelineConfigV2(config)) {
-        const pipelineId = typeof config === 'object' && config !== null && 'id' in config
-          ? String(config.id)
+        const unsupportedConfig: unknown = config;
+        const pipelineId = typeof unsupportedConfig === 'object' &&
+          unsupportedConfig !== null &&
+          'id' in unsupportedConfig
+          ? String(unsupportedConfig.id)
           : '(unknown)';
         return Effect.fail(new PipelineExecutionError({
           pipelineId,
