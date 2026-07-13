@@ -4,8 +4,6 @@ import { dirname, resolve } from 'path';
 import type { Tool } from '../tool/tool';
 import type { ProviderConfigInput } from '../platform/provider';
 import {
-  loadConfig,
-  validateConfig,
   extractIntents,
   extractAgents,
   validateNoAmbiguousPromptFiles,
@@ -15,6 +13,8 @@ import {
   extractToolPolicies,
   extractMCPServers,
 } from './loader';
+import { loadValidatedConfig } from './load';
+import { emitFrameworkConfigWarnings } from './validate';
 import { loadPromptFile } from '../utils/prompt-loader';
 import {
   discoverAgentFiles,
@@ -93,9 +93,10 @@ export class ConfigInitializer {
     target: ConfigInitializationTarget,
     configPath: string,
     options?: InitializerOptions,
+    validatedConfig?: FrameworkConfig,
   ): Promise<void> {
-    const config = loadConfig(configPath);
-    validateConfig(config);
+    const config = validatedConfig ?? loadValidatedConfig(configPath);
+    emitFrameworkConfigWarnings(config);
 
     const defaultSystemMessage = config.defaultSystemMessage
       ? loadPromptFile(config.defaultSystemMessage, configPath, false)

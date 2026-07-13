@@ -9,7 +9,11 @@ import type {
   ToolPolicyRule,
   MCPGlobalServerConfig,
 } from './types';
-import { parseConfigFile } from './parser';
+import { loadValidatedConfig } from './load';
+import {
+  mcpConfigWarnings,
+  workflowDefaultAgentWarning,
+} from './validate';
 import type { Intent } from '../intent/intent';
 import type { AgentConfig } from '../agent/agent';
 import type { PipelineConfigV2 } from '../pipeline/pipeline';
@@ -49,7 +53,7 @@ export function clearPipelineFunctions(): void {
  * Load configuration from a file
  */
 export function loadConfig(filePath: string): FrameworkConfig {
-  return parseConfigFile(filePath);
+  return loadValidatedConfig(filePath);
 }
 
 /**
@@ -162,12 +166,8 @@ export function validateConfig(config: FrameworkConfig): void {
       if (workflowConfig.agents.length === 0) {
         throw new Error(`Workflow "${workflowName}" must have at least one agent`);
       }
-      // Warn if defaultAgent is not in agents array
-      if (!workflowConfig.agents.includes(workflowConfig.defaultAgent)) {
-        console.warn(
-          `[Config] Workflow "${workflowName}" defaultAgent "${workflowConfig.defaultAgent}" not in agents list`
-        );
-      }
+      const warning = workflowDefaultAgentWarning(workflowName, workflowConfig);
+      if (warning) console.warn(warning);
     }
   }
 
@@ -181,9 +181,10 @@ export function validateConfig(config: FrameworkConfig): void {
     }
   }
 
-  // Validate MCP server configuration (warn-only)
   if (config.mcpServers) {
-    validateMCPServers(config.mcpServers, config.agents);
+    for (const warning of mcpConfigWarnings(config.mcpServers, config.agents)) {
+      console.warn(warning);
+    }
   }
 
   if (policies) {
@@ -347,56 +348,6 @@ function validateSchemaMetadata(toolId: string, metadata: ToolSchemaMetadata): v
   }
   if (!metadata.properties || typeof metadata.properties !== 'object') {
     throw new Error(`Tool "${toolId}" schema metadata must include properties`);
-  }
-}
-
-/**
- * Validate MCP server configuration.
- * Uses warn-only semantics - logs warnings but does not throw.
- */
-function validateMCPServers(
-  mcpServers: Record<string, MCPGlobalServerConfig>,
-  agents?: AgentConfig[]
-): void {
-  const serverIds = new Set(Object.keys(mcpServers));
-
-  // Validate each server config
-  for (const [serverId, serverConfig] of Object.entries(mcpServers)) {
-    // Warn if stdio transport is missing command
-    if (serverConfig.transport === 'stdio' && !serverConfig.command) {
-      console.warn(
-        `[Config] MCP server "${serverId}" uses stdio transport but is missing "command" field`
-      );
-    }
-
-    // Warn if http/sse transport is missing url
-    if ((serverConfig.transport === 'http' || serverConfig.transport === 'sse') && !serverConfig.url) {
-      console.warn(
-        `[Config] MCP server "${serverId}" uses ${serverConfig.transport} transport but is missing "url" field`
-      );
-    }
-  }
-
-  // Validate agent server references
-  if (agents) {
-    for (const agent of agents) {
-      if (agent.mcpServers && Array.isArray(agent.mcpServers)) {
-        // Check if it's string[] (server ID references) or MCPServerConfig[] (inline config)
-        const firstElement = agent.mcpServers[0];
-        if (typeof firstElement === 'string') {
-          // String array - validate server IDs exist
-          const serverRefs = agent.mcpServers as string[];
-          for (const serverId of serverRefs) {
-            if (!serverIds.has(serverId)) {
-              console.warn(
-                `[Config] Agent "${agent.id}" references unknown MCP server "${serverId}"`
-              );
-            }
-          }
-        }
-        // If it's MCPServerConfig[], it's the old inline format - no validation needed for now
-      }
-    }
   }
 }
 

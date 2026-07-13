@@ -11,10 +11,9 @@
  * `ConfigError` (with remediation), instead of the imperative loader's
  * fail-on-first-`throw`.
  *
- * This is additive: the legacy `loadConfig`/`validateConfig` in `loader.ts`
- * are unchanged, so existing callers and their exact error messages keep
- * working. New/Effect-native callers can adopt this path (and pair it with
- * `configToLayers` from `compile.ts`) for provider-quality config errors.
+ * This is the canonical config boundary. Promise and Effect-facing runtime
+ * initializers both enter through this module before compiling the validated
+ * value into layers or applying live service configuration.
  */
 import { Schema } from 'effect';
 import { parseConfigFile } from './parser';

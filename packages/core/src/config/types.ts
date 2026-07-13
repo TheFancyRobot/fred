@@ -2,6 +2,7 @@ import type { Intent } from '../intent/intent';
 import type { AgentConfig } from '../agent/agent';
 import type { Tool, ToolSchemaMetadata } from '../tool/tool';
 import type { RoutingConfig } from '../routing/types';
+import type { FrameworkConfigSchemaType } from './schema';
 
 // =============================================================================
 // Provider Pack Config Types
@@ -353,14 +354,26 @@ export interface TemplateConfig {
 /**
  * Fred framework configuration structure for config files
  */
-export interface FrameworkConfig {
+type MutableConfig<T> =
+  T extends ReadonlyArray<infer Item> ? MutableConfig<Item>[]
+    : T extends object ? { -readonly [Key in keyof T]: MutableConfig<T[Key]> }
+    : T;
+
+/**
+ * Semantic refinements established by `validateFrameworkConfig` after the
+ * structural schema decode. Keeping them separate makes the schema-derived
+ * base explicit while preserving the historically supported public shape.
+ */
+interface ValidatedFrameworkConfigFields {
   intents?: Intent[];
   agents?: AgentConfig[];
-  /** Directories to scan for .md agent definition files.
-   *  Defaults to ['./agents'] if that directory exists.
-   *  Paths are relative to the config file or CWD. */
+  /**
+   * Directories to scan for `.md` agent definition files.
+   * Defaults to `['./agents']` if that directory exists.
+   * Paths are relative to the config file or current working directory.
+   */
   agentDirs?: string[];
-  /** Extended pipelines with step types (Phase 5+) */
+  /** Extended pipelines with step types (Phase 5+). */
   pipelinesV2?: Record<string, ExtendedPipelineConfig>;
   tools?: ToolConfig[];
   defaultSystemMessage?: string;
@@ -371,22 +384,28 @@ export interface FrameworkConfig {
     agents: string[];
     routing?: RoutingConfig;
   }>;
-  /** Provider pack declarations */
+  /** Provider pack declarations. */
   providers?: ProviderPackConfig[];
   /** Plugin declarations (npm package, local path, or object form). */
   plugins?: PluginDeclaration[];
-  /** Persistence storage configuration */
+  /** Persistence storage configuration. */
   persistence?: PersistenceConfig;
-  /** Observability configuration (tracing and logging) */
+  /** Observability configuration (tracing and logging). */
   observability?: ObservabilityConfig;
-  /** Tool access policy declarations */
+  /** Tool access policy declarations. */
   policies?: ToolPoliciesConfig;
-  /** Backward-compatible alias for policy declarations */
+  /** Backward-compatible alias for policy declarations. */
   toolPolicies?: ToolPoliciesConfig;
-  /** MCP server declarations (global registry, agents reference by ID) */
+  /** MCP server declarations (global registry, agents reference by ID). */
   mcpServers?: Record<string, MCPGlobalServerConfig>;
   template?: TemplateConfig;
 }
+
+/** Fred framework configuration decoded and semantically validated by Effect Schema. */
+export type FrameworkConfig = Omit<
+  MutableConfig<FrameworkConfigSchemaType>,
+  keyof ValidatedFrameworkConfigFields
+> & ValidatedFrameworkConfigFields;
 
 export interface MemoryConfig {
   policy?: {

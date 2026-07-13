@@ -7,11 +7,12 @@
  * `validateConfig` in `loader.ts` but returning `ConfigError`s (with
  * remediation) instead of throwing on the first problem.
  *
- * This function is not yet wired into `loadConfig`; STEP-61-05 makes the
- * loader run schema-decode + this pass and surface the aggregated errors.
+ * The canonical loader runs this pass after schema decoding and surfaces the
+ * accumulated issues as one `ConfigValidationError`.
  */
 import { ConfigError } from './errors';
 import type { FrameworkConfigSchemaType } from './schema';
+import type { FrameworkConfig } from './types';
 
 const configError = (
   path: string,
@@ -349,4 +350,61 @@ export function validateFrameworkConfig(config: FrameworkConfigSchemaType): Conf
   }
 
   return errors;
+}
+
+/**
+ * Preserve the compatibility diagnostics that were intentionally warn-only in
+ * the imperative validator. Schema-first loading must not silently discard
+ * useful configuration feedback merely because these conditions are valid.
+ */
+export function workflowDefaultAgentWarning(
+  workflowName: string,
+  workflow: NonNullable<FrameworkConfig['workflows']>[string],
+): string | undefined {
+  return workflow.agents.includes(workflow.defaultAgent)
+    ? undefined
+    : `[Config] Workflow "${workflowName}" defaultAgent "${workflow.defaultAgent}" not in agents list`;
+}
+
+export function mcpConfigWarnings(
+  mcpServers: NonNullable<FrameworkConfig['mcpServers']>,
+  agents: FrameworkConfig['agents'],
+): string[] {
+  const warnings: string[] = [];
+  const serverIds = new Set(Object.keys(mcpServers));
+  for (const [serverId, server] of Object.entries(mcpServers)) {
+    if (server.transport === 'stdio' && !server.command) {
+      warnings.push(
+        `[Config] MCP server "${serverId}" uses stdio transport but is missing "command" field`,
+      );
+    }
+    if ((server.transport === 'http' || server.transport === 'sse') && !server.url) {
+      warnings.push(
+        `[Config] MCP server "${serverId}" uses ${server.transport} transport but is missing "url" field`,
+      );
+    }
+  }
+
+  for (const agent of agents ?? []) {
+    if (!Array.isArray(agent.mcpServers) || typeof agent.mcpServers[0] !== 'string') continue;
+    for (const serverId of agent.mcpServers as string[]) {
+      if (!serverIds.has(serverId)) {
+        warnings.push(
+          `[Config] Agent "${agent.id}" references unknown MCP server "${serverId}"`,
+        );
+      }
+    }
+  }
+
+  return warnings;
+}
+
+export function emitFrameworkConfigWarnings(config: FrameworkConfig): void {
+  const warnings = Object.entries(config.workflows ?? {}).flatMap(([name, workflow]) => {
+    const warning = workflowDefaultAgentWarning(name, workflow);
+    return warning ? [warning] : [];
+  });
+  if (config.mcpServers) warnings.push(...mcpConfigWarnings(config.mcpServers, config.agents));
+
+  for (const warning of warnings) console.warn(warning);
 }

@@ -27,17 +27,23 @@ import {
 /**
  * Map a validated config to the build-time runtime-layer options.
  *
- * Observability layers are always built (mirroring the initializer, which
- * applies `extractObservability(config)` unconditionally — an empty config
- * yields the default tracer/logger). Routing is only set when the config
- * declares it, so an undeclared routing block leaves the runtime's default
- * no-op router in place.
+ * By default, observability layers are always built (an empty config yields
+ * the default tracer/logger), while routing is set only when declared. A
+ * facade that has explicit overrides can omit either output to avoid creating
+ * unused runtime resources.
  */
-export function configToLayerOptions(config: FrameworkConfig): FredLayerOptions {
-  const options: FredLayerOptions = {
-    observabilityLayers: buildObservabilityLayers(extractObservability(config)),
-  };
-  if (config.routing) {
+export function configToLayerOptions(
+  config: FrameworkConfig,
+  selection: {
+    readonly includeRouting?: boolean;
+    readonly includeObservability?: boolean;
+  } = {},
+): FredLayerOptions {
+  const options: FredLayerOptions = {};
+  if (selection.includeObservability ?? true) {
+    options.observabilityLayers = buildObservabilityLayers(extractObservability(config));
+  }
+  if ((selection.includeRouting ?? true) && config.routing) {
     // Guarantee `rules` is an array even for an unvalidated config —
     // MessageRouterService spreads it at dispatch and would crash on undefined.
     options.routingConfig = { ...config.routing, rules: config.routing.rules ?? [] };

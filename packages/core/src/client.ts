@@ -67,7 +67,8 @@ import {
   type ConfigInitializationTarget,
   type InitializerOptions,
 } from './config/initializer';
-import { extractObservability, loadConfig, validateConfig } from './config/loader';
+import { loadValidatedConfig } from './config/load';
+import { configToLayerOptions } from './config/compile';
 import type { ContextStorage, SessionDetails, SessionSummary } from './context/context';
 import { PostgresContextStorage } from './context/storage/postgres';
 import { SqliteContextStorage } from './context/storage/sqlite';
@@ -461,11 +462,16 @@ const toMCPToolMetadata = (tool: Tool): MCPToolMetadata => ({
  * Create a Fred client with an initialized Effect runtime.
  */
 export async function createFred(options: CreateFredOptions = {}): Promise<FredClient> {
-  const loadedConfig = options.configPath ? loadConfig(options.configPath) : undefined;
-  if (loadedConfig) validateConfig(loadedConfig);
-  const routing = options.routing ?? loadedConfig?.routing;
-  const observability = options.observability
-    ?? (loadedConfig ? extractObservability(loadedConfig) : undefined);
+  const loadedConfig = options.configPath ? loadValidatedConfig(options.configPath) : undefined;
+  const needsConfigRouting = options.routing === undefined;
+  const needsConfigObservability = options.observability === undefined;
+  const compiledConfig = loadedConfig && (needsConfigRouting || needsConfigObservability)
+    ? configToLayerOptions(loadedConfig, {
+        includeRouting: needsConfigRouting,
+        includeObservability: needsConfigObservability,
+      })
+    : undefined;
+  const routing = options.routing ?? compiledConfig?.routingConfig;
   const template = options.template ?? loadedConfig?.template;
   const templateBasePath = options.configPath ? dirname(options.configPath) : process.cwd();
   const persistence = loadedConfig?.persistence;
@@ -498,9 +504,9 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const layer = Layer.mergeAll(
     makeFredRuntimeLayer({
       routingConfig: routing,
-      observabilityLayers: observability
-        ? buildObservabilityLayers(observability)
-        : undefined,
+      observabilityLayers: options.observability !== undefined
+        ? buildObservabilityLayers(options.observability)
+        : compiledConfig?.observabilityLayers,
       promptSourceLayer: options.promptSourceLayer,
       storage: options.storage ?? configuredStorage,
       checkpointStorage: configuredCheckpointStorage,
@@ -1082,6 +1088,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           ...options.configOptions,
           routingOverride: options.routing,
         },
+        loadedConfig,
       );
     } catch (error) {
       await client.shutdown();
