@@ -161,6 +161,14 @@ export const FredHttpServerLive = (
     endpoint.auth === false ? false : (endpoint.auth?.scopes ?? []),
   ] as const));
   const allowedMethodsByPath = new Map<string, string[]>();
+  for (const [path, methods] of options.allowedMethodsByPath ?? new Map()) {
+    for (const method of methods) {
+      const normalizedMethod = method.trim().toUpperCase();
+      if (HttpMethod.isHttpMethod(normalizedMethod)) {
+        addAllowedMethod(allowedMethodsByPath, path, normalizedMethod);
+      }
+    }
+  }
   for (const [path, operations] of Object.entries(FredOpenApiSpec.paths)) {
     for (const method of Object.keys(operations)) {
       const normalizedMethod = method.toUpperCase();
