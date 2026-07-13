@@ -16,7 +16,9 @@
     "@fancyrobot/fred-openrouter": "4.0.0"
   },
   "changesets": [
+    "align-effect-peer-floor",
     "fred-v2-effect-first-core",
+    "generic-tool-registration",
     "http-workflow-endpoints",
     "local-adapter-resolution",
     "minimax-file-dependency-resolution",
