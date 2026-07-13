@@ -87,6 +87,9 @@ describe('validateParsedConfig — aggregated errors', () => {
     expect(() => validateConfig({ pipelines: {} } as never)).toThrow(
       /pipelinesV2.*native workflow/,
     );
+    const inherited = Object.create({ pipelines: {} }) as Record<string, unknown>;
+    expect(() => validateConfig(inherited as never)).not.toThrow();
+    expect(() => validateParsedConfig(inherited)).not.toThrow();
   });
 
   it('throws ConfigValidationError listing every semantic problem at once', () => {

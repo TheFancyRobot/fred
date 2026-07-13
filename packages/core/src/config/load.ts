@@ -35,7 +35,11 @@ const decode = Schema.decodeUnknownEither(FrameworkConfigSchema);
  * about types hold.
  */
 export function validateParsedConfig(config: unknown): FrameworkConfig {
-  if (typeof config === 'object' && config !== null && 'pipelines' in config) {
+  if (
+    typeof config === 'object' &&
+    config !== null &&
+    Object.prototype.hasOwnProperty.call(config, 'pipelines')
+  ) {
     throw configValidationError([
       new ConfigError({
         path: 'pipelines',

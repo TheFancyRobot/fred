@@ -173,6 +173,31 @@ describe('unified WorkflowIR executor', () => {
     expect(nestedInput).toBe(structured);
   });
 
+  it('preserves structured input through the pipeline-manager fallback', async () => {
+    const structured = { left: 'draft', right: 'critique' };
+    const workflow = compilePipelineV2({
+      id: 'fallback-nested-input',
+      steps: [
+        { name: 'prepare', type: 'function', fn: () => structured },
+        { name: 'nested', type: 'pipeline', pipelineId: 'child' },
+      ],
+    });
+    let nestedInput: unknown;
+    await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({}),
+      pipelineManager: {
+        getPipeline: () => ({
+          execute: async (input) => {
+            nestedInput = input;
+            return { content: 'done', toolCalls: [] };
+          },
+        }),
+      },
+    }));
+
+    expect(nestedInput).toBe(structured);
+  });
+
   it('passes nested agent content into the next native agent', async () => {
     const workflow = {
       id: 'nested-agent-sequence',

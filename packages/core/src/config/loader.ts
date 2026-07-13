@@ -56,7 +56,7 @@ export function loadConfig(filePath: string): FrameworkConfig {
  * Validate config structure
  */
 export function validateConfig(config: FrameworkConfig): void {
-  if ('pipelines' in (config as FrameworkConfig & { readonly pipelines?: unknown })) {
+  if (Object.prototype.hasOwnProperty.call(config, 'pipelines')) {
     throw new Error(
       'The legacy top-level "pipelines" configuration has been removed. Migrate it to "pipelinesV2" or define a native workflow.',
     );

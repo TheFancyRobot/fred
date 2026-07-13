@@ -23,7 +23,7 @@ export interface WorkflowExecutionOptions {
   readonly pipelineManager?: {
     readonly getPipeline: (
       id: string,
-    ) => { readonly execute: (message: string) => Promise<AgentResponse> } | undefined;
+    ) => { readonly execute: (input: unknown) => Promise<AgentResponse> } | undefined;
   };
   readonly workflowResolver?: (
     workflowId: string,
@@ -334,7 +334,7 @@ function runNodeBody(
         );
       }
       return Effect.tryPromise({
-        try: () => nested.execute(workflowInputToMessage(nestedInput)),
+        try: () => nested.execute(nestedInput),
         catch: (cause) => nodeFailure(workflow.id, node.id, cause, true),
       });
     }

@@ -62,7 +62,7 @@ export interface ExecutorOptions {
   hookManager?: HookManagerLike;
   tracer?: Tracer;
   pipelineManager?: {
-    getPipeline: (id: string) => { execute: (message: string) => Promise<AgentResponse> } | undefined;
+    getPipeline: (id: string) => { execute: (input: unknown) => Promise<AgentResponse> } | undefined;
   };
   checkpointManager?: CheckpointManager;
 }
