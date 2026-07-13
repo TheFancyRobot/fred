@@ -39,7 +39,7 @@ import type {
   PipelineAlreadyExistsError,
   PipelineExecutionError,
 } from './pipeline/errors';
-import { findNode, type WorkflowIR } from './workflow/ir';
+import type { WorkflowIR } from './workflow/ir';
 import {
   WorkflowInputValidationError,
   WorkflowNodeExecutionError,
@@ -47,7 +47,6 @@ import {
 } from './workflow/errors';
 import type { WorkflowDescriptor } from './workflow/contracts';
 import {
-  agentResponseContent,
   executeWorkflowEffect,
   type WorkflowExecutionOptions,
   type WorkflowExecutionResult,
@@ -176,11 +175,7 @@ export async function executeWorkflowViaRuntime(
           retryable: true,
         });
       }
-      return agentResponseContent(
-        findNode(nestedWorkflow, nestedResult.finalOutputNodeId ?? ''),
-        nestedResult.finalOutput,
-      ) ??
-        nestedResult.finalOutput;
+      return nestedResult.finalOutput;
     });
 
   const executionOptions: WorkflowExecutionOptions = {

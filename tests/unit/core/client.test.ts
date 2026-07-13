@@ -522,7 +522,7 @@ describe('createFred client', () => {
     expect(result.finalOutput).toBe('child:hello');
   });
 
-  it('preserves content-shaped data returned by a non-agent nested workflow', async () => {
+  it('preserves structured data returned by a nested workflow', async () => {
     const client = track(await createFred());
     await client.workflows.define(defineWorkflow({
       id: 'agent-child-workflow',

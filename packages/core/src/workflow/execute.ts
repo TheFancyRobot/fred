@@ -45,8 +45,6 @@ export interface WorkflowExecutionResult {
   readonly outputs: Record<string, unknown>;
   readonly executedNodes: string[];
   readonly finalOutput?: unknown;
-  /** Node that produced `finalOutput`; avoids inferring provenance from execution order. */
-  readonly finalOutputNodeId?: string;
   readonly error?: Error;
   readonly failedNodeId?: string;
   readonly abortedBy?: string;
@@ -692,7 +690,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         .map((node) => node.id)
     : [workflow.entry];
   let finalOutput: unknown;
-  let finalOutputNodeId: string | undefined;
   const retryAttempts = new Map<string, number>();
 
   const workflowSpan = options.tracer?.startSpan(
@@ -898,7 +895,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           completed.add(node.id);
           if (!node.internal && node.recordOutput !== false && !execution.skipped) {
             finalOutput = result;
-            finalOutputNodeId = node.id;
           }
         } else {
           completed.add(node.id);
@@ -1035,7 +1031,6 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
       outputs: context.outputs,
       executedNodes,
       finalOutput: validatedFinalOutput,
-      finalOutputNodeId,
       runId,
     } satisfies WorkflowExecutionResult;
   });
