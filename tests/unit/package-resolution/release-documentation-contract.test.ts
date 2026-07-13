@@ -133,7 +133,13 @@ describe('release documentation contract', () => {
     expect(effectRanges.size).toBe(1);
     const [range] = effectRanges;
     if (!range?.startsWith('^')) throw new Error(`Unsupported Effect peer range: ${range}`);
-    expect(lock.packages.effect?.[0]).toBe(`effect@${range.slice(1)}`);
+    const expectedResolution = `effect@${range.slice(1)}`;
+    const effectResolutions = Object.values(lock.packages)
+      .map(([packageId]) => packageId)
+      .filter((packageId) => packageId.startsWith('effect@'));
+
+    expect(lock.packages.effect?.[0]).toBe(expectedResolution);
+    expect(effectResolutions).toEqual([expectedResolution]);
   });
 
   test('root quick-start install guidance tracks every selected package peer contract', () => {
