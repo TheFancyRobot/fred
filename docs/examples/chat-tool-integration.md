@@ -8,7 +8,9 @@ import { createCalculatorTool, createFred } from '@fancyrobot/fred';
 import { withHttp } from '@fancyrobot/fred-http';
 
 async function main() {
-  const core = await createFred();
+  const core = await createFred({
+    routing: { defaultAgent: 'assistant', rules: [] },
+  });
   await core.providers.use('openai');
   await core.tools.register(createCalculatorTool());
   await core.agents.register({
