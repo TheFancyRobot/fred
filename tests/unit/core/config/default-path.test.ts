@@ -11,7 +11,7 @@ import {
   type ConfigInitializationTarget,
 } from '../../../../packages/core/src/config/initializer';
 import { ConfigValidationError } from '../../../../packages/core/src/config/errors';
-import { loadConfig } from '../../../../packages/core/src/config/loader';
+import { loadConfig, validateConfig } from '../../../../packages/core/src/config/loader';
 
 const tempDirs: string[] = [];
 
@@ -107,12 +107,17 @@ describe('schema-first config is the default runtime path', () => {
     expect(() => loadConfig(invalidConfigPath())).toThrow(ConfigValidationError);
   });
 
-  it('preserves valid warn-only workflow and MCP diagnostics', () => {
+  it('preserves valid warn-only workflow and MCP diagnostics at initialization', async () => {
     const warnings: string[] = [];
     const originalWarn = console.warn;
     console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
     try {
-      loadConfig(warningConfigPath());
+      const config = loadConfig(warningConfigPath());
+      expect(warnings).toEqual([]);
+      validateConfig(config);
+      expect(warnings).toHaveLength(3);
+      warnings.length = 0;
+      await new ConfigInitializer().initializeServices(unusedTarget(), warningConfigPath());
     } finally {
       console.warn = originalWarn;
     }

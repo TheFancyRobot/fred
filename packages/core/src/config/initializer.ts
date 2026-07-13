@@ -14,6 +14,7 @@ import {
   extractMCPServers,
 } from './loader';
 import { loadValidatedConfig } from './load';
+import { emitFrameworkConfigWarnings } from './validate';
 import { loadPromptFile } from '../utils/prompt-loader';
 import {
   discoverAgentFiles,
@@ -95,6 +96,7 @@ export class ConfigInitializer {
     validatedConfig?: FrameworkConfig,
   ): Promise<void> {
     const config = validatedConfig ?? loadValidatedConfig(configPath);
+    emitFrameworkConfigWarnings(config);
 
     const defaultSystemMessage = config.defaultSystemMessage
       ? loadPromptFile(config.defaultSystemMessage, configPath, false)
