@@ -16,6 +16,11 @@ bun add @fancyrobot/fred-convex@1.0.0-alpha.1 \
   @fancyrobot/fred@2.0.0-alpha.1 convex@^1.42.1 effect@^3.21.0
 ```
 
+> `convex@^1.42.1` is a security support floor, not an adapter API-shape
+> requirement. Earlier compatible 1.x clients pin vulnerable `ws` releases;
+> Fred requires the fixed upstream Convex line instead of relying on consumer
+> overrides.
+
 ## Quick Start
 
 ```ts
