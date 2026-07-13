@@ -4,7 +4,7 @@ Fred exposes an OpenAI-compatible endpoint for chat tools while keeping HTTP
 outside the core client.
 
 ```typescript
-import { createCalculatorTool, createFred } from '@fancyrobot/fred';
+import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openai';
 import { withHttp } from '@fancyrobot/fred-http';
 
@@ -13,7 +13,6 @@ async function main() {
     routing: { defaultAgent: 'assistant', rules: [] },
   });
   await core.providers.use('openai');
-  await core.tools.register(createCalculatorTool());
   await core.agents.register({
     id: 'assistant',
     systemMessage: 'You are a helpful assistant. Use the calculator for arithmetic.',
