@@ -204,6 +204,21 @@ describe('unified WorkflowIR executor', () => {
     ]);
   });
 
+  it('ignores inherited object keys when resolving predecessor outputs', async () => {
+    const workflow = {
+      id: 'prototype-safe-input',
+      source: 'native' as const,
+      entry: 'target',
+      nodes: [{ id: 'target', kind: 'agent' as const, agentId: 'target' }],
+      edges: [{ from: 'toString', to: 'target' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ target: echoAgent('target') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'target<-original', toolCalls: [] });
+  });
+
   it('passes every completed predecessor output to a native synthesis agent', async () => {
     const workflow = {
       id: 'native-fan-in',

@@ -103,6 +103,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 /** Extract conversational content only from agent or nested-workflow results. */
 function conversationalContent(node: IRNode | undefined, value: unknown): string | undefined {
   return (node?.kind === 'agent' || node?.kind === 'subworkflow') &&
@@ -134,7 +138,7 @@ function messageForNode(
 
   const predecessors = inEdges(workflow, node.id)
     .map((edge) => edge.from)
-    .filter((source) => source in runtimeOutputs);
+    .filter((source) => hasOwn(runtimeOutputs, source));
   if (predecessors.length === 0) return workflowInputToMessage(input);
 
   if (predecessors.length > 1) {
@@ -157,7 +161,7 @@ export function getPublicWorkflowOutputs(
 ): Record<string, unknown> {
   const visible: Record<string, unknown> = {};
   for (const node of workflow.nodes) {
-    if (!node.internal && node.recordOutput !== false && node.id in outputs) {
+    if (!node.internal && node.recordOutput !== false && hasOwn(outputs, node.id)) {
       visible[node.id] = outputs[node.id];
     }
   }
