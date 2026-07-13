@@ -1,5 +1,15 @@
 # @fancyrobot/fred-minimax
 
+## 2.0.0-alpha.2
+
+### Patch Changes
+
+- [#88](https://github.com/TheFancyRobot/fred/pull/88) [`d66c541`](https://github.com/TheFancyRobot/fred/commit/d66c541f3e7d235f7c305679d4cc84a070317ab6) Thanks [@sincspecv](https://github.com/sincspecv)! - Require `effect@^3.21.5` in packages that directly peer on the
+  `@effect/platform` 0.96 line. The reviewed workspace lock resolves
+  `@effect/platform@0.96.3`, whose Effect peer range starts at 3.21.5. This is a
+  compatibility boundary; no upstream vulnerability is being claimed for Effect
+  3.21.0 through 3.21.4.
+
 ## 2.0.0-alpha.1
 
 ### Patch Changes
