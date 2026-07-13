@@ -153,10 +153,6 @@ function inputForNode(
   input: unknown,
   runtimeOutputs: Readonly<Record<string, unknown>>,
 ): unknown {
-  if (workflow.source !== 'native' && node.kind !== 'subworkflow') {
-    return input;
-  }
-
   const predecessors = inEdges(workflow, node.id)
     .map((edge) => edge.from)
     .filter((source) => hasOwn(runtimeOutputs, source));

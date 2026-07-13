@@ -54,6 +54,21 @@ describe('unified WorkflowIR executor', () => {
     ]);
   });
 
+  it('threads predecessor content through V2 agent sequences', async () => {
+    const workflow = compilePipelineV2({
+      id: 'v2-agent-chain',
+      steps: [
+        { name: 'first', type: 'agent', agentId: 'a' },
+        { name: 'second', type: 'agent', agentId: 'b' },
+      ],
+    });
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'hi', {
+      agentManager: agentManager({ a: echoAgent('a'), b: echoAgent('b') }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'b<-a<-hi', toolCalls: [] });
+  });
+
   it('preserves V2 accumulation and hides compiler-generated conditional outputs', async () => {
     const workflow = compilePipelineV2({
       id: 'conditional',
