@@ -270,7 +270,7 @@ describe('publishable package contract', () => {
     mkdirSync(consumerDir, { recursive: true });
 
     const tarballs = new Map<string, string>();
-    const externalDependencies: Record<string, string> = { typescript: '^5.9.3' };
+    const externalDependencies: Record<string, string> = { typescript: ts.version };
     for (const packageDir of packageDirs) {
       const manifest = readManifest(packageDir);
       const result = pack(packageDir, packDir, false);
