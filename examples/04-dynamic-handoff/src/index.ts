@@ -1,7 +1,6 @@
 import {
   createFred,
   createHandoffTool,
-  type Tool,
 } from '@fancyrobot/fred';
 import '@fancyrobot/fred-openrouter';
 
@@ -16,7 +15,7 @@ async function main() {
     () => allAgentIds
   );
 
-  await fred.tools.register(handoffTool as unknown as Tool);
+  await fred.tools.register(handoffTool);
   for (const agent of agents.values()) {
     await fred.agents.remove(agent.id);
     await fred.agents.register({

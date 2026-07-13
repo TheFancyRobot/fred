@@ -332,7 +332,7 @@ export interface FredClient {
     process(message: string, options?: ProcessingOptions): Promise<AgentResponse>;
   };
   readonly tools: {
-    register(tool: Tool): Promise<void>;
+    register<Input, Output, Failure>(tool: Tool<Input, Output, Failure>): Promise<void>;
     remove(id: string): Promise<boolean>;
     list(): Promise<Tool[]>;
   };

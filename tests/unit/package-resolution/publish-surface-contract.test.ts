@@ -324,7 +324,11 @@ describe('publishable package contract', () => {
     const specifiers = inventory.map((entry) => specifier(entry, readManifest(entry.packageDir)));
     writeFileSync(
       join(consumerDir, 'consumer.ts'),
-      specifiers.map((name, index) => `import type * as Surface${index} from '${name}';\ntype T${index} = keyof typeof Surface${index};`).join('\n'),
+      specifiers.map((name, index) => `import type * as Surface${index} from '${name}';\ntype T${index} = keyof typeof Surface${index};`).join('\n') +
+        "\nimport type { FredClient, Tool } from '@fancyrobot/fred';\n" +
+        "declare const client: FredClient;\n" +
+        "declare const tool: Tool<{ readonly value: string }, string, never>;\n" +
+        "client.tools.register(tool);\n",
     );
     const builtEntrypoints = inventory.map((entry) => {
       const manifest = readManifest(entry.packageDir);
