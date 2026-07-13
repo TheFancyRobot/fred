@@ -17,9 +17,9 @@ bun add @fancyrobot/fred-convex@1.0.0-alpha.1 \
 ```
 
 > `convex@^1.42.1` is a security support floor, not an adapter API-shape
-> requirement. Earlier compatible 1.x clients pin vulnerable `ws` releases;
-> Fred requires the fixed upstream Convex line instead of relying on consumer
-> overrides.
+> requirement. Earlier compatible 1.x clients can pin vulnerable `ws@8.20.1`;
+> Fred requires the Convex line that pins fixed `ws@8.21.0` instead of relying
+> on consumer overrides.
 
 ## Quick Start
 

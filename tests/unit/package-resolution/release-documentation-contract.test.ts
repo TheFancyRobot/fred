@@ -115,11 +115,23 @@ describe('release documentation contract', () => {
     }
   });
 
-  test('root quick-start install guidance tracks the selected provider peer contract', () => {
-    const provider = readManifest('provider-openrouter');
+  test('root quick-start install guidance tracks every selected package peer contract', () => {
+    const selectedPackages = [readManifest('core'), readManifest('provider-openrouter')];
     const block = bashBlockUnderHeading(rootReadme, 'Quick Start');
+    const peers = new Map<string, string>();
 
-    for (const [peerName, range] of Object.entries(provider.peerDependencies ?? {})) {
+    for (const manifest of selectedPackages) {
+      installVersion(block, manifest.name);
+      for (const [peerName, range] of Object.entries(manifest.peerDependencies ?? {})) {
+        const existing = peers.get(peerName);
+        if (existing && existing !== range) {
+          throw new Error(`Conflicting ${peerName} peer ranges: ${existing} and ${range}`);
+        }
+        peers.set(peerName, range);
+      }
+    }
+
+    for (const [peerName, range] of peers) {
       const version = installVersion(block, peerName);
       if (peerName.startsWith('@fancyrobot/')) {
         expect(Bun.semver.satisfies(version, range)).toBe(true);
