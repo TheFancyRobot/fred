@@ -152,6 +152,58 @@ describe('unified WorkflowIR executor', () => {
     expect(result.finalOutput).toBe('child<-preparer<-original');
   });
 
+  it('passes nested agent content into the next native agent', async () => {
+    const workflow = {
+      id: 'nested-agent-sequence',
+      source: 'native' as const,
+      entry: 'draft',
+      nodes: [
+        { id: 'draft', kind: 'subworkflow' as const, workflowId: 'drafter' },
+        { id: 'review', kind: 'agent' as const, agentId: 'reviewer' },
+      ],
+      edges: [{ from: 'draft', to: 'review' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ reviewer: echoAgent('reviewer') }),
+      workflowResolver: () => Effect.succeed({ content: 'draft', toolCalls: [] }),
+    }));
+
+    expect(result.finalOutput).toEqual({ content: 'reviewer<-draft', toolCalls: [] });
+  });
+
+  it('does not leak isolated native agent turns into shared history', async () => {
+    let observerHistory: readonly unknown[] | undefined;
+    const observer = echoAgent('observer');
+    observer.processMessage = (message, history) => {
+      observerHistory = [...history];
+      return Effect.succeed({ content: `observer<-${message}`, toolCalls: [] });
+    };
+    const workflow = {
+      id: 'isolated-agent-history',
+      source: 'native' as const,
+      entry: 'isolated',
+      nodes: [
+        {
+          id: 'isolated',
+          kind: 'agent' as const,
+          agentId: 'isolated',
+          contextView: 'isolated' as const,
+        },
+        { id: 'observer', kind: 'agent' as const, agentId: 'observer' },
+      ],
+      edges: [{ from: 'isolated', to: 'observer' }],
+    };
+    const result = await Effect.runPromise(executeWorkflowEffect(workflow, 'original', {
+      agentManager: agentManager({ isolated: echoAgent('isolated'), observer }),
+    }));
+
+    expect(observerHistory).toEqual([]);
+    expect(result.context.history).toEqual([
+      { role: 'user', content: 'isolated<-original' },
+      { role: 'assistant', content: 'observer<-isolated<-original' },
+    ]);
+  });
+
   it('passes every completed predecessor output to a native synthesis agent', async () => {
     const workflow = {
       id: 'native-fan-in',

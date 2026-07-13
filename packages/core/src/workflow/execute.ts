@@ -103,9 +103,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Return conversational content only when the producing node is known to be an agent. */
-export function agentResponseContent(node: IRNode | undefined, value: unknown): string | undefined {
-  return node?.kind === 'agent' && isRecord(value) && typeof value.content === 'string'
+/** Extract conversational content only from agent or nested-workflow results. */
+function conversationalContent(node: IRNode | undefined, value: unknown): string | undefined {
+  return (node?.kind === 'agent' || node?.kind === 'subworkflow') &&
+    isRecord(value) && typeof value.content === 'string'
     ? value.content
     : undefined;
 }
@@ -140,13 +141,13 @@ function messageForNode(
     return workflowInputToMessage(Object.fromEntries(
       predecessors.map((source) => {
         const output = runtimeOutputs[source];
-        return [source, agentResponseContent(findNode(workflow, source), output) ?? output];
+        return [source, conversationalContent(findNode(workflow, source), output) ?? output];
       }),
     ));
   }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
-  return agentResponseContent(findNode(workflow, predecessors[0]!), predecessorOutput) ??
+  return conversationalContent(findNode(workflow, predecessors[0]!), predecessorOutput) ??
     workflowInputToMessage(predecessorOutput);
 }
 
@@ -902,8 +903,13 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
           completed.add(node.id);
         }
 
-        if (workflow.source === 'native' && node.kind === 'agent' && !execution.skipped) {
-          const content = agentResponseContent(node, result);
+        if (
+          workflow.source === 'native' &&
+          node.kind === 'agent' &&
+          node.contextView !== 'isolated' &&
+          !execution.skipped
+        ) {
+          const content = conversationalContent(node, result);
           context.history.push({ role: 'user', content: nodeMessage });
           if (content !== undefined) context.history.push({ role: 'assistant', content });
         }
