@@ -367,7 +367,13 @@ type MutableConfig<T> =
 interface ValidatedFrameworkConfigFields {
   intents?: Intent[];
   agents?: AgentConfig[];
+  /**
+   * Directories to scan for `.md` agent definition files.
+   * Defaults to `['./agents']` if that directory exists.
+   * Paths are relative to the config file or current working directory.
+   */
   agentDirs?: string[];
+  /** Extended pipelines with step types (Phase 5+). */
   pipelinesV2?: Record<string, ExtendedPipelineConfig>;
   tools?: ToolConfig[];
   defaultSystemMessage?: string;
@@ -378,12 +384,19 @@ interface ValidatedFrameworkConfigFields {
     agents: string[];
     routing?: RoutingConfig;
   }>;
+  /** Provider pack declarations. */
   providers?: ProviderPackConfig[];
+  /** Plugin declarations (npm package, local path, or object form). */
   plugins?: PluginDeclaration[];
+  /** Persistence storage configuration. */
   persistence?: PersistenceConfig;
+  /** Observability configuration (tracing and logging). */
   observability?: ObservabilityConfig;
+  /** Tool access policy declarations. */
   policies?: ToolPoliciesConfig;
+  /** Backward-compatible alias for policy declarations. */
   toolPolicies?: ToolPoliciesConfig;
+  /** MCP server declarations (global registry, agents reference by ID). */
   mcpServers?: Record<string, MCPGlobalServerConfig>;
   template?: TemplateConfig;
 }

@@ -154,6 +154,19 @@ describe('schema-first config is the default runtime path', () => {
     expect(initializer).not.toMatch(/\b(?:loadConfig|validateConfig)\b/);
     expect(types).toContain('MutableConfig<FrameworkConfigSchemaType>');
     expect(types).not.toContain('export interface FrameworkConfig');
+    for (const publicFieldDoc of [
+      'Directories to scan for `.md` agent definition files.',
+      'Extended pipelines with step types (Phase 5+).',
+      'Provider pack declarations.',
+      'Plugin declarations (npm package, local path, or object form).',
+      'Persistence storage configuration.',
+      'Observability configuration (tracing and logging).',
+      'Tool access policy declarations.',
+      'Backward-compatible alias for policy declarations.',
+      'MCP server declarations (global registry, agents reference by ID).',
+    ]) {
+      expect(types).toContain(publicFieldDoc);
+    }
     expect(loader).toContain('return loadValidatedConfig(filePath)');
     expect(loader).not.toContain('return parseConfigFile(filePath)');
   });
