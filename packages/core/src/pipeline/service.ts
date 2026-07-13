@@ -191,6 +191,17 @@ export interface PipelineService {
 
 export const PipelineService = Context.GenericTag<PipelineService>('PipelineService');
 
+function isPipelineConfigV2(config: unknown): config is PipelineConfigV2 {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'id' in config &&
+    typeof config.id === 'string' &&
+    'steps' in config &&
+    Array.isArray(config.steps)
+  );
+}
+
 /**
  * Implementation of PipelineService
  */
@@ -221,7 +232,21 @@ class PipelineServiceImpl implements PipelineService {
   ): Effect.Effect<void, PipelineAlreadyExistsError | PipelineExecutionError | GraphValidationError> {
     const self = this;
     if (isGraphWorkflowConfig(config)) return self.registerGraphWorkflow(config);
-    if (!isWorkflowIR(config)) return self.createPipelineV2(config);
+    if (!isWorkflowIR(config)) {
+      if (!isPipelineConfigV2(config)) {
+        const pipelineId = typeof config === 'object' && config !== null && 'id' in config
+          ? String(config.id)
+          : '(unknown)';
+        return Effect.fail(new PipelineExecutionError({
+          pipelineId,
+          step: 0,
+          cause: new Error(
+            'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR.',
+          ),
+        }));
+      }
+      return self.createPipelineV2(config);
+    }
 
     return Effect.gen(function* () {
       yield* Effect.try({
@@ -293,12 +318,20 @@ class PipelineServiceImpl implements PipelineService {
       if (pipelines.has(config.id) || workflows.has(config.id)) {
         return yield* Effect.fail(new PipelineAlreadyExistsError({ id: config.id }));
       }
+      const workflow = yield* Effect.try({
+        try: () => compilePipelineV2(config),
+        catch: (error) => new PipelineExecutionError({
+          pipelineId: config.id,
+          step: 0,
+          cause: error,
+        }),
+      });
       const newPipelines = new Map(pipelines);
       newPipelines.set(config.id, config);
       yield* Ref.set(self.pipelinesV2, newPipelines);
       yield* Ref.update(self.workflows, (workflows) => {
         const next = new Map(workflows);
-        next.set(config.id, compilePipelineV2(config));
+        next.set(config.id, workflow);
         return next;
       });
     });

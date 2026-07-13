@@ -185,6 +185,33 @@ describe('PipelineService', () => {
   });
 
   describe('defineWorkflow', () => {
+    test('rejects legacy workflow shapes before mutating registry state', async () => {
+      const result = await runWithService(
+        Effect.gen(function* () {
+          const service = yield* PipelineService;
+          const rejected = yield* Effect.either(service.defineWorkflow({
+            id: 'legacy-shape',
+            agents: ['test-agent'],
+          } as never));
+          const registeredAfterRejection = yield* service.hasWorkflowIR('legacy-shape');
+          yield* service.defineWorkflow({
+            id: 'legacy-shape',
+            steps: [{ name: 'replacement', type: 'function', fn: () => 'ok' }],
+          });
+          return {
+            rejected,
+            registeredAfterRejection,
+            registeredAfterCorrection: yield* service.hasWorkflowIR('legacy-shape'),
+          };
+        }),
+      );
+
+      expect(result.rejected._tag).toBe('Left');
+      expect(result.rejected.left).toBeInstanceOf(PipelineExecutionError);
+      expect(result.registeredAfterRejection).toBe(false);
+      expect(result.registeredAfterCorrection).toBe(true);
+    });
+
     test('rejects invalid native workflow ids consistently', async () => {
       const result = await Effect.runPromiseExit(
         Effect.gen(function* () {
