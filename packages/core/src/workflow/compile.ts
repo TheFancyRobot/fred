@@ -370,7 +370,18 @@ export function isPipelineV2Definition(value: unknown): value is PipelineConfigV
 export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
   if (isGraphWorkflowConfig(config)) return compileGraphWorkflow(config);
   if (isWorkflowIR(config)) {
-    const native: WorkflowIR = config.source ? config : { ...config, source: 'native' };
+    const source: unknown = config.source;
+    if (
+      source !== undefined &&
+      source !== 'v2' &&
+      source !== 'graph' &&
+      source !== 'native'
+    ) {
+      throw new TypeError(
+        `Unsupported WorkflowIR source "${String(source)}". Expected "v2", "graph", or "native".`,
+      );
+    }
+    const native: WorkflowIR = source === undefined ? { ...config, source: 'native' } : config;
     validateWorkflowIR(native);
     return native;
   }

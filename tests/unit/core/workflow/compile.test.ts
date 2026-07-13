@@ -14,6 +14,16 @@ describe('workflow compilers', () => {
     );
   });
 
+  it('rejects unsupported runtime WorkflowIR source tags', () => {
+    expect(() => compileWorkflow({
+      id: 'removed-source',
+      source: 'v1',
+      entry: 'done',
+      nodes: [{ id: 'done', kind: 'function', fn: () => 'done' }],
+      edges: [],
+    } as never)).toThrow(/Unsupported WorkflowIR source "v1"/);
+  });
+
   it('lowers V2 conditional nesting to guarded edges without a conditional node kind', () => {
     const ir = compilePipelineV2({
       id: 'branching',
