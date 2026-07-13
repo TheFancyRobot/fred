@@ -46,6 +46,13 @@ function documentedPeer(peerName: string, range: string): string {
   return `\`${peerName} ${range}\``;
 }
 
+function installVersion(command: string, packageName: string): string {
+  const prefix = `${packageName}@`;
+  const token = command.split(/\s+/).find((part) => part.startsWith(prefix));
+  if (!token) throw new Error(`Missing ${packageName} from install command`);
+  return token.slice(prefix.length);
+}
+
 describe('release documentation contract', () => {
   const migration = readFileSync(MIGRATION_PATH, 'utf8');
   const rootReadme = readFileSync(ROOT_README_PATH, 'utf8');
@@ -76,5 +83,20 @@ describe('release documentation contract', () => {
     expect(convexPeer).toBe('^1.42.1');
     expect(matrixRow(migration, manifest.name)).toContain(`\`convex ${convexPeer}\``);
     expect(packageReadme).toContain(`convex@${convexPeer}`);
+  });
+
+  test('root quick-start install guidance tracks the selected provider peer contract', () => {
+    const provider = readManifest('provider-openrouter');
+    const block = rootReadme.match(/## Quick Start[\s\S]*?```bash\n([\s\S]*?)\n```/)?.[1];
+    if (!block) throw new Error('Missing root README Quick Start install command');
+
+    for (const [peerName, range] of Object.entries(provider.peerDependencies ?? {})) {
+      const version = installVersion(block, peerName);
+      if (peerName.startsWith('@fancyrobot/')) {
+        expect(Bun.semver.satisfies(version, range)).toBe(true);
+      } else {
+        expect(version).toBe(range);
+      }
+    }
   });
 });
