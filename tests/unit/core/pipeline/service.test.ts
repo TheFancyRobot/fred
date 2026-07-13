@@ -208,6 +208,11 @@ describe('PipelineService', () => {
 
       expect(result.rejected._tag).toBe('Left');
       expect(result.rejected.left).toBeInstanceOf(PipelineExecutionError);
+      if (result.rejected.left instanceof PipelineExecutionError) {
+        expect(String(result.rejected.left.cause)).toContain(
+          'Legacy agent-list pipelines are no longer supported',
+        );
+      }
       expect(result.registeredAfterRejection).toBe(false);
       expect(result.registeredAfterCorrection).toBe(true);
     });

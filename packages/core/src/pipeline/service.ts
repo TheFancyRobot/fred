@@ -52,6 +52,7 @@ import {
   compileWorkflow,
   isPipelineV2Definition,
   isWorkflowIR,
+  UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE,
   type CompilableWorkflow,
 } from '../workflow/compile';
 import type { WorkflowIR } from '../workflow/ir';
@@ -233,9 +234,7 @@ class PipelineServiceImpl implements PipelineService {
         return Effect.fail(new PipelineExecutionError({
           pipelineId,
           step: 0,
-          cause: new Error(
-            'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR.',
-          ),
+          cause: new Error(UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE),
         }));
       }
       return self.createPipelineV2(config);

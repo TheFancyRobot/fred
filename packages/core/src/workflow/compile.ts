@@ -351,6 +351,9 @@ export type CompilableWorkflow =
   | GraphWorkflowConfig
   | WorkflowIR;
 
+export const UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE =
+  'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR. Legacy agent-list pipelines are no longer supported.';
+
 /** Runtime guard for unchecked callers crossing the workflow compilation boundary. */
 export function isPipelineV2Definition(value: unknown): value is PipelineConfigV2 {
   return (
@@ -372,9 +375,7 @@ export function compileWorkflow(config: CompilableWorkflow): WorkflowIR {
     return native;
   }
   if (isPipelineV2Definition(config)) return compilePipelineV2(config);
-  throw new TypeError(
-    'Unsupported workflow definition. Expected a V2 workflow with a steps array, a graph workflow, or native WorkflowIR. Legacy agent-list pipelines are no longer supported.',
-  );
+  throw new TypeError(UNSUPPORTED_WORKFLOW_DEFINITION_MESSAGE);
 }
 
 /** Define a native workflow with validation and an explicit native source tag. */
