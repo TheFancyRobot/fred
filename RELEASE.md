@@ -9,9 +9,9 @@ candidate compatibility matrix.
 1. Start from a clean checkout and frozen install.
 2. Run `bun run build`, `bash scripts/build-declarations.sh`, `bun test`, and
    `bun run docs:build`.
-3. Enter Changesets prerelease mode with the selected tag (normally `alpha` or
-   `rc`) and version the packages. This checkout is already in `alpha` mode;
-   do not re-enter it. From a checkout without `.changeset/pre.json`, use:
+3. Inspect `.changeset/pre.json`. If it exists, continue with its recorded
+   prerelease tag and do not re-enter prerelease mode. If it does not exist,
+   enter the selected tag (normally `alpha` or `rc`) before versioning:
 
    ```bash
    bunx changeset pre enter alpha

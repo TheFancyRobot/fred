@@ -24,8 +24,8 @@ Install core + one provider package:
 
 ```bash
 bun add --exact \
-  @fancyrobot/fred@2.0.0-alpha.0 \
-  @fancyrobot/fred-openrouter@5.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.1 \
+  @fancyrobot/fred-openrouter@5.0.0-alpha.1 \
   effect@^3.21.0 @effect/ai@^0.35.0 \
   @effect/platform@^0.96.0 @effect/ai-openrouter@^0.10.0
 ```

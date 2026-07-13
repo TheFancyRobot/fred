@@ -2,14 +2,14 @@
 
 Lightweight BAML integration surface for Fred.
 
-See the [Phase 68 migration matrix](../../MIGRATION.md) for the compatible core
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the compatible core
 line and the Stanza BAML import recipe.
 
 ## Installation
 
 ```bash
-bun add --exact @fancyrobot/fred-baml@1.0.0-alpha.0 \
-  @fancyrobot/fred@2.0.0-alpha.0 effect@^3.21.0
+bun add --exact @fancyrobot/fred-baml@1.0.0-alpha.1 \
+  @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0
 ```
 
 ## Current package contract

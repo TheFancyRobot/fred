@@ -3,13 +3,13 @@
 Reusable Bun HTTP server package for Fred.
 
 Migrating from `ServerApp`, `startServer()`, or `createFredHttpApp()`? Follow
-the [Phase 68 migration matrix and security guide](../../MIGRATION.md).
+the [Phase 68 migration matrix and security guide](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md).
 
 ## Installation
 
 ```bash
-bun add --exact @fancyrobot/fred-http@1.0.0-alpha.0 \
-  @fancyrobot/fred@2.0.0-alpha.0 effect@^3.21.0 \
+bun add --exact @fancyrobot/fred-http@1.0.0-alpha.1 \
+  @fancyrobot/fred@2.0.0-alpha.1 effect@^3.21.0 \
   @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 
@@ -89,7 +89,7 @@ completed output is derived from the workflow output Schema. Streaming
 endpoints use SSE lifecycle events: `started`, `node-completed`, and exactly one
 terminal `completed` or `failed` event.
 
-The runnable [HTTP workflows example](../../examples/15-http-workflows/)
+The runnable [HTTP workflows example](https://github.com/TheFancyRobot/fred/tree/main/examples/15-http-workflows)
 includes default/custom paths, public/inherited/scoped auth, CORS and limiter
 checks, a deterministic smoke client, and durable SQLite/Postgres key guidance.
 

@@ -45,15 +45,16 @@ This repository is already in an alpha prerelease cycle, and
 `changeset version` pass from this checkout produces CLI `0.6.0-alpha.1`, not
 `0.6.0-alpha.0`; no extra versioning pass is required.
 
-After the table has been updated with published candidate versions, install an
-exact prerelease set for validation. Do not mix these packages with older Fred
-majors:
+An isolated version-plan preview currently produces the exact candidate subset
+below. After release versioning, confirm these values against the versioned
+manifests and update the published matrix before installing. Do not mix the
+candidate with older Fred majors:
 
 ```bash
 bun add --exact \
-  @fancyrobot/fred@2.0.0-alpha.0 \
-  @fancyrobot/fred-http@1.0.0-alpha.0 \
-  @fancyrobot/fred-minimax@2.0.0-alpha.0 \
+  @fancyrobot/fred@2.0.0-alpha.1 \
+  @fancyrobot/fred-http@1.0.0-alpha.1 \
+  @fancyrobot/fred-minimax@2.0.0-alpha.1 \
   effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 

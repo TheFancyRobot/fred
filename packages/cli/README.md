@@ -2,7 +2,7 @@
 
 Command-line interface and interactive TUI for the [Fred](https://github.com/TheFancyRobot/fred) AI agent framework. Chat with agents, inspect resources, test intent routing, manage sessions, and run evaluations -- all from the terminal.
 
-See the [Phase 68 migration matrix](../../MIGRATION.md) before installing the
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) before installing the
 CLI prerelease alongside core or replacing `@fancyrobot/fred-dev`.
 
 ## Installation

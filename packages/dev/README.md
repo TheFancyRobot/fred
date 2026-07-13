@@ -2,7 +2,7 @@
 
 > Deprecated compatibility shim. Install `@fancyrobot/fred-cli` and use `fred chat`.
 
-See the [Phase 68 migration matrix](../../MIGRATION.md) for the exact compatible
+See the [Phase 68 migration matrix](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md) for the exact compatible
 CLI version and the removal timeline.
 
 This final compatibility release contains no development-chat implementation. It
@@ -52,9 +52,9 @@ window and prints migration guidance. HTTP server APIs live in
 
 ## Related
 
-- [@fancyrobot/fred-cli](../cli/README.md)
-- [@fancyrobot/fred core package](../core/README.md)
-- [Repository README hub](../../README.md)
+- [@fancyrobot/fred-cli](https://github.com/TheFancyRobot/fred/blob/main/packages/cli/README.md)
+- [@fancyrobot/fred core package](https://github.com/TheFancyRobot/fred/blob/main/packages/core/README.md)
+- [Repository README hub](https://github.com/TheFancyRobot/fred#packages)
 
 ## License
 

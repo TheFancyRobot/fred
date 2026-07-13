@@ -3,18 +3,18 @@
 TypeScript AI agent framework with intent-based routing and pipeline orchestration.
 
 > Upgrading from `Fred`, `FredInstance`, or manager-style methods? Use the
-> repository [migration guide](../../MIGRATION.md). Package versions are
+> repository [migration guide](https://github.com/TheFancyRobot/fred/blob/main/MIGRATION.md). Package versions are
 > independent; the guide contains the exact compatible release matrix.
 
 ## Installation
 ```bash
-bun add --exact @fancyrobot/fred@2.0.0-alpha.0 \
+bun add --exact @fancyrobot/fred@2.0.0-alpha.1 \
   effect@^3.21.0 @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 
 Add at least one provider package:
 
-- [@fancyrobot/fred-openrouter](../provider-openrouter/README.md) (or any provider in the [Providers](#providers) table below)
+- [@fancyrobot/fred-openrouter](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-openrouter/README.md) (or any provider in the [Providers](#providers) table below)
 
 ## Quick Start
 Recommended workflow: markdown agent files (`.md`) + `config.yaml`.
@@ -349,12 +349,12 @@ const fred = await createFred({
 
 | Provider | Package | Env Variable |
 |----------|---------|-------------|
-| OpenAI | [@fancyrobot/fred-openai](../provider-openai/README.md) | `OPENAI_API_KEY` |
-| Anthropic | [@fancyrobot/fred-anthropic](../provider-anthropic/README.md) | `ANTHROPIC_API_KEY` |
-| Google | [@fancyrobot/fred-google](../provider-google/README.md) | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| Groq | [@fancyrobot/fred-groq](../provider-groq/README.md) | `GROQ_API_KEY` |
-| OpenRouter | [@fancyrobot/fred-openrouter](../provider-openrouter/README.md) | `OPENROUTER_API_KEY` |
-| MiniMax | [@fancyrobot/fred-minimax](../provider-minimax/README.md) | `MINIMAX_API_KEY` |
+| OpenAI | [@fancyrobot/fred-openai](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-openai/README.md) | `OPENAI_API_KEY` |
+| Anthropic | [@fancyrobot/fred-anthropic](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-anthropic/README.md) | `ANTHROPIC_API_KEY` |
+| Google | [@fancyrobot/fred-google](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-google/README.md) | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| Groq | [@fancyrobot/fred-groq](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-groq/README.md) | `GROQ_API_KEY` |
+| OpenRouter | [@fancyrobot/fred-openrouter](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-openrouter/README.md) | `OPENROUTER_API_KEY` |
+| MiniMax | [@fancyrobot/fred-minimax](https://github.com/TheFancyRobot/fred/blob/main/packages/provider-minimax/README.md) | `MINIMAX_API_KEY` |
 
 ## Advanced: Effect Services
 
@@ -392,7 +392,7 @@ await fred.shutdown();
 Use this path when you need low-level service control or custom runtime wiring.
 
 ## Examples
-See [examples/README.md](../../examples/README.md) for the 15-example learning
+See the [examples guide](https://github.com/TheFancyRobot/fred/blob/main/examples/README.md) for the 15-example learning
 path covering quickstart, tools, routing, pipelines, hooks, observability,
 evaluation, MCP, CLI/TUI, multi-agent orchestration, and optional HTTP.
 
