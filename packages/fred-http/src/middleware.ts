@@ -66,6 +66,17 @@ export const normalizeAllowedMethodsForPath = (
     : normalizeAllowedMethods([...normalized, 'OPTIONS']);
 };
 
+export const normalizeAllowedMethodsByPath = (
+  methodsByPath: ReadonlyMap<string, ReadonlyArray<string>>,
+  fallback: ReadonlyArray<string>,
+): ReadonlyMap<string, ReadonlyArray<string>> => new Map(Array.from(
+  methodsByPath,
+  ([path, methods]) => [
+    canonicalizeHttpPath(path) ?? path,
+    normalizeAllowedMethodsForPath(methods, fallback),
+  ] as const,
+));
+
 const extractProxyIp = (headers: Readonly<Record<string, string | undefined>>): string | undefined => {
   const forwarded = headers['x-forwarded-for']?.split(',')[0]?.trim();
   if (forwarded && isIP(forwarded)) return forwarded;
@@ -256,13 +267,10 @@ export const FredHttpSecurityLive = (options: FredHttpSecurityOptions = {}) => {
         ...defaultAllowedMethods,
         ...(options.allowedMethods ?? []),
       ]);
-      const allowedMethodsByPath = new Map(Array.from(
+      const allowedMethodsByPath = normalizeAllowedMethodsByPath(
         options.allowedMethodsByPath ?? new Map(),
-        ([path, methods]) => [
-          path,
-          normalizeAllowedMethodsForPath(methods, allowedMethods),
-        ] as const,
-      ));
+        allowedMethods,
+      );
       return makeSecurityMiddleware(
         config,
         options.trustProxy ?? false,

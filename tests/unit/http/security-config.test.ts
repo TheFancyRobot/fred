@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createFred } from '../../../packages/core/src/client';
 import { withHttp } from '../../../packages/fred-http/src/client';
-import { normalizeAllowedMethodsForPath } from '../../../packages/fred-http/src/middleware';
+import {
+  normalizeAllowedMethodsByPath,
+  normalizeAllowedMethodsForPath,
+} from '../../../packages/fred-http/src/middleware';
 import {
   DEFAULT_SECURITY_CONFIG,
   resolveServerSecurityConfig,
@@ -18,6 +21,11 @@ describe('fred-http configuration Schema', () => {
     ]);
     expect(normalizeAllowedMethodsForPath(['BAD,VALUE', 'INJECTED\r\nHeader: value'], fallback))
       .toBe(fallback);
+
+    const methodsByPath = normalizeAllowedMethodsByPath(new Map([
+      ['/custom/%7e', ['GET']],
+    ]), fallback);
+    expect(methodsByPath.get('/custom/~')).toEqual(['GET', 'OPTIONS']);
   });
 
   test('decodes compatible defaults and immutable overrides', () => {
