@@ -3,9 +3,10 @@
  */
 
 import type { RoutingConfig } from '../routing/types';
+import type { AgentInstance } from '../agent/agent';
 
 interface AgentLookup {
-  getAgent(id: string): unknown;
+  getAgent(id: string): AgentInstance | undefined;
 }
 
 /** Workflow definition — a named entry point that groups related agents. */
