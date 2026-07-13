@@ -103,9 +103,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Return conversational content from an agent response, when one is present. */
-export function agentResponseContent(value: unknown): string | undefined {
-  return isRecord(value) && typeof value.content === 'string' ? value.content : undefined;
+/** Return conversational content only when the producing node is known to be an agent. */
+export function agentResponseContent(node: IRNode | undefined, value: unknown): string | undefined {
+  return node?.kind === 'agent' && isRecord(value) && typeof value.content === 'string'
+    ? value.content
+    : undefined;
 }
 
 /** Convert structured workflow input only when it crosses a conversational string boundary. */
@@ -136,13 +138,14 @@ function messageForNode(
     return workflowInputToMessage(Object.fromEntries(
       predecessors.map((source) => {
         const output = runtimeOutputs[source];
-        return [source, agentResponseContent(output) ?? output];
+        return [source, agentResponseContent(findNode(workflow, source), output) ?? output];
       }),
     ));
   }
 
   const predecessorOutput = runtimeOutputs[predecessors[0]!];
-  return agentResponseContent(predecessorOutput) ?? workflowInputToMessage(predecessorOutput);
+  return agentResponseContent(findNode(workflow, predecessors[0]!), predecessorOutput) ??
+    workflowInputToMessage(predecessorOutput);
 }
 
 export function getPublicWorkflowOutputs(
@@ -895,7 +898,7 @@ export const executeWorkflowEffect = Effect.fn('WorkflowExecutor.execute')(funct
         }
 
         if (workflow.source === 'native' && node.kind === 'agent' && !execution.skipped) {
-          const content = agentResponseContent(result);
+          const content = agentResponseContent(node, result);
           context.history.push({ role: 'user', content: nodeMessage });
           if (content !== undefined) context.history.push({ role: 'assistant', content });
         }

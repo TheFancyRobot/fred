@@ -522,7 +522,7 @@ describe('createFred client', () => {
     expect(result.finalOutput).toBe('child:hello');
   });
 
-  it('unwraps agent-response content returned by a nested workflow', async () => {
+  it('preserves content-shaped data returned by a non-agent nested workflow', async () => {
     const client = track(await createFred());
     await client.workflows.define(defineWorkflow({
       id: 'agent-child-workflow',
@@ -540,7 +540,7 @@ describe('createFred client', () => {
     });
 
     const result = await client.workflows.run('agent-parent-workflow', 'hello');
-    expect(result.finalOutput).toBe('child:hello');
+    expect(result.finalOutput).toEqual({ content: 'child:hello', toolCalls: [] });
   });
 
   it('workflows sub-API defines and runs native WorkflowIR directly', async () => {
