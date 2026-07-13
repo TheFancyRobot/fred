@@ -166,15 +166,22 @@ function run(command: string, args: string[], cwd = REPO_ROOT): string {
 }
 
 function pack(packageDir: string, destination: string, dryRun: boolean): PackResult {
-  const dryRunArg = dryRun ? ' --dry-run' : ' --dry-run=false';
+  const dryRunArg = dryRun ? '--dry-run' : '--dry-run=false';
   const resultPath = join(destination, `${packageDir}-${dryRun ? 'dry-run' : 'pack'}.json`);
   const stageDir = stagedPackageDirs.get(packageDir);
   if (!stageDir) throw new Error(`Package stage is missing: ${packageDir}`);
   // Invoke npm behind a shell boundary so Bun's child-process compatibility
   // mode cannot swallow npm's JSON pipe while this file runs under bun:test.
   run(
-    '/bin/zsh',
-    ['-lc', `unset BUN_BE_BUN; npm pack --json --pack-destination ${destination}${dryRunArg} > ${resultPath}`],
+    '/bin/sh',
+    [
+      '-c',
+      'unset BUN_BE_BUN; npm pack --json --pack-destination "$1" "$2" > "$3"',
+      'fred-npm-pack',
+      destination,
+      dryRunArg,
+      resultPath,
+    ],
     stageDir,
   );
   const output = readFileSync(resultPath, 'utf8');
@@ -270,7 +277,10 @@ describe('publishable package contract', () => {
         throw new Error(`npm pack did not create ${tarball}; found: ${readdirSync(packDir).join(', ')}`);
       }
       const packedManifestPath = join(tempDir, `${packageDir}-package.json`);
-      run('/bin/zsh', ['-lc', `unset BUN_BE_BUN; tar -xOf ${tarball} package/package.json > ${packedManifestPath}`]);
+      writeFileSync(
+        packedManifestPath,
+        run('tar', ['-xOf', tarball, 'package/package.json']),
+      );
       const packedManifest = JSON.parse(readFileSync(packedManifestPath, 'utf8')) as PackageManifest;
       expect(packedManifest.name).toBe(manifest.name);
       expect(packedManifest.version).toBe(manifest.version);
