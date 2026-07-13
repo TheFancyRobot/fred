@@ -134,6 +134,7 @@ Maintain context across requests:
 # First message
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-Session-Id: conv-123" \
   -d '{
     "messages": [
       { "role": "user", "content": "My name is Alice" }

@@ -21,7 +21,9 @@ async function main() {
     model: 'gpt-4o-mini',
     tools: ['calculator'],
   });
-  const fred = withHttp(core);
+  const authToken = process.env.FRED_DEV_SERVER_TOKEN;
+  if (!authToken) throw new Error('Set FRED_DEV_SERVER_TOKEN before starting the server');
+  const fred = withHttp(core, { security: { authToken } });
   const server = await fred.server.listen({ port: 3000 });
   console.log(`OpenAI-compatible endpoint: ${server.url}/v1/chat/completions`);
 }
@@ -31,8 +33,8 @@ await main();
 
 Configure Misty, Chatbox, or another OpenAI-compatible client with
 `http://localhost:3000/v1/chat/completions` and model `fred-agent`. Authentication
-is required by default; configure an explicit bearer token or use a durable API
-key in production.
+is required by default; set `FRED_DEV_SERVER_TOKEN` for this example or use a
+durable API key in production.
 
 ```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
