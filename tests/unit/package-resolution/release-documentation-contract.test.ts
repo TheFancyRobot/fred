@@ -11,6 +11,7 @@ type PackageManifest = {
 
 type BunLock = {
   workspaces: Record<string, PackageManifest>;
+  packages: Record<string, readonly [string, ...unknown[]]>;
 };
 
 const REPO_ROOT = resolve(import.meta.dir, '../../..');
@@ -56,12 +57,6 @@ function installVersion(command: string, packageName: string): string {
   const token = command.split(/\s+/).find((part) => part.startsWith(prefix));
   if (!token) throw new Error(`Missing ${packageName} from install command`);
   return token.slice(prefix.length);
-}
-
-function minimumVersion(range: string): string {
-  const match = range.match(/^[~^]?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/);
-  if (!match) throw new Error(`Unsupported install range: ${range}`);
-  return match[1]!;
 }
 
 function bashBlockUnderHeading(document: string, heading: string): string {
@@ -121,18 +116,41 @@ describe('release documentation contract', () => {
     }
   });
 
+  test('workspace lock validates the shared Effect peer floor', () => {
+    const effectRanges = new Set(
+      PACKAGE_DIRS.map((packageDir) => readManifest(packageDir).peerDependencies?.effect).filter(
+        (range): range is string => range !== undefined,
+      ),
+    );
+
+    expect(effectRanges.size).toBe(1);
+    const [range] = effectRanges;
+    if (!range?.startsWith('^')) throw new Error(`Unsupported Effect peer range: ${range}`);
+    expect(lock.packages.effect?.[0]).toBe(`effect@${range.slice(1)}`);
+  });
+
   test('root quick-start install guidance tracks every selected package peer contract', () => {
     const selectedPackages = [readManifest('core'), readManifest('provider-openrouter')];
     const block = bashBlockUnderHeading(rootReadme, 'Quick Start');
+    const peers = new Map<string, string>();
 
     for (const manifest of selectedPackages) {
       installVersion(block, manifest.name);
       for (const [peerName, range] of Object.entries(manifest.peerDependencies ?? {})) {
-        const installRange = installVersion(block, peerName);
-        const version = peerName.startsWith('@fancyrobot/')
-          ? installRange
-          : minimumVersion(installRange);
+        const existing = peers.get(peerName);
+        if (existing && existing !== range) {
+          throw new Error(`Conflicting ${peerName} peer ranges: ${existing} and ${range}`);
+        }
+        peers.set(peerName, range);
+      }
+    }
+
+    for (const [peerName, range] of peers) {
+      const version = installVersion(block, peerName);
+      if (peerName.startsWith('@fancyrobot/')) {
         expect(Bun.semver.satisfies(version, range)).toBe(true);
+      } else {
+        expect(version).toBe(range);
       }
     }
   });

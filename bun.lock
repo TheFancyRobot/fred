@@ -36,7 +36,7 @@
         "@types/bun": "^1.3.14",
         "@types/js-yaml": "^4.0.9",
         "@types/pg": "^8.20.0",
-        "effect": "^3.22.0",
+        "effect": "3.21.5",
         "fast-deep-equal": "^3.1.3",
         "graphology": "^0.26.0",
         "graphology-dag": "^0.4.1",
@@ -59,7 +59,7 @@
       "dependencies": {
         "@fancyrobot/fred": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "examples/03-intent-routing-basics": {
@@ -81,7 +81,7 @@
       "dependencies": {
         "@fancyrobot/fred": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "examples/06-pipeline-graph-workflow": {
@@ -111,7 +111,7 @@
         "@fancyrobot/fred": "workspace:*",
         "@fancyrobot/fred-baml": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "examples/10-config-driven-yaml": {
@@ -143,7 +143,7 @@
       "dependencies": {
         "@fancyrobot/fred": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "examples/14-http-layer": {
@@ -160,7 +160,7 @@
       "dependencies": {
         "@fancyrobot/fred": "workspace:*",
         "@fancyrobot/fred-http": "workspace:*",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/cli": {
@@ -182,13 +182,13 @@
       "devDependencies": {
         "@types/bun": "latest",
         "@types/semver": "^7.7.1",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "optionalDependencies": {
         "pg": "^8.22.0",
       },
       "peerDependencies": {
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/core": {
@@ -233,11 +233,11 @@
       "name": "@fancyrobot/fred-baml",
       "version": "1.0.0-alpha.1",
       "devDependencies": {
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/fred-convex": {
@@ -245,12 +245,12 @@
       "version": "1.0.0-alpha.1",
       "devDependencies": {
         "convex": "^1.42.1",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@fancyrobot/fred": "^2.0.0-alpha.0",
         "convex": "^1.42.1",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/fred-http": {
@@ -260,13 +260,13 @@
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",
         "@types/bun": "latest",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-anthropic": {
@@ -275,13 +275,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-anthropic": "^0.25.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-anthropic": "^0.25.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-google": {
@@ -291,14 +291,14 @@
         "@effect/ai": "^0.35.0",
         "@effect/ai-google": "^0.14.0",
         "@effect/platform": "^0.96.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-google": "^0.14.0",
         "@effect/platform": "^0.96.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-groq": {
@@ -307,13 +307,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-minimax": {
@@ -322,13 +322,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/platform": "^0.96.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-openai": {
@@ -337,13 +337,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
     "packages/provider-openrouter": {
@@ -352,13 +352,13 @@
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openrouter": "^0.10.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
       "peerDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openrouter": "^0.10.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
-        "effect": "^3.21.0",
+        "effect": "^3.21.5",
       },
     },
   },
@@ -412,15 +412,15 @@
 
     "@dmsnell/diff-match-patch": ["@dmsnell/diff-match-patch@1.1.0", "", {}, "sha512-yejLPmM5pjsGvxS9gXablUSbInW7H976c/FJ4iQxWIm7/38xBySRemTPDe34lhg1gVLbJntX0+sH0jYfU+PN9A=="],
 
-    "@effect/ai": ["@effect/ai@0.35.0", "", { "dependencies": { "find-my-way-ts": "^0.1.6" }, "peerDependencies": { "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "effect": "^3.21.0" } }, "sha512-VOYFBN/TpHC0sB5AhUGOEJzOTEnuo2bbDtQcDDsU7ffHaE8ZbqZj1CuSHgifbmqMaY9+xofsKMazQZ3jlZfPSw=="],
+    "@effect/ai": ["@effect/ai@0.35.0", "", { "dependencies": { "find-my-way-ts": "^0.1.6" }, "peerDependencies": { "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "effect": "^3.21.5" } }, "sha512-VOYFBN/TpHC0sB5AhUGOEJzOTEnuo2bbDtQcDDsU7ffHaE8ZbqZj1CuSHgifbmqMaY9+xofsKMazQZ3jlZfPSw=="],
 
-    "@effect/ai-anthropic": ["@effect/ai-anthropic@0.25.0", "", { "dependencies": { "@anthropic-ai/tokenizer": "^0.0.4" }, "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-Qac2WUmi7qBHppu6uUdyA8Xa441IYXxfBirxe6YSibqVeMVam9uKqvTl0GnSaymHpPc/b0aXdbKUiFfMm3d2Ug=="],
+    "@effect/ai-anthropic": ["@effect/ai-anthropic@0.25.0", "", { "dependencies": { "@anthropic-ai/tokenizer": "^0.0.4" }, "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.5" } }, "sha512-Qac2WUmi7qBHppu6uUdyA8Xa441IYXxfBirxe6YSibqVeMVam9uKqvTl0GnSaymHpPc/b0aXdbKUiFfMm3d2Ug=="],
 
-    "@effect/ai-google": ["@effect/ai-google@0.14.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-lQG3T5wT31L9a1FuIr7IhYbC6dq0ClqXs3CqJKSiF0IMVpxC/2ZPREbhd5O4dKrT+6JyWmxP54Uv04DTt/0cJQ=="],
+    "@effect/ai-google": ["@effect/ai-google@0.14.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.5" } }, "sha512-lQG3T5wT31L9a1FuIr7IhYbC6dq0ClqXs3CqJKSiF0IMVpxC/2ZPREbhd5O4dKrT+6JyWmxP54Uv04DTt/0cJQ=="],
 
     "@effect/ai-openai": ["@effect/ai-openai@0.39.2", "", { "dependencies": { "gpt-tokenizer": "^2.9.0" }, "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.1" } }, "sha512-b+9pUgpeadRCFx6ozPq+E9Fd0jMd4BIEGkn+FWYe090/WhHluth/sCYYKI+ShytBbcwP6KBuw+gVQYaDAoGrkQ=="],
 
-    "@effect/ai-openrouter": ["@effect/ai-openrouter@0.10.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.0" } }, "sha512-aRuiFF1jjbslBXdOsv25cI+CnaT3b5meVLlKZJ5OwS54w7OjNHqZhJwMQYUxSL6kOzKWNCQ5M5fA0TUOePJpug=="],
+    "@effect/ai-openrouter": ["@effect/ai-openrouter@0.10.0", "", { "peerDependencies": { "@effect/ai": "^0.35.0", "@effect/experimental": "^0.60.0", "@effect/platform": "^0.96.0", "effect": "^3.21.5" } }, "sha512-aRuiFF1jjbslBXdOsv25cI+CnaT3b5meVLlKZJ5OwS54w7OjNHqZhJwMQYUxSL6kOzKWNCQ5M5fA0TUOePJpug=="],
 
     "@effect/cluster": ["@effect/cluster@0.56.1", "", { "dependencies": { "kubernetes-types": "^1.30.0" }, "peerDependencies": { "@effect/platform": "^0.94.1", "@effect/rpc": "^0.73.0", "@effect/sql": "^0.49.0", "@effect/workflow": "^0.16.0", "effect": "^3.19.14" } }, "sha512-gnrsH6kfrUjn+82j/bw1IR4yFqJqV8tc7xZvrbJPRgzANycc6K1hu3LMg548uYbUkTzD8YYyqrSatMO1mkQpzw=="],
 
@@ -428,13 +428,13 @@
 
     "@effect/language-service": ["@effect/language-service@0.74.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-ZqOvxCUo70WtnV8Kf4ORcEW6euepPn3Yu9btB0vpDhN5ydf1RC3/kl2M2b22tzB0MOITeJzNn5HK7w7NJhQFaw=="],
 
-    "@effect/opentelemetry": ["@effect/opentelemetry@0.63.0", "", { "peerDependencies": { "@effect/platform": "^0.96.0", "@opentelemetry/api": "^1.9", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-logs": ">=0.203.0 <0.300.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-base": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/sdk-trace-web": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.33.0", "effect": "^3.21.0" } }, "sha512-2yUG2QWNATi1uKP0kwhaP5eLp+c5NDzAL3EOpIcGLBAC0cbXZrx4n9Qw/QwUKxpuV+pbhrBUPCiByyWAFKfuCw=="],
+    "@effect/opentelemetry": ["@effect/opentelemetry@0.63.0", "", { "peerDependencies": { "@effect/platform": "^0.96.0", "@opentelemetry/api": "^1.9", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-logs": ">=0.203.0 <0.300.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-base": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/sdk-trace-web": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.33.0", "effect": "^3.21.5" } }, "sha512-2yUG2QWNATi1uKP0kwhaP5eLp+c5NDzAL3EOpIcGLBAC0cbXZrx4n9Qw/QwUKxpuV+pbhrBUPCiByyWAFKfuCw=="],
 
     "@effect/platform": ["@effect/platform@0.96.3", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.10", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.21.5" } }, "sha512-LzvIj4HYE++TcTv/cVTCI/GRvQTV0ymwRmgjZMzNB5dU4OS05pTN36RKN0npiOm5orLJgw4yjIv1dNZoYGh/vg=="],
 
-    "@effect/platform-bun": ["@effect/platform-bun@0.89.0", "", { "dependencies": { "@effect/platform-node-shared": "^0.59.0", "multipasta": "^0.2.7" }, "peerDependencies": { "@effect/cluster": "^0.58.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "@effect/sql": "^0.51.0", "effect": "^3.21.0" } }, "sha512-ReT5f2vujJfffMOBexrgwJd2RLxgfr2G0c1FyCsoflcjdQJ7RZE3cwHDp1M3hAzmG67wWAssMHqLsX6H/n27sQ=="],
+    "@effect/platform-bun": ["@effect/platform-bun@0.89.0", "", { "dependencies": { "@effect/platform-node-shared": "^0.59.0", "multipasta": "^0.2.7" }, "peerDependencies": { "@effect/cluster": "^0.58.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "@effect/sql": "^0.51.0", "effect": "^3.21.5" } }, "sha512-ReT5f2vujJfffMOBexrgwJd2RLxgfr2G0c1FyCsoflcjdQJ7RZE3cwHDp1M3hAzmG67wWAssMHqLsX6H/n27sQ=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@0.59.0", "", { "dependencies": { "@parcel/watcher": "^2.5.1", "multipasta": "^0.2.7", "ws": "^8.18.2" }, "peerDependencies": { "@effect/cluster": "^0.58.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "@effect/sql": "^0.51.0", "effect": "^3.21.0" } }, "sha512-3bq2YKKfLY7UFauZSxqZUneCXoA3SMSls82V+0RKunvRlfPuPQW0hVn6t1RkvEdh0PDoygWG2mZXYQa6Iqgp9A=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@0.59.0", "", { "dependencies": { "@parcel/watcher": "^2.5.1", "multipasta": "^0.2.7", "ws": "^8.18.2" }, "peerDependencies": { "@effect/cluster": "^0.58.0", "@effect/platform": "^0.96.0", "@effect/rpc": "^0.75.0", "@effect/sql": "^0.51.0", "effect": "^3.21.5" } }, "sha512-3bq2YKKfLY7UFauZSxqZUneCXoA3SMSls82V+0RKunvRlfPuPQW0hVn6t1RkvEdh0PDoygWG2mZXYQa6Iqgp9A=="],
 
     "@effect/rpc": ["@effect/rpc@0.73.0", "", { "dependencies": { "msgpackr": "^1.11.4" }, "peerDependencies": { "@effect/platform": "^0.94.0", "effect": "^3.19.13" } }, "sha512-iMPf6tTriz8sK0l5x4koFId8Hz5nFptHYg8WqyjHGIIVLTpZxuiSqhmXZG7FnAs5N2n6uCEws4wWGcIgXNUrFg=="],
 
@@ -772,7 +772,7 @@
 
     "dotenv": ["dotenv@8.6.0", "", {}, "sha512-IrPdXQsk2BbzvCBGBOTmmSH5SodmqZNt4ERAZDmW4CT+tL8VtvinqywuANaFu4bOMWki16nqf0e4oC0QIaDr/g=="],
 
-    "effect": ["effect@3.22.0", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-jhYFe0zTlIRqYFrKTS+6luhmS/Tm0f+JLo0K9KUxvtFab1SUGEszQi2ehOP6QzAZvy831lDmTwwzvVDZSPNz3g=="],
+    "effect": ["effect@3.21.5", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-t2QChwBMRDhz4nKW8KbHtMiGG+ExhIIB6iIf42Be6sNKUF8ryDJ6MFnupyosAMkqPNMWEdvMnkPeSUaHzdzPGg=="],
 
     "emoji-regex": ["emoji-regex@10.6.0", "", {}, "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A=="],
 

@@ -10,6 +10,6 @@
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-http": "workspace:*",
-    "effect": "^3.21.0"
+    "effect": "^3.21.5"
   }
 }

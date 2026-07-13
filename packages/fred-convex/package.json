@@ -36,11 +36,11 @@
   "peerDependencies": {
     "@fancyrobot/fred": "^2.0.0-alpha.0",
     "convex": "^1.42.1",
-    "effect": "^3.21.0"
+    "effect": "^3.21.5"
   },
   "devDependencies": {
     "convex": "^1.42.1",
-    "effect": "^3.21.0"
+    "effect": "^3.21.5"
   },
   "publishConfig": {
     "access": "public"
