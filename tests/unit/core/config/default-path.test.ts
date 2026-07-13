@@ -26,6 +26,30 @@ const invalidConfigPath = (): string => {
   return configPath;
 };
 
+const warningConfigPath = (): string => {
+  const directory = mkdtempSync(join(tmpdir(), 'fred-schema-config-warnings-'));
+  tempDirs.push(directory);
+  const configPath = join(directory, 'fred.yaml');
+  writeFileSync(configPath, [
+    'agents:',
+    '  - id: configured-agent',
+    '    platform: openai',
+    '    model: test-model',
+    '    systemMessage: Ready.',
+    '    mcpServers:',
+    '      - missing-server',
+    'workflows:',
+    '  demo:',
+    '    defaultAgent: missing-agent',
+    '    agents:',
+    '      - configured-agent',
+    'mcpServers:',
+    '  local:',
+    '    transport: stdio',
+  ].join('\n'));
+  return configPath;
+};
+
 const unusedTarget = (): ConfigInitializationTarget => ({
   setDefaultSystemMessage: async () => {},
   setMemoryDefaults: async () => {},
@@ -81,6 +105,23 @@ describe('schema-first config is the default runtime path', () => {
 
   it('the legacy loadConfig name is a thin schema-first compatibility wrapper', () => {
     expect(() => loadConfig(invalidConfigPath())).toThrow(ConfigValidationError);
+  });
+
+  it('preserves valid warn-only workflow and MCP diagnostics', () => {
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
+    try {
+      loadConfig(warningConfigPath());
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toEqual([
+      '[Config] Workflow "demo" defaultAgent "missing-agent" not in agents list',
+      '[Config] MCP server "local" uses stdio transport but is missing "command" field',
+      '[Config] Agent "configured-agent" references unknown MCP server "missing-server"',
+    ]);
   });
 
   it('guards default consumers and the public type against legacy regression', () => {

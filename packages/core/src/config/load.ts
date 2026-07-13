@@ -18,7 +18,7 @@
 import { Schema } from 'effect';
 import { parseConfigFile } from './parser';
 import { FrameworkConfigSchema } from './schema';
-import { validateFrameworkConfig } from './validate';
+import { emitFrameworkConfigWarnings, validateFrameworkConfig } from './validate';
 import { ConfigError, configValidationError, formatConfigIssues } from './errors';
 import type { FrameworkConfig } from './types';
 
@@ -70,5 +70,7 @@ export function validateParsedConfig(config: unknown): FrameworkConfig {
  * Throws `ConfigValidationError` on any structural or semantic problem.
  */
 export function loadValidatedConfig(filePath: string): FrameworkConfig {
-  return validateParsedConfig(parseConfigFile(filePath));
+  const config = validateParsedConfig(parseConfigFile(filePath));
+  emitFrameworkConfigWarnings(config);
+  return config;
 }

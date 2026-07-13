@@ -1077,11 +1077,11 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       await initializer.initializeServices(
         target,
         options.configPath,
-          {
-            ...options.configOptions,
-            routingOverride: options.routing,
-          },
-          loadedConfig,
+        {
+          ...options.configOptions,
+          routingOverride: options.routing,
+        },
+        loadedConfig,
       );
     } catch (error) {
       await client.shutdown();
