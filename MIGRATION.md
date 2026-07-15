@@ -2,61 +2,59 @@
 
 This guide is the source of truth for the Phase 68 breaking release. Fred's
 packages do not share one synchronized `v0.4.0` version. Each package remains
-on its existing major line, and compatible prereleases are published together.
+on its existing major line, and compatible stable versions are published together.
 
 > **Warning:**
 > Older guides and API-reference pages on the published documentation site
 > describe the removed pre-Phase-68 facade. Until they are refreshed, use this
-> guide and the linked package READMEs for the current prerelease API.
+> guide and the linked package READMEs for the current stable API.
 
-The version column records the generated alpha release candidate on this
-release branch. These exact versions become installable only after the release
-pull request is merged and the publish workflow succeeds. Peer ranges describe
+The version column records the final stable release set. Peer ranges describe
 the compatible package lines and intentionally remain semver ranges.
 
 ## Package compatibility matrix
 
-| Package | Release candidate | Required Fred/peer line | Purpose |
+| Package | Version | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
-| `@fancyrobot/fred` | `2.0.0-alpha.2` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
-| `@fancyrobot/fred-cli` | `0.6.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
-| `@fancyrobot/fred-dev` | `1.0.0-alpha.1` | CLI `^0.6.0-alpha.0` | Final deprecated compatibility shim |
-| `@fancyrobot/fred-http` | `1.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
-| `@fancyrobot/fred-baml` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
-| `@fancyrobot/fred-convex` | `1.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
-| `@fancyrobot/fred-anthropic` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
-| `@fancyrobot/fred-google` | `4.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
-| `@fancyrobot/fred-groq` | `4.0.0-alpha.2` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
-| `@fancyrobot/fred-minimax` | `2.0.0-alpha.3` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
-| `@fancyrobot/fred-openai` | `4.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
-| `@fancyrobot/fred-openrouter` | `5.0.0-alpha.1` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
+| `@fancyrobot/fred` | `2.0.0` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
+| `@fancyrobot/fred-cli` | `0.6.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
+| `@fancyrobot/fred-dev` | `1.0.0` | CLI `^0.6.0-alpha.0` | Final deprecated compatibility shim |
+| `@fancyrobot/fred-http` | `1.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
+| `@fancyrobot/fred-baml` | `1.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
+| `@fancyrobot/fred-convex` | `1.0.0` | Fred `^2.0.0-alpha.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
+| `@fancyrobot/fred-anthropic` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
+| `@fancyrobot/fred-google` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
+| `@fancyrobot/fred-groq` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
+| `@fancyrobot/fred-minimax` | `2.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
+| `@fancyrobot/fred-openai` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
+| `@fancyrobot/fred-openrouter` | `5.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
 In particular, the final `@fancyrobot/fred-dev` shim requires CLI `^0.6.0-alpha.0`.
 The forwarded `startDevChat` and `./chat-defaults` exports were added after the
-earlier CLI 0.5.1 prerelease and first publish on the CLI 0.6 line. The release
-candidate above pins that CLI to `0.6.0-alpha.1`; do not combine the shim with a
+earlier CLI 0.5.1 prerelease and first stable publish on the CLI 0.6 line. The
+release above pins that CLI to `0.6.0`; do not combine the shim with a
 published CLI 0.5.1 artifact. Prefer removing the shim.
 
-This repository is already in an alpha prerelease cycle, and
-`.changeset/pre.json` records earlier `alpha.0` releases. The current Changesets
-version plan therefore produced CLI `0.6.0-alpha.1`, not `0.6.0-alpha.0`; no
-extra versioning pass is required.
+The Fred-to-Fred and dev-to-CLI peer floors retain their tested `alpha.0`
+minimums. Stable versions satisfy those ranges, so the floors preserve
+compatibility with the validated release candidates without weakening the
+stable package set shown above.
 
-The generated release candidate contains the Fred package subset below. The
+The stable release contains the Fred package subset below. The
 Fred package specs are exact; Effect dependencies use the supported peer
-ranges. Confirm these values against the published prerelease before installing.
-Do not mix the candidate with older Fred majors:
+ranges. Confirm these values against the published registry before installing.
+Do not mix this release set with older Fred majors:
 
 ```bash
 bun add \
-  @fancyrobot/fred@2.0.0-alpha.2 \
-  @fancyrobot/fred-http@1.0.0-alpha.2 \
-  @fancyrobot/fred-minimax@2.0.0-alpha.3 \
+  @fancyrobot/fred@2.0.0 \
+  @fancyrobot/fred-http@1.0.0 \
+  @fancyrobot/fred-minimax@2.0.0 \
   effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 
-Use the versions from the selected release candidate's published matrix if
-they differ from this checkout. See the
+Use the versions from the published matrix if they differ from this checkout.
+See the
 [release runbook](https://github.com/TheFancyRobot/fred/blob/main/RELEASE.md)
 for dist-tag and promotion rules.
 
@@ -136,14 +134,12 @@ messages; use an explicit intent/routing rule or call `workflows.run()`.
 ## Development chat moves to the CLI
 
 `@fancyrobot/fred-cli` owns development chat, provider detection, default-agent
-setup, hot reload, and terminal cleanup. As explained above, the current
-Changesets plan produces CLI `0.6.0-alpha.1` in one versioning pass. Use the
-exact 0.6 candidate from the updated matrix if the release plan changes. Remove
-the compatibility package:
+setup, hot reload, and terminal cleanup. Use the exact CLI `0.6.0` version from
+the stable matrix. Remove the compatibility package:
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d --exact @fancyrobot/fred-cli@0.6.0-alpha.1
+bun add -d --exact @fancyrobot/fred-cli@0.6.0
 fred chat
 ```
 

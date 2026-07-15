@@ -12,8 +12,8 @@ This package provides adapter glue for connecting Fred agents to a Convex backen
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-convex@1.0.0-alpha.1 \
-  @fancyrobot/fred@2.0.0-alpha.2 convex@^1.42.1 effect@^3.21.5
+bun add @fancyrobot/fred-convex@1.0.0 \
+  @fancyrobot/fred@2.0.0 convex@^1.42.1 effect@^3.21.5
 ```
 
 > `convex@^1.42.1` is a security support floor, not an adapter API-shape

@@ -18,14 +18,14 @@ Fred is a TypeScript framework for building AI agents with intent-based routing,
 
 > Migrating from the legacy `Fred` facade or HTTP adapters? Read the
 > [Phase 68 migration guide](MIGRATION.md) and its exact independent-version
-> compatibility matrix before installing prereleases.
+> compatibility matrix before installing.
 
 Install core + one provider package:
 
 ```bash
 bun add \
-  @fancyrobot/fred@2.0.0-alpha.2 \
-  @fancyrobot/fred-openrouter@5.0.0-alpha.1 \
+  @fancyrobot/fred@2.0.0 \
+  @fancyrobot/fred-openrouter@5.0.0 \
   effect@^3.21.5 @effect/ai@^0.35.0 \
   @effect/platform@^0.96.0 @effect/ai-openrouter@^0.10.0
 ```
@@ -71,20 +71,20 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 ## Packages
 
-| Package | Release candidate | Description |
-|---------|--------------------|-------------|
-| [@fancyrobot/fred](packages/core/README.md) | `2.0.0-alpha.2` | Core framework |
-| [@fancyrobot/fred-cli](packages/cli/README.md) | `0.6.0-alpha.1` | CLI, development chat, and interactive TUI |
-| [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0-alpha.1` | Deprecated one-release CLI compatibility shim |
-| [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0-alpha.2` | Bun HTTP server and composable API layer |
-| [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0-alpha.1` | Consumer-owned BAML integration |
-| [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0-alpha.1` | Convex integration helpers |
-| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0-alpha.1` | OpenAI provider |
-| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.0.0-alpha.1` | Anthropic provider |
-| [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0-alpha.2` | Google (Gemini) provider |
-| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0-alpha.2` | Groq provider |
-| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0-alpha.1` | OpenRouter provider |
-| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0-alpha.3` | MiniMax multi-modality provider |
+| Package | Version | Description |
+|---------|---------|-------------|
+| [@fancyrobot/fred](packages/core/README.md) | `2.0.0` | Core framework |
+| [@fancyrobot/fred-cli](packages/cli/README.md) | `0.6.0` | CLI, development chat, and interactive TUI |
+| [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0` | Deprecated one-release CLI compatibility shim |
+| [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0` | Bun HTTP server and composable API layer |
+| [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0` | Consumer-owned BAML integration |
+| [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0` | Convex integration helpers |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0` | OpenAI provider |
+| [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.0.0` | Anthropic provider |
+| [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.0.0` | Google (Gemini) provider |
+| [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.0.0` | Groq provider |
+| [@fancyrobot/fred-openrouter](packages/provider-openrouter/README.md) | `5.0.0` | OpenRouter provider |
+| [@fancyrobot/fred-minimax](packages/provider-minimax/README.md) | `2.0.0` | MiniMax multi-modality provider |
 
 Packages intentionally retain independent major lines. The
 [compatibility matrix](MIGRATION.md#package-compatibility-matrix), not a shared
@@ -100,7 +100,7 @@ layer. Start here: [examples/README.md](examples/README.md).
 
 ## Documentation
 
-For the current prerelease, use the [Phase 68 migration guide](MIGRATION.md),
+For the current stable release, use the [Phase 68 migration guide](MIGRATION.md),
 the package READMEs above, and the [release runbook](RELEASE.md). The
 [published Phase 68 migration page](https://TheFancyRobot.github.io/fred/migration/v0.4.0/)
 mirrors the canonical guide. Older guides and API-reference pages on that site

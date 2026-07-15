@@ -1,6 +1,6 @@
 # Fred Phase 68 documentation
 
-Fred's Phase 68 prerelease removes the legacy `Fred` facade and publishes its
+Fred's Phase 68 stable release removes the legacy `Fred` facade and publishes its
 packages on independent version lines. The older guides and API-reference pages
 have been removed from this published site until they are rewritten for the new
 surface.
