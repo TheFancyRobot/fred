@@ -15,19 +15,39 @@ fi
 
 PUBLISHED_PKGS=()
 
-for dir in packages/*; do
+# Publish in dependency order so a newly released dependent never becomes
+# visible before the Fred package version required by its manifest. This
+# mirrors the declaration-build order. New independent packages fall through
+# to the glob below; packages with Fred dependencies must be added here.
+ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
+
+publish_one() {
+  local dir=$1
+  local name
+  local version
   if [ ! -f "$dir/package.json" ]; then
-    continue
+    return 0
   fi
   if grep -q '"private"[[:space:]]*:[[:space:]]*true' "$dir/package.json"; then
     echo "Skipping private package $dir"
-    continue
+    return 0
   fi
   name=$(bun -e "console.log(require('./${dir}/package.json').name)")
   version=$(bun -e "console.log(require('./${dir}/package.json').version)")
   # ${TAG_ARGS[@]+...} keeps `set -u` happy on bash 3.x when the array is empty
   (cd "$dir" && bun publish --tolerate-republish ${TAG_ARGS[@]+"${TAG_ARGS[@]}"})
   PUBLISHED_PKGS+=("${name}@${version}")
+}
+
+for name in $ORDERED_PACKAGES; do
+  publish_one "packages/$name"
+done
+
+for dir in packages/*; do
+  case " $ORDERED_PACKAGES " in
+    *" $(basename "$dir") "*) continue ;;
+  esac
+  publish_one "$dir"
 done
 
 changeset tag
