@@ -1,5 +1,14 @@
 # @fancyrobot/fred-convex
 
+## 1.0.0
+
+### Patch Changes
+
+- [#50](https://github.com/TheFancyRobot/fred/pull/50) [`920332c`](https://github.com/TheFancyRobot/fred/commit/920332cfd7502782293b83fd4f22537f3634270e) Thanks [@sincspecv](https://github.com/sincspecv)! - Improve local file dependency resolution for BAML and Convex adapter packages by exposing Bun source-backed testing subpaths with built JavaScript fallbacks and adding package-resolution smoke coverage.
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+
 ## 1.0.0-alpha.1
 
 ### Patch Changes
