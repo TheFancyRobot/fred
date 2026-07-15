@@ -1,5 +1,33 @@
 # @fred/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- [#66](https://github.com/TheFancyRobot/fred/pull/66) [`c3d92d2`](https://github.com/TheFancyRobot/fred/commit/c3d92d2831a936a9ab6bf0ef43afb920bf88b1ce) Thanks [@sincspecv](https://github.com/sincspecv)! - Add transport-neutral typed workflow discovery and execution, opt-in generated
+  JSON/SSE workflow endpoints, scoped hash-only API keys with durable stores,
+  persistent rate limiting, hardened HTTP configuration, and the keys CLI.
+
+- [#68](https://github.com/TheFancyRobot/fred/pull/68) [`1fdb1db`](https://github.com/TheFancyRobot/fred/commit/1fdb1db156eb6dda340a7f9f4d3f673197ec4b05) Thanks [@sincspecv](https://github.com/sincspecv)! - Move development chat, provider/default-agent helpers, setup loading, hot reload,
+  and lifecycle ownership into `@fancyrobot/fred-cli`. Publish
+  `@fancyrobot/fred-dev` as a final deprecated re-export shim with migration
+  guidance before removing it in the next major release.
+
+  Declare the core comparison runtime dependencies required when packed CLI
+  consumers load Fred through Bun's source export condition.
+
+### Patch Changes
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+- Updated dependencies [[`d66c541`](https://github.com/TheFancyRobot/fred/commit/d66c541f3e7d235f7c305679d4cc84a070317ab6), [`42a5d01`](https://github.com/TheFancyRobot/fred/commit/42a5d0160f57fdd2d1a7761e489331f5f9587217), [`ca49ada`](https://github.com/TheFancyRobot/fred/commit/ca49ada282c008a42c2bbdaacf5ed5dc7c472cd8), [`c3d92d2`](https://github.com/TheFancyRobot/fred/commit/c3d92d2831a936a9ab6bf0ef43afb920bf88b1ce), [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675), [`1fdb1db`](https://github.com/TheFancyRobot/fred/commit/1fdb1db156eb6dda340a7f9f4d3f673197ec4b05), [`b51ebb1`](https://github.com/TheFancyRobot/fred/commit/b51ebb1f7861647b562411399642eacd4d404c0c)]:
+  - @fancyrobot/fred@2.0.0
+  - @fancyrobot/fred-google@4.0.0
+  - @fancyrobot/fred-groq@4.0.0
+  - @fancyrobot/fred-anthropic@4.0.0
+  - @fancyrobot/fred-openai@4.0.0
+  - @fancyrobot/fred-openrouter@5.0.0
+
 ## 0.6.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,22 @@
 # @fred/dev
 
+## 1.0.0
+
+### Major Changes
+
+- [#68](https://github.com/TheFancyRobot/fred/pull/68) [`1fdb1db`](https://github.com/TheFancyRobot/fred/commit/1fdb1db156eb6dda340a7f9f4d3f673197ec4b05) Thanks [@sincspecv](https://github.com/sincspecv)! - Move development chat, provider/default-agent helpers, setup loading, hot reload,
+  and lifecycle ownership into `@fancyrobot/fred-cli`. Publish
+  `@fancyrobot/fred-dev` as a final deprecated re-export shim with migration
+  guidance before removing it in the next major release.
+
+  Declare the core comparison runtime dependencies required when packed CLI
+  consumers load Fred through Bun's source export condition.
+
+### Patch Changes
+
+- [#80](https://github.com/TheFancyRobot/fred/pull/80) [`852ed41`](https://github.com/TheFancyRobot/fred/commit/852ed4171ff6298b0a880062949beab63e5ef675) Thanks [@sincspecv](https://github.com/sincspecv)! - Ship the Phase 68 independent-version migration matrix, supported API recipes,
+  security rotation guidance, package README links, and release/rollback runbook.
+
 ## 1.0.0-alpha.1
 
 ### Major Changes

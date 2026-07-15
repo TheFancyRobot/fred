@@ -10,16 +10,15 @@ forwards the former root and `./chat-defaults` exports to
 `@fancyrobot/fred-cli` and will be removed in the next major release.
 
 Those forwarded exports first publish on the CLI 0.6 line because they carry a
-minor Changeset. The generated release candidate pins CLI `0.6.0-alpha.1`; an
-earlier published CLI 0.5.1 artifact is not a valid shim peer. During candidate
-validation, use the exact CLI prerelease recorded in the migration matrix.
+minor Changeset. The stable release pins CLI `0.6.0`; an earlier published CLI
+0.5.1 artifact is not a valid shim peer.
 
 ## Migration
 
 ```bash
 bun remove @fancyrobot/fred-dev
-# Confirm this exact candidate in the published migration matrix.
-bun add -d --exact @fancyrobot/fred-cli@0.6.0-alpha.1
+# Confirm this exact version in the published migration matrix.
+bun add -d --exact @fancyrobot/fred-cli@0.6.0
 ```
 
 Replace programmatic imports:

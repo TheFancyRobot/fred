@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-http",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TheFancyRobot/fred.git",

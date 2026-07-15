@@ -11,7 +11,7 @@ export const FredHttpApi = HttpApi.make('FredHttpApi')
   .add(FredOpenAiApi)
   .add(FredMessageApi)
   .annotate(OpenApi.Title, 'Fred HTTP API')
-  .annotate(OpenApi.Version, '1.0.0-alpha.0')
+  .annotate(OpenApi.Version, '1.0.0')
   .annotate(OpenApi.Description, 'HTTP contracts for Fred agents, status, and chat.')
   .annotate(OpenApi.Transform, (spec) => ({
     ...spec,

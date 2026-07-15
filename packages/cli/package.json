@@ -1,6 +1,6 @@
 {
   "name": "@fancyrobot/fred-cli",
-  "version": "0.6.0-alpha.1",
+  "version": "0.6.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TheFancyRobot/fred.git",
@@ -43,12 +43,12 @@
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {
-    "@fancyrobot/fred": "^2.0.0-alpha.1",
-    "@fancyrobot/fred-anthropic": "^4.0.0-alpha.1",
-    "@fancyrobot/fred-google": "^4.0.0-alpha.1",
-    "@fancyrobot/fred-groq": "^4.0.0-alpha.1",
-    "@fancyrobot/fred-openai": "^4.0.0-alpha.1",
-    "@fancyrobot/fred-openrouter": "^5.0.0-alpha.1",
+    "@fancyrobot/fred": "^2.0.0",
+    "@fancyrobot/fred-anthropic": "^4.0.0",
+    "@fancyrobot/fred-google": "^4.0.0",
+    "@fancyrobot/fred-groq": "^4.0.0",
+    "@fancyrobot/fred-openai": "^4.0.0",
+    "@fancyrobot/fred-openrouter": "^5.0.0",
     "@opentui/core": "^0.1.92",
     "semver": "^7.7.4"
   },
