@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
 import type { ProviderCapabilityKey } from './provider-capabilities';
+import type { ProviderConnectionCapabilities, ProviderConnectionTestHook } from './connections';
 
 export type ProviderAlias = string;
 
@@ -44,6 +45,10 @@ export interface ProviderDefinition {
    * capabilities here so callers can discover and route to them.
    */
   capabilities?: Set<ProviderCapabilityKey>;
+  /** Authentication/login capabilities; provider packages own this declaration. */
+  connectionCapabilities?: ProviderConnectionCapabilities;
+  /** Tests an unsaved connection without coupling a provider to persistence. */
+  connectionTest?: ProviderConnectionTestHook;
 }
 
 export interface ProviderConfigInput {

@@ -16,6 +16,7 @@
  *   `defaultSystemMessage` is set).
  */
 import { Schema } from 'effect';
+import { ProviderConnectionId } from '../platform/connections';
 
 /** An index signature that accepts and preserves arbitrary extra keys. */
 const passthrough = Schema.Record({ key: Schema.String, value: Schema.Unknown });
@@ -365,6 +366,7 @@ export const AgentConfigSchema = Schema.Struct(
   {
     id: Schema.optional(Schema.String),
     platform: Schema.optional(Schema.String),
+    connectionId: Schema.optional(ProviderConnectionId),
     model: Schema.optional(Schema.String),
     systemMessage: Schema.optional(AgentPromptSchema),
   },

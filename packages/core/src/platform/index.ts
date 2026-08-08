@@ -18,3 +18,4 @@ export {
   hasCapability,
   getCapability,
 } from './provider-capabilities';
+export * from './connections';

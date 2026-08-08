@@ -14,6 +14,10 @@ import type { ToolGateServiceApi } from './tool-gate/types';
 import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import {
+  ProviderConnectionService,
+  makeInMemoryProviderConnectionLayer,
+} from './platform/connections';
+import {
   ContextStorageService,
   ContextStorageServiceLive,
   ContextStorageServiceLiveWithAdapter,
@@ -59,6 +63,7 @@ export type FredServices =
   | ToolGateServiceApi
   | HookManagerService
   | ProviderRegistryService
+  | ProviderConnectionService
   | ContextStorageService
   | PromptSourceServiceApi
   | AgentService
@@ -328,6 +333,7 @@ export const makeFredLayers = (
 ) => {
   const selectedCoreLayer = Layer.mergeAll(
     ProviderRegistryServiceLive,
+    makeInMemoryProviderConnectionLayer(),
     contextStorageLayer,
     checkpointServiceLayer,
   );
@@ -506,6 +512,7 @@ export {
   HookManagerServiceLive,
   ProviderRegistryService,
   ProviderRegistryServiceLive,
+  ProviderConnectionService,
   ContextStorageService,
   ContextStorageServiceLive,
   ContextStorageServiceLiveWithAdapter,

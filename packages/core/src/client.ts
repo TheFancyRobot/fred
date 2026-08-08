@@ -21,7 +21,7 @@
  * tests/unit/core/migration/boundary-guard.test.ts).
  */
 
-import { Cause, Data, Effect, Exit, Layer, Runtime, Scope } from 'effect';
+import { Cause, Data, Effect, Exit, Layer, Option, Runtime, Scope } from 'effect';
 import { dirname } from 'path';
 import type * as Schema from 'effect/Schema';
 import type {
@@ -54,6 +54,12 @@ import {
 import type { Tool, ToolSchemaMetadata } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
 import type { ProviderConfig, ProviderDefinition } from './platform/provider';
+import type {
+  ProviderConnection,
+  ProviderConnectionCredentials,
+  ProviderConnectionId,
+  ResolvedProviderConnection,
+} from './platform/connections';
 import type { Tracer } from './tracing';
 import type { RoutingConfig } from './routing/types';
 import { buildObservabilityLayers } from './observability/otel';
@@ -84,6 +90,7 @@ import {
   PipelineService,
   ContextStorageService,
   ProviderRegistryService,
+  ProviderConnectionService,
   HookManagerService,
   MessageProcessorService,
   MessageRouterService,
@@ -327,6 +334,17 @@ export interface FredClient {
     remove(id: string): Promise<boolean>;
     get(id: string): Promise<AnyAgentInstance | null>;
     list(): Promise<AnyAgentInstance[]>;
+  };
+  /** Transport-neutral provider-connection management for clients and the CLI. */
+  readonly connections: {
+    list(): Promise<readonly ProviderConnection[]>;
+    get(id: ProviderConnectionId): Promise<ProviderConnection | null>;
+    put(connection: ProviderConnection, credentials: ProviderConnectionCredentials): Promise<void>;
+    remove(id: ProviderConnectionId): Promise<boolean>;
+    resolve(request: {
+      readonly providerId: string;
+      readonly connectionId?: ProviderConnectionId;
+    }): Promise<ResolvedProviderConnection>;
   };
   readonly messages: {
     process(message: string, options?: ProcessingOptions): Promise<AgentResponse>;
@@ -659,6 +677,23 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           (agent) => agent ?? null,
         )),
       list: () => run(Effect.flatMap(AgentService, (s) => s.getAllAgents())),
+    },
+
+    connections: {
+      list: () => run(Effect.flatMap(ProviderConnectionService, (service) => service.list())),
+      get: (id) => run(Effect.map(
+        Effect.flatMap(ProviderConnectionService, (service) => service.get(id)),
+        Option.getOrNull,
+      )),
+      put: (connection, credentials) => run(Effect.flatMap(
+        ProviderConnectionService,
+        (service) => service.put(connection, credentials),
+      )),
+      remove: (id) => run(Effect.flatMap(ProviderConnectionService, (service) => service.remove(id))),
+      resolve: (request) => run(Effect.flatMap(
+        ProviderConnectionService,
+        (service) => service.resolve(request),
+      )),
     },
 
     messages: {

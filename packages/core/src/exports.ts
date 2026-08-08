@@ -58,6 +58,7 @@ export type {
   ProviderConfig, ProviderConfigInput, ProviderDefinition,
   ProviderRegistration, ProviderModelDefaults, ProviderAlias,
 } from './platform/provider';
+export * from './platform/connections';
 
 // Provider capability types
 export type { ProviderCapabilityKey } from './platform/provider-capabilities';

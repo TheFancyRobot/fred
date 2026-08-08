@@ -2,9 +2,11 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import { extname, resolve } from 'path';
 import yaml from 'js-yaml';
 import { Eta, EtaParseError } from 'eta';
+import { Schema } from 'effect';
 import type { AgentConfig, ToolRetryPolicy } from './agent';
 import { AgentFileParseError } from './errors';
 import type { FrameworkConfig } from '../config/types';
+import { ProviderConnectionId } from '../platform/connections';
 import { buildFrontmatterContext } from '../template/context';
 import { containsEtaSyntax } from '../template/engine';
 import { SECURITY_HEADER } from '../template/security';
@@ -250,6 +252,14 @@ export const validateAgentFrontmatter = (frontmatter: Record<string, unknown>, f
     throwParseError(filePath, 'mcpServers must be an array of strings');
   }
 
+  if (frontmatter.connectionId !== undefined) {
+    try {
+      Schema.decodeUnknownSync(ProviderConnectionId)(frontmatter.connectionId);
+    } catch {
+      throwParseError(filePath, 'connectionId must be a UUID');
+    }
+  }
+
   if (frontmatter.persistHistory !== undefined && typeof frontmatter.persistHistory !== 'boolean') {
     throwParseError(filePath, 'persistHistory must be a boolean');
   }
@@ -281,6 +291,9 @@ export const toAgentConfig = (parsed: ParsedAgentFile): AgentConfig => {
   if (frontmatter.maxTokens !== undefined) config.maxTokens = frontmatter.maxTokens as number;
   if (frontmatter.utterances !== undefined) config.utterances = frontmatter.utterances as string[];
   if (frontmatter.mcpServers !== undefined) config.mcpServers = frontmatter.mcpServers as string[];
+  if (frontmatter.connectionId !== undefined) {
+    config.connectionId = Schema.decodeUnknownSync(ProviderConnectionId)(frontmatter.connectionId);
+  }
   if (frontmatter.maxSteps !== undefined) config.maxSteps = frontmatter.maxSteps as number;
   if (frontmatter.toolChoice !== undefined) config.toolChoice = frontmatter.toolChoice as AgentConfig['toolChoice'];
   if (frontmatter.toolTimeout !== undefined) config.toolTimeout = frontmatter.toolTimeout as number;
