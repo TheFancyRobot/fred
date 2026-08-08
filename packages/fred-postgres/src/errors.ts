@@ -25,9 +25,15 @@ export class PgvectorRequiredError extends Schema.TaggedError<PgvectorRequiredEr
   { message: Schema.String },
 ) {}
 
+export class LegacyPostgresImportError extends Schema.TaggedError<LegacyPostgresImportError>()(
+  'LegacyPostgresImportError',
+  { operation: Schema.String, table: Schema.String, message: Schema.String },
+) {}
+
 export type FredPostgresError =
   | PostgresConfigurationError
   | PostgresOperationError
   | PostgresMigrationChecksumError
   | PostgresMigrationLockTimeoutError
-  | PgvectorRequiredError;
+  | PgvectorRequiredError
+  | LegacyPostgresImportError;

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { Clock, Context, Effect, Layer, Schema } from 'effect';
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_POSTGRES_SCHEMA, fredPostgresTable } from '@fancyrobot/fred-postgres';
 
 export const RATE_LIMIT_TABLE = 'fred_rate_limit_buckets';
 
@@ -234,31 +235,28 @@ export interface PostgresRateLimitPool {
   ): Promise<{ readonly rows: readonly Record<string, unknown>[]; readonly rowCount: number | null }>;
 }
 
-const POSTGRES_DDL = `CREATE TABLE IF NOT EXISTS ${RATE_LIMIT_TABLE} (
-  bucket_key TEXT PRIMARY KEY,
-  window_start BIGINT NOT NULL,
-  request_count INTEGER NOT NULL,
-  expires_at BIGINT NOT NULL,
-  decision_id TEXT
-);
-ALTER TABLE ${RATE_LIMIT_TABLE} ADD COLUMN IF NOT EXISTS decision_id TEXT;
-CREATE INDEX IF NOT EXISTS idx_${RATE_LIMIT_TABLE}_expires_at ON ${RATE_LIMIT_TABLE} (expires_at);`;
+export interface PostgresRateLimitStoreOptions {
+  /** Schema prepared by migrateFredPostgresStores. */
+  readonly schema?: string;
+}
 
-export const makePostgresRateLimitStore = (pool: PostgresRateLimitPool): RateLimitStoreService => {
+export const makePostgresRateLimitStore = (
+  pool: PostgresRateLimitPool,
+  options: PostgresRateLimitStoreOptions = {},
+): RateLimitStoreService => {
+  const table = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, RATE_LIMIT_TABLE);
   let consumes = 0;
   return {
     backend: 'postgres',
-    initialize: Effect.tryPromise({
-      try: async () => { await pool.query(POSTGRES_DDL); },
-      catch: (cause) => storeFailure('initialize', cause),
-    }),
+    // Postgres DDL is applied only by @fancyrobot/fred-postgres migrations.
+    initialize: Effect.void,
     consume: Effect.fn('PostgresRateLimitStore.consume')((input) => Effect.gen(function* () {
       const policy = yield* validatePolicy(input.policy);
       consumes += 1;
       if (consumes % 256 === 0) {
         yield* Effect.tryPromise({
-          try: () => pool.query(`DELETE FROM ${RATE_LIMIT_TABLE} WHERE bucket_key IN (
-            SELECT bucket_key FROM ${RATE_LIMIT_TABLE} WHERE expires_at <= $1 LIMIT 1000
+          try: () => pool.query(`DELETE FROM ${table} WHERE bucket_key IN (
+            SELECT bucket_key FROM ${table} WHERE expires_at <= $1 LIMIT 1000
           )`, [input.now]),
           catch: (cause) => storeFailure('prune', cause),
         });
@@ -266,19 +264,19 @@ export const makePostgresRateLimitStore = (pool: PostgresRateLimitPool): RateLim
       const decisionId = randomUUID();
       const result = yield* Effect.tryPromise({
         try: () => pool.query(
-          `INSERT INTO ${RATE_LIMIT_TABLE} (bucket_key, window_start, request_count, expires_at, decision_id)
+          `INSERT INTO ${table} AS buckets (bucket_key, window_start, request_count, expires_at, decision_id)
            VALUES ($1, $2, 1, $3, $5)
            ON CONFLICT(bucket_key) DO UPDATE SET
-             window_start = CASE WHEN ${RATE_LIMIT_TABLE}.expires_at <= $2 THEN EXCLUDED.window_start ELSE ${RATE_LIMIT_TABLE}.window_start END,
+             window_start = CASE WHEN buckets.expires_at <= $2 THEN EXCLUDED.window_start ELSE buckets.window_start END,
              request_count = CASE
-               WHEN ${RATE_LIMIT_TABLE}.expires_at <= $2 THEN 1
-               WHEN ${RATE_LIMIT_TABLE}.request_count < $4 THEN ${RATE_LIMIT_TABLE}.request_count + 1
-               ELSE ${RATE_LIMIT_TABLE}.request_count
+               WHEN buckets.expires_at <= $2 THEN 1
+               WHEN buckets.request_count < $4 THEN buckets.request_count + 1
+               ELSE buckets.request_count
              END,
-             expires_at = CASE WHEN ${RATE_LIMIT_TABLE}.expires_at <= $2 THEN EXCLUDED.expires_at ELSE ${RATE_LIMIT_TABLE}.expires_at END,
+             expires_at = CASE WHEN buckets.expires_at <= $2 THEN EXCLUDED.expires_at ELSE buckets.expires_at END,
              decision_id = CASE
-               WHEN ${RATE_LIMIT_TABLE}.expires_at <= $2 OR ${RATE_LIMIT_TABLE}.request_count < $4 THEN EXCLUDED.decision_id
-               ELSE ${RATE_LIMIT_TABLE}.decision_id
+               WHEN buckets.expires_at <= $2 OR buckets.request_count < $4 THEN EXCLUDED.decision_id
+               ELSE buckets.decision_id
              END
            RETURNING request_count, expires_at, decision_id = $5 AS consumed`,
           [input.key, input.now, input.now + policy.windowMs, policy.maxRequests, decisionId],
@@ -298,15 +296,15 @@ export const makePostgresRateLimitStore = (pool: PostgresRateLimitPool): RateLim
       };
     })),
     prune: (now) => Effect.tryPromise({
-      try: async () => (await pool.query(`DELETE FROM ${RATE_LIMIT_TABLE} WHERE expires_at <= $1`, [now])).rowCount ?? 0,
+      try: async () => (await pool.query(`DELETE FROM ${table} WHERE expires_at <= $1`, [now])).rowCount ?? 0,
       catch: (cause) => storeFailure('prune', cause),
     }),
     close: Effect.void,
   };
 };
 
-export const RateLimitStorePostgres = (pool: PostgresRateLimitPool) =>
-  Layer.succeed(RateLimitStore, makePostgresRateLimitStore(pool));
+export const RateLimitStorePostgres = (pool: PostgresRateLimitPool, options?: PostgresRateLimitStoreOptions) =>
+  Layer.succeed(RateLimitStore, makePostgresRateLimitStore(pool, options));
 
 export interface RateLimitRequest {
   readonly key: string;

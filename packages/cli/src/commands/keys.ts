@@ -89,6 +89,11 @@ export async function handleKeysCommand(
       const { Pool } = await import('pg');
       const pool = new Pool({ connectionString: options.postgres });
       close = () => pool.end();
+      const postgres = await import('@fancyrobot/fred-postgres');
+      const database = await Effect.runPromise(postgres.makeFredPostgres({ pool }));
+      await Effect.runPromise(database.migrate(
+        postgres.fredPostgresStoreMigrations().filter((migration) => migration.module === 'http-api-keys'),
+      ));
       store = http.makePostgresApiKeyStore(pool);
     }
 

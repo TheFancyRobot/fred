@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { DEFAULT_POSTGRES_SCHEMA, fredPostgresTable } from '@fancyrobot/fred-postgres';
 import {
   API_KEY_VERIFIER_IDS,
   ApiKeyVerifierDescriptor,
@@ -273,26 +274,6 @@ export const makeSqliteApiKeyStore = (
 export const ApiKeyStoreSqlite = (path: string, database?: Database) =>
   Layer.succeed(ApiKeyStore, makeSqliteApiKeyStore(path, database));
 
-const POSTGRES_DDL = `CREATE TABLE IF NOT EXISTS ${API_KEY_TABLE} (
-  id TEXT PRIMARY KEY,
-  hash TEXT NOT NULL,
-  scopes JSONB NOT NULL,
-  rate_limit JSONB,
-  revoked BOOLEAN NOT NULL DEFAULT FALSE,
-  verifier_id TEXT,
-  verifier_version INTEGER,
-  verifier_metadata JSONB,
-  expires_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL
-)`;
-
-const POSTGRES_MIGRATIONS = [
-  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_id TEXT`,
-  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_version INTEGER`,
-  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_metadata JSONB`,
-  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
-] as const;
-
 export interface PostgresApiKeyPool {
   query(
     text: string,
@@ -300,18 +281,23 @@ export interface PostgresApiKeyPool {
   ): Promise<{ readonly rows: readonly Record<string, unknown>[]; readonly rowCount: number | null }>;
 }
 
-export const makePostgresApiKeyStore = (pool: PostgresApiKeyPool): ApiKeyStoreService => ({
+export interface PostgresApiKeyStoreOptions {
+  /** Schema prepared by migrateFredPostgresStores. */
+  readonly schema?: string;
+}
+
+export const makePostgresApiKeyStore = (
+  pool: PostgresApiKeyPool,
+  options: PostgresApiKeyStoreOptions = {},
+): ApiKeyStoreService => {
+  const table = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, API_KEY_TABLE);
+  return {
   backend: 'postgres',
-  initialize: Effect.tryPromise({
-    try: async () => {
-      await pool.query(POSTGRES_DDL);
-      for (const migration of POSTGRES_MIGRATIONS) await pool.query(migration);
-    },
-    catch: (cause) => storeFailure('initialize', cause),
-  }),
+  // Postgres DDL is applied only by @fancyrobot/fred-postgres migrations.
+  initialize: Effect.void,
   findById: (id) => Effect.tryPromise({
     try: () => pool.query(
-      `SELECT id, hash, scopes, rate_limit, revoked, verifier_id, verifier_version, verifier_metadata, expires_at, created_at FROM ${API_KEY_TABLE} WHERE id = $1`,
+      `SELECT id, hash, scopes, rate_limit, revoked, verifier_id, verifier_version, verifier_metadata, expires_at, created_at FROM ${table} WHERE id = $1`,
       [id],
     ),
     catch: (cause) => storeFailure('findById', cause),
@@ -337,7 +323,7 @@ export const makePostgresApiKeyStore = (pool: PostgresApiKeyPool): ApiKeyStoreSe
   insert: (record) => Effect.tryPromise({
     try: async () => {
       await pool.query(
-        `INSERT INTO ${API_KEY_TABLE} (id, hash, scopes, rate_limit, revoked, verifier_id, verifier_version, verifier_metadata, expires_at, created_at) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10)`,
+        `INSERT INTO ${table} (id, hash, scopes, rate_limit, revoked, verifier_id, verifier_version, verifier_metadata, expires_at, created_at) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10)`,
         [
           record.id,
           record.hash,
@@ -359,21 +345,22 @@ export const makePostgresApiKeyStore = (pool: PostgresApiKeyPool): ApiKeyStoreSe
   }),
   revoke: (id) => Effect.tryPromise({
     try: async () => (await pool.query(
-      `UPDATE ${API_KEY_TABLE} SET revoked = TRUE WHERE id = $1`, [id],
+      `UPDATE ${table} SET revoked = TRUE WHERE id = $1`, [id],
     )).rowCount !== 0,
     catch: (cause) => storeFailure('revoke', cause),
   }),
   compareAndSwapVerifier: (id, expectedHash, replacement) => Effect.tryPromise({
     try: async () => (await pool.query(
-      `UPDATE ${API_KEY_TABLE} SET hash = $1, verifier_id = $2, verifier_version = $3, verifier_metadata = $4::jsonb WHERE id = $5 AND hash = $6 AND revoked = FALSE`,
+      `UPDATE ${table} SET hash = $1, verifier_id = $2, verifier_version = $3, verifier_metadata = $4::jsonb WHERE id = $5 AND hash = $6 AND revoked = FALSE`,
       [replacement.hash, replacement.verifier.id, replacement.verifier.version, JSON.stringify(replacement.verifier.metadata), id, expectedHash],
     )).rowCount !== 0,
     catch: (cause) => storeFailure('compareAndSwapVerifier', cause),
   }),
-});
+  };
+};
 
-export const ApiKeyStorePostgres = (pool: PostgresApiKeyPool) =>
-  Layer.succeed(ApiKeyStore, makePostgresApiKeyStore(pool));
+export const ApiKeyStorePostgres = (pool: PostgresApiKeyPool, options?: PostgresApiKeyStoreOptions) =>
+  Layer.succeed(ApiKeyStore, makePostgresApiKeyStore(pool, options));
 
 export const hashApiKey = (token: string): string =>
   createHash('sha256').update(token, 'utf8').digest('hex');

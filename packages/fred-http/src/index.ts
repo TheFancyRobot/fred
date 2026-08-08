@@ -45,6 +45,7 @@ export type {
   AuthenticatedApiKeyIdentity,
   GeneratedApiKey,
   PostgresApiKeyPool,
+  PostgresApiKeyStoreOptions,
 } from './api-keys';
 export {
   API_KEY_VERIFIER_IDS,
@@ -85,6 +86,7 @@ export {
 export type {
   MemoryRateLimitStoreOptions,
   PostgresRateLimitPool,
+  PostgresRateLimitStoreOptions,
   RateLimitConsumeInput,
   RateLimitRequest,
   RateLimitStoreService,

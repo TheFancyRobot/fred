@@ -86,7 +86,6 @@ describe('Effect runtime boundary guards', () => {
     'mcp/health.ts',
     'pipeline/service.ts',
     'pipeline/checkpoint/manager.ts',
-    'pipeline/checkpoint/postgres.ts',
     'pipeline/checkpoint/sqlite.ts',
     'pipeline/pause/manager.ts',
   ]);

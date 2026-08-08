@@ -75,9 +75,17 @@ export interface FredPostgres {
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const quoteIdentifier = (identifier: string): string => `"${identifier.replaceAll('"', '""')}"`;
+export const quotePostgresIdentifier = (identifier: string): string => `"${identifier.replaceAll('"', '""')}"`;
 
 const validSchema = (schema: string): schema is string => POSTGRES_SCHEMA_NAME_PATTERN.test(schema);
+
+/** Return a safely quoted table name in a configured Fred schema. */
+export const fredPostgresTable = (schema: string, table: string): string => {
+  if (!validSchema(schema) || !validSchema(table)) {
+    throw new Error(`Invalid PostgreSQL identifier: ${!validSchema(schema) ? schema : table}`);
+  }
+  return `${quotePostgresIdentifier(schema)}.${quotePostgresIdentifier(table)}`;
+};
 
 const operation = <A>(
   name: string,
@@ -248,8 +256,8 @@ export const makeFredPostgres = Effect.fn('FredPostgres.make')(function* (
       message: `Invalid pgvector mode: ${String(vectorMode)}`,
     });
   }
-  const quotedSchema = quoteIdentifier(schema);
-  const ledger = `${quotedSchema}.${quoteIdentifier('schema_migrations')}`;
+  const quotedSchema = quotePostgresIdentifier(schema);
+  const ledger = `${quotedSchema}.${quotePostgresIdentifier('schema_migrations')}`;
 
   const collectDiagnostics = (client: PostgresClient): Effect.Effect<FredPostgresDiagnostics, FredPostgresError> =>
     Effect.gen(function* () {

@@ -159,19 +159,33 @@ By default, context is stored in-memory. For production, Fred provides built-in 
 
 ### Built-in SQL Adapters
 
-Fred includes two production-ready persistence adapters:
+Fred includes a built-in SQLite adapter and an explicit PostgreSQL package:
 
 **PostgreSQL** - For production deployments:
-```yaml
-# fred.config.yaml
-persistence:
-  adapter: postgres
-```
-
-Requires the `FRED_POSTGRES_URL` environment variable:
 ```bash
 export FRED_POSTGRES_URL="postgres://user:pass@host:5432/database"
 ```
+
+```typescript
+import { Effect } from 'effect';
+import { Pool } from 'pg';
+import {
+  makeFredPostgres,
+  migrateFredPostgresStores,
+  PostgresCheckpointStorage,
+  PostgresContextStorage,
+} from '@fancyrobot/fred-postgres';
+
+const pool = new Pool({ connectionString: process.env.FRED_POSTGRES_URL });
+const database = await Effect.runPromise(makeFredPostgres({ pool }));
+await Effect.runPromise(migrateFredPostgresStores(database));
+const fred = await createFred({
+  storage: new PostgresContextStorage({ pool }),
+  checkpointStorage: new PostgresCheckpointStorage({ pool }),
+});
+```
+
+Migrations use the `fred` schema by default and never adopt same-named tables in `public`. Run the explicit legacy import only after a backup and rehearsal.
 
 **SQLite** - For local development or embedded use:
 ```yaml
@@ -189,7 +203,7 @@ export FRED_SQLITE_PATH="/path/to/my.db"
 
 | Variable | Adapter | Required | Default |
 |----------|---------|----------|---------|
-| `FRED_POSTGRES_URL` | postgres | Yes | (none - throws if missing) |
+| `FRED_POSTGRES_URL` | postgres | Used by your `pg` pool | (none) |
 | `FRED_SQLITE_PATH` | sqlite | No | `./fred.db` |
 
 ### Agent Opt-Out

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Cause, Effect, Exit, Option } from 'effect';
 import {
+  fredPostgresStoreMigrations,
+  importLegacyFredPostgresStores,
   makeFredPostgres,
   type PostgresClient,
   type PostgresPool,
@@ -58,6 +60,56 @@ class FakePool implements PostgresPool {
   }
 }
 
+class LegacyImportPool implements PostgresPool {
+  readonly queries: string[] = [];
+  private readonly copied = new Set<string>();
+  private readonly ledger = new Map<string, { count: number; checksum: string }>();
+
+  async connect(): Promise<PostgresClient> {
+    return {
+      query: async (text, values = []) => {
+        this.queries.push(text);
+        if (text.startsWith('SELECT source_table')) {
+          return {
+            rows: [...this.ledger].map(([source_table, entry]) => ({
+              source_table,
+              source_count: entry.count,
+              source_checksum: entry.checksum,
+              destination_count: entry.count,
+              destination_checksum: entry.checksum,
+            })),
+            rowCount: this.ledger.size,
+          };
+        }
+        if (text.startsWith('SELECT COUNT')) {
+          const table = text.includes('conversations') ? 'conversations' : 'messages';
+          const isSource = text.includes('"public".');
+          const present = isSource || this.copied.has(table);
+          return { rows: [{ row_count: present ? '1' : '0', checksum: present ? `${table}-checksum` : 'empty' }], rowCount: 1 };
+        }
+        if (text.includes('information_schema.columns')) {
+          const table = values[1];
+          const columns = table === 'conversations'
+            ? ['id', 'created_at', 'updated_at', 'metadata']
+            : ['conversation_id', 'sequence', 'payload', 'created_at'];
+          return { rows: columns.sort().map((column_name) => ({ column_name })), rowCount: columns.length };
+        }
+        if (text.startsWith('INSERT INTO "fred"."legacy_imports"')) {
+          const [source_table, count, checksum] = values;
+          this.ledger.set(String(source_table), { count: Number(count), checksum: String(checksum) });
+          return { rows: [], rowCount: 1 };
+        }
+        if (text.startsWith('INSERT INTO "fred".')) {
+          this.copied.add(text.includes('conversations') ? 'conversations' : 'messages');
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: null };
+      },
+      release: () => undefined,
+    };
+  }
+}
+
 test('construction and invalid schema perform no queries', async () => {
   const pool = new FakePool();
   const invalid = await Effect.runPromiseExit(makeFredPostgres({ pool, schema: 'fred; DROP SCHEMA public' }));
@@ -68,6 +120,34 @@ test('construction and invalid schema perform no queries', async () => {
 });
 
 describe('Fred Postgres migrations', () => {
+  test('defines all store DDL under the requested schema', () => {
+    const migrations = fredPostgresStoreMigrations('fred_test');
+    expect(migrations.map((migration) => migration.module)).toEqual([
+      'context',
+      'checkpoints',
+      'http-api-keys',
+      'http-rate-limits',
+      'legacy-imports',
+    ]);
+    for (const migration of migrations) {
+      expect(migration.sql).toContain('"fred_test".');
+      expect(migration.sql).not.toContain('"public".');
+    }
+  });
+
+  test('copies legacy public context only after preflight and preserves the source', async () => {
+    const pool = new LegacyImportPool();
+    const first = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
+    const second = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
+
+    expect(first.map((result) => result.imported)).toEqual([true, true]);
+    expect(second.map((result) => result.imported)).toEqual([false, false]);
+    expect(pool.queries.some((query) => /(?:DELETE|UPDATE|ALTER|DROP)\s+.*"public"/i.test(query))).toBe(false);
+    expect(pool.queries.findIndex((query) => query === 'BEGIN')).toBeGreaterThan(
+      pool.queries.findIndex((query) => query.includes('information_schema.columns')),
+    );
+  });
+
   test('runs explicit migrations once and leaves caller-owned pools open', async () => {
     const pool = new FakePool();
     const database = await Effect.runPromise(makeFredPostgres({ pool, vector: 'auto' }));

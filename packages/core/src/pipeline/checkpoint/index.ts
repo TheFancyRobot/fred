@@ -7,8 +7,6 @@
 
 export * from './types';
 export * from './schema';
-export { PostgresCheckpointStorage } from './postgres';
-export type { PostgresCheckpointStorageOptions } from './postgres';
 export { SqliteCheckpointStorage } from './sqlite';
 export type { SqliteCheckpointStorageOptions } from './sqlite';
 export { CheckpointManager } from './manager';

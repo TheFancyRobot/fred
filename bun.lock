@@ -177,6 +177,7 @@
         "@fancyrobot/fred-groq": "^4.0.0",
         "@fancyrobot/fred-openai": "^4.0.0",
         "@fancyrobot/fred-openrouter": "^5.0.0",
+        "@fancyrobot/fred-postgres": "^1.0.0",
         "@opentui/core": "^0.1.92",
         "semver": "^7.7.4",
       },
@@ -257,6 +258,9 @@
     "packages/fred-http": {
       "name": "@fancyrobot/fred-http",
       "version": "1.0.0",
+      "dependencies": {
+        "@fancyrobot/fred-postgres": "^1.0.0",
+      },
       "devDependencies": {
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",

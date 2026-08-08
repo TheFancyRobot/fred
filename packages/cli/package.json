@@ -39,7 +39,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/plugin/api.ts src/chat-defaults.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-http --external pg --external @opentui/core --external semver",
+    "build": "bun build src/index.ts src/plugin/api.ts src/chat-defaults.ts --root src --outdir dist --target bun --format esm --external effect --external @fancyrobot/fred --external @fancyrobot/fred-openai --external @fancyrobot/fred-anthropic --external @fancyrobot/fred-google --external @fancyrobot/fred-groq --external @fancyrobot/fred-openrouter --external @fancyrobot/fred-http --external @fancyrobot/fred-postgres --external pg --external @opentui/core --external semver",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {
@@ -49,6 +49,7 @@
     "@fancyrobot/fred-groq": "^4.0.0",
     "@fancyrobot/fred-openai": "^4.0.0",
     "@fancyrobot/fred-openrouter": "^5.0.0",
+    "@fancyrobot/fred-postgres": "^1.0.0",
     "@opentui/core": "^0.1.92",
     "semver": "^7.7.4"
   },

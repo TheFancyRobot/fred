@@ -76,7 +76,6 @@ import {
 import { loadValidatedConfig } from './config/load';
 import { configToLayerOptions } from './config/compile';
 import type { ContextStorage, SessionDetails, SessionSummary } from './context/context';
-import { PostgresContextStorage } from './context/storage/postgres';
 import { SqliteContextStorage } from './context/storage/sqlite';
 import { buildSessionDetails } from './context/session';
 import {
@@ -122,7 +121,6 @@ import { BUILTIN_PACKS } from './platform/packs';
 import type { AgentFileWatcher } from './agent/file-watcher';
 import {
   CheckpointCleanupTask,
-  PostgresCheckpointStorage,
   SqliteCheckpointStorage,
   type CheckpointStorage,
 } from './pipeline/checkpoint';
@@ -276,6 +274,8 @@ export interface CreateFredOptions {
   template?: TemplateConfig;
   /** Persistent conversation storage adapter (e.g. SQLite/Postgres). */
   storage?: ContextStorage;
+  /** Persistent workflow-checkpoint storage adapter. */
+  checkpointStorage?: CheckpointStorage;
   /** Prompt adapter layer used while constructing AgentService. */
   promptSourceLayer?: FredLayerOptions['promptSourceLayer'];
 }
@@ -493,21 +493,19 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const template = options.template ?? loadedConfig?.template;
   const templateBasePath = options.configPath ? dirname(options.configPath) : process.cwd();
   const persistence = loadedConfig?.persistence;
-  let configuredStorage: PostgresContextStorage | SqliteContextStorage | undefined;
-  let configuredCheckpointStorage: CheckpointStorage | undefined;
+  let configuredStorage: SqliteContextStorage | undefined;
+  let configuredCheckpointStorage: CheckpointStorage | undefined = options.checkpointStorage;
   if (persistence) {
     if (persistence.adapter === 'postgres') {
-      const connectionString = process.env.FRED_POSTGRES_URL;
-      if (!connectionString) {
+      if (options.storage === undefined) {
         throw new Error(
-          'FRED_POSTGRES_URL environment variable is required for Postgres persistence adapter',
+          'Postgres persistence requires an explicit PostgresContextStorage from @fancyrobot/fred-postgres',
         );
       }
-      if (!options.storage) {
-        configuredStorage = new PostgresContextStorage({ connectionString });
-      }
-      if (persistence.checkpoint?.enabled !== false) {
-        configuredCheckpointStorage = new PostgresCheckpointStorage({ connectionString });
+      if (persistence.checkpoint?.enabled !== false && options.checkpointStorage === undefined) {
+        throw new Error(
+          'Postgres checkpoints require an explicit PostgresCheckpointStorage from @fancyrobot/fred-postgres',
+        );
       }
     } else {
       const path = process.env.FRED_SQLITE_PATH ?? './fred.db';

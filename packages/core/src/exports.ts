@@ -150,7 +150,6 @@ export type { SessionHandle } from './context/session-service';
 
 // ─── Checkpoint Types ───────────────────────────────────────────────────────
 export {
-  PostgresCheckpointStorage,
   SqliteCheckpointStorage,
 } from './pipeline/checkpoint';
 export type {

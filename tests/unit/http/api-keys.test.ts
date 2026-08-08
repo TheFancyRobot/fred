@@ -416,7 +416,7 @@ describe('API key durable stores', () => {
     const store = makePostgresApiKeyStore(pool);
     await Effect.runPromise(store.initialize);
     await Effect.runPromise(store.initialize);
-    expect(ddlCount).toBe(2);
+    expect(ddlCount).toBe(0);
     const generated = await Effect.runPromise(generateApiKey(['read']));
     await Effect.runPromise(store.insert(generated.record));
     expect(Option.isSome(await Effect.runPromise(store.findById(generated.record.id)))).toBe(true);

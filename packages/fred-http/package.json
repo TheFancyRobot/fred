@@ -24,8 +24,11 @@
     }
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/platform --external @effect/platform-bun --external @fancyrobot/fred",
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/platform --external @effect/platform-bun --external @fancyrobot/fred --external @fancyrobot/fred-postgres",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
+  },
+  "dependencies": {
+    "@fancyrobot/fred-postgres": "^1.0.0"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^2.0.0-alpha.0",

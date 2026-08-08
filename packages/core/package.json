@@ -29,12 +29,6 @@
       "import": "./dist/context/storage/sqlite.js",
       "default": "./dist/context/storage/sqlite.js"
     },
-    "./context/postgres": {
-      "types": "./dist/context/storage/postgres.d.ts",
-      "bun": "./src/context/storage/postgres.ts",
-      "import": "./dist/context/storage/postgres.js",
-      "default": "./dist/context/storage/postgres.js"
-    },
     "./tools": {
       "types": "./dist/tool/calculator.d.ts",
       "bun": "./src/tool/calculator.ts",
@@ -87,7 +81,7 @@
     "!dist/**/*.test.d.ts.map"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/eval/public.ts src/context/storage/sqlite.ts src/context/storage/postgres.ts src/tool/calculator.ts src/effect/index.ts src/mcp/types.ts src/mcp/registry.ts src/tool/tool.ts src/stream/smooth-text.ts src/messages.ts --root src --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/platform --external @effect/platform-bun --external @effect/platform-node",
+    "build": "bun build src/index.ts src/eval/public.ts src/context/storage/sqlite.ts src/tool/calculator.ts src/effect/index.ts src/mcp/types.ts src/mcp/registry.ts src/tool/tool.ts src/stream/smooth-text.ts src/messages.ts --root src --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/platform --external @effect/platform-bun --external @effect/platform-node",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist",
     "test": "bun test"
   },

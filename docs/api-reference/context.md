@@ -160,22 +160,18 @@ storage.close();
 Production-grade persistence using PostgreSQL.
 
 ```typescript
-import { PostgresContextStorage } from 'fred';
-
-// Using connection string
-const storage = new PostgresContextStorage({
-  connectionString: 'postgres://user:pass@host:5432/database',
-});
-
-// Or with injected pool (for testing/advanced use)
+import { Effect } from 'effect';
 import { Pool } from 'pg';
+import {
+  makeFredPostgres,
+  migrateFredPostgresStores,
+  PostgresContextStorage,
+} from '@fancyrobot/fred-postgres';
+
 const pool = new Pool({ connectionString: '...' });
+const database = await Effect.runPromise(makeFredPostgres({ pool }));
+await Effect.runPromise(migrateFredPostgresStores(database));
 const storage = new PostgresContextStorage({ pool });
-
-fred.getContextManager().setStorage(storage);
-
-// Close when shutting down
-await storage.close();
 ```
 
 **Options:**
@@ -184,14 +180,15 @@ await storage.close();
 |--------|------|-------------|
 | `connectionString` | `string` | Postgres connection URL |
 | `pool` | `Pool` | Pre-configured pg Pool instance (alternative to connectionString) |
+| `schema` | `string` | Fred schema selected during the explicit migration (default `fred`) |
 
 One of `connectionString` or `pool` must be provided.
 
 **Features:**
-- Lazy schema initialization (tables created on first use)
+- Explicit schema migrations through `@fancyrobot/fred-postgres`
 - Transactional writes for data integrity
 - Best-effort recovery with warnings for corrupted rows
-- Automatic schema migration with `CREATE TABLE IF NOT EXISTS`
+- No runtime DDL or use of same-named `public` tables
 
 ## Examples
 
@@ -251,4 +248,3 @@ const storage = new DatabaseStorage();
 const contextManager = fred.getContextManager();
 contextManager.setStorage(storage);
 ```
-
