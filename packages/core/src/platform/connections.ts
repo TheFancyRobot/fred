@@ -148,6 +148,12 @@ export class ProviderConnectionTestError extends Schema.TaggedError<ProviderConn
   { providerId: Schema.String, message: Schema.String },
 ) {}
 
+/** A persistence implementation failed without exposing provider credentials. */
+export class ProviderConnectionStoreError extends Schema.TaggedError<ProviderConnectionStoreError>()(
+  'ProviderConnectionStoreError',
+  { operation: Schema.String, message: Schema.String },
+) {}
+
 export type ProviderConnectionError =
   | ProviderConnectionNotFoundError
   | ProviderConnectionProviderMismatchError
@@ -156,7 +162,8 @@ export type ProviderConnectionError =
   | UnsupportedProviderConnectionAuthError
   | UnsupportedProviderLoginMethodError
   | MalformedLegacyProviderEnvironmentError
-  | LegacyProviderConnectionNotConfiguredError;
+  | LegacyProviderConnectionNotConfiguredError
+  | ProviderConnectionStoreError;
 
 /** Decode a raw ID at a trust boundary without leaking Effect parse details. */
 export const decodeProviderConnectionId = (
@@ -215,10 +222,10 @@ interface StoredProviderConnection {
 
 /** Persistence boundary implemented by the Postgres package in Step 04. */
 export interface ProviderConnectionStore {
-  readonly list: () => Effect.Effect<readonly ProviderConnection[]>;
-  readonly get: (id: ProviderConnectionId) => Effect.Effect<Option.Option<StoredProviderConnection>>;
-  readonly put: (record: StoredProviderConnection) => Effect.Effect<void>;
-  readonly remove: (id: ProviderConnectionId) => Effect.Effect<boolean>;
+  readonly list: () => Effect.Effect<readonly ProviderConnection[], ProviderConnectionStoreError>;
+  readonly get: (id: ProviderConnectionId) => Effect.Effect<Option.Option<StoredProviderConnection>, ProviderConnectionStoreError>;
+  readonly put: (record: StoredProviderConnection) => Effect.Effect<void, ProviderConnectionStoreError>;
+  readonly remove: (id: ProviderConnectionId) => Effect.Effect<boolean, ProviderConnectionStoreError>;
 }
 export const ProviderConnectionStore = Context.GenericTag<ProviderConnectionStore>('@fred/ProviderConnectionStore');
 
@@ -233,10 +240,10 @@ export const LegacyProviderConnectionResolver = Context.GenericTag<LegacyProvide
 );
 
 export interface ProviderConnectionService {
-  readonly list: () => Effect.Effect<readonly ProviderConnection[]>;
-  readonly get: (id: ProviderConnectionId) => Effect.Effect<Option.Option<ProviderConnection>>;
-  readonly put: (connection: ProviderConnection, credentials: ProviderConnectionCredentials) => Effect.Effect<void>;
-  readonly remove: (id: ProviderConnectionId) => Effect.Effect<boolean>;
+  readonly list: () => Effect.Effect<readonly ProviderConnection[], ProviderConnectionStoreError>;
+  readonly get: (id: ProviderConnectionId) => Effect.Effect<Option.Option<ProviderConnection>, ProviderConnectionStoreError>;
+  readonly put: (connection: ProviderConnection, credentials: ProviderConnectionCredentials) => Effect.Effect<void, ProviderConnectionStoreError>;
+  readonly remove: (id: ProviderConnectionId) => Effect.Effect<boolean, ProviderConnectionStoreError>;
   readonly resolve: (request: {
     readonly providerId: string;
     readonly connectionId?: ProviderConnectionId;

@@ -30,10 +30,38 @@ export class LegacyPostgresImportError extends Schema.TaggedError<LegacyPostgres
   { operation: Schema.String, table: Schema.String, message: Schema.String },
 ) {}
 
+/** A configured encryption key is unavailable or has an invalid length. */
+export class ProviderCredentialKeyError extends Schema.TaggedError<ProviderCredentialKeyError>()(
+  'ProviderCredentialKeyError',
+  { keyId: Schema.String, message: Schema.String },
+) {}
+
+/** A credential envelope could not be authenticated, decrypted, or decoded. */
+export class ProviderCredentialEncryptionError extends Schema.TaggedError<ProviderCredentialEncryptionError>()(
+  'ProviderCredentialEncryptionError',
+  { connectionId: Schema.String, message: Schema.String },
+) {}
+
+/** A credential write lost its optimistic-version race. */
+export class ProviderCredentialVersionConflictError extends Schema.TaggedError<ProviderCredentialVersionConflictError>()(
+  'ProviderCredentialVersionConflictError',
+  { connectionId: Schema.String, expectedVersion: Schema.Number, message: Schema.String },
+) {}
+
+/** A provider-connection query or transaction failed without exposing credentials. */
+export class ProviderConnectionStorageError extends Schema.TaggedError<ProviderConnectionStorageError>()(
+  'ProviderConnectionStorageError',
+  { operation: Schema.String, message: Schema.String },
+) {}
+
 export type FredPostgresError =
   | PostgresConfigurationError
   | PostgresOperationError
   | PostgresMigrationChecksumError
   | PostgresMigrationLockTimeoutError
   | PgvectorRequiredError
-  | LegacyPostgresImportError;
+  | LegacyPostgresImportError
+  | ProviderCredentialKeyError
+  | ProviderCredentialEncryptionError
+  | ProviderCredentialVersionConflictError
+  | ProviderConnectionStorageError;

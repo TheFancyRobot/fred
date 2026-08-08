@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect, Redacted, Schema } from 'effect';
+import { Cause, Effect, Exit, Layer, Redacted, Schema } from 'effect';
 import {
   BUILTIN_PROVIDER_CONNECTION_CAPABILITIES,
   LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
+  LegacyProviderConnectionResolver,
   ProviderConnectionCredentialsSchema,
   ProviderConnectionId,
   ProviderConnectionNotFoundError,
+  ProviderConnectionStore,
+  ProviderConnectionStoreError,
   ProviderConnectionService,
+  ProviderConnectionServiceLive,
   ProviderConnectionStatusSchema,
   makeInMemoryProviderConnectionLayer,
   makeLegacyProviderConnectionResolver,
@@ -124,5 +128,30 @@ describe('provider connection contracts', () => {
   test('keeps disabled and deleted records distinct', () => {
     expect(Schema.decodeUnknownSync(ProviderConnectionStatusSchema)('disabled')).toBe('disabled');
     expect(Schema.decodeUnknownSync(ProviderConnectionStatusSchema)('deleted')).toBe('deleted');
+  });
+
+  test('propagates a typed persistence failure instead of treating storage as infallible', async () => {
+    const persistenceError = new ProviderConnectionStoreError({ operation: 'list', message: 'Provider connection storage operation failed.' });
+    const store = Layer.succeed(ProviderConnectionStore, {
+      list: () => Effect.fail(persistenceError),
+      get: () => Effect.fail(persistenceError),
+      put: () => Effect.fail(persistenceError),
+      remove: () => Effect.fail(persistenceError),
+    });
+    const layer = ProviderConnectionServiceLive.pipe(
+      Layer.provide(store),
+      Layer.provide(Layer.succeed(LegacyProviderConnectionResolver, makeLegacyProviderConnectionResolver({}))),
+    );
+    const exit = await Effect.runPromiseExit(Effect.gen(function* () {
+      const service = yield* ProviderConnectionService;
+      return yield* service.list();
+    }).pipe(Effect.provide(layer)));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const error = Cause.failureOption(exit.cause);
+      expect(error._tag).toBe('Some');
+      if (error._tag === 'Some') expect(error.value).toBe(persistenceError);
+    }
   });
 });

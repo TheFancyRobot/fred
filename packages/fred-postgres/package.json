@@ -24,7 +24,7 @@
     }
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external pg",
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external pg --external @fancyrobot/fred",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "dependencies": {
