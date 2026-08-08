@@ -1,6 +1,8 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import type { KeyEvent } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
+import { createFred } from '@fancyrobot/fred';
+import { buildBuiltinSlashCommands } from '../../../packages/cli/src/commands/chat.js';
 import {
   createInitialTuiStateWithPlugins,
   openCommandPalette,
@@ -163,6 +165,31 @@ describe('TUI plugin slash commands', () => {
       expect(errorMessage?.content).toContain('[plugin:beta]');
       expect(errorMessage?.content).toContain('failed');
       expect(state.streaming.lastError).toContain('[plugin:beta]');
+    });
+
+    test('/login is an alias for the shared Fred provider-login command', async () => {
+      const fred = await createFred();
+      try {
+        testSetup = await createTestRenderer({ width: 120, height: 40 });
+        app = FredTuiApp.createWithRenderer(testSetup.renderer, {}, {
+          pluginSlashCommands: buildBuiltinSlashCommands(fred, {
+            providerLogin: async (args) => `provider-login:${args}`,
+          }),
+        });
+
+        for (const key of '/login openrouter team') {
+          app.processKey(makeKey({ name: key === ' ' ? 'space' : key }));
+        }
+        app.processKey(makeKey({ name: 'enter' }));
+        await Bun.sleep(10);
+
+        expect(app.getState().transcript.messages.some(
+          (message) => message.content.includes('provider-login:openrouter team'),
+        )).toBe(true);
+        expect(app.getState().focusedPane).toBe('input');
+      } finally {
+        await fred.shutdown();
+      }
     });
   });
 });

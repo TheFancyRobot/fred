@@ -31,6 +31,7 @@ import { resolveProjectConfig } from '../project/resolve-config.js';
 import { loadPluginsFromConfig } from '../plugin/manager.js';
 import type { RegisteredPluginContributions } from '../plugin/registry.js';
 import { sanitizeErrorForCli } from './error-sanitize.js';
+import { handleProviderLoginSlash } from './provider.js';
 
 /**
  * Injectable dependencies for the chat command.
@@ -144,7 +145,10 @@ function parseSubagentIdArg(args: string, usage: string): string {
   return subagentId;
 }
 
-export function buildBuiltinSlashCommands(fred: FredClient): PluginSlashCommandRuntime[] {
+export function buildBuiltinSlashCommands(
+  fred: FredClient,
+  options: { providerLogin?: (args: string) => Promise<string> } = {},
+): PluginSlashCommandRuntime[] {
   return [
     {
       pluginId: 'fred',
@@ -182,6 +186,15 @@ export function buildBuiltinSlashCommands(fred: FredClient): PluginSlashCommandR
           ? `Destroyed subagent: ${subagentId}`
           : `Subagent not found or already destroyed: ${subagentId}`;
       },
+    },
+    {
+      pluginId: 'fred',
+      commandId: 'login',
+      summary: 'Connect a provider with OAuth',
+      usage: '/login <google|openrouter> <label>',
+      aliases: ['/login'],
+      available: true,
+      execute: (args) => (options.providerLogin ?? handleProviderLoginSlash)(args),
     },
   ];
 }
