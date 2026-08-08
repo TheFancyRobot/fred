@@ -1,7 +1,7 @@
-import { Data, Effect, Redacted } from 'effect';
+import { Data, Effect } from 'effect';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 /**
@@ -23,6 +23,11 @@ export class GoogleLanguageModelUnavailableError extends Data.TaggedError(
 export const GoogleProviderFactory: EffectProviderFactory = {
   id: 'google',
   aliases: ['google', 'gemini'],
+  connectionCapabilities: {
+    providerId: 'google',
+    auth: ['api-key', 'oauth2-bearer'],
+    login: ['manual-secret', 'google-installed-app'],
+  },
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-google');
@@ -34,21 +39,18 @@ export const GoogleProviderFactory: EffectProviderFactory = {
       );
     }
 
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'GOOGLE_GENERATIVE_AI_API_KEY';
-    const apiKeyString = process.env[apiKeyEnvVar];
-    const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
+    const apiKey = providerApiKey(config.credentials);
 
-    const transformClient = config.headers
-      ? (client: HttpClient.HttpClient) =>
-          client.pipe(
-            HttpClient.mapRequest((request) =>
-              Object.entries(config.headers ?? {}).reduce(
-                (next, [key, value]) => HttpClientRequest.setHeader(key, value)(next),
-                request
-              )
-            )
-          )
-      : undefined;
+    const transformClient = (client: HttpClient.HttpClient) => providerAuthTransform(config.credentials)(
+      config.headers
+        ? client.pipe(HttpClient.mapRequest((request) =>
+            Object.entries(config.headers ?? {}).reduce(
+              (next, [key, value]) => HttpClientRequest.setHeader(key, value)(next),
+              request,
+            ),
+          ))
+        : client,
+    );
 
     // Use GoogleClient.layer for client initialization
     const layer = module.GoogleClient?.layer?.({

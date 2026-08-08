@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Option, Ref } from 'effect';
 import type * as Schema from 'effect/Schema';
 import type { AgentConfig, AgentInstance, AnyAgentInstance } from './agent';
-import type { ProviderDefinition } from '../platform/provider';
+import type { ProviderConfig, ProviderDefinition } from '../platform/provider';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
@@ -15,6 +15,8 @@ import { AgentFactory, type ToolRegistryLike } from './factory';
 import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
+import { createProviderDefinitionEffect } from '../platform/base';
+import { ProviderConnectionService, type ResolvedProviderConnection } from '../platform/connections';
 import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
 import type { TemplateEngine } from '../template/engine';
@@ -120,6 +122,27 @@ export const AgentService = Context.GenericTag<AgentService>(
   'AgentService'
 );
 
+const providerConfigForConnection = (
+  config: ProviderConfig,
+  resolved: ResolvedProviderConnection,
+): Effect.Effect<ProviderConfig, Error> => Effect.try({
+  try: () => {
+    const endpoint = resolved.connection.endpoint;
+    if (endpoint !== undefined) {
+      const url = new URL(endpoint);
+      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
+        throw new Error('invalid provider endpoint');
+      }
+    }
+    return {
+      ...config,
+      ...(endpoint === undefined ? {} : { baseUrl: endpoint }),
+      credentials: resolved.credentials,
+    };
+  },
+  catch: () => new Error('Provider connection endpoint must use http or https and cannot include userinfo.'),
+});
+
 /**
  * Implementation of AgentService
  */
@@ -131,6 +154,7 @@ class AgentServiceImpl implements AgentService {
     private agents: Ref.Ref<Map<string, AnyAgentInstance>>,
     private toolRegistryService: typeof ToolRegistryService.Service,
     private providerRegistryService: typeof ProviderRegistryService.Service,
+    private providerConnectionService: typeof ProviderConnectionService.Service,
     private toolGateService: typeof ToolGateService.Service,
     private promptSourceService: PromptSourceServiceApi,
     private agentStatusService?: typeof AgentStatusService.Service,
@@ -145,6 +169,29 @@ class AgentServiceImpl implements AgentService {
     this.factory = new AgentFactory(emptyRegistry, tracer, promptSourceService);
     this.factory.setToolGateService(toolGateService);
     this.factory.setAgentStatusService(agentStatusService);
+  }
+
+  private makeConnectionBoundProvider<
+    InputSchema extends Schema.Schema.AnyNoContext,
+    OutputSchema extends Schema.Schema.AnyNoContext,
+  >(
+    provider: ProviderDefinition,
+    config: AgentConfig<InputSchema, OutputSchema>,
+  ): ProviderDefinition {
+    if (provider.factory === undefined) return provider;
+    const factory = provider.factory;
+    return {
+      ...provider,
+      resolveRuntime: () => this.providerConnectionService.resolve({
+        providerId: provider.id,
+        connectionId: config.connectionId,
+        apiKeyEnvVar: provider.config.apiKeyEnvVar,
+      }).pipe(
+        Effect.flatMap((resolved) => providerConfigForConnection(provider.config, resolved)),
+        Effect.flatMap((runtimeConfig) => createProviderDefinitionEffect(factory, runtimeConfig)),
+        Effect.map(({ getModel, layer }) => ({ getModel, layer })),
+      ),
+    };
   }
 
   createAgent<
@@ -190,7 +237,10 @@ class AgentServiceImpl implements AgentService {
       const allTools = yield* self.toolRegistryService.getAllTools();
       yield* self.syncFactoryTools(allTools, config.id);
 
-      const agentProcessor = yield* self.createAgentFromFactory(resolvedConfig, providerDef);
+      const agentProcessor = yield* self.createAgentFromFactory(
+        resolvedConfig,
+        self.makeConnectionBoundProvider(providerDef, resolvedConfig),
+      );
 
       const instance: AgentInstance<InputSchema, OutputSchema> = {
         id: config.id,
@@ -524,6 +574,7 @@ export const AgentServiceLayer = Layer.effect(
     const agents = yield* Ref.make(new Map<string, AnyAgentInstance>());
     const toolRegistryService = yield* ToolRegistryService;
     const providerRegistryService = yield* ProviderRegistryService;
+    const providerConnectionService = yield* ProviderConnectionService;
     const toolGateService = yield* ToolGateService;
     const promptSourceService = yield* PromptSourceService;
     const agentStatusService = yield* Effect.serviceOption(AgentStatusService);
@@ -531,6 +582,7 @@ export const AgentServiceLayer = Layer.effect(
       agents,
       toolRegistryService,
       providerRegistryService,
+      providerConnectionService,
       toolGateService,
       promptSourceService,
       Option.isSome(agentStatusService) ? agentStatusService.value : undefined

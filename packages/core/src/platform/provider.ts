@@ -1,7 +1,12 @@
 import { Context, Effect, Layer } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
 import type { ProviderCapabilityKey } from './provider-capabilities';
-import type { ProviderConnectionCapabilities, ProviderConnectionTestHook } from './connections';
+import type {
+  ProviderConnectionCapabilities,
+  ProviderConnectionCredentials,
+  ProviderConnectionTestHook,
+} from './connections';
+import type { EffectProviderFactory } from './base';
 
 export type ProviderAlias = string;
 
@@ -12,7 +17,10 @@ export interface ProviderModelDefaults {
 }
 
 export interface ProviderConfig {
+  /** Legacy compatibility input, resolved by core before provider construction. */
   apiKeyEnvVar?: string;
+  /** Runtime-only credentials, resolved by core rather than provider packages. */
+  credentials?: ProviderConnectionCredentials;
   baseUrl?: string;
   headers?: Record<string, string>;
   modelDefaults?: ProviderModelDefaults;
@@ -35,6 +43,10 @@ export interface ProviderDefinition {
   getModel: (modelId: string, options?: ProviderModelDefaults) => Effect.Effect<AiModel.Model<any, any, any>, Error>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   layer: Layer.Layer<any, any, any>;
+  /** Factory retained by core so an agent can bind a fresh connection per call. */
+  factory?: EffectProviderFactory;
+  /** Resolves an auth-bound runtime immediately before an invocation. */
+  resolveRuntime?: () => Effect.Effect<ProviderRuntime, Error>;
   /**
    * Optional set of capability keys this provider supports.
    *
@@ -49,6 +61,13 @@ export interface ProviderDefinition {
   connectionCapabilities?: ProviderConnectionCapabilities;
   /** Tests an unsaved connection without coupling a provider to persistence. */
   connectionTest?: ProviderConnectionTestHook;
+}
+
+export interface ProviderRuntime {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly getModel: (modelId: string, options?: ProviderModelDefaults) => Effect.Effect<AiModel.Model<any, any, any>, Error>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly layer: Layer.Layer<any, any, any>;
 }
 
 export interface ProviderConfigInput {

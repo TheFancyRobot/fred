@@ -11,7 +11,7 @@
  * All capability adapters import from this module to avoid drift.
  */
 
-import { Schedule } from 'effect';
+import { Redacted, Schedule } from 'effect';
 import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
@@ -111,7 +111,7 @@ export function buildRetrySchedule() {
  */
 export function createAuthenticatedClient(
   httpClient: HttpClient.HttpClient,
-  apiKey: string,
+  apiKey: string | Redacted.Redacted<string>,
   baseUrl: string
 ): HttpClient.HttpClient {
   const clientWithBaseUrl = httpClient.pipe(
@@ -134,7 +134,7 @@ export function createAuthenticatedClient(
  */
 export function createAuthenticatedClientRaw(
   httpClient: HttpClient.HttpClient,
-  apiKey: string,
+  apiKey: string | Redacted.Redacted<string>,
   baseUrl: string
 ): HttpClient.HttpClient {
   return httpClient.pipe(

@@ -1,5 +1,5 @@
-import { Data, Effect, Redacted } from 'effect';
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import { Data, Effect } from 'effect';
+import { providerApiKey, registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 export class OpenRouterLanguageModelUnavailableError extends Data.TaggedError(
@@ -31,6 +31,11 @@ function getOpenRouterAttribution(config: ProviderConfig): {
 export const OpenRouterProviderFactory: EffectProviderFactory = {
   id: 'openrouter',
   aliases: ['openrouter'],
+  connectionCapabilities: {
+    providerId: 'openrouter',
+    auth: ['api-key'],
+    login: ['manual-secret', 'openrouter-pkce-api-key'],
+  },
   load: async (config: ProviderConfig) => {
     let module: typeof import('@effect/ai-openrouter');
     try {
@@ -41,9 +46,7 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
       );
     }
 
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'OPENROUTER_API_KEY';
-    const apiKeyString = process.env[apiKeyEnvVar];
-    const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
+    const apiKey = providerApiKey(config.credentials);
     const apiUrl = config.baseUrl ?? 'https://openrouter.ai/api/v1';
     const { referrer, title } = getOpenRouterAttribution(config);
 

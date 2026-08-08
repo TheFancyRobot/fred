@@ -102,6 +102,7 @@ export async function createProviderDefinition(
     config,
     getModel: loadResult.getModel,
     layer: loadResult.layer,
+    factory: validatedFactory,
     capabilities: validatedFactory.capabilities
       ? new Set(validatedFactory.capabilities)
       : undefined,
@@ -160,6 +161,7 @@ export const createProviderDefinitionEffect = (
       config,
       getModel: loadResult.getModel,
       layer: loadResult.layer,
+      factory: validatedFactory,
       capabilities: validatedFactory.capabilities
         ? new Set(validatedFactory.capabilities)
         : undefined,

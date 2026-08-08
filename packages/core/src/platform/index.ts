@@ -10,6 +10,7 @@ export {
   ProviderService as ProviderServiceTag,
 } from './provider';
 export { createProviderDefinition } from './base';
+export { providerApiKey, providerAuthTransform } from './provider-auth';
 export { buildProviderService, createDynamicProvider, resolveProviderAliases } from './dynamic';
 export type { ProviderCapabilityKey } from './provider-capabilities';
 export {

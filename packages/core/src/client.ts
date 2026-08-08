@@ -344,6 +344,7 @@ export interface FredClient {
     resolve(request: {
       readonly providerId: string;
       readonly connectionId?: ProviderConnectionId;
+      readonly apiKeyEnvVar?: string;
     }): Promise<ResolvedProviderConnection>;
   };
   readonly messages: {

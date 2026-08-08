@@ -229,10 +229,11 @@ export interface ProviderConnectionStore {
 }
 export const ProviderConnectionStore = Context.GenericTag<ProviderConnectionStore>('@fred/ProviderConnectionStore');
 
-/** Environment compatibility is injected; provider packages and the resolver never read process.env. */
+/** Environment compatibility is injected; provider packages and this resolver never read it directly. */
 export interface LegacyProviderConnectionResolver {
   readonly resolve: (
     providerId: string,
+    apiKeyEnvVar?: string,
   ) => Effect.Effect<Option.Option<ResolvedProviderConnection>, MalformedLegacyProviderEnvironmentError>;
 }
 export const LegacyProviderConnectionResolver = Context.GenericTag<LegacyProviderConnectionResolver>(
@@ -247,6 +248,7 @@ export interface ProviderConnectionService {
   readonly resolve: (request: {
     readonly providerId: string;
     readonly connectionId?: ProviderConnectionId;
+    readonly apiKeyEnvVar?: string;
   }) => Effect.Effect<ResolvedProviderConnection, ProviderConnectionError>;
 }
 export const ProviderConnectionService = Context.GenericTag<ProviderConnectionService>('@fred/ProviderConnectionService');
@@ -261,9 +263,9 @@ export const ProviderConnectionServiceLive = Layer.effect(
       get: (id) => Effect.map(store.get(id), Option.map((record) => record.connection)),
       put: (connection, credentials) => store.put({ connection, credentials }),
       remove: store.remove,
-      resolve: ({ providerId, connectionId }) => {
+      resolve: ({ providerId, connectionId, apiKeyEnvVar }) => {
         if (connectionId === undefined) {
-          return legacy.resolve(providerId).pipe(
+          return legacy.resolve(providerId, apiKeyEnvVar).pipe(
             Effect.flatMap(Option.match({
               onNone: () => Effect.fail(new LegacyProviderConnectionNotConfiguredError({
                 providerId,
@@ -322,8 +324,8 @@ const legacyEnvironmentVariableByProvider: Readonly<Record<string, string>> = {
 export const makeLegacyProviderConnectionResolver = (
   environment: Readonly<Record<string, string | undefined>>,
 ): LegacyProviderConnectionResolver => ({
-  resolve: (providerId) => {
-    const variable = legacyEnvironmentVariableByProvider[providerId.toLowerCase()];
+  resolve: (providerId, apiKeyEnvVar) => {
+    const variable = apiKeyEnvVar ?? legacyEnvironmentVariableByProvider[providerId.toLowerCase()];
     if (variable === undefined) return Effect.succeed(Option.none());
     const apiKey = environment[variable];
     if (apiKey === undefined || apiKey.trim().length === 0) return Effect.succeed(Option.none());

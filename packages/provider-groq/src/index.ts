@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream, Option, Schedule } from 'effect';
+import { Effect, Layer, Redacted, Stream, Option, Schedule } from 'effect';
 import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
@@ -148,7 +148,7 @@ function buildRetrySchedule() {
  * which is not supported by Groq.
  */
 function createGroqLanguageModel(
-  apiKey: string,
+  apiKey: Redacted.Redacted<string>,
   apiUrl: string,
   modelId: string,
   overrides?: ProviderModelDefaults
@@ -679,14 +679,16 @@ function parseToolCallArguments(
 export const GroqProviderFactory: EffectProviderFactory = {
   id: 'groq',
   aliases: ['groq'],
+  connectionCapabilities: {
+    providerId: 'groq',
+    auth: ['api-key'],
+    login: ['manual-secret'],
+  },
   load: async (config: ProviderConfig) => {
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'GROQ_API_KEY';
-    const apiKey = process.env[apiKeyEnvVar];
+    const apiKey = config.credentials?.kind === 'api-key'
+      ? config.credentials.apiKey
+      : undefined;
     const apiUrl = config.baseUrl ?? 'https://api.groq.com/openai/v1';
-
-    if (!apiKey) {
-      throw new Error(`Groq API key not found. Set ${apiKeyEnvVar} environment variable.`);
-    }
 
     // Create a minimal layer for HTTP client
     const layer = FetchHttpClient.layer;
@@ -694,6 +696,9 @@ export const GroqProviderFactory: EffectProviderFactory = {
     return {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
+        if (apiKey === undefined) {
+          return Effect.fail(new Error('Groq requires an API-key provider connection.'));
+        }
         return Effect.succeed(
           createGroqLanguageModel(apiKey, apiUrl, modelId, overrides)
         );

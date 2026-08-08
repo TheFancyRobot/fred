@@ -45,6 +45,35 @@ describe('AgentFactory streamMessage integration', () => {
   });
 
   describe('multi-step flow', () => {
+    it('resolves a fresh provider runtime for every invocation', async () => {
+      const resolved: string[] = [];
+      let credentialVersion = 'initial';
+      const provider = {
+        ...mockProvider,
+        resolveRuntime: () => Effect.sync(() => {
+          resolved.push(credentialVersion);
+          return {
+            getModel: () => Effect.succeed(Layer.empty as any),
+            layer: Layer.empty as any,
+          };
+        }),
+      };
+
+      await collectStreamEvents(factory, provider, [{
+        type: 'finish',
+        reason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      }]);
+      credentialVersion = 'rotated';
+      await collectStreamEvents(factory, provider, [{
+        type: 'finish',
+        reason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      }]);
+
+      expect(resolved).toEqual(['initial', 'rotated']);
+    });
+
     it('emits step-start before each model call', async () => {
       // This is a structural test - verify factory creates streamMessage function
       const config = {

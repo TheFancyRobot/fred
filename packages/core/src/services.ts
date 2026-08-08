@@ -15,6 +15,7 @@ import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import {
   ProviderConnectionService,
+  makeLegacyProviderConnectionResolver,
   makeInMemoryProviderConnectionLayer,
 } from './platform/connections';
 import {
@@ -333,7 +334,7 @@ export const makeFredLayers = (
 ) => {
   const selectedCoreLayer = Layer.mergeAll(
     ProviderRegistryServiceLive,
-    makeInMemoryProviderConnectionLayer(),
+    makeInMemoryProviderConnectionLayer([], makeLegacyProviderConnectionResolver(process.env)),
     contextStorageLayer,
     checkpointServiceLayer,
   );
@@ -343,7 +344,7 @@ export const makeFredLayers = (
   const selectedAgentLayer = makeAgentServiceLive(promptSourceLayer).pipe(
     Layer.provide(baseLayer),
     Layer.provide(toolGateLayer),
-    Layer.provide(ProviderRegistryServiceLive)
+    Layer.provide(selectedCoreLayer)
   );
 
   const selectedWorkflowLayer = WorkflowServiceLive.pipe(

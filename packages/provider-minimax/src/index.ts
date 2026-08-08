@@ -1,4 +1,3 @@
-import { Effect, Layer, Redacted } from 'effect';
 import { registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults, ProviderCapabilityKey } from '@fancyrobot/fred';
 import {
@@ -171,6 +170,11 @@ export const MiniMaxProviderFactory: EffectProviderFactory = {
   id: 'minimax',
   aliases: ['minimax'],
   capabilities: MINIMAX_CAPABILITIES,
+  connectionCapabilities: {
+    providerId: 'minimax',
+    auth: ['api-key'],
+    login: ['manual-secret'],
+  },
   load: async (config: ProviderConfig) => {
     // Delegate to the language adapter which handles config and errors
     return LanguageFactory.load(config);

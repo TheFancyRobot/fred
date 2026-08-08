@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { Layer } from 'effect';
+import { Layer, Redacted } from 'effect';
 import { resolve } from 'node:path';
 import type { ProviderModelDefaults } from '@fancyrobot/fred';
 import {
@@ -166,6 +166,7 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
     temperature: 0.25,
     maxTokens: 321,
   } satisfies ProviderModelDefaults;
+  const CREDENTIALS = { kind: 'api-key' as const, apiKey: Redacted.make('fred-provider-conformance-placeholder') };
 
   const fixtures = [
   {
@@ -180,10 +181,9 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: openaiPack,
     },
     credentialEnvVar: 'OPENAI_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: false,
     modelId: 'gpt-conformance',
     config: {
-      apiKeyEnvVar: 'OPENAI_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://openai.invalid/v1',
     },
     modelDefaults: MODEL_DEFAULTS,
@@ -215,10 +215,9 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: anthropicPack,
     },
     credentialEnvVar: 'ANTHROPIC_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: false,
     modelId: 'claude-conformance',
     config: {
-      apiKeyEnvVar: 'ANTHROPIC_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://anthropic.invalid/v1',
     },
     modelDefaults: MODEL_DEFAULTS,
@@ -250,10 +249,9 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: googlePack,
     },
     credentialEnvVar: 'GOOGLE_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: false,
     modelId: 'gemini-conformance',
     config: {
-      apiKeyEnvVar: 'GOOGLE_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://google.invalid/v1',
       headers: { 'X-Conformance': 'enabled' },
     },
@@ -289,10 +287,9 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: groqPack,
     },
     credentialEnvVar: 'GROQ_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: true,
     modelId: 'llama-conformance',
     config: {
-      apiKeyEnvVar: 'GROQ_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://groq.invalid/v1',
     },
     modelDefaults: MODEL_DEFAULTS,
@@ -311,10 +308,9 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: openrouterPack,
     },
     credentialEnvVar: 'OPENROUTER_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: false,
     modelId: 'openrouter/conformance',
     config: {
-      apiKeyEnvVar: 'OPENROUTER_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://openrouter.invalid/v1',
       headers: {
         'HTTP-Referer': 'https://fred.invalid',
@@ -352,11 +348,10 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
       pack: minimaxPack,
     },
     credentialEnvVar: 'MINIMAX_PROVIDER_CONFORMANCE_KEY',
-    credentialRequired: true,
     modelId: 'MiniMax-Conformance',
     capabilities: [...MINIMAX_CAPABILITIES],
     config: {
-      apiKeyEnvVar: 'MINIMAX_PROVIDER_CONFORMANCE_KEY',
+      credentials: CREDENTIALS,
       baseUrl: 'https://minimax.invalid/v1',
     },
     modelDefaults: MODEL_DEFAULTS,

@@ -109,6 +109,17 @@ describe('provider connection contracts', () => {
     expect(JSON.stringify(result)).not.toContain('legacy-secret');
   });
 
+  test('uses a configured legacy variable only through the core resolver', async () => {
+    const result = await Effect.runPromise(makeLegacyProviderConnectionResolver({
+      CUSTOM_OPENAI_KEY: 'legacy-secret',
+    }).resolve('openai', 'CUSTOM_OPENAI_KEY'));
+
+    expect(result._tag).toBe('Some');
+    if (result._tag === 'Some' && result.value.credentials.kind === 'api-key') {
+      expect(Redacted.value(result.value.credentials.apiKey)).toBe('legacy-secret');
+    }
+  });
+
   test('fails an explicit missing selection instead of falling back to legacy credentials', async () => {
     const missing = Schema.decodeUnknownSync(ProviderConnectionId)('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
     const layer = makeInMemoryProviderConnectionLayer([], makeLegacyProviderConnectionResolver({

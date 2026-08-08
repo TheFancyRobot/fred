@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'bun:test';
-import { Effect, Layer } from 'effect';
+import { describe, it, expect, spyOn } from 'bun:test';
+import { Effect, Layer, Redacted, Schema, Stream } from 'effect';
+import { LanguageModel } from '@effect/ai';
 import { AgentService, AgentServiceLive } from '../../../../packages/core/src/agent/service';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
+import { makeInMemoryProviderConnectionLayer } from '../../../../packages/core/src/platform/connections';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
@@ -14,17 +16,21 @@ import {
 } from '../../../../packages/core/src/agent/errors';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
+import type { EffectProviderFactory } from '../../../../packages/core/src/platform/base';
+import { ProviderConnectionId, ProviderConnectionService } from '../../../../packages/core/src/platform/connections';
 
 describe('AgentService', () => {
   const ToolLayer = ToolRegistryServiceLive;
   const ProviderLayer = ProviderRegistryServiceLive;
   const ToolGateLayer = ToolGateServiceLive.pipe(Layer.provide(ToolLayer));
+  const ProviderConnectionLayer = makeInMemoryProviderConnectionLayer();
   const AgentLayer = AgentServiceLive.pipe(
     Layer.provide(ToolLayer),
     Layer.provide(ProviderLayer),
+    Layer.provide(ProviderConnectionLayer),
     Layer.provide(ToolGateLayer)
   );
-  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ToolLayer);
+  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ProviderConnectionLayer, ToolLayer);
 
   const runTest = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
     Effect.runPromise(effect.pipe(Effect.provide(TestLayer)) as Effect.Effect<A, E, never>);
@@ -81,6 +87,58 @@ describe('AgentService', () => {
   });
 
   describe('createAgent', () => {
+    it('resolves the selected connection again for each agent invocation', async () => {
+      const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+      const resolvedKeys: string[] = [];
+      const providerFactory: EffectProviderFactory = {
+        id: 'openai',
+        load: async (config) => {
+          if (config.credentials?.kind === 'api-key') {
+            resolvedKeys.push(Redacted.value(config.credentials.apiKey));
+          }
+          return {
+            layer: Layer.empty,
+            getModel: () => Effect.succeed(Layer.empty as any),
+          };
+        },
+      };
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.fromIterable([
+        { type: 'finish', reason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ] as any) as any);
+
+      try {
+        await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          yield* registry.registerFactory(providerFactory);
+          yield* connections.put({
+            id: connectionId,
+            label: 'Primary',
+            providerId: 'openai',
+            auth: { kind: 'api-key' },
+            status: 'active',
+          }, { kind: 'api-key', apiKey: Redacted.make('first-secret') });
+
+          const service = yield* AgentService;
+          const agent = yield* service.createAgent(createAgentConfig('rotating-agent', { connectionId }));
+          if (agent.streamMessage === undefined) return yield* Effect.fail(new Error('Expected streaming agent.'));
+          yield* Stream.runCollect(agent.streamMessage('First', []));
+          yield* connections.put({
+            id: connectionId,
+            label: 'Primary',
+            providerId: 'openai',
+            auth: { kind: 'api-key' },
+            status: 'active',
+          }, { kind: 'api-key', apiKey: Redacted.make('second-secret') });
+          yield* Stream.runCollect(agent.streamMessage('Second', []));
+        }));
+      } finally {
+        streamSpy.mockRestore();
+      }
+
+      expect(resolvedKeys).toEqual(['first-secret', 'second-secret']);
+    });
+
     it('creates an agent when provider exists', async () => {
       const createdId = await runTest(
         Effect.gen(function* () {

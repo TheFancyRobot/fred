@@ -1,5 +1,5 @@
-import { Data, Effect, Redacted } from 'effect';
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import { Data, Effect } from 'effect';
+import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 /**
@@ -21,6 +21,12 @@ export class OpenAiLanguageModelUnavailableError extends Data.TaggedError(
 export const OpenAiProviderFactory: EffectProviderFactory = {
   id: 'openai',
   aliases: ['openai'],
+  connectionCapabilities: {
+    providerId: 'openai',
+    auth: ['api-key'],
+    login: ['manual-secret'],
+    protocols: ['openai-compatible'],
+  },
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-openai');
@@ -32,14 +38,13 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
       );
     }
 
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'OPENAI_API_KEY';
-    const apiKeyString = process.env[apiKeyEnvVar];
-    const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
+    const apiKey = providerApiKey(config.credentials);
 
     // Use OpenAiClient.layer for client initialization
     const layer = module.OpenAiClient?.layer?.({
       apiKey,
       apiUrl: config.baseUrl,
+      transformClient: providerAuthTransform(config.credentials),
     });
 
     if (!layer) {
