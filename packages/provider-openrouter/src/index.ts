@@ -2,6 +2,8 @@ import { Data, Effect } from 'effect';
 import { providerApiKey, registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
+export * from './oauth';
+
 export class OpenRouterLanguageModelUnavailableError extends Data.TaggedError(
   'OpenRouterLanguageModelUnavailableError'
 )<{

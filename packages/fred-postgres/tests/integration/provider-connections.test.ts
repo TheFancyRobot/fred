@@ -55,11 +55,18 @@ integration('persists encrypted provider credentials with optimistic rotation an
   const metadata = await Effect.runPromise(store.getMetadata(first.id));
   expect(Option.isSome(metadata)).toBe(true);
   if (Option.isSome(metadata)) {
+    const refreshedExpiry = new Date('2030-01-01T00:00:00.000Z');
     expect(await Effect.runPromise(store.compareAndSetCredentials(
       first.id,
       { kind: 'api-key', apiKey: Redacted.make('rotated-secret') },
       metadata.value.credentialVersion,
+      refreshedExpiry,
     ))).toBe(true);
+    const refreshedMetadata = await Effect.runPromise(store.getMetadata(first.id));
+    expect(Option.isSome(refreshedMetadata)).toBe(true);
+    if (Option.isSome(refreshedMetadata)) {
+      expect(refreshedMetadata.value.expiresAt?.toISOString()).toBe(refreshedExpiry.toISOString());
+    }
     expect(await Effect.runPromise(store.compareAndSetCredentials(
       first.id,
       { kind: 'api-key', apiKey: Redacted.make('stale-secret') },

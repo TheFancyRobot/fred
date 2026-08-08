@@ -1906,15 +1906,45 @@
     "subpath": ".",
     "declarations": [
       "GoogleLanguageModelUnavailableError",
+      "GoogleOAuthAuthorization",
+      "GoogleOAuthAuthorizationOptions",
+      "GoogleOAuthCallbackError",
+      "GoogleOAuthCallbackReason",
+      "GoogleOAuthClientRegistration",
+      "GoogleOAuthConfigurationError",
+      "GoogleOAuthHttpRequest",
+      "GoogleOAuthHttpResponse",
+      "GoogleOAuthRefreshCoordinator",
+      "GoogleOAuthRefreshError",
+      "GoogleOAuthRefreshStore",
+      "GoogleOAuthRuntime",
+      "GoogleOAuthToken",
+      "GoogleOAuthTokenError",
+      "GoogleOAuthTokenOperation",
       "GoogleProviderFactory",
+      "createGoogleOAuthAuthorization",
       "default",
-      "googlePack"
+      "googleOAuthCredentials",
+      "googlePack",
+      "makeGoogleOAuthRefreshCoordinator",
+      "refreshGoogleOAuthToken",
+      "refreshGoogleOAuthTokenWithStore",
+      "revokeGoogleOAuthToken"
     ],
     "runtime": [
       "GoogleLanguageModelUnavailableError",
+      "GoogleOAuthCallbackError",
+      "GoogleOAuthConfigurationError",
+      "GoogleOAuthTokenError",
       "GoogleProviderFactory",
+      "createGoogleOAuthAuthorization",
       "default",
-      "googlePack"
+      "googleOAuthCredentials",
+      "googlePack",
+      "makeGoogleOAuthRefreshCoordinator",
+      "refreshGoogleOAuthToken",
+      "refreshGoogleOAuthTokenWithStore",
+      "revokeGoogleOAuthToken"
     ]
   },
   {
@@ -2086,14 +2116,31 @@
     "subpath": ".",
     "declarations": [
       "OpenRouterLanguageModelUnavailableError",
+      "OpenRouterOAuthApiKey",
+      "OpenRouterOAuthAuthorization",
+      "OpenRouterOAuthCallbackError",
+      "OpenRouterOAuthCallbackReason",
+      "OpenRouterOAuthConfigurationError",
+      "OpenRouterOAuthExchangeError",
+      "OpenRouterOAuthHttpRequest",
+      "OpenRouterOAuthHttpResponse",
+      "OpenRouterOAuthOptions",
+      "OpenRouterOAuthRuntime",
       "OpenRouterProviderFactory",
+      "createOpenRouterOAuthAuthorization",
       "default",
+      "openRouterOAuthCredentials",
       "openrouterPack"
     ],
     "runtime": [
       "OpenRouterLanguageModelUnavailableError",
+      "OpenRouterOAuthCallbackError",
+      "OpenRouterOAuthConfigurationError",
+      "OpenRouterOAuthExchangeError",
       "OpenRouterProviderFactory",
+      "createOpenRouterOAuthAuthorization",
       "default",
+      "openRouterOAuthCredentials",
       "openrouterPack"
     ]
   }

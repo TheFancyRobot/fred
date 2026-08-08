@@ -4,6 +4,8 @@ import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
+export * from './oauth';
+
 /**
  * Google (Gemini) provider pack factory.
  *

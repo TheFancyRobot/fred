@@ -210,6 +210,7 @@ export interface PostgresProviderConnectionStore extends ProviderConnectionStore
     id: ProviderConnectionId,
     credentials: ProviderConnectionCredentials,
     expectedVersion: number,
+    expiresAt?: Date,
   ) => Effect.Effect<boolean, ProviderCredentialKeyError | ProviderCredentialEncryptionError | ProviderConnectionStorageError>;
   readonly rotateCredentials: (
     batchSize?: number,
@@ -500,6 +501,7 @@ export const makePostgresProviderConnectionStore = (
     id: ProviderConnectionId,
     runtimeCredentials: ProviderConnectionCredentials,
     expectedVersion: number,
+    expiresAt?: Date,
   ) => Effect.gen(function* () {
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
       return false;
@@ -509,7 +511,7 @@ export const makePostgresProviderConnectionStore = (
     const key = yield* options.keyRing.current;
     const encrypted = yield* encryptProviderCredentials({ connection: current.value.connection, credentials: runtimeCredentials, key });
     const updated = yield* transaction(pool, (client) =>
-      writeEnvelope(client, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase()).pipe(
+      writeEnvelope(client, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase(), expiresAt).pipe(
         Effect.as(true),
         Effect.catchTag('ProviderCredentialVersionConflictError', () => Effect.succeed(false)),
       ));
