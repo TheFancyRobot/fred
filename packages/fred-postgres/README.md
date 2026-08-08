@@ -37,3 +37,13 @@ await Effect.runPromise(importLegacyFredPostgresStores({
 
 The importer rejects ambiguous columns and non-empty destinations, verifies row
 counts and checksums, records idempotency, and leaves every source table intact.
+
+## Provider connections
+
+Run `migrateFredPostgresProviderConnections(database)` explicitly, then create
+`makePostgresProviderConnectionStore()` with an application-owned AES-256 key
+ring. Compose that store under Fred's `ProviderConnectionServiceLive` and pass
+the resulting `providerConnectionLayer` to `createFred()`. Metadata can be
+listed safely; runtime credentials remain encrypted and redacted. See the
+published provider-connection and PostgreSQL operations guides for key rotation,
+legacy-import, backup, and recovery procedures.

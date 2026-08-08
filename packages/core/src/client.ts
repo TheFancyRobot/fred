@@ -276,6 +276,8 @@ export interface CreateFredOptions {
   storage?: ContextStorage;
   /** Persistent workflow-checkpoint storage adapter. */
   checkpointStorage?: CheckpointStorage;
+  /** Provider-connection service used for explicit persisted credentials. */
+  providerConnectionLayer?: FredLayerOptions['providerConnectionLayer'];
   /** Prompt adapter layer used while constructing AgentService. */
   promptSourceLayer?: FredLayerOptions['promptSourceLayer'];
 }
@@ -528,6 +530,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       storage: options.storage ?? configuredStorage,
       checkpointStorage: configuredCheckpointStorage,
       checkpointTtlMs: persistence?.checkpoint?.ttlMs,
+      providerConnectionLayer: options.providerConnectionLayer,
     }),
     TemplateEngineLive({ ...template, basePath: templateBasePath })
   ) as Layer.Layer<FredServices | TemplateEngine>;

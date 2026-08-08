@@ -331,10 +331,11 @@ export const makeFredLayers = (
   contextStorageLayer: Layer.Layer<ContextStorageService> = ContextStorageServiceLive,
   checkpointServiceLayer: Layer.Layer<CheckpointService> = CheckpointServiceLive,
   messageRouterLayer?: Layer.Layer<MessageRouterService>,
+  providerConnectionLayer?: Layer.Layer<ProviderConnectionService>,
 ) => {
   const selectedCoreLayer = Layer.mergeAll(
     ProviderRegistryServiceLive,
-    makeInMemoryProviderConnectionLayer([], makeLegacyProviderConnectionResolver(process.env)),
+    providerConnectionLayer ?? makeInMemoryProviderConnectionLayer([], makeLegacyProviderConnectionResolver(process.env)),
     contextStorageLayer,
     checkpointServiceLayer,
   );
@@ -421,6 +422,8 @@ export interface FredLayerOptions {
   storage?: ContextStorage;
   checkpointStorage?: CheckpointStorage;
   checkpointTtlMs?: number;
+  /** Explicit provider-connection service, such as an encrypted Postgres store. */
+  providerConnectionLayer?: Layer.Layer<ProviderConnectionService>;
 }
 
 /**
@@ -445,6 +448,7 @@ export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Laye
     contextStorageLayer,
     checkpointServiceLayer,
     messageRouterLayer,
+    options.providerConnectionLayer,
   );
 
   if (!options.observabilityLayers) {

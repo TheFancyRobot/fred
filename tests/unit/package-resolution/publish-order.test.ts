@@ -13,6 +13,7 @@ type PackageManifest = {
 const REPO_ROOT = resolve(import.meta.dir, "../../..");
 const PACKAGES_ROOT = join(REPO_ROOT, "packages");
 const PUBLISH_SCRIPT_PATH = join(REPO_ROOT, "scripts/publish-packages.sh");
+const DECLARATION_SCRIPT_PATH = join(REPO_ROOT, "scripts/build-declarations.sh");
 
 function readPublishOrder(script: string): readonly string[] {
   const match = script.match(/^ORDERED_PACKAGES="([^"]+)"$/m);
@@ -85,5 +86,16 @@ describe("package publication order", () => {
     expect(fallbackPass).toBeGreaterThan(orderedPass);
     expect(script).toContain('publish_one "packages/$name"');
     expect(script).toContain('publish_one "$dir"');
+  });
+});
+
+describe("declaration build order", () => {
+  const script = readFileSync(DECLARATION_SCRIPT_PATH, "utf8");
+  const orderedPackageDirs = readPublishOrder(script);
+  const orderIndex = new Map(orderedPackageDirs.map((dir, index) => [dir, index]));
+
+  test("builds Fred Postgres declarations before its clean-checkout consumers", () => {
+    expect(orderIndex.get("fred-postgres")).toBeLessThan(orderIndex.get("fred-http")!);
+    expect(orderIndex.get("fred-postgres")).toBeLessThan(orderIndex.get("cli")!);
   });
 });

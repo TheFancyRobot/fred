@@ -1,0 +1,1 @@
+--8<-- "docs/advanced/provider-credential-security.md"

@@ -18,6 +18,7 @@ import {
 } from '../../../../packages/core/src/platform/connections';
 import { AgentConfigSchema } from '../../../../packages/core/src/config/schema';
 import { toAgentConfig, validateAgentFrontmatter } from '../../../../packages/core/src/agent/file-loader';
+import { createFred } from '../../../../packages/core/src';
 
 const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
 const connection = {
@@ -95,6 +96,20 @@ describe('provider connection contracts', () => {
 
     expect(Redacted.value(result.initial.credentials.apiKey)).toBe('saved-secret');
     expect(Redacted.value(result.rotated.credentials.apiKey)).toBe('rotated-secret');
+  });
+
+  test('injects a persisted connection layer into the Promise client', async () => {
+    const client = await createFred({
+      providerConnectionLayer: makeInMemoryProviderConnectionLayer([{ connection, credentials }]),
+    });
+
+    try {
+      const resolved = await client.connections.resolve({ providerId: 'openai', connectionId });
+      expect(resolved.source).toBe('saved');
+      expect(resolved.connection.id).toBe(connectionId);
+    } finally {
+      await client.shutdown();
+    }
   });
 
   test('does not fall back to a saved connection when selection is omitted', async () => {

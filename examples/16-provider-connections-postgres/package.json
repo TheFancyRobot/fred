@@ -1,0 +1,14 @@
+{
+  "name": "@fancyrobot/fred-example-16-provider-connections-postgres",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@fancyrobot/fred": "workspace:*",
+    "@fancyrobot/fred-postgres": "workspace:*",
+    "effect": "^3.21.5",
+    "pg": "^8.22.0"
+  }
+}

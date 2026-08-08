@@ -19,6 +19,7 @@ const EXPECTED_EXAMPLES = [
   '13-multi-agent-workflows',
   '14-http-layer',
   '15-http-workflows',
+  '16-provider-connections-postgres',
 ] as const;
 
 const examplesDir = path.resolve(__dirname, '../../../examples');

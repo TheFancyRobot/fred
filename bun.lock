@@ -164,6 +164,15 @@
         "effect": "^3.21.5",
       },
     },
+    "examples/16-provider-connections-postgres": {
+      "name": "@fancyrobot/fred-example-16-provider-connections-postgres",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-postgres": "workspace:*",
+        "effect": "^3.21.5",
+        "pg": "^8.22.0",
+      },
+    },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
       "version": "0.6.0",
@@ -551,6 +560,8 @@
     "@fancyrobot/fred-example-14-http-layer": ["@fancyrobot/fred-example-14-http-layer@workspace:examples/14-http-layer"],
 
     "@fancyrobot/fred-example-15-http-workflows": ["@fancyrobot/fred-example-15-http-workflows@workspace:examples/15-http-workflows"],
+
+    "@fancyrobot/fred-example-16-provider-connections-postgres": ["@fancyrobot/fred-example-16-provider-connections-postgres@workspace:examples/16-provider-connections-postgres"],
 
     "@fancyrobot/fred-google": ["@fancyrobot/fred-google@workspace:packages/provider-google"],
 

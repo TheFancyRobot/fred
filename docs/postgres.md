@@ -1,0 +1,1 @@
+--8<-- "docs/guides/postgres.md"
