@@ -12,6 +12,7 @@
     { "path": "packages/provider-minimax" },
     { "path": "packages/fred-http" },
     { "path": "packages/fred-baml" },
-    { "path": "packages/fred-convex" }
+    { "path": "packages/fred-convex" },
+    { "path": "packages/fred-postgres" }
   ]
 }

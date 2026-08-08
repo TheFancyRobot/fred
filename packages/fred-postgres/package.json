@@ -1,0 +1,48 @@
+{
+  "name": "@fancyrobot/fred-postgres",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheFancyRobot/fred.git",
+    "directory": "packages/fred-postgres"
+  },
+  "description": "PostgreSQL migration and pgvector lifecycle for Fred",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external pg",
+    "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  },
+  "peerDependencies": {
+    "@fancyrobot/fred": "^2.0.0-alpha.0",
+    "effect": "^3.21.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "fred",
+    "postgres",
+    "pgvector",
+    "ai",
+    "agents"
+  ],
+  "license": "MIT"
+}

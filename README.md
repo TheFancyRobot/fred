@@ -77,6 +77,7 @@ See the [core package documentation](packages/core/README.md) for the full getti
 | [@fancyrobot/fred-cli](packages/cli/README.md) | `0.6.0` | CLI, development chat, and interactive TUI |
 | [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.0` | Deprecated one-release CLI compatibility shim |
 | [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.0.0` | Bun HTTP server and composable API layer |
+| [@fancyrobot/fred-postgres](packages/fred-postgres/README.md) | `1.0.0` | Explicit PostgreSQL migrations and pgvector lifecycle |
 | [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0` | Consumer-owned BAML integration |
 | [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0` | Convex integration helpers |
 | [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.0.0` | OpenAI provider |
