@@ -17,6 +17,10 @@ type BunLock = {
 const REPO_ROOT = resolve(import.meta.dir, "../../..");
 const MIGRATION_PATH = join(REPO_ROOT, "MIGRATION.md");
 const ROOT_README_PATH = join(REPO_ROOT, "README.md");
+const STRUCT_HANDOFF_PATH = join(
+  REPO_ROOT,
+  "docs/struct-provider-connections-handoff.md",
+);
 const LOCK_PATH = join(REPO_ROOT, "bun.lock");
 const PACKAGES_ROOT = join(REPO_ROOT, "packages");
 const PACKAGE_DIRS = readdirSync(PACKAGES_ROOT, { withFileTypes: true })
@@ -230,5 +234,24 @@ describe("release documentation contract", () => {
     );
 
     expectInstallBlockMatches(block, selectedPackages);
+  });
+
+  test("Struct handoff uses canonical provider IDs instead of package names", async () => {
+    const handoff = readFileSync(STRUCT_HANDOFF_PATH, "utf8");
+    const providers = {
+      openai: "@fancyrobot/fred-openai",
+      anthropic: "@fancyrobot/fred-anthropic",
+      google: "@fancyrobot/fred-google",
+      groq: "@fancyrobot/fred-groq",
+      minimax: "@fancyrobot/fred-minimax",
+      openrouter: "@fancyrobot/fred-openrouter",
+    };
+
+    for (const [providerId, packageName] of Object.entries(providers)) {
+      const factory = (await import(packageName)).default;
+      expect(factory.id).toBe(providerId);
+      expect(handoff).toContain(`| \`${providerId}\` | \`${packageName}\` |`);
+    }
+    expect(handoff).toContain("never persist it as a provider ID");
   });
 });

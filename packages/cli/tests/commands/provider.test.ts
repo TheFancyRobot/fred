@@ -97,6 +97,35 @@ describe('provider command', () => {
     expect(JSON.stringify(output)).not.toContain('provider-secret-canary');
   });
 
+  test('uses the hosted provider probe and rejects unsuccessful HTTP status', async () => {
+    const output = capture();
+    const fixture = createStore();
+    const originalFetch = globalThis.fetch;
+    let requestUrl = '';
+    globalThis.fetch = async (input) => {
+      requestUrl = String(input);
+      return new Response(null, { status: 401 });
+    };
+    try {
+      const exitCode = await handleProviderCommand(
+        ['add', 'openai', 'work'],
+        { test: true },
+        {
+          ...fixture.deps(output.io),
+          readSecret: async () => 'provider-secret-canary',
+        },
+      );
+
+      expect(exitCode).toBe(4);
+      expect(requestUrl).toBe('https://api.openai.com/v1/models');
+      expect(fixture.saved).toHaveLength(0);
+      expect(output.stderr).toEqual(['Provider "openai" rejected the connection test (HTTP 401).']);
+      expect(JSON.stringify(output)).not.toContain('provider-secret-canary');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test('removes local OAuth credentials even when remote revoke fails', async () => {
     const output = capture();
     const id = await connectionId();

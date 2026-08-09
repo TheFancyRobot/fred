@@ -1,4 +1,9 @@
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults, ProviderCapabilityKey } from '@fancyrobot/fred';
 import {
   MiniMaxProviderFactory as LanguageFactory,
@@ -175,6 +180,13 @@ export const MiniMaxProviderFactory: EffectProviderFactory = {
     auth: ['api-key'],
     login: ['manual-secret'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'minimax',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://api.minimax.io/v1', 'models').toString(),
+      init: { headers: providerConnectionProbeAuthHeaders(credentials) },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     // Delegate to the language adapter which handles config and errors
     return LanguageFactory.load(config);

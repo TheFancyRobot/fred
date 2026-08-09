@@ -1,5 +1,12 @@
 import { Data, Effect } from 'effect';
-import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerApiKey,
+  providerAuthTransform,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 /**
@@ -27,6 +34,18 @@ export const AnthropicProviderFactory: EffectProviderFactory = {
     login: ['manual-secret'],
     protocols: ['anthropic-compatible'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'anthropic',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://api.anthropic.com/v1', 'models').toString(),
+      init: {
+        headers: {
+          ...providerConnectionProbeAuthHeaders(credentials, 'x-api-key'),
+          'anthropic-version': '2023-06-01',
+        },
+      },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-anthropic');

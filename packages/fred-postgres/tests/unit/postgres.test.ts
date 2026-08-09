@@ -137,11 +137,18 @@ describe('Fred Postgres migrations', () => {
 
   test('copies legacy public context only after preflight and preserves the source', async () => {
     const pool = new LegacyImportPool();
+    const preview = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'], dryRun: true }));
+    expect(preview.map((result) => result.status)).toEqual(['pending', 'pending']);
+    expect(preview.map((result) => result.rowCount)).toEqual([1, 1]);
+    expect(pool.queries).not.toContain('BEGIN');
+
     const first = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
     const second = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
 
     expect(first.map((result) => result.imported)).toEqual([true, true]);
+    expect(first.map((result) => result.status)).toEqual(['imported', 'imported']);
     expect(second.map((result) => result.imported)).toEqual([false, false]);
+    expect(second.map((result) => result.status)).toEqual(['verified', 'verified']);
     expect(pool.queries.some((query) => /(?:DELETE|UPDATE|ALTER|DROP)\s+.*"public"/i.test(query))).toBe(false);
     expect(pool.queries.findIndex((query) => query === 'BEGIN')).toBeGreaterThan(
       pool.queries.findIndex((query) => query.includes('information_schema.columns')),

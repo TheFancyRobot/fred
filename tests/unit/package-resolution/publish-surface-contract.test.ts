@@ -335,13 +335,27 @@ describe('publishable package contract', () => {
     writeFileSync(
       join(consumerDir, 'consumer.ts'),
       specifiers.map((name, index) => `import type * as Surface${index} from '${name}';\ntype T${index} = keyof typeof Surface${index};`).join('\n') +
-        "\nimport type { FredClient, Tool } from '@fancyrobot/fred';\n" +
+        "\nimport type { FredClient, ProviderConnection, ProviderConnectionCredentials, ProviderConnectionId, ProviderConnectionNamespace, Tool } from '@fancyrobot/fred';\n" +
+        "import type { PostgresProviderConnectionStore } from '@fancyrobot/fred-postgres';\n" +
         "import type { ToolRegistryService } from '@fancyrobot/fred/effect';\n" +
         "declare const client: FredClient;\n" +
+        "declare const connectionStore: PostgresProviderConnectionStore;\n" +
+        "declare const namespace: ProviderConnectionNamespace;\n" +
+        "declare const connection: ProviderConnection;\n" +
+        "declare const connectionId: ProviderConnectionId;\n" +
+        "declare const credentials: ProviderConnectionCredentials;\n" +
         "declare const tool: Tool<{ readonly value: string }, string, never>;\n" +
         "declare const numericTool: Tool<{ readonly value: number }, number, never>;\n" +
         "declare const registry: ToolRegistryService;\n" +
         "client.tools.register(tool);\n" +
+        "connectionStore.save(namespace, connection, credentials);\n" +
+        "connectionStore.getMetadata(namespace, connectionId);\n" +
+        "connectionStore.compareAndSetCredentials(namespace, connectionId, credentials, 1);\n" +
+        "connectionStore.rotateCredentials(namespace);\n" +
+        "connectionStore.get(namespace, connectionId);\n" +
+        "connectionStore.put(namespace, { connection, credentials });\n" +
+        "connectionStore.updateMetadata(namespace, connection);\n" +
+        "connectionStore.remove(namespace, connectionId);\n" +
         "registry.registerTool(tool);\n" +
         "registry.registerTools([tool, numericTool]);\n",
     );

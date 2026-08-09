@@ -21,6 +21,7 @@ import { handleValidateCommand } from './commands/validate';
 import { handleStatusCommand } from './commands/status';
 import { handleKeysCommand } from './commands/keys';
 import { handleProviderCommand } from './commands/provider';
+import { handlePostgresCommand } from './commands/postgres';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import {
   AggregatedPluginValidationError,
@@ -69,6 +70,8 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'protocol',
   'auth',
   'username',
+  'schema',
+  'modules',
 ]);
 
 const BUILTIN_COMMANDS = new Set([
@@ -94,6 +97,7 @@ const BUILTIN_COMMANDS = new Set([
   'validate',
   'keys',
   'provider',
+  'postgres',
 ]);
 
 const PLUGIN_VALIDATION_EXIT_CODE = 12;
@@ -193,6 +197,12 @@ Commands:
   provider login <provider> <label>
                           Login with Google or OpenRouter OAuth
   provider status|logout|remove <id>
+  postgres import-legacy  Preflight and copy supported legacy public tables
+                          --modules <a,b>  context, checkpoints, http-api-keys, http-rate-limits
+                          --schema <name>  Destination schema (default: FRED_POSTGRES_SCHEMA or fred)
+                          --dry-run        Preflight only; never copies rows
+                          --yes            Required for non-interactive execution
+                          --json           Output structured metadata only
   session                 Manage saved chat sessions
   session list             List sessions (table or --json)
   session show <id>        Show a session transcript
@@ -234,6 +244,7 @@ Examples:
   fred keys create --sqlite ./fred.db --scopes workflows:run
   fred provider add openai work --secret-stdin < ./openai-key.txt
   fred provider login google work-google
+  FRED_POSTGRES_URL=... fred postgres import-legacy --dry-run
   fred session list
   fred session list --json
   fred session show conv_123
@@ -365,6 +376,10 @@ async function main(): Promise<void> {
 
       case 'provider':
         exitCode = await handleProviderCommand(commandArgs, options);
+        break;
+
+      case 'postgres':
+        exitCode = await handlePostgresCommand(commandArgs, options);
         break;
 
 

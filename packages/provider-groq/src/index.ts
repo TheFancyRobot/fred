@@ -12,7 +12,12 @@ import * as Prompt from '@effect/ai/Prompt';
 import * as Response from '@effect/ai/Response';
 import * as Tool from '@effect/ai/Tool';
 import { IdGenerator } from '@effect/ai/IdGenerator';
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults, RetryDiagnostics } from '@fancyrobot/fred';
 
 /**
@@ -684,6 +689,13 @@ export const GroqProviderFactory: EffectProviderFactory = {
     auth: ['api-key'],
     login: ['manual-secret'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'groq',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://api.groq.com/openai/v1', 'models').toString(),
+      init: { headers: providerConnectionProbeAuthHeaders(credentials) },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     const apiKey = config.credentials?.kind === 'api-key'
       ? config.credentials.apiKey

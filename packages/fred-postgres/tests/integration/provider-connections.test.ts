@@ -1,8 +1,13 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { Effect, Option, Redacted, Schema } from 'effect';
+import { Cause, Effect, Exit, Option, Redacted, Schema } from 'effect';
 import { Pool } from 'pg';
-import { ProviderConnectionId, type ProviderConnection } from '@fancyrobot/fred';
+import {
+  ProviderConnectionId,
+  ProviderConnectionIdentityChangeError,
+  ProviderConnectionNamespace,
+  type ProviderConnection,
+} from '@fancyrobot/fred';
 import {
   makeFredPostgres,
   makePostgresProviderConnectionStore,
@@ -15,6 +20,8 @@ const integration = connectionString === undefined ? test.skip : test;
 const schema = () => `fred_test_${randomUUID().replaceAll('-', '')}`;
 
 const key = (id: string, byte: number) => ({ id, key: Redacted.make(new Uint8Array(32).fill(byte)) });
+const namespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-a');
+const otherNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-b');
 const connection = (label: string): ProviderConnection => ({
   id: Schema.decodeUnknownSync(ProviderConnectionId)(randomUUID()),
   label,
@@ -38,11 +45,16 @@ integration('persists encrypted provider credentials with optimistic rotation an
   const second = connection('Backup');
   const canary = 'provider-credential-integration-canary';
 
-  await Effect.runPromise(store.put({ connection: first, credentials: { kind: 'api-key', apiKey: Redacted.make(canary) } }));
-  await Effect.runPromise(store.put({ connection: second, credentials: { kind: 'api-key', apiKey: Redacted.make('backup-secret') } }));
-  expect((await Effect.runPromise(store.list())).map(({ label }) => label)).toEqual(['Backup', 'Primary']);
+  await Effect.runPromise(store.put(namespace, { connection: first, credentials: { kind: 'api-key', apiKey: Redacted.make(canary) } }));
+  await Effect.runPromise(store.put(namespace, { connection: second, credentials: { kind: 'api-key', apiKey: Redacted.make('backup-secret') } }));
+  const other = connection('Primary');
+  await Effect.runPromise(store.put(otherNamespace, { connection: other, credentials: { kind: 'api-key', apiKey: Redacted.make('other-secret') } }));
+  expect((await Effect.runPromise(store.list(namespace))).map(({ label }) => label)).toEqual(['Backup', 'Primary']);
+  expect((await Effect.runPromise(store.list(otherNamespace))).map(({ label }) => label)).toEqual(['Primary']);
+  expect(Option.isNone(await Effect.runPromise(store.get(otherNamespace, first.id)))).toBe(true);
+  expect(await Effect.runPromise(store.remove(otherNamespace, first.id))).toBe(false);
 
-  const saved = await Effect.runPromise(store.get(first.id));
+  const saved = await Effect.runPromise(store.get(namespace, first.id));
   expect(Option.isSome(saved)).toBe(true);
   if (Option.isSome(saved) && saved.value.credentials.kind === 'api-key') {
     expect(Redacted.value(saved.value.credentials.apiKey)).toBe(canary);
@@ -52,23 +64,61 @@ integration('persists encrypted provider credentials with optimistic rotation an
     `"${(await Effect.runPromise(database.diagnostics)).schema}"."provider_credentials"`);
   expect(JSON.stringify(raw.rows)).not.toContain(canary);
 
-  const metadata = await Effect.runPromise(store.getMetadata(first.id));
+  const databaseSchema = (await Effect.runPromise(database.diagnostics)).schema;
+  const credentialState = () => pool.query(
+    `SELECT encode(k.ciphertext, 'hex') AS ciphertext, k.credential_version, c.credential_version AS metadata_version
+     FROM "${databaseSchema}"."provider_credentials" k
+     JOIN "${databaseSchema}"."provider_connections" c ON c.id = k.connection_id
+     WHERE c.id = $1`,
+    [first.id],
+  );
+  const beforeMetadataUpdate = (await credentialState()).rows[0];
+  const renamed = {
+    ...first,
+    label: 'Renamed',
+    endpoint: 'https://example.test/v1',
+    status: 'disabled' as const,
+  };
+  expect(await Effect.runPromise(store.updateMetadata(namespace, renamed))).toBe(true);
+  expect(await Effect.runPromise(store.updateMetadata(otherNamespace, { ...renamed, label: 'Wrong workspace' }))).toBe(false);
+  expect((await credentialState()).rows[0]).toEqual(beforeMetadataUpdate);
+  const renamedMetadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
+  expect(Option.isSome(renamedMetadata)).toBe(true);
+  if (Option.isSome(renamedMetadata)) {
+    expect(renamedMetadata.value.connection.label).toBe('Renamed');
+    expect(renamedMetadata.value.connection.endpoint).toBe('https://example.test/v1');
+    expect(renamedMetadata.value.connection.status).toBe('disabled');
+  }
+  for (const changed of [
+    { ...renamed, providerId: 'anthropic' },
+    { ...renamed, auth: { kind: 'none' as const } },
+  ]) {
+    const exit = await Effect.runPromiseExit(store.updateMetadata(namespace, changed));
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const failure = Cause.failureOption(exit.cause);
+      expect(Option.isSome(failure)).toBe(true);
+      if (Option.isSome(failure)) expect(failure.value).toBeInstanceOf(ProviderConnectionIdentityChangeError);
+    }
+  }
+
+  const metadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
   expect(Option.isSome(metadata)).toBe(true);
   if (Option.isSome(metadata)) {
     const refreshedExpiry = new Date('2030-01-01T00:00:00.000Z');
     expect(await Effect.runPromise(store.compareAndSetCredentials(
-      first.id,
+      namespace, first.id,
       { kind: 'api-key', apiKey: Redacted.make('rotated-secret') },
       metadata.value.credentialVersion,
       refreshedExpiry,
     ))).toBe(true);
-    const refreshedMetadata = await Effect.runPromise(store.getMetadata(first.id));
+    const refreshedMetadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
     expect(Option.isSome(refreshedMetadata)).toBe(true);
     if (Option.isSome(refreshedMetadata)) {
       expect(refreshedMetadata.value.expiresAt?.toISOString()).toBe(refreshedExpiry.toISOString());
     }
     expect(await Effect.runPromise(store.compareAndSetCredentials(
-      first.id,
+      namespace, first.id,
       { kind: 'api-key', apiKey: Redacted.make('stale-secret') },
       metadata.value.credentialVersion,
     ))).toBe(false);
@@ -80,9 +130,10 @@ integration('persists encrypted provider credentials with optimistic rotation an
     schema: (await Effect.runPromise(database.diagnostics)).schema,
     keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
   });
-  expect((await Effect.runPromise(rotating.rotateCredentials())).rotated).toBe(2);
-  expect(await Effect.runPromise(rotating.remove(first.id))).toBe(true);
-  expect(Option.isNone(await Effect.runPromise(rotating.get(first.id)))).toBe(true);
+  expect((await Effect.runPromise(rotating.rotateCredentials(namespace))).rotated).toBe(2);
+  expect(await Effect.runPromise(rotating.remove(namespace, first.id))).toBe(true);
+  expect(Option.isNone(await Effect.runPromise(rotating.get(namespace, first.id)))).toBe(true);
+  expect((await Effect.runPromise(rotating.list(otherNamespace))).map(({ id }) => id)).toEqual([other.id]);
 
   await Effect.runPromise(database.close);
 });

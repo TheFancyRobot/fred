@@ -3,7 +3,7 @@ import type { Prompt } from '@effect/ai';
 import type { Effect, Stream } from 'effect';
 import type * as Schema from 'effect/Schema';
 import type { StreamEvent } from '../stream/events';
-import type { ProviderConnectionId } from '../platform/connections';
+import type { ProviderConnectionId, ProviderConnectionNamespace } from '../platform/connections';
 
 export type AgentPromptVariable = string | number | boolean;
 
@@ -100,6 +100,8 @@ export interface AgentConfig<
   platform: AIPlatform;
   /** Explicit persisted provider connection. Omit only to use legacy environment configuration. */
   connectionId?: ProviderConnectionId;
+  /** Consumer-owned isolation namespace required with a persisted connection. */
+  connectionNamespace?: ProviderConnectionNamespace;
   model: string; // Model identifier (e.g., 'gpt-4', 'llama-3.1-70b-versatile', 'claude-3-opus')
   tools?: string[]; // Array of tool IDs to assign to this agent
   temperature?: number; // Optional temperature setting

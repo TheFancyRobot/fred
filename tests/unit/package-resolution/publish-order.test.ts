@@ -14,6 +14,7 @@ const REPO_ROOT = resolve(import.meta.dir, "../../..");
 const PACKAGES_ROOT = join(REPO_ROOT, "packages");
 const PUBLISH_SCRIPT_PATH = join(REPO_ROOT, "scripts/publish-packages.sh");
 const DECLARATION_SCRIPT_PATH = join(REPO_ROOT, "scripts/build-declarations.sh");
+const VERIFY_SCRIPT_PATH = join(REPO_ROOT, "scripts/verify.ts");
 
 function readPublishOrder(script: string): readonly string[] {
   const match = script.match(/^ORDERED_PACKAGES="([^"]+)"$/m);
@@ -97,5 +98,17 @@ describe("declaration build order", () => {
   test("builds Fred Postgres declarations before its clean-checkout consumers", () => {
     expect(orderIndex.get("fred-postgres")).toBeLessThan(orderIndex.get("fred-http")!);
     expect(orderIndex.get("fred-postgres")).toBeLessThan(orderIndex.get("cli")!);
+  });
+
+  test("regenerates declarations before tests and direct publication", () => {
+    const verifyScript = readFileSync(VERIFY_SCRIPT_PATH, "utf8");
+    const publishScript = readFileSync(PUBLISH_SCRIPT_PATH, "utf8");
+    const verifyGate = verifyScript.indexOf("scripts/build-declarations.sh");
+    const publishGate = publishScript.indexOf("bash scripts/build-declarations.sh");
+
+    expect(verifyGate).toBeGreaterThan(-1);
+    expect(verifyGate).toBeLessThan(verifyScript.indexOf("test suite"));
+    expect(publishGate).toBeGreaterThan(-1);
+    expect(publishGate).toBeLessThan(publishScript.indexOf("for name in $ORDERED_PACKAGES; do"));
   });
 });

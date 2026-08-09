@@ -1,5 +1,12 @@
 import { Data, Effect } from 'effect';
-import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerApiKey,
+  providerAuthTransform,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 /**
@@ -27,6 +34,13 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
     login: ['manual-secret'],
     protocols: ['openai-compatible'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'openai',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://api.openai.com/v1', 'models').toString(),
+      init: { headers: providerConnectionProbeAuthHeaders(credentials) },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-openai');

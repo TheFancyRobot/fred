@@ -1,5 +1,11 @@
 import { Data, Effect } from 'effect';
-import { providerApiKey, registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerApiKey,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 export * from './oauth';
@@ -38,6 +44,13 @@ export const OpenRouterProviderFactory: EffectProviderFactory = {
     auth: ['api-key'],
     login: ['manual-secret', 'openrouter-pkce-api-key'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'openrouter',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://openrouter.ai/api/v1', 'key').toString(),
+      init: { headers: providerConnectionProbeAuthHeaders(credentials) },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     let module: typeof import('@effect/ai-openrouter');
     try {

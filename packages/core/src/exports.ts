@@ -59,6 +59,7 @@ export type {
   ProviderRegistration, ProviderModelDefaults, ProviderAlias,
 } from './platform/provider';
 export * from './platform/connections';
+export * from './platform/connection-test';
 export { providerApiKey, providerAuthTransform } from './platform/provider-auth';
 
 // Provider capability types

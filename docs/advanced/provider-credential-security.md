@@ -2,7 +2,7 @@
 
 Fred persists connection metadata separately from credential envelopes.
 Credentials are write-only at ordinary list/status boundaries and encrypted
-with AES-256-GCM using a fresh nonce and connection-bound authenticated data.
+with AES-256-GCM using a fresh nonce and namespace-and-connection-bound authenticated data.
 The database stores a key identifier, never key material.
 
 ## Key management
@@ -26,7 +26,8 @@ mapping rather than rendering foreign provider errors directly.
 2. Revoke the credential at the provider. `fred provider logout` attempts
    Google revocation; use the OpenRouter or API-key provider console for keys.
 3. Issue a replacement credential, use `fred provider add --test`, then save
-   it and switch affected agents to the new explicit `connectionId`.
+   it and switch affected agents to the new explicit `connectionId` and
+   `connectionNamespace`.
 4. Rotate the envelope key ring when key material may be exposed.
 5. Review sanitized logs, traces, generated artifacts, and backups; restore
    only from a verified backup when database integrity is in doubt.

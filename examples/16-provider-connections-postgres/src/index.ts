@@ -5,6 +5,7 @@ import {
   ProviderConnectionStore,
   createFred,
   decodeProviderConnectionId,
+  decodeProviderConnectionNamespace,
   makeLegacyProviderConnectionResolver,
   type ProviderConnection,
   type ProviderConnectionCredentials,
@@ -54,6 +55,9 @@ async function main(): Promise<void> {
   if (!connectionString) throw new Error('Set FRED_POSTGRES_URL to a disposable PostgreSQL database.');
 
   const schema = process.env.FRED_POSTGRES_SCHEMA ?? 'fred_example';
+  const namespace = await Effect.runPromise(decodeProviderConnectionNamespace(
+    process.env.FRED_PROVIDER_CONNECTION_NAMESPACE ?? 'example-workspace',
+  ));
   const runId = randomUUID().replaceAll('-', '');
   const sentinelSchema = `application_sentinel_${runId}`;
   const sentinel = `${quotePostgresIdentifier(sentinelSchema)}.${quotePostgresIdentifier('events')}`;
@@ -120,16 +124,17 @@ async function main(): Promise<void> {
       },
     );
 
-    await fred.connections.put(localNoAuth.connection, localNoAuth.credentials);
-    await fred.connections.put(localApiKey.connection, localApiKey.credentials);
-    await fred.connections.put(googleFixture.connection, googleFixture.credentials);
+    await fred.connections.put(namespace, localNoAuth.connection, localNoAuth.credentials);
+    await fred.connections.put(namespace, localApiKey.connection, localApiKey.credentials);
+    await fred.connections.put(namespace, googleFixture.connection, googleFixture.credentials);
 
-    const saved = await fred.connections.list();
+    const saved = await fred.connections.list(namespace);
     assert(saved.some(({ id }) => id === localNoAuth.connection.id), 'no-auth connection was not saved');
     assert(saved.some(({ id }) => id === localApiKey.connection.id), 'API-key connection was not saved');
     assert(saved.some(({ id }) => id === googleFixture.connection.id), 'OAuth fixture was not saved');
     const resolved = await fred.connections.resolve({
       providerId: 'local-compatible',
+      namespace,
       connectionId: localNoAuth.connection.id,
     });
     assert(resolved.source === 'saved' && resolved.credentials.kind === 'none', 'explicit local connection did not resolve');

@@ -3,6 +3,7 @@ import { Effect, Redacted } from 'effect';
 import {
   createGoogleOAuthAuthorization,
   googleOAuthCredentials,
+  makeGoogleOAuthConnectionPrepare,
   makeGoogleOAuthRefreshCoordinator,
   refreshGoogleOAuthToken,
   refreshGoogleOAuthTokenWithStore,
@@ -10,6 +11,7 @@ import {
   type GoogleOAuthHttpRequest,
   type GoogleOAuthRuntime,
 } from '../src/oauth';
+import type { ResolvedProviderConnection } from '@fancyrobot/fred';
 
 const now = new Date('2026-08-08T00:00:00.000Z');
 const state = Buffer.from(new Uint8Array(32).fill(1)).toString('base64url');
@@ -187,4 +189,108 @@ test('Google OAuth refresh coordinates in-process callers and reloads an encrypt
   }))));
   expect(Redacted.value(winner.accessToken)).toBe('winner-access-token');
   expect(loads).toBe(2);
+});
+
+const savedGoogleConnection = (
+  accessToken: string,
+  expiresAt: Date | undefined,
+  refreshToken = 'refresh-token',
+  credentialVersion = 1,
+): ResolvedProviderConnection => ({
+  source: 'saved',
+  connection: {
+    id: 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    label: 'Google OAuth',
+    providerId: 'google',
+    auth: { kind: 'oauth2-bearer' },
+    status: 'active',
+  },
+  credentials: {
+    kind: 'oauth2-bearer',
+    accessToken: Redacted.make(accessToken),
+    refreshToken: Redacted.make(refreshToken),
+  },
+  credentialVersion,
+  expiresAt,
+});
+
+test('Google invocation preparation skips fresh credentials and persists one expired refresh', async () => {
+  let requests = 0;
+  let current = savedGoogleConnection('old-access-token', new Date('2026-08-08T01:00:00.000Z'));
+  const prepare = makeGoogleOAuthConnectionPrepare({
+    googleOAuth: { clientId: 'google-client-id' },
+  }, runtime(async () => {
+    requests += 1;
+    return {
+      status: 200,
+      json: async () => ({ access_token: 'new-access-token', expires_in: 3_600 }),
+    };
+  }));
+  const context = {
+    reload: () => Effect.succeed(current),
+    compareAndSetCredentials: (credentials: typeof current.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
+      if (expectedVersion !== current.credentialVersion) return false;
+      current = { ...current, credentials, credentialVersion: expectedVersion + 1, expiresAt };
+      return true;
+    }),
+  };
+
+  const fresh = await Effect.runPromise(prepare(current, context));
+  expect(fresh).toBe(current);
+  expect(requests).toBe(0);
+
+  current = { ...current, expiresAt: now };
+  const refreshed = await Effect.runPromise(prepare(current, context));
+  const reused = await Effect.runPromise(prepare(refreshed, context));
+  expect(requests).toBe(1);
+  expect(refreshed.source).toBe('saved');
+  expect(reused.source).toBe('saved');
+  if (reused.source === 'saved' && reused.credentials.kind === 'oauth2-bearer') {
+    expect(Redacted.value(reused.credentials.accessToken)).toBe('new-access-token');
+    expect(reused.credentialVersion).toBe(2);
+  }
+});
+
+test('Google invocation preparation reloads the CAS winner and sanitizes missing refresh inputs', async () => {
+  let current = savedGoogleConnection('stale-access-token-canary', now);
+  const prepare = makeGoogleOAuthConnectionPrepare({
+    googleOAuth: { clientId: 'google-client-id' },
+  }, runtime(async () => ({
+    status: 200,
+    json: async () => ({ access_token: 'loser-access-token-canary', expires_in: 3_600 }),
+  })));
+  const winner = savedGoogleConnection(
+    'winner-access-token',
+    new Date('2026-08-08T01:00:00.000Z'),
+    'winner-refresh-token',
+    2,
+  );
+  const prepared = await Effect.runPromise(prepare(current, {
+    reload: () => Effect.succeed(current),
+    compareAndSetCredentials: () => Effect.sync(() => {
+      current = winner;
+      return false;
+    }),
+  }));
+  expect(prepared).toBe(winner);
+
+  for (const [candidate, config] of [
+    [savedGoogleConnection('access-token-canary', now, ''), { googleOAuth: { clientId: 'google-client-id' } }],
+    [savedGoogleConnection('access-token-canary', now), {}],
+  ] as const) {
+    const withoutRefresh = candidate.credentials.kind === 'oauth2-bearer' && candidate.credentials.refreshToken !== undefined
+      && Redacted.value(candidate.credentials.refreshToken) === ''
+      ? { ...candidate, credentials: { kind: 'oauth2-bearer' as const, accessToken: candidate.credentials.accessToken } }
+      : candidate;
+    const failure = await Effect.runPromise(Effect.either(makeGoogleOAuthConnectionPrepare(
+      config,
+      runtime(async () => ({ status: 500, json: async () => ({ token: 'response-token-canary' }) })),
+    )(withoutRefresh, {
+      reload: () => Effect.succeed(withoutRefresh),
+      compareAndSetCredentials: () => Effect.succeed(false),
+    })));
+    expect(failure._tag).toBe('Left');
+    expect(JSON.stringify(failure)).not.toContain('access-token-canary');
+    expect(JSON.stringify(failure)).not.toContain('response-token-canary');
+  }
 });

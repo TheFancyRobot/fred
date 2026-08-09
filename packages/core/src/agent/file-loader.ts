@@ -6,7 +6,7 @@ import { Schema } from 'effect';
 import type { AgentConfig, ToolRetryPolicy } from './agent';
 import { AgentFileParseError } from './errors';
 import type { FrameworkConfig } from '../config/types';
-import { ProviderConnectionId } from '../platform/connections';
+import { ProviderConnectionId, ProviderConnectionNamespace } from '../platform/connections';
 import { buildFrontmatterContext } from '../template/context';
 import { containsEtaSyntax } from '../template/engine';
 import { SECURITY_HEADER } from '../template/security';
@@ -260,6 +260,18 @@ export const validateAgentFrontmatter = (frontmatter: Record<string, unknown>, f
     }
   }
 
+  if ((frontmatter.connectionId === undefined) !== (frontmatter.connectionNamespace === undefined)) {
+    throwParseError(filePath, 'connectionId and connectionNamespace must be configured together');
+  }
+
+  if (frontmatter.connectionNamespace !== undefined) {
+    try {
+      Schema.decodeUnknownSync(ProviderConnectionNamespace)(frontmatter.connectionNamespace);
+    } catch {
+      throwParseError(filePath, 'connectionNamespace must be a non-empty string');
+    }
+  }
+
   if (frontmatter.persistHistory !== undefined && typeof frontmatter.persistHistory !== 'boolean') {
     throwParseError(filePath, 'persistHistory must be a boolean');
   }
@@ -293,6 +305,7 @@ export const toAgentConfig = (parsed: ParsedAgentFile): AgentConfig => {
   if (frontmatter.mcpServers !== undefined) config.mcpServers = frontmatter.mcpServers as string[];
   if (frontmatter.connectionId !== undefined) {
     config.connectionId = Schema.decodeUnknownSync(ProviderConnectionId)(frontmatter.connectionId);
+    config.connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)(frontmatter.connectionNamespace);
   }
   if (frontmatter.maxSteps !== undefined) config.maxSteps = frontmatter.maxSteps as number;
   if (frontmatter.toolChoice !== undefined) config.toolChoice = frontmatter.toolChoice as AgentConfig['toolChoice'];

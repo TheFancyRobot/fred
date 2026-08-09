@@ -50,9 +50,24 @@ schema-qualified adapters and migrations from `@fancyrobot/fred-postgres`.
 
 1. Back up the database and rehearse restore in disposable infrastructure.
 2. Run the explicit Fred migrations in the destination schema.
-3. Run `importLegacyFredPostgresStores` only for selected legacy modules.
-4. Verify its source and destination counts/checksums; source rows remain.
-5. Keep the backup until production verification is complete.
+3. Preflight selected modules without exposing the connection string in argv:
+
+   ```bash
+   export FRED_POSTGRES_URL='postgres://...'
+   fred postgres import-legacy --modules context,checkpoints --dry-run
+   ```
+
+4. Run the confirmed copy interactively, or add `--yes` only for reviewed automation. Use `--json` for a single metadata-only result:
+
+   ```bash
+   fred postgres import-legacy --modules context,checkpoints
+   fred postgres import-legacy --modules context,checkpoints --yes --json
+   ```
+
+   `FRED_POSTGRES_SCHEMA` selects the destination schema; `--schema` overrides it.
+   The command never accepts a connection string argument.
+5. Verify the reported source and destination counts/checksums; source rows remain.
+6. Keep the backup until production verification is complete.
 
 The importer is copy-only and idempotent. It refuses ambiguous source columns
 and non-empty destinations. There are no down migrations and no automatic

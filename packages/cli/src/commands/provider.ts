@@ -2,7 +2,10 @@ import { Effect, Option, Redacted, Schema } from 'effect';
 import {
   BUILTIN_PROVIDER_CONNECTION_CAPABILITIES,
   LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
+  ProviderConnectionTestError,
   decodeProviderConnectionId,
+  decodeProviderConnectionNamespace,
+  testProviderConnectionDraft,
   validateProviderConnectionCapability,
   type ProviderConnection,
   type ProviderConnectionAuthKind,
@@ -14,7 +17,6 @@ import {
 } from '@fancyrobot/fred';
 import { sanitizeErrorForCli } from './error-sanitize.js';
 
-const PROVIDER_COMMAND_TIMEOUT_MS = 10_000;
 const GOOGLE_LOGIN_METHOD = 'google-installed-app';
 const OPENROUTER_LOGIN_METHOD = 'openrouter-pkce-api-key';
 
@@ -189,21 +191,12 @@ const credentialsFor = (
   });
 };
 
-const endpointHealthCheck = async (draft: ProviderConnectionDraft, credentials: ProviderConnectionCredentials): Promise<void> => {
-  if (draft.endpoint === undefined) throw new Error('No provider connection test is available for this provider.');
-  const headers = new Headers();
-  if (credentials.kind === 'api-key') headers.set('authorization', `Bearer ${Redacted.value(credentials.apiKey)}`);
-  if (credentials.kind === 'basic') {
-    headers.set('authorization', `Basic ${Buffer.from(`${Redacted.value(credentials.username)}:${Redacted.value(credentials.password)}`).toString('base64')}`);
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_COMMAND_TIMEOUT_MS);
-  try {
-    await fetch(draft.endpoint, { method: 'HEAD', headers, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-};
+const defaultConnectionTest = (
+  draft: ProviderConnectionDraft,
+  credentials: ProviderConnectionCredentials,
+): Promise<void> => Effect.runPromise(Effect.either(testProviderConnectionDraft(draft, credentials))).then((result) => {
+  if (result._tag === 'Left') throw result.left;
+});
 
 const testDraft = (
   draft: ProviderConnectionDraft,
@@ -211,8 +204,11 @@ const testDraft = (
   deps: ProviderCommandDependencies,
 ): Effect.Effect<void, ProviderCommandError> =>
   Effect.tryPromise({
-    try: () => (deps.testConnection ?? endpointHealthCheck)(draft, credentials),
-    catch: () => commandError('connectivity', 'Provider connection test failed.'),
+    try: () => (deps.testConnection ?? defaultConnectionTest)(draft, credentials),
+    catch: (error) => commandError(
+      'connectivity',
+      error instanceof ProviderConnectionTestError ? error.message : 'Provider connection test failed.',
+    ),
   });
 
 const metadataFor = (connection: ProviderConnection, expiresAt?: Date) => ({
@@ -461,8 +457,11 @@ const executeProviderCommand = (
 const defaultOpenStore = async (): Promise<ProviderConnectionCommandStoreLease> => {
   const connectionString = process.env.FRED_POSTGRES_URL;
   const encodedKey = process.env.FRED_PROVIDER_CREDENTIAL_KEY;
+  const namespaceValue = process.env.FRED_PROVIDER_CONNECTION_NAMESPACE;
   if (!connectionString) throw new Error('FRED_POSTGRES_URL is required for provider connection commands.');
   if (!encodedKey) throw new Error('FRED_PROVIDER_CREDENTIAL_KEY is required and must contain a base64url AES-256 key.');
+  if (!namespaceValue) throw new Error('FRED_PROVIDER_CONNECTION_NAMESPACE is required for provider connection commands.');
+  const namespace = await Effect.runPromise(decodeProviderConnectionNamespace(namespaceValue));
   const key = Buffer.from(encodedKey, 'base64url');
   if (key.byteLength !== 32) throw new Error('FRED_PROVIDER_CREDENTIAL_KEY must decode to exactly 32 bytes.');
   const [{ Pool }, postgres] = await Promise.all([import('pg'), import('@fancyrobot/fred-postgres')]);
@@ -480,12 +479,12 @@ const defaultOpenStore = async (): Promise<ProviderConnectionCommandStoreLease> 
     });
     return {
       store: {
-        list: () => Effect.runPromise(store.list()),
-        get: async (id) => Option.getOrNull(await Effect.runPromise(store.get(id))),
-        save: (connection, credentials, expiresAt) => Effect.runPromise(store.save(connection, credentials, expiresAt)),
-        remove: (id) => Effect.runPromise(store.remove(id)),
+        list: () => Effect.runPromise(store.list(namespace)),
+        get: async (id) => Option.getOrNull(await Effect.runPromise(store.get(namespace, id))),
+        save: (connection, credentials, expiresAt) => Effect.runPromise(store.save(namespace, connection, credentials, expiresAt)),
+        remove: (id) => Effect.runPromise(store.remove(namespace, id)),
         metadata: async (id) => {
-          const metadata = Option.getOrNull(await Effect.runPromise(store.getMetadata(id)));
+          const metadata = Option.getOrNull(await Effect.runPromise(store.getMetadata(namespace, id)));
           return metadata === null ? null : { expiresAt: metadata.expiresAt };
         },
       },

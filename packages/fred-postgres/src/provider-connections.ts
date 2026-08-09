@@ -1,7 +1,9 @@
 import { Context, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import {
   ProviderConnectionCredentialsSchema,
+  ProviderConnectionNamespace,
   ProviderConnectionSchema,
+  ProviderConnectionIdentityChangeError,
   ProviderConnectionStore,
   ProviderConnectionStoreError,
   type ProviderConnection,
@@ -70,6 +72,7 @@ export interface ProviderCredentialEnvelope {
 }
 
 export interface ProviderCredentialCryptoInput {
+  readonly namespace: ProviderConnectionNamespace;
   readonly connection: Pick<ProviderConnection, 'id' | 'providerId' | 'auth'>;
   readonly credentials: ProviderConnectionCredentials;
   readonly key: ProviderCredentialKey;
@@ -122,8 +125,11 @@ const credentialPayload = (credentials: ProviderConnectionCredentials): Record<s
   }
 };
 
-const aad = (connection: Pick<ProviderConnection, 'id' | 'providerId' | 'auth'>): Uint8Array =>
-  text.encode(JSON.stringify({ version: ENVELOPE_VERSION, connectionId: connection.id, providerId: connection.providerId, auth: connection.auth.kind }));
+const aad = (
+  namespace: ProviderConnectionNamespace,
+  connection: Pick<ProviderConnection, 'id' | 'providerId' | 'auth'>,
+): Uint8Array =>
+  text.encode(JSON.stringify({ version: ENVELOPE_VERSION, namespace, connectionId: connection.id, providerId: connection.providerId, auth: connection.auth.kind }));
 
 const assertCredentialKind = (connection: Pick<ProviderConnection, 'id' | 'auth'>, credentials: ProviderConnectionCredentials) =>
   credentials.kind === connection.auth.kind
@@ -142,7 +148,7 @@ export const encryptProviderCredentials = (
       try: async () => {
         const key = await crypto.subtle.importKey('raw', arrayBuffer(material), { name: 'AES-GCM' }, false, ['encrypt']);
         const plaintext = text.encode(JSON.stringify(credentialPayload(input.credentials)));
-        return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: arrayBuffer(nonce), additionalData: arrayBuffer(aad(input.connection)) }, key, arrayBuffer(plaintext)));
+        return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: arrayBuffer(nonce), additionalData: arrayBuffer(aad(input.namespace, input.connection)) }, key, arrayBuffer(plaintext)));
       },
       catch: () => encryptionError(input.connection.id, 'Unable to encrypt provider credentials.'),
     });
@@ -151,6 +157,7 @@ export const encryptProviderCredentials = (
 
 /** Decrypt and schema-validate a credential envelope without exposing its plaintext in errors. */
 export const decryptProviderCredentials = (
+  namespace: ProviderConnectionNamespace,
   connection: Pick<ProviderConnection, 'id' | 'providerId' | 'auth'>,
   envelope: ProviderCredentialEnvelope,
   key: ProviderCredentialKey,
@@ -163,7 +170,7 @@ export const decryptProviderCredentials = (
     const plaintext = yield* Effect.tryPromise({
       try: async () => {
         const cryptoKey = await crypto.subtle.importKey('raw', arrayBuffer(material), { name: 'AES-GCM' }, false, ['decrypt']);
-        return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: arrayBuffer(envelope.nonce), additionalData: arrayBuffer(aad(connection)) }, cryptoKey, arrayBuffer(envelope.ciphertext)));
+        return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: arrayBuffer(envelope.nonce), additionalData: arrayBuffer(aad(namespace, connection)) }, cryptoKey, arrayBuffer(envelope.ciphertext)));
       },
       catch: () => encryptionError(connection.id, 'Provider credential envelope could not be authenticated.'),
     });
@@ -191,6 +198,7 @@ export interface ProviderConnectionStorageLayerOptions {
 }
 
 export interface ProviderConnectionMetadata {
+  readonly namespace: ProviderConnectionNamespace;
   readonly connection: ProviderConnection;
   readonly credentialVersion: number;
   readonly expiresAt: Date | undefined;
@@ -201,18 +209,14 @@ export interface ProviderConnectionMetadata {
 export interface PostgresProviderConnectionStore extends ProviderConnectionStoreService {
   readonly close: Effect.Effect<void, ProviderConnectionStorageError>;
   readonly save: (
+    namespace: ProviderConnectionNamespace,
     connection: ProviderConnection,
     credentials: ProviderConnectionCredentials,
     expiresAt?: Date,
   ) => Effect.Effect<void, ProviderCredentialKeyError | ProviderCredentialEncryptionError | ProviderCredentialVersionConflictError | ProviderConnectionStorageError>;
-  readonly getMetadata: (id: ProviderConnectionId) => Effect.Effect<Option.Option<ProviderConnectionMetadata>, ProviderConnectionStorageError>;
-  readonly compareAndSetCredentials: (
-    id: ProviderConnectionId,
-    credentials: ProviderConnectionCredentials,
-    expectedVersion: number,
-    expiresAt?: Date,
-  ) => Effect.Effect<boolean, ProviderCredentialKeyError | ProviderCredentialEncryptionError | ProviderConnectionStorageError>;
+  readonly getMetadata: (namespace: ProviderConnectionNamespace, id: ProviderConnectionId) => Effect.Effect<Option.Option<ProviderConnectionMetadata>, ProviderConnectionStorageError>;
   readonly rotateCredentials: (
+    namespace: ProviderConnectionNamespace,
     batchSize?: number,
   ) => Effect.Effect<{ readonly rotated: number; readonly remaining: boolean }, ProviderCredentialKeyError | ProviderCredentialEncryptionError | ProviderConnectionStorageError>;
 }
@@ -282,6 +286,7 @@ const metadata = (row: Record<string, unknown>): ProviderConnectionMetadata => {
     status: readString(row.status, 'status'),
   });
   return {
+    namespace: Schema.decodeUnknownSync(ProviderConnectionNamespace)(readString(row.namespace, 'namespace')),
     connection,
     credentialVersion: readVersion(row.credential_version),
     expiresAt: row.expires_at === null || row.expires_at === undefined ? undefined : readDate(row.expires_at, 'expires at'),
@@ -340,10 +345,11 @@ export const fredPostgresProviderConnectionMigrations = (
   return [{
     module: 'provider-connections',
     version: 1,
-    checksum: 'fred-provider-connections-v1',
+    checksum: 'fred-provider-connections-v1-namespaced',
     sql: `
 CREATE TABLE ${connections} (
   id UUID PRIMARY KEY,
+  namespace TEXT NOT NULL CHECK (length(namespace) > 0),
   provider_id TEXT NOT NULL,
   label TEXT NOT NULL,
   label_normalized TEXT NOT NULL,
@@ -355,9 +361,9 @@ CREATE TABLE ${connections} (
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (provider_id, label_normalized)
+  UNIQUE (namespace, provider_id, label_normalized)
 );
-CREATE INDEX idx_provider_connections_provider_status ON ${connections} (provider_id, status);
+CREATE INDEX idx_provider_connections_namespace_provider_status ON ${connections} (namespace, provider_id, status);
 CREATE TABLE ${credentials} (
   connection_id UUID PRIMARY KEY REFERENCES ${connections}(id) ON DELETE CASCADE,
   envelope_version SMALLINT NOT NULL CHECK (envelope_version = 1),
@@ -378,7 +384,7 @@ export const migrateFredPostgresProviderConnections = (database: FredPostgres) =
     Effect.flatMap(({ schema }) => database.migrate(fredPostgresProviderConnectionMigrations(schema))),
   );
 
-const metadataColumns = 'id, label, provider_id, endpoint, protocol, auth_kind, status, credential_version, expires_at, created_at, updated_at';
+const metadataColumns = 'id, namespace, label, provider_id, endpoint, protocol, auth_kind, status, credential_version, expires_at, created_at, updated_at';
 
 /**
  * Create the Postgres implementation of Fred's connection-store boundary.
@@ -398,15 +404,15 @@ export const makePostgresProviderConnectionStore = (
   const connections = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, 'provider_connections');
   const credentials = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, 'provider_credentials');
 
-  const getMetadata = (id: ProviderConnectionId) => useClient(pool, (client) =>
-    query(client, 'getMetadata', `SELECT ${metadataColumns} FROM ${connections} WHERE id = $1`, [id]).pipe(
+  const getMetadata = (namespace: ProviderConnectionNamespace, id: ProviderConnectionId) => useClient(pool, (client) =>
+    query(client, 'getMetadata', `SELECT ${metadataColumns} FROM ${connections} WHERE namespace = $1 AND id = $2`, [namespace, id]).pipe(
       Effect.flatMap((result) => result.rows[0] === undefined
         ? Effect.succeed(Option.none())
         : parseMetadata(result.rows[0]).pipe(Effect.map(Option.some))),
     ));
 
-  const get = (id: ProviderConnectionId) => asStoreError('get', useClient(pool, (client) =>
-    query(client, 'get', `SELECT c.${metadataColumns.replaceAll(', ', ', c.')}, k.envelope_version, k.algorithm, k.key_id, k.nonce, k.ciphertext FROM ${connections} c JOIN ${credentials} k ON k.connection_id = c.id WHERE c.id = $1`, [id]).pipe(
+  const get = (namespace: ProviderConnectionNamespace, id: ProviderConnectionId) => asStoreError('get', useClient(pool, (client) =>
+    query(client, 'get', `SELECT c.${metadataColumns.replaceAll(', ', ', c.')}, k.envelope_version, k.algorithm, k.key_id, k.nonce, k.ciphertext FROM ${connections} c JOIN ${credentials} k ON k.connection_id = c.id WHERE c.namespace = $1 AND c.id = $2`, [namespace, id]).pipe(
       Effect.flatMap((result) => {
         const row = result.rows[0];
         if (row === undefined) return Effect.succeed(Option.none());
@@ -414,14 +420,20 @@ export const makePostgresProviderConnectionStore = (
           const saved = yield* parseMetadata(row);
           const encrypted = yield* envelope(saved.connection.id, row);
           const key = yield* keyForEnvelope(options.keyRing, encrypted.keyId);
-          const runtimeCredentials = yield* decryptProviderCredentials(saved.connection, encrypted, key);
-          return Option.some({ connection: saved.connection, credentials: runtimeCredentials });
+          const runtimeCredentials = yield* decryptProviderCredentials(namespace, saved.connection, encrypted, key);
+          return Option.some({
+            connection: saved.connection,
+            credentials: runtimeCredentials,
+            credentialVersion: saved.credentialVersion,
+            expiresAt: saved.expiresAt,
+          });
         });
       }),
     )));
 
   const writeEnvelope = (
     client: PostgresClient,
+    namespace: ProviderConnectionNamespace,
     connection: ProviderConnection,
     encrypted: ProviderCredentialEnvelope,
     expectedVersion: number,
@@ -435,8 +447,8 @@ export const makePostgresProviderConnectionStore = (
       `UPDATE ${connections}
        SET provider_id = $2, label = $3, label_normalized = $4, endpoint = $5, protocol = $6, auth_kind = $7, status = $8,
            credential_version = $9, expires_at = COALESCE($10, expires_at), updated_at = NOW()
-       WHERE id = $1 AND credential_version = $11`,
-      [connection.id, connection.providerId, connection.label, labelNormalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, nextVersion, expiresAt ?? null, expectedVersion],
+       WHERE id = $1 AND namespace = $11 AND credential_version = $12`,
+      [connection.id, connection.providerId, connection.label, labelNormalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, nextVersion, expiresAt ?? null, namespace, expectedVersion],
     );
     if (updated.rowCount !== 1) {
       return yield* new ProviderCredentialVersionConflictError({
@@ -462,20 +474,20 @@ export const makePostgresProviderConnectionStore = (
     }
   });
 
-  const save: PostgresProviderConnectionStore['save'] = (connection, runtimeCredentials, expiresAt) => Effect.gen(function* () {
+  const save: PostgresProviderConnectionStore['save'] = (namespace, connection, runtimeCredentials, expiresAt) => Effect.gen(function* () {
     const normalized = yield* labelKey(connection.label);
     const key = yield* options.keyRing.current;
-    const encrypted = yield* encryptProviderCredentials({ connection, credentials: runtimeCredentials, key });
+    const encrypted = yield* encryptProviderCredentials({ namespace, connection, credentials: runtimeCredentials, key });
     yield* transaction(pool, (client) => Effect.gen(function* () {
-      const existing = yield* query(client, 'lockConnection', `SELECT credential_version FROM ${connections} WHERE id = $1 FOR UPDATE`, [connection.id]);
+      const existing = yield* query(client, 'lockConnection', `SELECT credential_version FROM ${connections} WHERE namespace = $1 AND id = $2 FOR UPDATE`, [namespace, connection.id]);
       const row = existing.rows[0];
       if (row === undefined) {
         yield* query(
           client,
           'insertConnection',
-          `INSERT INTO ${connections} (id, provider_id, label, label_normalized, endpoint, protocol, auth_kind, status, credential_version, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9)`,
-          [connection.id, connection.providerId, connection.label, normalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, expiresAt ?? null],
+          `INSERT INTO ${connections} (id, namespace, provider_id, label, label_normalized, endpoint, protocol, auth_kind, status, credential_version, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)`,
+          [connection.id, namespace, connection.providerId, connection.label, normalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, expiresAt ?? null],
         );
         yield* query(
           client,
@@ -486,18 +498,65 @@ export const makePostgresProviderConnectionStore = (
         );
         return;
       }
-      yield* writeEnvelope(client, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt);
+      yield* writeEnvelope(client, namespace, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt);
     }));
   });
 
-  const put: PostgresProviderConnectionStore['put'] = (record) => asStoreError('put', save(record.connection, record.credentials));
+  const put: PostgresProviderConnectionStore['put'] = (namespace, record) => asStoreError(
+    'put',
+    save(namespace, record.connection, record.credentials, record.expiresAt),
+  );
 
-  const remove = (id: ProviderConnectionId) => asStoreError('remove', transaction(pool, (client) =>
-    query(client, 'deleteConnection', `DELETE FROM ${connections} WHERE id = $1`, [id]).pipe(
+  const compareAndSetStoreCredentials: ProviderConnectionStoreService['compareAndSetCredentials'] = (
+    namespace,
+    id,
+    runtimeCredentials,
+    expectedVersion,
+    expiresAt,
+  ) => asStoreError(
+    'compareAndSetCredentials',
+    compareAndSetCredentials(namespace, id, runtimeCredentials, expectedVersion, expiresAt),
+  );
+
+  const updateMetadata: PostgresProviderConnectionStore['updateMetadata'] = (namespace, connection) => Effect.gen(function* () {
+    const normalized = yield* labelKey(connection.label);
+    return yield* transaction(pool, (client) => Effect.gen(function* () {
+      const current = yield* query(
+        client,
+        'lockConnectionMetadata',
+        `SELECT provider_id, auth_kind FROM ${connections} WHERE namespace = $1 AND id = $2 FOR UPDATE`,
+        [namespace, connection.id],
+      );
+      const row = current.rows[0];
+      if (row === undefined) return false;
+      if (
+        readString(row.provider_id, 'provider id') !== connection.providerId
+        || readString(row.auth_kind, 'authentication method') !== connection.auth.kind
+      ) {
+        return yield* new ProviderConnectionIdentityChangeError({
+          connectionId: connection.id,
+          message: 'Provider identity and authentication kind require matching credential replacement.',
+        });
+      }
+      const updated = yield* query(
+        client,
+        'updateConnectionMetadata',
+        `UPDATE ${connections}
+           SET label = $3, label_normalized = $4, endpoint = $5, protocol = $6, status = $7, updated_at = NOW()
+           WHERE namespace = $1 AND id = $2`,
+        [namespace, connection.id, connection.label, normalized, connection.endpoint ?? null, connection.protocol ?? null, connection.status],
+      );
+      return updated.rowCount === 1;
+    }));
+  }).pipe(Effect.catchTag('ProviderConnectionStorageError', () => Effect.fail(storeError('updateMetadata'))));
+
+  const remove = (namespace: ProviderConnectionNamespace, id: ProviderConnectionId) => asStoreError('remove', transaction(pool, (client) =>
+    query(client, 'deleteConnection', `DELETE FROM ${connections} WHERE namespace = $1 AND id = $2`, [namespace, id]).pipe(
       Effect.map((result) => result.rowCount === 1),
     )));
 
   const compareAndSetCredentials = (
+    namespace: ProviderConnectionNamespace,
     id: ProviderConnectionId,
     runtimeCredentials: ProviderConnectionCredentials,
     expectedVersion: number,
@@ -506,19 +565,19 @@ export const makePostgresProviderConnectionStore = (
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
       return false;
     }
-    const current = yield* getMetadata(id);
+    const current = yield* getMetadata(namespace, id);
     if (Option.isNone(current) || current.value.credentialVersion !== expectedVersion) return false;
     const key = yield* options.keyRing.current;
-    const encrypted = yield* encryptProviderCredentials({ connection: current.value.connection, credentials: runtimeCredentials, key });
+    const encrypted = yield* encryptProviderCredentials({ namespace, connection: current.value.connection, credentials: runtimeCredentials, key });
     const updated = yield* transaction(pool, (client) =>
-      writeEnvelope(client, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase(), expiresAt).pipe(
+      writeEnvelope(client, namespace, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase(), expiresAt).pipe(
         Effect.as(true),
         Effect.catchTag('ProviderCredentialVersionConflictError', () => Effect.succeed(false)),
       ));
     return updated;
   });
 
-  const rotateCredentials = (batchSize = 100) => Effect.gen(function* () {
+  const rotateCredentials = (namespace: ProviderConnectionNamespace, batchSize = 100) => Effect.gen(function* () {
     if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 1_000) {
       return yield* new ProviderConnectionStorageError({ operation: 'rotateCredentials', message: 'batchSize must be an integer from 1 through 1000.' });
     }
@@ -528,18 +587,18 @@ export const makePostgresProviderConnectionStore = (
       'listCredentialRotationBatch',
       `SELECT c.${metadataColumns.replaceAll(', ', ', c.')}, k.envelope_version, k.algorithm, k.key_id, k.nonce, k.ciphertext
        FROM ${connections} c JOIN ${credentials} k ON k.connection_id = c.id
-       WHERE k.key_id <> $1 ORDER BY c.updated_at, c.id LIMIT $2`,
-      [currentKey.id, batchSize],
+       WHERE c.namespace = $1 AND k.key_id <> $2 ORDER BY c.updated_at, c.id LIMIT $3`,
+      [namespace, currentKey.id, batchSize],
     ));
     let rotated = 0;
     for (const row of rows.rows) {
       const saved = yield* parseMetadata(row);
       const oldEnvelope = yield* envelope(saved.connection.id, row);
       const oldKey = yield* keyForEnvelope(options.keyRing, oldEnvelope.keyId);
-      const runtimeCredentials = yield* decryptProviderCredentials(saved.connection, oldEnvelope, oldKey);
-      const nextEnvelope = yield* encryptProviderCredentials({ connection: saved.connection, credentials: runtimeCredentials, key: currentKey });
+      const runtimeCredentials = yield* decryptProviderCredentials(namespace, saved.connection, oldEnvelope, oldKey);
+      const nextEnvelope = yield* encryptProviderCredentials({ namespace, connection: saved.connection, credentials: runtimeCredentials, key: currentKey });
       const updated = yield* transaction(pool, (client) =>
-        writeEnvelope(client, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase()).pipe(
+        writeEnvelope(client, namespace, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase()).pipe(
           Effect.as(true),
           Effect.catchTag('ProviderCredentialVersionConflictError', () => Effect.succeed(false)),
         ));
@@ -548,18 +607,20 @@ export const makePostgresProviderConnectionStore = (
     return { rotated, remaining: rows.rows.length === batchSize };
   });
 
-  const end = pool.end;
-  const close = ownsPool && end !== undefined ? operation('close', end) : Effect.void;
+  const close = ownsPool ? operation('close', () => pool.end!()) : Effect.void;
 
-  return { list: () => asStoreError('list', useClient(pool, (client) =>
-    query(client, 'list', `SELECT ${metadataColumns} FROM ${connections} ORDER BY provider_id, label_normalized`).pipe(
+  return { list: (namespace) => asStoreError('list', useClient(pool, (client) =>
+    query(client, 'list', `SELECT ${metadataColumns} FROM ${connections} WHERE namespace = $1 ORDER BY provider_id, label_normalized`, [namespace]).pipe(
       Effect.flatMap((result) => Effect.forEach(result.rows, parseMetadata).pipe(Effect.map((records) => records.map((record) => record.connection)))),
-    ))), get, put, remove, close, save, getMetadata, compareAndSetCredentials, rotateCredentials };
+    ))), get, put, updateMetadata, compareAndSetCredentials: compareAndSetStoreCredentials, remove, close, save, getMetadata, rotateCredentials };
 };
 
 /** Compose the Postgres store under the core persistence boundary using an injected key ring. */
 export const makePostgresProviderConnectionStoreLayer = (options: ProviderConnectionStorageLayerOptions) =>
-  Layer.effect(
+  Layer.scoped(
     ProviderConnectionStore,
-    Effect.map(ProviderCredentialKeyRing, (keyRing) => makePostgresProviderConnectionStore({ ...options, keyRing })),
+    Effect.acquireRelease(
+      Effect.map(ProviderCredentialKeyRing, (keyRing) => makePostgresProviderConnectionStore({ ...options, keyRing })),
+      (store) => store.close.pipe(Effect.catchTag('ProviderConnectionStorageError', Effect.logError)),
+    ),
   );

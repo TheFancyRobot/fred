@@ -1,8 +1,16 @@
-import { Data, Effect } from 'effect';
+import { Data, Effect, Redacted } from 'effect';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
-import { providerApiKey, providerAuthTransform, registerBuiltinPack } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  providerApiKey,
+  providerAuthTransform,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import { makeGoogleOAuthConnectionPrepare } from './oauth';
 
 export * from './oauth';
 
@@ -30,6 +38,25 @@ export const GoogleProviderFactory: EffectProviderFactory = {
     auth: ['api-key', 'oauth2-bearer'],
     login: ['manual-secret', 'google-installed-app'],
   },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'google',
+    request: (draft, credentials) => {
+      const url = providerConnectionProbeUrl(
+        draft,
+        'https://generativelanguage.googleapis.com/v1beta',
+        'models',
+      );
+      return {
+        url: url.toString(),
+        init: {
+          headers: credentials.kind === 'api-key'
+            ? { 'x-goog-api-key': Redacted.value(credentials.apiKey) }
+            : providerConnectionProbeAuthHeaders(credentials),
+        },
+      };
+    },
+  }),
+  makeConnectionPrepare: makeGoogleOAuthConnectionPrepare,
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-google');

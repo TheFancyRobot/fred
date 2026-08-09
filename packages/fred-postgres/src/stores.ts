@@ -158,12 +158,13 @@ export const migrateFredPostgresStores = (database: FredPostgres) =>
     Effect.flatMap(({ schema }) => database.migrate(fredPostgresStoreMigrations(schema))),
   );
 
-type LegacyStoreModule = 'context' | 'checkpoints' | 'http-api-keys' | 'http-rate-limits';
+export type LegacyStoreModule = 'context' | 'checkpoints' | 'http-api-keys' | 'http-rate-limits';
 
 export interface LegacyPostgresStoreImportOptions {
   readonly pool: PostgresStorePool;
   readonly schema?: string;
   readonly modules?: readonly LegacyStoreModule[];
+  readonly dryRun?: boolean;
 }
 
 export interface LegacyPostgresStoreImportResult {
@@ -172,6 +173,7 @@ export interface LegacyPostgresStoreImportResult {
   readonly rowCount: number;
   readonly checksum: string;
   readonly imported: boolean;
+  readonly status: 'pending' | 'imported' | 'verified';
 }
 
 const legacyTables = (schema: string): ReadonlyArray<{
@@ -222,7 +224,7 @@ export const importLegacyFredPostgresStores = (
         const ledger = fredPostgresTable(schema, 'legacy_imports');
         const completed = await client.query(`SELECT source_table, source_count, source_checksum, destination_count, destination_checksum FROM ${ledger}`);
         const imported = new Map(completed.rows.map((row) => [row.source_table, row]));
-        const pending: typeof selected = [];
+        const pending: Array<{ readonly table: (typeof selected)[number]; readonly source: { readonly rowCount: number; readonly checksum: string } }> = [];
         const results: LegacyPostgresStoreImportResult[] = [];
         for (const table of selected) {
           const previous = imported.get(table.name);
@@ -232,7 +234,7 @@ export const importLegacyFredPostgresStores = (
             if (Number(previous.source_count) !== source.rowCount || previous.source_checksum !== source.checksum || Number(previous.destination_count) !== destination.rowCount || previous.destination_checksum !== destination.checksum) {
               throw importFailure('verify', table.name, 'Legacy import ledger no longer matches source or destination');
             }
-            results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: false });
+            results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: false, status: 'verified' });
             continue;
           }
           const columns = await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY column_name', ['public', table.name]);
@@ -242,18 +244,30 @@ export const importLegacyFredPostgresStores = (
             throw importFailure('preflight', table.name, 'Legacy source columns do not exactly match the supported shape');
           }
           if (destination.rowCount !== 0) throw importFailure('preflight', table.name, 'Destination is non-empty without an import ledger entry');
-          pending.push(table);
+          pending.push({ table, source });
+        }
+        if (options.dryRun === true) {
+          return [
+            ...results,
+            ...pending.map(({ table, source }) => ({
+              sourceTable: table.source,
+              destinationTable: table.destination,
+              ...source,
+              imported: false,
+              status: 'pending' as const,
+            })),
+          ];
         }
         if (pending.length === 0) return results;
         await client.query('BEGIN');
-        for (const table of pending) {
+        for (const { table } of pending) {
           const quotedColumns = table.columns.map(quotePostgresIdentifier).join(', ');
           await client.query(`INSERT INTO ${table.destination} (${quotedColumns}) SELECT ${quotedColumns} FROM ${table.source}`);
           const source = await summary(client, table.source);
           const destination = await summary(client, table.destination);
           if (source.rowCount !== destination.rowCount || source.checksum !== destination.checksum) throw importFailure('verify', table.name, 'Copied rows do not match the untouched source');
           await client.query(`INSERT INTO ${ledger} (source_table, source_count, source_checksum, destination_count, destination_checksum) VALUES ($1, $2, $3, $4, $5)`, [table.name, source.rowCount, source.checksum, destination.rowCount, destination.checksum]);
-          results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: true });
+          results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: true, status: 'imported' });
         }
         await client.query('COMMIT');
         return results;

@@ -20,3 +20,4 @@ export {
   getCapability,
 } from './provider-capabilities';
 export * from './connections';
+export * from './connection-test';

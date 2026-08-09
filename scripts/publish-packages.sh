@@ -15,6 +15,10 @@ fi
 
 PUBLISHED_PKGS=()
 
+# Package manifests publish types from dist/, so direct release invocations
+# must not rely on declaration artifacts left by an earlier command.
+bash scripts/build-declarations.sh
+
 # Publish in dependency order so a newly released dependent never becomes
 # visible before the Fred package version required by its manifest. This
 # mirrors the declaration-build order. New independent packages fall through

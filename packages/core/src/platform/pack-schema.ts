@@ -63,6 +63,8 @@ const ProviderConnectionTestSchema = Schema.declare(
   { identifier: 'ProviderConnectionTest', description: 'Provider connection test hook' },
 );
 
+const ProviderConnectionPrepareFactorySchema = FunctionSchema;
+
 /**
  * Effect Schema for validating EffectProviderFactory structure.
  *
@@ -75,6 +77,7 @@ export const ProviderFactorySchema = Schema.Struct({
   capabilities: Schema.optional(ProviderCapabilitySetSchema),
   connectionCapabilities: Schema.optional(ProviderConnectionCapabilitiesSchema),
   connectionTest: Schema.optional(ProviderConnectionTestSchema),
+  makeConnectionPrepare: Schema.optional(ProviderConnectionPrepareFactorySchema),
   load: FunctionSchema,
 });
 

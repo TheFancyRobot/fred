@@ -184,6 +184,7 @@
         "@fancyrobot/fred-anthropic": "^4.0.0",
         "@fancyrobot/fred-google": "^4.0.0",
         "@fancyrobot/fred-groq": "^4.0.0",
+        "@fancyrobot/fred-minimax": "^2.0.0",
         "@fancyrobot/fred-openai": "^4.0.0",
         "@fancyrobot/fred-openrouter": "^5.0.0",
         "@fancyrobot/fred-postgres": "^1.0.0",

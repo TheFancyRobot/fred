@@ -1,6 +1,11 @@
 import { Buffer } from 'node:buffer';
-import { Data, Deferred, Effect, Option, Redacted, Ref } from 'effect';
-import type { ProviderConnectionCredentials } from '@fancyrobot/fred';
+import { Data, Deferred, Effect, Option, Redacted, Ref, Schema } from 'effect';
+import type {
+  ProviderConfig,
+  ProviderConnectionCredentials,
+  ProviderConnectionPrepare,
+  ResolvedProviderConnection,
+} from '@fancyrobot/fred';
 
 const GOOGLE_AUTHORIZATION_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -56,6 +61,10 @@ export interface GoogleOAuthClientRegistration {
   readonly clientId: string;
   /** Optional because installed-app clients cannot keep this value confidential. Fred never supplies one. */
   readonly clientSecret?: Redacted.Redacted<string>;
+}
+
+export interface GoogleOAuthProviderConfig extends ProviderConfig {
+  readonly googleOAuth?: GoogleOAuthClientRegistration;
 }
 
 export interface GoogleOAuthAuthorizationOptions extends GoogleOAuthClientRegistration {
@@ -122,6 +131,16 @@ const defaultRuntime: GoogleOAuthRuntime = {
     });
     return { status: response.status, json: () => response.json() };
   },
+};
+
+const GoogleOAuthClientRegistrationSchema = Schema.Struct({
+  clientId: Schema.String,
+  clientSecret: Schema.optional(Schema.Redacted(Schema.String)),
+});
+
+const registrationFrom = (config: ProviderConfig): GoogleOAuthClientRegistration => {
+  const decoded = Schema.decodeUnknownEither(GoogleOAuthClientRegistrationSchema)(config.googleOAuth);
+  return decoded._tag === 'Right' ? decoded.right : { clientId: '' };
 };
 
 const runtimeFor = (overrides: Partial<GoogleOAuthRuntime> | undefined): GoogleOAuthRuntime => ({
@@ -442,6 +461,68 @@ export const makeGoogleOAuthRefreshCoordinator = <E>(
     }));
     return { refresh };
   });
+
+/** Refresh an expired saved Google OAuth connection before any runtime or probe receives it. */
+export const makeGoogleOAuthConnectionPrepare = (
+  config: ProviderConfig,
+  overrides?: Partial<GoogleOAuthRuntime>,
+): ProviderConnectionPrepare => {
+  const registration = registrationFrom(config);
+  const runtime = runtimeFor(overrides);
+  const coordinators = new Map<string, GoogleOAuthRefreshCoordinator<Error>>();
+  return (resolved, context) => Effect.gen(function* () {
+    if (
+      resolved.source !== 'saved'
+      || resolved.connection.providerId !== 'google'
+      || resolved.credentials.kind !== 'oauth2-bearer'
+    ) return resolved;
+    if (resolved.expiresAt !== undefined && resolved.expiresAt.getTime() > runtime.now().getTime()) {
+      return resolved;
+    }
+    if (resolved.credentials.refreshToken === undefined) {
+      return yield* new GoogleOAuthConfigurationError({
+        message: 'Google OAuth refresh requires a refresh token.',
+      });
+    }
+    let coordinator = coordinators.get(resolved.connection.id);
+    if (coordinator === undefined) {
+      const created = yield* makeGoogleOAuthRefreshCoordinator({
+        load: () => context.reload().pipe(
+          Effect.flatMap((current): Effect.Effect<{ readonly token: GoogleOAuthToken; readonly version: number }, Error> => {
+            if (current.source !== 'saved' || current.credentials.kind !== 'oauth2-bearer') {
+              return Effect.fail(new GoogleOAuthConfigurationError({
+                message: 'Google OAuth credentials are no longer available for refresh.',
+              }));
+            }
+            if (current.credentials.refreshToken === undefined) {
+              return Effect.fail(new GoogleOAuthConfigurationError({
+                message: 'Google OAuth refresh requires a refresh token.',
+              }));
+            }
+            return Effect.succeed({
+              token: {
+                accessToken: current.credentials.accessToken,
+                refreshToken: current.credentials.refreshToken,
+                expiresAt: current.expiresAt ?? new Date(0),
+                scopes: [],
+              },
+              version: current.credentialVersion,
+            });
+          }),
+        ),
+        compareAndSet: (expectedVersion, token) => context.compareAndSetCredentials(
+          googleOAuthCredentials(token),
+          expectedVersion,
+          token.expiresAt,
+        ),
+      }, registration, overrides);
+      coordinator = coordinators.get(resolved.connection.id) ?? created;
+      coordinators.set(resolved.connection.id, coordinator);
+    }
+    yield* coordinator.refresh();
+    return yield* context.reload();
+  });
+};
 
 /** Revoke a Google access or refresh token. The caller retains local credentials when this remote request fails. */
 export const revokeGoogleOAuthToken = (

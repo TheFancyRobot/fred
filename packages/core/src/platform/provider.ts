@@ -3,6 +3,7 @@ import type * as AiModel from '@effect/ai/Model';
 import type { ProviderCapabilityKey } from './provider-capabilities';
 import type {
   ProviderConnectionCapabilities,
+  ProviderConnectionPrepare,
   ProviderConnectionCredentials,
   ProviderConnectionTestHook,
 } from './connections';
@@ -61,6 +62,8 @@ export interface ProviderDefinition {
   connectionCapabilities?: ProviderConnectionCapabilities;
   /** Tests an unsaved connection without coupling a provider to persistence. */
   connectionTest?: ProviderConnectionTestHook;
+  /** Refreshes provider-owned credentials immediately before use. */
+  connectionPrepare?: ProviderConnectionPrepare;
 }
 
 export interface ProviderRuntime {

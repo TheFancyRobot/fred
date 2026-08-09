@@ -1,7 +1,14 @@
 import { expect, mock, test } from 'bun:test';
-import { Layer, Redacted } from 'effect';
+import { Effect, Layer, Redacted } from 'effect';
 import { resolve } from 'node:path';
-import type { ProviderModelDefaults } from '@fancyrobot/fred';
+import {
+  makeProviderConnectionTestHook,
+  testProviderConnectionDraft,
+  type EffectProviderFactory,
+  type ProviderConnectionCredentials,
+  type ProviderConnectionDraft,
+  type ProviderModelDefaults,
+} from '@fancyrobot/fred';
 import {
   defineProviderConformanceSuite,
   PROVIDER_CONFORMANCE_ISOLATION_ENV,
@@ -167,6 +174,147 @@ if (process.env[PROVIDER_CONFORMANCE_ISOLATION_ENV] !== '1') {
     maxTokens: 321,
   } satisfies ProviderModelDefaults;
   const CREDENTIALS = { kind: 'api-key' as const, apiKey: Redacted.make('fred-provider-conformance-placeholder') };
+
+  test('provider-owned connection probes authenticate bounded successful requests', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ readonly url: string; readonly headers: Headers }> = [];
+    globalThis.fetch = async (input, init) => {
+      requests.push({ url: String(input), headers: new Headers(init?.headers) });
+      return new Response('{}', { status: 200 });
+    };
+    try {
+      const hosted: readonly {
+        factory: EffectProviderFactory;
+        draft: ProviderConnectionDraft;
+        credentials: ProviderConnectionCredentials;
+        url: string;
+        header: readonly [string, string];
+      }[] = [
+        { factory: OpenAiProviderFactory, draft: { label: 'openai', providerId: 'openai', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://api.openai.com/v1/models', header: ['authorization', 'Bearer fred-provider-conformance-placeholder'] },
+        { factory: AnthropicProviderFactory, draft: { label: 'anthropic', providerId: 'anthropic', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://api.anthropic.com/v1/models', header: ['x-api-key', 'fred-provider-conformance-placeholder'] },
+        { factory: GoogleProviderFactory, draft: { label: 'google', providerId: 'google', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://generativelanguage.googleapis.com/v1beta/models', header: ['x-goog-api-key', 'fred-provider-conformance-placeholder'] },
+        { factory: GroqProviderFactory, draft: { label: 'groq', providerId: 'groq', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://api.groq.com/openai/v1/models', header: ['authorization', 'Bearer fred-provider-conformance-placeholder'] },
+        { factory: OpenRouterProviderFactory, draft: { label: 'openrouter', providerId: 'openrouter', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://openrouter.ai/api/v1/key', header: ['authorization', 'Bearer fred-provider-conformance-placeholder'] },
+        { factory: MiniMaxProviderFactory, draft: { label: 'minimax', providerId: 'minimax', auth: { kind: 'api-key' } }, credentials: CREDENTIALS, url: 'https://api.minimax.io/v1/models', header: ['authorization', 'Bearer fred-provider-conformance-placeholder'] },
+      ];
+
+      for (const fixture of hosted) {
+        await Effect.runPromise(fixture.factory.connectionTest!.test(fixture.draft, fixture.credentials));
+        const request = requests.at(-1)!;
+        expect(request.url).toBe(fixture.url);
+        expect(request.url).not.toContain('fred-provider-conformance-placeholder');
+        expect(request.headers.get(fixture.header[0])).toBe(fixture.header[1]);
+      }
+
+      const local = [
+        { factory: OpenAiProviderFactory, protocol: 'openai-compatible' as const, endpoint: 'http://127.0.0.1:11434/v1', expected: 'http://127.0.0.1:11434/v1/models' },
+        { factory: AnthropicProviderFactory, protocol: 'anthropic-compatible' as const, endpoint: 'http://127.0.0.1:11435/v1', expected: 'http://127.0.0.1:11435/v1/models' },
+      ];
+      for (const fixture of local) {
+        await Effect.runPromise(fixture.factory.connectionTest!.test({
+          label: 'local',
+          providerId: 'local-compatible',
+          protocol: fixture.protocol,
+          endpoint: fixture.endpoint,
+          auth: { kind: 'none' },
+        }, { kind: 'none' }));
+        expect(requests.at(-1)!.url).toBe(fixture.expected);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('connection probes reject auth mismatches, unsuccessful status, and timeout without secrets', async () => {
+    const mismatch = await Effect.runPromise(Effect.flip(testProviderConnectionDraft(
+      { label: 'work', providerId: 'openai', auth: { kind: 'none' } },
+      CREDENTIALS,
+    )));
+    expect(mismatch).toMatchObject({
+      _tag: 'ProviderConnectionTestError',
+      reason: 'configuration',
+    });
+
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => new Response(null, { status: 401 });
+      const rejected = await Effect.runPromise(Effect.flip(OpenAiProviderFactory.connectionTest!.test(
+        { label: 'work', providerId: 'openai', auth: { kind: 'api-key' } },
+        CREDENTIALS,
+      )));
+      expect(rejected).toMatchObject({ reason: 'authentication', statusCode: 401 });
+
+      globalThis.fetch = () => new Promise<Response>(() => undefined);
+      const timed = makeProviderConnectionTestHook({
+        providerId: 'timeout-fixture',
+        timeoutMs: 1,
+        request: () => ({ url: 'https://timeout.invalid/models' }),
+      });
+      const timeout = await Effect.runPromise(Effect.flip(timed.test(
+        { label: 'timeout', providerId: 'timeout-fixture', auth: { kind: 'none' } },
+        { kind: 'none' },
+      )));
+      expect(timeout).toMatchObject({ reason: 'timeout' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('connection probes cancel success and rejected response bodies', async () => {
+    const originalFetch = globalThis.fetch;
+    const cancellations: number[] = [];
+    let request = 0;
+    globalThis.fetch = async () => {
+      const current = ++request;
+      return new Response(new ReadableStream({
+        cancel: () => {
+          cancellations.push(current);
+          if (current === 2) return Promise.reject(new Error('cleanup failed'));
+        },
+      }), { status: current === 1 ? 200 : 401 });
+    };
+    try {
+      await Effect.runPromise(OpenAiProviderFactory.connectionTest!.test(
+        { label: 'work', providerId: 'openai', auth: { kind: 'api-key' } },
+        CREDENTIALS,
+      ));
+      const rejected = await Effect.runPromise(Effect.flip(OpenAiProviderFactory.connectionTest!.test(
+        { label: 'work', providerId: 'openai', auth: { kind: 'api-key' } },
+        CREDENTIALS,
+      )));
+      expect(rejected).toMatchObject({ reason: 'authentication', statusCode: 401 });
+      expect(cancellations).toEqual([1, 2]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('OpenAI and Anthropic connectors load every local-compatible auth mode', async () => {
+    const cases = [
+      { factory: OpenAiProviderFactory, recorder: openAiRecorder, endpoint: 'http://127.0.0.1:11434/v1' },
+      { factory: AnthropicProviderFactory, recorder: anthropicRecorder, endpoint: 'http://127.0.0.1:11435' },
+    ] as const;
+    const credentials = [
+      { kind: 'none' as const },
+      { kind: 'api-key' as const, apiKey: Redacted.make('local-key') },
+      { kind: 'basic' as const, username: Redacted.make('local-user'), password: Redacted.make('local-password') },
+    ];
+
+    for (const fixture of cases) {
+      for (const auth of credentials) {
+        fixture.recorder.reset();
+        await fixture.factory.load({ baseUrl: fixture.endpoint, credentials: auth });
+        const options = fixture.recorder.clientOptions[0] as {
+          apiKey?: unknown;
+          apiUrl?: string;
+          transformClient?: unknown;
+        };
+        expect(options.apiUrl).toBe(fixture.endpoint);
+        expect(options.apiKey === undefined).toBe(auth.kind !== 'api-key');
+        expect(options.transformClient).toBeFunction();
+      }
+    }
+  });
 
   const fixtures = [
   {

@@ -16,7 +16,16 @@ import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
 import { createProviderDefinitionEffect } from '../platform/base';
-import { ProviderConnectionService, type ResolvedProviderConnection } from '../platform/connections';
+import {
+  BUILTIN_PROVIDER_CONNECTION_CAPABILITIES,
+  LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
+  ProviderConnectionNamespaceRequiredError,
+  ProviderConnectionService,
+  UnsupportedProviderConnectionAuthError,
+  resolveProviderConnectionForUse,
+  validateProviderConnectionCapability,
+  type ResolvedProviderConnection,
+} from '../platform/connections';
 import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
 import type { TemplateEngine } from '../template/engine';
@@ -123,24 +132,41 @@ export const AgentService = Context.GenericTag<AgentService>(
 );
 
 const providerConfigForConnection = (
+  provider: ProviderDefinition,
   config: ProviderConfig,
   resolved: ResolvedProviderConnection,
-): Effect.Effect<ProviderConfig, Error> => Effect.try({
-  try: () => {
-    const endpoint = resolved.connection.endpoint;
-    if (endpoint !== undefined) {
-      const url = new URL(endpoint);
-      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
-        throw new Error('invalid provider endpoint');
-      }
-    }
-    return {
-      ...config,
-      ...(endpoint === undefined ? {} : { baseUrl: endpoint }),
-      credentials: resolved.credentials,
-    };
-  },
-  catch: () => new Error('Provider connection endpoint must use http or https and cannot include userinfo.'),
+): Effect.Effect<ProviderConfig, Error> => Effect.gen(function* () {
+  const capabilities = resolved.connection.providerId === LOCAL_PROVIDER_CONNECTION_CAPABILITIES.providerId
+    ? LOCAL_PROVIDER_CONNECTION_CAPABILITIES
+    : provider.connectionCapabilities
+      ?? BUILTIN_PROVIDER_CONNECTION_CAPABILITIES.find(({ providerId }) => providerId === provider.id);
+  if (capabilities !== undefined) {
+    yield* validateProviderConnectionCapability(resolved.connection, capabilities);
+  }
+  if (resolved.connection.auth.kind !== resolved.credentials.kind) {
+    return yield* new UnsupportedProviderConnectionAuthError({
+      providerId: resolved.connection.providerId,
+      authKind: resolved.credentials.kind,
+      message: `Provider connection credentials do not match the declared ${resolved.connection.auth.kind} authentication mode.`,
+    });
+  }
+  const endpoint = resolved.connection.endpoint;
+  if (endpoint !== undefined) {
+    yield* Effect.try({
+      try: () => {
+        const url = new URL(endpoint);
+        if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
+          throw new Error('invalid provider endpoint');
+        }
+      },
+      catch: () => new Error('Provider connection endpoint must use http or https and cannot include userinfo.'),
+    });
+  }
+  return {
+    ...config,
+    ...(endpoint === undefined ? {} : { baseUrl: endpoint }),
+    credentials: resolved.credentials,
+  };
 });
 
 /**
@@ -182,15 +208,34 @@ class AgentServiceImpl implements AgentService {
     const factory = provider.factory;
     return {
       ...provider,
-      resolveRuntime: () => this.providerConnectionService.resolve({
-        providerId: provider.id,
-        connectionId: config.connectionId,
-        apiKeyEnvVar: provider.config.apiKeyEnvVar,
-      }).pipe(
-        Effect.flatMap((resolved) => providerConfigForConnection(provider.config, resolved)),
-        Effect.flatMap((runtimeConfig) => createProviderDefinitionEffect(factory, runtimeConfig)),
-        Effect.map(({ getModel, layer }) => ({ getModel, layer })),
-      ),
+      resolveRuntime: () => {
+        const connectionId = config.connectionId;
+        const connectionNamespace = config.connectionNamespace;
+        const buildRuntime = (request: Parameters<ProviderConnectionService['resolve']>[0]) =>
+          resolveProviderConnectionForUse(this.providerConnectionService, provider, request).pipe(
+            Effect.flatMap((resolved) => providerConfigForConnection(provider, provider.config, resolved)),
+            Effect.flatMap((runtimeConfig) => createProviderDefinitionEffect(factory, runtimeConfig)),
+            Effect.map(({ getModel, layer }) => ({ getModel, layer })),
+          );
+        if (connectionId === undefined) {
+          return buildRuntime({
+            providerId: provider.id,
+            apiKeyEnvVar: provider.config.apiKeyEnvVar,
+          });
+        }
+        if (connectionNamespace === undefined) {
+          return Effect.fail(new ProviderConnectionNamespaceRequiredError({
+            connectionId,
+            message: `Provider connection "${connectionId}" requires a namespace.`,
+          }));
+        }
+        return buildRuntime({
+          providerId: provider.id,
+          connectionId,
+          namespace: connectionNamespace,
+          apiKeyEnvVar: provider.config.apiKeyEnvVar,
+        });
+      },
     };
   }
 

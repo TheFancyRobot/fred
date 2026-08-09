@@ -57,9 +57,18 @@ import type { ProviderConfig, ProviderDefinition } from './platform/provider';
 import type {
   ProviderConnection,
   ProviderConnectionCredentials,
+  ProviderConnectionDraft,
   ProviderConnectionId,
+  ProviderConnectionNamespace,
   ResolvedProviderConnection,
 } from './platform/connections';
+import {
+  ProviderConnectionNotFoundError,
+  ProviderConnectionTestError,
+  providerConnectionRuntimeProviderId,
+  resolveProviderConnectionForUse,
+} from './platform/connections';
+import { testProviderConnectionDraft } from './platform/connection-test';
 import type { Tracer } from './tracing';
 import type { RoutingConfig } from './routing/types';
 import { buildObservabilityLayers } from './observability/otel';
@@ -339,13 +348,27 @@ export interface FredClient {
   };
   /** Transport-neutral provider-connection management for clients and the CLI. */
   readonly connections: {
-    list(): Promise<readonly ProviderConnection[]>;
-    get(id: ProviderConnectionId): Promise<ProviderConnection | null>;
-    put(connection: ProviderConnection, credentials: ProviderConnectionCredentials): Promise<void>;
-    remove(id: ProviderConnectionId): Promise<boolean>;
+    list(namespace: ProviderConnectionNamespace): Promise<readonly ProviderConnection[]>;
+    get(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<ProviderConnection | null>;
+    put(
+      namespace: ProviderConnectionNamespace,
+      connection: ProviderConnection,
+      credentials: ProviderConnectionCredentials,
+      expiresAt?: Date,
+    ): Promise<void>;
+    updateMetadata(namespace: ProviderConnectionNamespace, connection: ProviderConnection): Promise<boolean>;
+    remove(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<boolean>;
+    testDraft(draft: ProviderConnectionDraft, credentials: ProviderConnectionCredentials): Promise<void>;
+    test(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<void>;
     resolve(request: {
       readonly providerId: string;
-      readonly connectionId?: ProviderConnectionId;
+      readonly connectionId: ProviderConnectionId;
+      readonly namespace: ProviderConnectionNamespace;
+      readonly apiKeyEnvVar?: string;
+    } | {
+      readonly providerId: string;
+      readonly connectionId?: undefined;
+      readonly namespace?: undefined;
       readonly apiKeyEnvVar?: string;
     }): Promise<ResolvedProviderConnection>;
   };
@@ -682,20 +705,65 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     },
 
     connections: {
-      list: () => run(Effect.flatMap(ProviderConnectionService, (service) => service.list())),
-      get: (id) => run(Effect.map(
-        Effect.flatMap(ProviderConnectionService, (service) => service.get(id)),
+      list: (namespace) => run(Effect.flatMap(ProviderConnectionService, (service) => service.list(namespace))),
+      get: (namespace, id) => run(Effect.map(
+        Effect.flatMap(ProviderConnectionService, (service) => service.get(namespace, id)),
         Option.getOrNull,
       )),
-      put: (connection, credentials) => run(Effect.flatMap(
+      put: (namespace, connection, credentials, expiresAt) => run(Effect.flatMap(
         ProviderConnectionService,
-        (service) => service.put(connection, credentials),
+        (service) => service.put(namespace, connection, credentials, expiresAt),
       )),
-      remove: (id) => run(Effect.flatMap(ProviderConnectionService, (service) => service.remove(id))),
-      resolve: (request) => run(Effect.flatMap(
+      updateMetadata: (namespace, connection) => run(Effect.flatMap(
         ProviderConnectionService,
-        (service) => service.resolve(request),
+        (service) => service.updateMetadata(namespace, connection),
       )),
+      remove: (namespace, id) => run(Effect.flatMap(ProviderConnectionService, (service) => service.remove(namespace, id))),
+      testDraft: (draft, credentials) => run(testProviderConnectionDraft(draft, credentials)),
+      test: (namespace, id) => run(Effect.gen(function* () {
+        const service = yield* ProviderConnectionService;
+        const connection = yield* service.get(namespace, id).pipe(Effect.flatMap(Option.match({
+          onNone: () => Effect.fail(new ProviderConnectionNotFoundError({
+            connectionId: id,
+            message: `Provider connection "${id}" was not found.`,
+          })),
+          onSome: Effect.succeed,
+        })));
+        const providerId = providerConnectionRuntimeProviderId(connection);
+        if (providerId === undefined) {
+          return yield* new ProviderConnectionTestError({
+            providerId: connection.providerId,
+            reason: 'configuration',
+            message: 'Local-compatible provider connection requires a supported protocol.',
+          });
+        }
+        const providers = yield* ProviderRegistryService;
+        const request = { providerId, namespace, connectionId: id } as const;
+        const resolved = yield* providers.hasProvider(providerId).pipe(
+          Effect.flatMap((registered) => registered
+            ? providers.getDefinition(providerId).pipe(
+              Effect.flatMap((provider) => resolveProviderConnectionForUse(service, provider, request)),
+            )
+            : resolveProviderConnectionForUse(service, undefined, request)),
+        );
+        const draft: ProviderConnectionDraft = {
+          label: connection.label,
+          providerId: connection.providerId,
+          auth: connection.auth,
+          ...(connection.endpoint === undefined ? {} : { endpoint: connection.endpoint }),
+          ...(connection.protocol === undefined ? {} : { protocol: connection.protocol }),
+        };
+        return yield* testProviderConnectionDraft(draft, resolved.credentials);
+      })),
+      resolve: (request) => run(Effect.gen(function* () {
+        const service = yield* ProviderConnectionService;
+        const providers = yield* ProviderRegistryService;
+        if (!(yield* providers.hasProvider(request.providerId))) {
+          return yield* resolveProviderConnectionForUse(service, undefined, request);
+        }
+        const provider = yield* providers.getDefinition(request.providerId);
+        return yield* resolveProviderConnectionForUse(service, provider, request);
+      })),
     },
 
     messages: {

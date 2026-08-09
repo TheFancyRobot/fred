@@ -41,6 +41,7 @@ function buildSteps(): VerifyStep[] {
 
   const steps: VerifyStep[] = [
     { label: 'typecheck', command: ['bunx', 'tsc', '--noEmit'], cwd: projectRoot },
+    { label: 'build package declarations', command: ['bash', 'scripts/build-declarations.sh'], cwd: projectRoot },
     { label: 'test suite', command: ['bun', 'run', 'test'], cwd: projectRoot },
     { label: 'build workspace packages', command: ['bun', 'run', 'build'], cwd: projectRoot },
     { label: 'example smoke', command: ['bun', 'run', 'smoke'], cwd: exampleDir },
