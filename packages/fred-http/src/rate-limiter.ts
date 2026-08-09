@@ -236,20 +236,35 @@ export interface PostgresRateLimitPool {
 }
 
 export interface PostgresRateLimitStoreOptions {
-  /** Schema prepared by migrateFredPostgresStores. */
+  /** Schema prepared by migrateFredPostgresStores. Omit to retain the v1 public-table adapter. */
   readonly schema?: string;
 }
+
+const POSTGRES_DDL = `CREATE TABLE IF NOT EXISTS ${RATE_LIMIT_TABLE} (
+  bucket_key TEXT PRIMARY KEY,
+  window_start BIGINT NOT NULL,
+  request_count INTEGER NOT NULL,
+  expires_at BIGINT NOT NULL,
+  decision_id TEXT
+);
+ALTER TABLE ${RATE_LIMIT_TABLE} ADD COLUMN IF NOT EXISTS decision_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_${RATE_LIMIT_TABLE}_expires_at ON ${RATE_LIMIT_TABLE} (expires_at);`;
 
 export const makePostgresRateLimitStore = (
   pool: PostgresRateLimitPool,
   options: PostgresRateLimitStoreOptions = {},
 ): RateLimitStoreService => {
-  const table = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, RATE_LIMIT_TABLE);
+  const legacy = options.schema === undefined;
+  const table = legacy ? RATE_LIMIT_TABLE : fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, RATE_LIMIT_TABLE);
   let consumes = 0;
   return {
     backend: 'postgres',
-    // Postgres DDL is applied only by @fancyrobot/fred-postgres migrations.
-    initialize: Effect.void,
+    initialize: legacy
+      ? Effect.tryPromise({
+          try: async () => { await pool.query(POSTGRES_DDL); },
+          catch: (cause) => storeFailure('initialize', cause),
+        })
+      : Effect.void,
     consume: Effect.fn('PostgresRateLimitStore.consume')((input) => Effect.gen(function* () {
       const policy = yield* validatePolicy(input.policy);
       consumes += 1;

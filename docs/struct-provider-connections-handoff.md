@@ -1,10 +1,10 @@
 # Struct provider-connection handoff
 
 Struct consumes Fred's provider-connection contract; it does not implement a
-second credential store. This handoff targets the Phase 70 release cohort:
-`@fancyrobot/fred@3.0.0`, `@fancyrobot/fred-postgres@2.0.0`, and the matching
-provider package major listed in the migration guide. Confirm the final tagged
-versions from the generated release manifests before pinning them.
+second credential store. This handoff targets the additive Phase 70 v2.x release
+cohort. Existing v2 imports remain supported; use the new package for
+PostgreSQL migrations and provider-connection storage. Confirm final tagged
+versions from generated release manifests before pinning them.
 
 ## Public imports
 

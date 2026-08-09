@@ -676,7 +676,17 @@ export const MiniMaxProviderFactory: import('@fancyrobot/fred').EffectProviderFa
   load: async (config: ProviderConfig) => {
     const apiKey = config.credentials?.kind === 'api-key'
       ? config.credentials.apiKey
-      : undefined;
+      : (() => {
+          const envVar = config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR;
+          const value = process.env[envVar];
+          return value === undefined ? undefined : Redacted.make(value);
+        })();
+    if (apiKey === undefined) {
+      throw new MiniMaxMissingApiKeyError({
+        provider: 'minimax',
+        envVar: config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR,
+      });
+    }
     const baseUrl = config.baseUrl ?? MINIMAX_DEFAULT_BASE_URL;
 
     // Create HTTP client layer

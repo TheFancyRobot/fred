@@ -213,15 +213,17 @@ describe('rate-limit storage safety', () => {
     await Effect.runPromise(store.initialize);
     await consume(store, 'key', 0);
     const consumeSql = pool.queries.find((sql) => sql.includes('INSERT INTO') && sql.includes(RATE_LIMIT_TABLE)) ?? '';
+    const ddl = pool.queries[0] ?? '';
     expect(consumeSql).toContain('ON CONFLICT(bucket_key) DO UPDATE');
-    expect(pool.queries.some((sql) => sql.includes('CREATE TABLE'))).toBe(false);
+    expect(ddl).toContain('expires_at');
+    expect(ddl).toContain('CREATE INDEX');
   });
 
   it('surfaces backend outages as RateLimitStoreError', async () => {
     const store = makePostgresRateLimitStore({
       query: async () => { throw new Error('database unavailable'); },
     });
-    const exit = await Effect.runPromise(Effect.exit(store.consume({ key: 'unavailable', now: 0, policy })));
+    const exit = await Effect.runPromise(Effect.exit(store.initialize));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain(RateLimitStoreError.name);
   });

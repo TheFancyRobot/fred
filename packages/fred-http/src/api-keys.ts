@@ -282,19 +282,47 @@ export interface PostgresApiKeyPool {
 }
 
 export interface PostgresApiKeyStoreOptions {
-  /** Schema prepared by migrateFredPostgresStores. */
+  /** Schema prepared by migrateFredPostgresStores. Omit to retain the v1 public-table adapter. */
   readonly schema?: string;
 }
+
+const POSTGRES_DDL = `CREATE TABLE IF NOT EXISTS ${API_KEY_TABLE} (
+  id TEXT PRIMARY KEY,
+  hash TEXT NOT NULL,
+  scopes JSONB NOT NULL,
+  rate_limit JSONB,
+  revoked BOOLEAN NOT NULL DEFAULT FALSE,
+  verifier_id TEXT,
+  verifier_version INTEGER,
+  verifier_metadata JSONB,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL
+)`;
+
+const POSTGRES_MIGRATIONS = [
+  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_id TEXT`,
+  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_version INTEGER`,
+  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS verifier_metadata JSONB`,
+  `ALTER TABLE ${API_KEY_TABLE} ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+] as const;
 
 export const makePostgresApiKeyStore = (
   pool: PostgresApiKeyPool,
   options: PostgresApiKeyStoreOptions = {},
 ): ApiKeyStoreService => {
-  const table = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, API_KEY_TABLE);
+  const legacy = options.schema === undefined;
+  const table = legacy ? API_KEY_TABLE : fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, API_KEY_TABLE);
   return {
   backend: 'postgres',
-  // Postgres DDL is applied only by @fancyrobot/fred-postgres migrations.
-  initialize: Effect.void,
+  initialize: legacy
+    ? Effect.tryPromise({
+        try: async () => {
+          await pool.query(POSTGRES_DDL);
+          for (const migration of POSTGRES_MIGRATIONS) await pool.query(migration);
+        },
+        catch: (cause) => storeFailure('initialize', cause),
+      })
+    : Effect.void,
   findById: (id) => Effect.tryPromise({
     try: () => pool.query(
       `SELECT id, hash, scopes, rate_limit, revoked, verifier_id, verifier_version, verifier_metadata, expires_at, created_at FROM ${table} WHERE id = $1`,

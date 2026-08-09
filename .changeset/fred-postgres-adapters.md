@@ -1,11 +1,12 @@
 ---
-"@fancyrobot/fred": major
-"@fancyrobot/fred-http": major
-"@fancyrobot/fred-cli": major
+"@fancyrobot/fred": minor
+"@fancyrobot/fred-http": minor
+"@fancyrobot/fred-cli": minor
 "@fancyrobot/fred-postgres": minor
 ---
 
-Move PostgreSQL context and checkpoint adapters to `@fancyrobot/fred-postgres`.
-Postgres tables now require explicit schema-qualified migrations; runtime stores
-never create or adopt `public` tables. Use the documented copy-only legacy
-import after a backup and rehearsal.
+Add `@fancyrobot/fred-postgres` as the canonical PostgreSQL adapter and migration
+package. Existing core adapters and `fred-http` PostgreSQL stores remain
+functional for this v2 release, but emit a deprecation warning (or use the
+explicit `schema` option for the new schema-qualified path). Migrate after a
+backup and rehearsal; removal is deferred to the next major release.

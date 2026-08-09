@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { PostgresContextStorage } from '../../../../packages/fred-postgres/src';
+import { PostgresContextStorage } from '../../../../packages/core/src/context/storage/postgres';
 import type { ConversationContext } from '../../../../packages/core/src/context/context';
 
 // -----------------------------------------------------------------------------
@@ -63,8 +63,18 @@ describe('PostgresContextStorage', () => {
       const { client } = createMockClient({});
       const pool = createMockPool(client);
 
-      const storage = new PostgresContextStorage({ pool: pool as any });
+      const warnings: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
+      let storage: PostgresContextStorage;
+      try {
+        storage = new PostgresContextStorage({ pool: pool as any });
+      } finally {
+        console.warn = originalWarn;
+      }
       expect(storage).toBeInstanceOf(PostgresContextStorage);
+      expect(warnings.join(' ')).toContain('deprecated');
+      expect(warnings.join(' ')).toContain('@fancyrobot/fred-postgres');
     });
   });
 
@@ -79,8 +89,8 @@ describe('PostgresContextStorage', () => {
       const result = await storage.get('non-existent-id');
 
       expect(result).toBeNull();
-      // Runtime storage never creates tables; migrations own schema changes.
-      expect(queries.some((q) => q.text.includes('CREATE TABLE'))).toBe(false);
+      // Should have initialized schema and queried conversations
+      expect(queries.some((q) => q.text.includes('CREATE TABLE'))).toBe(true);
       expect(
         queries.some(
           (q) =>
@@ -208,7 +218,7 @@ describe('PostgresContextStorage', () => {
 
       // Upsert conversation
       const upsertQuery = txQueries.find(
-        (q) => q.text.includes('INSERT INTO') && q.text.includes('conversations')
+        (q) => q.text.includes('INSERT INTO conversations')
       );
       expect(upsertQuery).toBeDefined();
       expect(upsertQuery!.text).toContain('ON CONFLICT (id) DO UPDATE');
@@ -216,14 +226,14 @@ describe('PostgresContextStorage', () => {
 
       // Delete existing messages
       const deleteQuery = txQueries.find(
-        (q) => q.text.includes('DELETE FROM') && q.text.includes('messages')
+        (q) => q.text.includes('DELETE FROM messages')
       );
       expect(deleteQuery).toBeDefined();
       expect(deleteQuery!.values?.[0]).toBe('thread-1');
 
       // Insert new messages
       const insertQueries = txQueries.filter(
-        (q) => q.text.includes('INSERT INTO') && q.text.includes('messages')
+        (q) => q.text.includes('INSERT INTO messages')
       );
       expect(insertQueries).toHaveLength(2);
       expect(insertQueries[0].values?.[1]).toBe(0); // sequence 0
@@ -238,7 +248,7 @@ describe('PostgresContextStorage', () => {
       // Make the delete query throw
       client.query = mock(async (text: string, values?: unknown[]) => {
         queries.push({ text, values });
-        if (text.includes('DELETE FROM') && text.includes('messages')) {
+        if (text.includes('DELETE FROM messages')) {
           throw new Error('Simulated error');
         }
         return { rows: [], rowCount: 0 };
@@ -279,7 +289,7 @@ describe('PostgresContextStorage', () => {
       expect(txQueries[0].text).toBe('BEGIN');
 
       const deleteQuery = txQueries.find(
-        (q) => q.text.includes('DELETE FROM') && q.text.includes('conversations')
+        (q) => q.text.includes('DELETE FROM conversations')
       );
       expect(deleteQuery).toBeDefined();
       expect(deleteQuery!.values?.[0]).toBe('thread-to-delete');
@@ -303,7 +313,7 @@ describe('PostgresContextStorage', () => {
       expect(txQueries[0].text).toBe('BEGIN');
 
       const deleteQuery = txQueries.find(
-        (q) => q.text.includes('DELETE FROM') && q.text.includes('conversations')
+        (q) => q.text.includes('DELETE FROM conversations')
       );
       expect(deleteQuery).toBeDefined();
       // No values for clear - deletes all
@@ -314,7 +324,7 @@ describe('PostgresContextStorage', () => {
   });
 
   describe('schema initialization', () => {
-    it('never initializes schema during runtime operations', async () => {
+    it('only initializes schema once across multiple operations', async () => {
       const { client, queries } = createMockClient({
         conversation: { rows: [] },
       });
@@ -326,11 +336,11 @@ describe('PostgresContextStorage', () => {
       await storage.get('id-2');
       await storage.delete('id-3');
 
-      // Migrations are explicit and runtime requests only query managed tables.
+      // Count CREATE TABLE queries
       const createQueries = queries.filter((q) =>
         q.text.includes('CREATE TABLE')
       );
-      expect(createQueries).toHaveLength(0);
+      expect(createQueries).toHaveLength(1);
     });
   });
 
@@ -383,7 +393,7 @@ describe('PostgresContextStorage', () => {
         if (text.includes('CREATE TABLE')) {
           return { rows: [] };
         }
-        if (text.includes('SELECT') && text.includes('conversations') && text.includes('last_payload')) {
+        if (text.includes('SELECT') && text.includes('FROM conversations') && text.includes('last_payload')) {
           return listResult;
         }
         if (text.includes('SELECT') && text.includes('conversations')) {

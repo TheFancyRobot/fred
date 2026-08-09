@@ -237,7 +237,7 @@
         "@types/bun": "latest",
       },
       "peerDependencies": {
-        "@fancyrobot/fred-cli": "^0.6.0-alpha.0",
+        "@fancyrobot/fred-cli": ">=0.6.0-alpha.0 <1.0.0",
       },
     },
     "packages/fred-baml": {

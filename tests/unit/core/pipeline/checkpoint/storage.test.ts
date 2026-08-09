@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { PostgresCheckpointStorage } from '../../../../../packages/fred-postgres/src';
+import { PostgresCheckpointStorage } from '../../../../../packages/core/src/pipeline/checkpoint/postgres';
 import { SqliteCheckpointStorage } from '../../../../../packages/core/src/pipeline/checkpoint/sqlite';
 import type { Checkpoint, CheckpointStatus } from '../../../../../packages/core/src/pipeline/checkpoint/types';
 import type { PipelineContext } from '../../../../../packages/core/src/pipeline/context';
@@ -95,8 +95,18 @@ describe('PostgresCheckpointStorage', () => {
       const { client } = createMockClient({});
       const pool = createMockPool(client);
 
-      const storage = new PostgresCheckpointStorage({ pool: pool as any });
+      const warnings: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
+      let storage: PostgresCheckpointStorage;
+      try {
+        storage = new PostgresCheckpointStorage({ pool: pool as any });
+      } finally {
+        console.warn = originalWarn;
+      }
       expect(storage).toBeInstanceOf(PostgresCheckpointStorage);
+      expect(warnings.join(' ')).toContain('deprecated');
+      expect(warnings.join(' ')).toContain('@fancyrobot/fred-postgres');
     });
   });
 
@@ -110,7 +120,7 @@ describe('PostgresCheckpointStorage', () => {
       await storage.save(checkpoint);
 
       // Find the INSERT query
-      const insertQuery = queries.find((q) => q.text.includes('INSERT INTO') && q.text.includes('checkpoints'));
+      const insertQuery = queries.find((q) => q.text.includes('INSERT INTO checkpoints'));
       expect(insertQuery).toBeDefined();
       expect(insertQuery!.text).toContain('ON CONFLICT (run_id, step) DO UPDATE');
       expect(insertQuery!.values?.[0]).toBe('run-123'); // run_id
@@ -255,7 +265,7 @@ describe('PostgresCheckpointStorage', () => {
 
       await storage.updateStatus('run-123', 1, 'completed');
 
-      const updateQuery = queries.find((q) => q.text.includes('UPDATE') && q.text.includes('checkpoints'));
+      const updateQuery = queries.find((q) => q.text.includes('UPDATE checkpoints'));
       expect(updateQuery).toBeDefined();
       expect(updateQuery!.values).toContain('run-123');
       expect(updateQuery!.values).toContain(1);
@@ -276,7 +286,7 @@ describe('PostgresCheckpointStorage', () => {
       );
 
       expect(txQueries.some((q) => q.text === 'BEGIN')).toBe(true);
-      expect(txQueries.some((q) => q.text.includes('DELETE FROM') && q.text.includes('checkpoints'))).toBe(true);
+      expect(txQueries.some((q) => q.text.includes('DELETE FROM checkpoints'))).toBe(true);
       expect(txQueries.some((q) => q.text === 'COMMIT')).toBe(true);
     });
   });
@@ -323,7 +333,7 @@ describe('PostgresCheckpointStorage', () => {
   });
 
   describe('schema initialization', () => {
-    it('never initializes schema during runtime operations', async () => {
+    it('only initializes schema once across multiple operations', async () => {
       const { client, queries } = createMockClient({
         checkpoints: { rows: [] },
       });
@@ -335,9 +345,9 @@ describe('PostgresCheckpointStorage', () => {
       await storage.getLatest('run-2');
       await storage.get('run-3', 0);
 
-      // Migrations are explicit and runtime requests only query managed tables.
+      // Count CREATE TABLE queries
       const createQueries = queries.filter((q) => q.text.includes('CREATE TABLE'));
-      expect(createQueries).toHaveLength(0);
+      expect(createQueries).toHaveLength(1);
     });
   });
 });

@@ -335,6 +335,9 @@ const fred = await createFred({
 
 ### Postgres (production)
 
+The core PostgreSQL adapters remain available for v2 compatibility and emit a
+deprecation warning. New applications should use `@fancyrobot/fred-postgres`.
+
 ```typescript
 import { Effect } from 'effect';
 import { Pool } from 'pg';

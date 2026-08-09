@@ -1,8 +1,9 @@
 # PostgreSQL Operations
 
-`@fancyrobot/fred-postgres` owns Fred's PostgreSQL adapters and migrations.
-Core deliberately does not re-export them. Runtime adapters never create DDL
-or adopt `public` tables; installation is explicit and schema-qualified.
+`@fancyrobot/fred-postgres` is the canonical package for new PostgreSQL adapters
+and migrations. The v2 adapters exported by core remain supported for existing
+applications and emit a deprecation warning; removal is deferred to the next
+major release. The explicit package never adopts `public` tables.
 
 ## Install and migrate
 
@@ -42,6 +43,10 @@ Record observed migration duration and lock time in the release rehearsal;
 Fred does not promise a universal migration SLA.
 
 ## Legacy adoption and recovery
+
+Existing core adapters and `fred-http` stores preserve their v2 behavior when
+constructed without an explicit schema. Pass `schema` to opt into the
+schema-qualified adapters and migrations from `@fancyrobot/fred-postgres`.
 
 1. Back up the database and rehearse restore in disposable infrastructure.
 2. Run the explicit Fred migrations in the destination schema.
