@@ -155,8 +155,8 @@ CREATE TABLE ${legacyImports} (source_table TEXT PRIMARY KEY, source_count BIGIN
   return migrations.map((migration) => ({
     ...migration,
     // SHA-256 identifies immutable migration SQL; no credential material is hashed.
-    // codeql[js/insufficient-password-hash]
     checksum: createHash('sha256')
+      // codeql[js/insufficient-password-hash]
       .update(`${migration.module}\0${migration.version}\0${migration.sql.replaceAll(schemaPrefix, '"$schema".')}`)
       .digest('hex'),
   }));
