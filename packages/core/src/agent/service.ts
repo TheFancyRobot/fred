@@ -24,6 +24,7 @@ import {
   UnsupportedProviderConnectionAuthError,
   resolveProviderConnectionForUse,
   validateProviderConnectionCapability,
+  validateProviderConnectionEndpoint,
   type ResolvedProviderConnection,
 } from '../platform/connections';
 import { ToolGateService } from '../tool-gate/service';
@@ -151,17 +152,7 @@ const providerConfigForConnection = (
     });
   }
   const endpoint = resolved.connection.endpoint;
-  if (endpoint !== undefined) {
-    yield* Effect.try({
-      try: () => {
-        const url = new URL(endpoint);
-        if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
-          throw new Error('invalid provider endpoint');
-        }
-      },
-      catch: () => new Error('Provider connection endpoint must use http or https and cannot include userinfo.'),
-    });
-  }
+  yield* validateProviderConnectionEndpoint(endpoint);
   return {
     ...config,
     ...(endpoint === undefined ? {} : { baseUrl: endpoint }),

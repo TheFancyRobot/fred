@@ -24,7 +24,7 @@ export interface PostgresQueryResult {
 
 export interface PostgresClient {
   query(text: string, values?: unknown[]): Promise<PostgresQueryResult>;
-  release(): void;
+  release(error?: Error | boolean): void;
 }
 
 export interface PostgresPool {
@@ -96,16 +96,19 @@ const operation = <A>(
     catch: (cause) => new PostgresOperationError({ operation: name, message: errorMessage(cause) }),
   });
 
-const release = (client: PostgresClient): Effect.Effect<void> => Effect.sync(() => client.release());
+const release = (client: PostgresClient, destroy: boolean): Effect.Effect<void> =>
+  Effect.sync(() => destroy ? client.release(true) : client.release());
 
 const useClient = <A, E>(
   pool: PostgresPool,
-  use: (client: PostgresClient) => Effect.Effect<A, E>,
+  use: (client: PostgresClient, destroy: () => void) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | PostgresOperationError> =>
   Effect.acquireUseRelease(
-    operation('connect', () => pool.connect()),
-    use,
-    release,
+    operation('connect', () => pool.connect()).pipe(
+      Effect.map((client) => ({ client, destroy: false })),
+    ),
+    (lease) => use(lease.client, () => { lease.destroy = true; }),
+    (lease) => release(lease.client, lease.destroy),
   );
 
 const query = (
@@ -197,13 +200,16 @@ const acquireLock = Effect.fn('FredPostgres.acquireMigrationLock')(function* (
   }
 });
 
-const releaseLock = (client: PostgresClient, schema: string): Effect.Effect<void> =>
+const releaseLock = (
+  client: PostgresClient,
+  schema: string,
+): Effect.Effect<void, PostgresOperationError> =>
   query(
     client,
     'releaseMigrationLock',
     'SELECT pg_advisory_unlock(hashtext($1), hashtext($2))',
     lockValues(schema),
-  ).pipe(Effect.asVoid, Effect.ignore);
+  ).pipe(Effect.asVoid);
 
 const migrationRows = Effect.fn('FredPostgres.migrationRows')(function* (
   client: PostgresClient,
@@ -248,14 +254,14 @@ export const makeFredPostgres = Effect.fn('FredPostgres.make')(function* (
     });
   }
 
-  const ownsPool = options.pool === undefined;
-  const pool = options.pool ?? new Pool({ connectionString: options.connectionString });
   const vectorMode = options.vector ?? 'auto';
   if (!VECTOR_MODES.some((mode) => mode === vectorMode)) {
     return yield* new PostgresConfigurationError({
       message: `Invalid pgvector mode: ${String(vectorMode)}`,
     });
   }
+  const ownsPool = options.pool === undefined;
+  const pool = options.pool ?? new Pool({ connectionString: options.connectionString });
   const quotedSchema = quotePostgresIdentifier(schema);
   const ledger = `${quotedSchema}.${quotePostgresIdentifier('schema_migrations')}`;
 
@@ -278,7 +284,7 @@ export const makeFredPostgres = Effect.fn('FredPostgres.make')(function* (
 
   const migrate = (requested: readonly FredPostgresMigration[] = []) =>
     validateMigrations(requested).pipe(
-      Effect.flatMap((migrations) => useClient(pool, (client) =>
+      Effect.flatMap((migrations) => useClient(pool, (client, destroy) =>
         acquireLock(client, schema, lockTimeoutMs).pipe(
           Effect.flatMap(() =>
             Effect.gen(function* () {
@@ -326,10 +332,8 @@ export const makeFredPostgres = Effect.fn('FredPostgres.make')(function* (
                   );
                 }
                 yield* query(client, 'commitMigration', 'COMMIT');
-                const modules = yield* migrationRows(client, ledger);
-                return { schema, pool: ownsPool ? 'owned' as const : 'external' as const, modules, vector };
               });
-              return yield* migration.pipe(
+              yield* migration.pipe(
                 Effect.catchAll((error) =>
                   query(client, 'rollbackMigration', 'ROLLBACK').pipe(
                     Effect.ignore,
@@ -337,9 +341,16 @@ export const makeFredPostgres = Effect.fn('FredPostgres.make')(function* (
                   ),
                 ),
               );
+              const modules = yield* migrationRows(client, ledger);
+              return { schema, pool: ownsPool ? 'owned' as const : 'external' as const, modules, vector };
             }),
           ),
-          Effect.ensuring(releaseLock(client, schema)),
+          Effect.ensuring(
+            releaseLock(client, schema).pipe(
+              Effect.tapError(() => Effect.sync(destroy)),
+              Effect.orDie,
+            ),
+          ),
         ),
       )),
     );

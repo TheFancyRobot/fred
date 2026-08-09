@@ -32,6 +32,49 @@ const canary = 'provider-credential-canary-never-log';
 const credentials = { kind: 'api-key' as const, apiKey: Redacted.make(canary) };
 const key = { id: 'key-1', key: Redacted.make(new Uint8Array(32).fill(7)) };
 
+const rotationRow = async (candidate: ProviderConnection, encryptionKey: typeof key) => {
+  const encrypted = await Effect.runPromise(encryptProviderCredentials({ namespace, connection: candidate, credentials, key: encryptionKey }));
+  return {
+    id: candidate.id,
+    namespace,
+    label: candidate.label,
+    provider_id: candidate.providerId,
+    endpoint: null,
+    protocol: null,
+    auth_kind: candidate.auth.kind,
+    status: candidate.status,
+    credential_version: 1,
+    expires_at: null,
+    created_at: new Date('2026-01-01T00:00:00.000Z'),
+    updated_at: new Date('2026-01-01T00:00:00.000Z'),
+    envelope_version: encrypted.version,
+    algorithm: encrypted.algorithm,
+    key_id: encrypted.keyId,
+    nonce: encrypted.nonce,
+    ciphertext: encrypted.ciphertext,
+  };
+};
+
+interface QueryStep {
+  readonly contains: string;
+  readonly rows?: readonly Record<string, unknown>[];
+  readonly rowCount?: number;
+  readonly assertValues?: (values: unknown[] | undefined) => void;
+}
+
+const scriptedPool = (steps: QueryStep[]): PostgresPool => ({
+  connect: async () => ({
+    query: async (sql, values) => {
+      const step = steps.shift();
+      if (step === undefined) throw new Error(`Unexpected query: ${sql}`);
+      expect(sql).toContain(step.contains);
+      step.assertValues?.(values);
+      return { rows: step.rows ?? [], rowCount: step.rowCount ?? step.rows?.length ?? 0 };
+    },
+    release: () => undefined,
+  }),
+});
+
 describe('provider credential encryption', () => {
   test('uses AES-GCM with fresh nonces and keeps the plaintext out of the envelope', async () => {
     const [first, second] = await Effect.runPromise(Effect.all([
@@ -84,6 +127,107 @@ test('defines explicit schema-qualified metadata and ciphertext migrations', () 
   expect(migration.sql).toContain('ON DELETE CASCADE');
   expect(migration.sql).not.toContain('"public".');
   expect(migration.sql).not.toContain('DEFAULT gen_random_uuid');
+});
+
+test('credential rotation reports malformed and unavailable rows while continuing with later rows', async () => {
+  const missingKey = { id: 'missing', key: Redacted.make(new Uint8Array(32).fill(3)) };
+  const oldKey = { id: 'old', key: Redacted.make(new Uint8Array(32).fill(4)) };
+  const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
+  const laterConnection = { ...connection, id: Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12'), label: 'Later' };
+  const [missingRow, laterRow] = await Promise.all([rotationRow(connection, missingKey), rotationRow(laterConnection, oldKey)]);
+  const rows = [{ ...missingRow, id: 'not-a-uuid' }, missingRow, laterRow];
+  const steps: QueryStep[] = [
+    { contains: 'ORDER BY c.updated_at', rows },
+    { contains: 'BEGIN' },
+    { contains: 'UPDATE "fred"."provider_connections"', rowCount: 1 },
+    { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
+    { contains: 'COMMIT' },
+    { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [{ one: 1 }] },
+  ];
+  const store = makePostgresProviderConnectionStore({
+    pool: scriptedPool(steps),
+    keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
+  });
+
+  const result = await Effect.runPromise(store.rotateCredentials(namespace, 3));
+
+  expect(result.rotated).toBe(1);
+  expect(result.remaining).toBe(true);
+  expect(result.skipped).toHaveLength(2);
+  expect(result.skipped[0]).toMatchObject({ connectionId: 'not-a-uuid', keyId: missingKey.id, error: { _tag: 'ProviderConnectionStorageError' } });
+  expect(result.skipped[1]).toMatchObject({ connectionId: connection.id, keyId: missingKey.id, error: { _tag: 'ProviderCredentialKeyError' } });
+  expect(JSON.stringify(result)).not.toContain(canary);
+  expect(steps).toHaveLength(0);
+});
+
+test('credential save and rotation preserve expiry while compare-and-set can clear it', async () => {
+  const expiry = new Date('2030-01-01T00:00:00.000Z');
+  const oldKey = { id: 'old', key: Redacted.make(new Uint8Array(32).fill(4)) };
+  const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
+  const row = { ...(await rotationRow(connection, oldKey)), expires_at: expiry };
+  const metadataRow = { ...row, credential_version: 2 };
+  const steps: QueryStep[] = [
+    { contains: 'BEGIN' },
+    { contains: 'SELECT credential_version, expires_at', rows: [{ credential_version: 1, expires_at: expiry }] },
+    {
+      contains: 'expires_at = $10',
+      rowCount: 1,
+      assertValues: (values) => expect(values?.[9]).toEqual(expiry),
+    },
+    { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
+    { contains: 'COMMIT' },
+    { contains: 'WHERE namespace = $1 AND id = $2', rows: [metadataRow] },
+    { contains: 'BEGIN' },
+    {
+      contains: 'expires_at = $10',
+      rowCount: 1,
+      assertValues: (values) => expect(values?.[9]).toBeNull(),
+    },
+    { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
+    { contains: 'COMMIT' },
+    { contains: 'ORDER BY c.updated_at', rows: [row] },
+    { contains: 'BEGIN' },
+    {
+      contains: 'expires_at = $10',
+      rowCount: 1,
+      assertValues: (values) => expect(values?.[9]).toEqual(expiry),
+    },
+    { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
+    { contains: 'COMMIT' },
+    { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [] },
+  ];
+  const store = makePostgresProviderConnectionStore({
+    pool: scriptedPool(steps),
+    keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
+  });
+
+  await Effect.runPromise(store.save(namespace, connection, credentials));
+  expect(await Effect.runPromise(store.compareAndSetCredentials(namespace, connection.id, credentials, 2))).toBe(true);
+  expect(await Effect.runPromise(store.rotateCredentials(namespace))).toMatchObject({ rotated: 1, remaining: false });
+  expect(steps).toHaveLength(0);
+});
+
+test('credential rotation checks remaining rows after an optimistic-version race', async () => {
+  const oldKey = { id: 'old', key: Redacted.make(new Uint8Array(32).fill(4)) };
+  const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
+  const row = await rotationRow(connection, oldKey);
+  const steps: QueryStep[] = [
+    { contains: 'ORDER BY c.updated_at', rows: [row] },
+    { contains: 'BEGIN' },
+    { contains: 'UPDATE "fred"."provider_connections"', rowCount: 0 },
+    { contains: 'ROLLBACK' },
+    { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [{ one: 1 }] },
+  ];
+  const store = makePostgresProviderConnectionStore({
+    pool: scriptedPool(steps),
+    keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
+  });
+
+  const result = await Effect.runPromise(store.rotateCredentials(namespace));
+
+  expect(result).toMatchObject({ rotated: 0, remaining: true });
+  expect(result.skipped[0]?.error._tag).toBe('ProviderCredentialVersionConflictError');
+  expect(steps).toHaveLength(0);
 });
 
 test('closes a connectionString store with the pg Pool receiver intact', async () => {

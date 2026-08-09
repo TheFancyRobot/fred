@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
 import { decodeProviderConnectionId, type ProviderConnection } from '@fancyrobot/fred';
 import {
+  createLoopbackCallback,
   handleProviderCommand,
+  openBrowser,
   type ProviderCommandDependencies,
   type ProviderConnectionCommandStore,
   type ProviderConnectionRecord,
@@ -51,6 +53,35 @@ const createStore = (records: ProviderConnectionRecord[] = []) => {
 };
 
 describe('provider command', () => {
+  test('continues OAuth login when the OS browser opener is unavailable or exits unsuccessfully', async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Reflect.set(Bun, 'spawn', () => { throw new Error('missing opener'); });
+      await expect(openBrowser('https://example.com/authorize')).resolves.toBeUndefined();
+
+      Reflect.set(Bun, 'spawn', () => ({ exited: Promise.resolve(1) }));
+      await expect(openBrowser('https://example.com/authorize')).resolves.toBeUndefined();
+    } finally {
+      Reflect.set(Bun, 'spawn', originalSpawn);
+    }
+  });
+
+  test('accepts loopback OAuth callbacks only on the advertised path', async () => {
+    const loopback = await createLoopbackCallback();
+    try {
+      const callback = loopback.wait(500);
+      const unexpected = await fetch(new URL('/unexpected?code=wrong', loopback.callbackUrl));
+      expect(unexpected.status).toBe(404);
+
+      const expectedUrl = `${loopback.callbackUrl}?code=right`;
+      const expected = await fetch(expectedUrl);
+      expect(expected.status).toBe(200);
+      expect(await callback).toBe(expectedUrl);
+    } finally {
+      loopback.close();
+    }
+  });
+
   test('tests an API-key draft before saving without serializing its secret', async () => {
     const output = capture();
     const fixture = createStore();
@@ -167,6 +198,29 @@ describe('provider command', () => {
 
     expect(exitCode).toBe(0);
     expect(fixture.saved[0]?.connection.auth).toEqual({ kind: 'api-key' });
+    expect(fixture.saved[0]?.credentials.kind).toBe('api-key');
     expect(JSON.stringify(output)).not.toContain('openrouter-key-canary');
+  });
+
+  test('rejects OAuth login results that do not match the declared authentication kind', async () => {
+    const output = capture();
+    const fixture = createStore();
+    const exitCode = await handleProviderCommand(['login', 'openrouter', 'team'], { json: true }, {
+      ...fixture.deps(output.io),
+      login: async () => ({
+        credentials: {
+          kind: 'oauth2-bearer',
+          accessToken: Redacted.make('mismatched-access-token-canary'),
+        },
+      }),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(fixture.saved).toHaveLength(0);
+    expect(JSON.parse(output.stdout[0] ?? '{}').error).toEqual({
+      code: 'internal',
+      message: 'Provider "openrouter" login returned oauth2-bearer credentials but the connection requires api-key.',
+    });
+    expect(JSON.stringify(output)).not.toContain('mismatched-access-token-canary');
   });
 });

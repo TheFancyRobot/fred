@@ -205,6 +205,48 @@ describe('createFred client', () => {
     }
   });
 
+  it('leaves caller-owned checkpoint storage open on shutdown', async () => {
+    const checkpointStorage = new SqliteCheckpointStorage({ path: ':memory:' });
+    const checkpointClose = spyOn(checkpointStorage, 'close');
+
+    try {
+      const client = await createFred({ checkpointStorage });
+      await client.shutdown();
+
+      expect(checkpointClose).not.toHaveBeenCalled();
+      expect(await checkpointStorage.getLatest('caller-owned')).toBeNull();
+    } finally {
+      checkpointClose.mockRestore();
+      await checkpointStorage.close().catch(() => undefined);
+    }
+  });
+
+  it('closes client-owned checkpoint storage on shutdown', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fred-client-owned-checkpoint-'));
+    const configPath = join(directory, 'fred.config.json');
+    const databasePath = join(directory, 'fred.db');
+    const previousDatabasePath = process.env.FRED_SQLITE_PATH;
+    process.env.FRED_SQLITE_PATH = databasePath;
+    writeFileSync(configPath, JSON.stringify({ persistence: { adapter: 'sqlite' } }));
+
+    try {
+      const client = await createFred({ configPath });
+      const checkpointStorage = await client.effects.run(
+        Effect.flatMap(CheckpointService, (service) => service.getStorage()),
+      );
+      const checkpointClose = spyOn(checkpointStorage, 'close');
+
+      await client.shutdown();
+
+      expect(checkpointClose).toHaveBeenCalledTimes(1);
+      checkpointClose.mockRestore();
+    } finally {
+      if (previousDatabasePath === undefined) delete process.env.FRED_SQLITE_PATH;
+      else process.env.FRED_SQLITE_PATH = previousDatabasePath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('exposes service-backed message, tool, hook, template, and variable capabilities', async () => {
     const client = track(await createFred());
     await client.tools.register({

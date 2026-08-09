@@ -372,7 +372,10 @@ export const AgentConfigSchema = Schema.Struct(
     systemMessage: Schema.optional(AgentPromptSchema),
   },
   passthrough,
-);
+).pipe(Schema.filter(
+  (config) => (config.connectionId === undefined) === (config.connectionNamespace === undefined),
+  { message: () => 'connectionId and connectionNamespace must be configured together' },
+));
 
 export const RoutingConfigSchema = Schema.Struct(
   {

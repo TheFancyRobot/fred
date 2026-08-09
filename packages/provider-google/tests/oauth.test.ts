@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
 import {
   createGoogleOAuthAuthorization,
@@ -57,6 +57,7 @@ test('Google OAuth creates a loopback S256 request and exchanges a state-bound c
   expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
   expect(url.searchParams.get('response_type')).toBe('code');
   expect(url.searchParams.get('access_type')).toBe('offline');
+  expect(url.searchParams.get('prompt')).toBe('consent');
   expect(url.searchParams.get('state')).toBe(state);
   expect(url.searchParams.get('code_challenge')).toBe(challenge);
   expect(url.searchParams.get('code_challenge_method')).toBe('S256');
@@ -79,6 +80,42 @@ test('Google OAuth creates a loopback S256 request and exchanges a state-bound c
   expect(requests).toHaveLength(1);
 });
 
+test('Google default token requests are bounded and timeout failures stay sanitized', async () => {
+  const signal = new AbortController().signal;
+  const timeout = spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+    expect(milliseconds).toBe(30_000);
+    return signal;
+  });
+  const fetch = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    expect(init?.signal).toBe(signal);
+    throw new DOMException('google-timeout-code-canary', 'TimeoutError');
+  });
+
+  try {
+    const authorization = await Effect.runPromise(createGoogleOAuthAuthorization({
+      clientId: 'google-client-id',
+      redirectUri: 'http://127.0.0.1:43123/callback',
+      scopes: ['scope:one'],
+    }, {
+      now: () => now,
+      randomBytes: (length) => new Uint8Array(length).fill(length === 32 ? 1 : 2),
+      sha256: async () => new Uint8Array(32).fill(3),
+    }));
+    const failure = await Effect.runPromise(Effect.either(authorization.complete(
+      `http://127.0.0.1:43123/callback?code=google-timeout-code-canary&state=${state}`,
+    )));
+
+    expect(failure).toMatchObject({
+      _tag: 'Left',
+      left: { _tag: 'GoogleOAuthTokenError', operation: 'exchange' },
+    });
+    expect(JSON.stringify(failure)).not.toContain('google-timeout-code-canary');
+  } finally {
+    fetch.mockRestore();
+    timeout.mockRestore();
+  }
+});
+
 test('Google OAuth rejects state tampering without sending a token request', async () => {
   let requests = 0;
   const authorization = await Effect.runPromise(createGoogleOAuthAuthorization({
@@ -95,6 +132,36 @@ test('Google OAuth rejects state tampering without sending a token request', asy
   )));
   expect(result).toMatchObject({ _tag: 'Left', left: { reason: 'state-mismatch' } });
   expect(requests).toBe(0);
+});
+
+test('Google OAuth completes a valid authorization only once under concurrency', async () => {
+  let requests = 0;
+  const authorization = await Effect.runPromise(createGoogleOAuthAuthorization({
+    clientId: 'google-client-id',
+    redirectUri: 'http://127.0.0.1:43123/callback',
+    scopes: ['scope:one'],
+  }, runtime(async () => {
+    requests += 1;
+    return {
+      status: 200,
+      json: async () => ({
+        access_token: 'google-access-token',
+        refresh_token: 'google-refresh-token',
+        expires_in: 3_600,
+      }),
+    };
+  })));
+  const callback = `http://127.0.0.1:43123/callback?code=google-code&state=${state}`;
+  const results = await Effect.runPromise(Effect.all([
+    Effect.either(authorization.complete(callback)),
+    Effect.either(authorization.complete(callback)),
+  ], { concurrency: 'unbounded' }));
+
+  expect(requests).toBe(1);
+  expect(results.filter((result) => result._tag === 'Right')).toHaveLength(1);
+  expect(results.filter((result) => result._tag === 'Left')).toEqual([
+    expect.objectContaining({ left: expect.objectContaining({ reason: 'reused' }) }),
+  ]);
 });
 
 test('Google OAuth refresh retains a non-rotated refresh token and redacts rejection details', async () => {
@@ -292,5 +359,76 @@ test('Google invocation preparation reloads the CAS winner and sanitizes missing
     expect(failure._tag).toBe('Left');
     expect(JSON.stringify(failure)).not.toContain('access-token-canary');
     expect(JSON.stringify(failure)).not.toContain('response-token-canary');
+  }
+});
+
+test('Google invocation preparation rejects malformed OAuth registration distinctly', async () => {
+  const connection = savedGoogleConnection('access-token', now);
+  const malformed = await Effect.runPromise(Effect.either(makeGoogleOAuthConnectionPrepare({
+    googleOAuth: { clientId: 42 },
+  }, runtime(async () => ({ status: 500, json: async () => ({}) })))(connection, {
+    reload: () => Effect.succeed(connection),
+    compareAndSetCredentials: () => Effect.succeed(false),
+  })));
+  const missing = await Effect.runPromise(Effect.either(makeGoogleOAuthConnectionPrepare(
+    {},
+    runtime(async () => ({ status: 500, json: async () => ({}) })),
+  )(connection, {
+    reload: () => Effect.succeed(connection),
+    compareAndSetCredentials: () => Effect.succeed(false),
+  })));
+
+  expect(malformed).toMatchObject({
+    _tag: 'Left',
+    left: {
+      _tag: 'GoogleOAuthConfigurationError',
+      message: 'Google OAuth client registration is invalid.',
+    },
+  });
+  expect(missing).toMatchObject({
+    _tag: 'Left',
+    left: {
+      _tag: 'GoogleOAuthConfigurationError',
+      message: 'Google OAuth requires a client id.',
+    },
+  });
+});
+
+test('Google invocation preparation releases completed per-connection coordinators', async () => {
+  let requests = 0;
+  const prepare = makeGoogleOAuthConnectionPrepare({
+    googleOAuth: { clientId: 'google-client-id' },
+  }, runtime(async () => {
+    requests += 1;
+    return {
+      status: 200,
+      json: async () => ({ access_token: `refreshed-access-token-${requests}`, expires_in: 3_600 }),
+    };
+  }));
+  let first = savedGoogleConnection('first-access-token', now);
+  let second = savedGoogleConnection('second-access-token', now);
+  const firstContext = {
+    reload: () => Effect.succeed(first),
+    compareAndSetCredentials: (credentials: typeof first.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
+      first = { ...first, credentials, credentialVersion: expectedVersion + 1, expiresAt };
+      return true;
+    }),
+  };
+  const secondContext = {
+    reload: () => Effect.succeed(second),
+    compareAndSetCredentials: (credentials: typeof second.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
+      second = { ...second, credentials, credentialVersion: expectedVersion + 1, expiresAt };
+      return true;
+    }),
+  };
+
+  await Effect.runPromise(prepare(first, firstContext));
+  await Effect.runPromise(prepare(second, secondContext));
+
+  expect(requests).toBe(2);
+  expect(first.credentialVersion).toBe(2);
+  expect(second.credentialVersion).toBe(2);
+  if (second.credentials.kind === 'oauth2-bearer') {
+    expect(Redacted.value(second.credentials.accessToken)).toBe('refreshed-access-token-2');
   }
 });

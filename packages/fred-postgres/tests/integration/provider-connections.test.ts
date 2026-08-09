@@ -31,8 +31,10 @@ const connection = (label: string): ProviderConnection => ({
 });
 
 integration('persists encrypted provider credentials with optimistic rotation and transactional deletion', async () => {
+  const databaseSchema = schema();
   const pool = new Pool({ connectionString });
-  const database = await Effect.runPromise(makeFredPostgres({ pool, schema: schema() }));
+  try {
+  const database = await Effect.runPromise(makeFredPostgres({ pool, schema: databaseSchema }));
   await Effect.runPromise(migrateFredPostgresProviderConnections(database));
 
   const oldKey = key('old', 1);
@@ -64,7 +66,6 @@ integration('persists encrypted provider credentials with optimistic rotation an
     `"${(await Effect.runPromise(database.diagnostics)).schema}"."provider_credentials"`);
   expect(JSON.stringify(raw.rows)).not.toContain(canary);
 
-  const databaseSchema = (await Effect.runPromise(database.diagnostics)).schema;
   const credentialState = () => pool.query(
     `SELECT encode(k.ciphertext, 'hex') AS ciphertext, k.credential_version, c.credential_version AS metadata_version
      FROM "${databaseSchema}"."provider_credentials" k
@@ -116,6 +117,14 @@ integration('persists encrypted provider credentials with optimistic rotation an
     expect(Option.isSome(refreshedMetadata)).toBe(true);
     if (Option.isSome(refreshedMetadata)) {
       expect(refreshedMetadata.value.expiresAt?.toISOString()).toBe(refreshedExpiry.toISOString());
+      expect(await Effect.runPromise(store.compareAndSetCredentials(
+        namespace, first.id,
+        { kind: 'api-key', apiKey: Redacted.make('non-expiring-secret') },
+        refreshedMetadata.value.credentialVersion,
+      ))).toBe(true);
+      const nonExpiringMetadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
+      expect(Option.isSome(nonExpiringMetadata)).toBe(true);
+      if (Option.isSome(nonExpiringMetadata)) expect(nonExpiringMetadata.value.expiresAt).toBeUndefined();
     }
     expect(await Effect.runPromise(store.compareAndSetCredentials(
       namespace, first.id,
@@ -134,6 +143,68 @@ integration('persists encrypted provider credentials with optimistic rotation an
   expect(await Effect.runPromise(rotating.remove(namespace, first.id))).toBe(true);
   expect(Option.isNone(await Effect.runPromise(rotating.get(namespace, first.id)))).toBe(true);
   expect((await Effect.runPromise(rotating.list(otherNamespace))).map(({ id }) => id)).toEqual([other.id]);
+  } finally {
+    try {
+      await pool.query(`DROP SCHEMA IF EXISTS "${databaseSchema}" CASCADE`);
+    } finally {
+      await pool.end();
+    }
+  }
+});
 
-  await Effect.runPromise(database.close);
+integration('isolates skipped credential rows and completes after the historic key is restored', async () => {
+  const databaseSchema = schema();
+  const pool = new Pool({ connectionString });
+  try {
+    const database = await Effect.runPromise(makeFredPostgres({ pool, schema: databaseSchema }));
+    await Effect.runPromise(migrateFredPostgresProviderConnections(database));
+    const missingKey = key('missing', 3);
+    const oldKey = key('old', 4);
+    const currentKey = key('current', 5);
+    const blocked = connection('Blocked');
+    const candidate = connection('Candidate');
+
+    await Effect.runPromise(makePostgresProviderConnectionStore({
+      pool,
+      schema: databaseSchema,
+      keyRing: makeProviderCredentialKeyRing([missingKey], missingKey.id),
+    }).put(namespace, { connection: blocked, credentials: { kind: 'api-key', apiKey: Redacted.make('blocked-secret') } }));
+    await Effect.runPromise(makePostgresProviderConnectionStore({
+      pool,
+      schema: databaseSchema,
+      keyRing: makeProviderCredentialKeyRing([oldKey], oldKey.id),
+    }).put(namespace, { connection: candidate, credentials: { kind: 'api-key', apiKey: Redacted.make('candidate-secret') } }));
+
+    const rotating = makePostgresProviderConnectionStore({
+      pool,
+      schema: databaseSchema,
+      keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
+    });
+    const partial = await Effect.runPromise(rotating.rotateCredentials(namespace));
+    expect(partial.rotated).toBe(1);
+    expect(partial.remaining).toBe(true);
+    expect(partial.skipped).toHaveLength(1);
+    expect(partial.skipped[0]).toMatchObject({
+      connectionId: blocked.id,
+      keyId: missingKey.id,
+      error: { _tag: 'ProviderCredentialKeyError' },
+    });
+
+    const recovered = makePostgresProviderConnectionStore({
+      pool,
+      schema: databaseSchema,
+      keyRing: makeProviderCredentialKeyRing([missingKey, currentKey], currentKey.id),
+    });
+    expect(await Effect.runPromise(recovered.rotateCredentials(namespace))).toMatchObject({
+      rotated: 1,
+      skipped: [],
+      remaining: false,
+    });
+  } finally {
+    try {
+      await pool.query(`DROP SCHEMA IF EXISTS "${databaseSchema}" CASCADE`);
+    } finally {
+      await pool.end();
+    }
+  }
 });

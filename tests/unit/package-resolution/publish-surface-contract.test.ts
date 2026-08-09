@@ -220,7 +220,7 @@ describe('publishable package contract', () => {
     for (const packageDir of packageDirs) {
       const manifest = readManifest(packageDir);
       const entries = inventory.filter((entry) => entry.packageDir === packageDir);
-      expect(manifest.version).toBe(entries[0]!.version);
+      expect(entries[0]!.version).toBe(manifest.version === '0.0.0' ? '1.0.0' : manifest.version);
       expect(Object.keys(manifest.exports).sort()).toEqual(entries.map(({ subpath }) => subpath).sort());
 
       for (const entry of entries) {

@@ -187,7 +187,7 @@
         "@fancyrobot/fred-minimax": "^2.0.0",
         "@fancyrobot/fred-openai": "^4.0.0",
         "@fancyrobot/fred-openrouter": "^5.0.0",
-        "@fancyrobot/fred-postgres": "^1.0.0",
+        "@fancyrobot/fred-postgres": "^0.0.0",
         "@opentui/core": "^0.1.92",
         "semver": "^7.7.4",
       },
@@ -269,7 +269,7 @@
       "name": "@fancyrobot/fred-http",
       "version": "1.0.0",
       "dependencies": {
-        "@fancyrobot/fred-postgres": "^1.0.0",
+        "@fancyrobot/fred-postgres": "^0.0.0",
       },
       "devDependencies": {
         "@effect/platform": "^0.96.2",
@@ -286,7 +286,7 @@
     },
     "packages/fred-postgres": {
       "name": "@fancyrobot/fred-postgres",
-      "version": "1.0.0",
+      "version": "0.0.0",
       "dependencies": {
         "pg": "^8.22.0",
       },

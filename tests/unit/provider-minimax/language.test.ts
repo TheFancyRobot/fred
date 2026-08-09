@@ -78,6 +78,23 @@ describe('MiniMax Language Capability', () => {
       }
     });
 
+    test('throws MiniMaxMissingApiKeyError when API key is blank', async () => {
+      const originalEnv = process.env.MINIMAX_API_KEY;
+      process.env.MINIMAX_API_KEY = '   ';
+
+      try {
+        await expect(MiniMaxProviderFactory.load({})).rejects.toBeInstanceOf(
+          MiniMaxMissingApiKeyError
+        );
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.MINIMAX_API_KEY;
+        } else {
+          process.env.MINIMAX_API_KEY = originalEnv;
+        }
+      }
+    });
+
     test('respects custom apiKeyEnvVar', async () => {
       const originalEnv = process.env.CUSTOM_MINIMAX_KEY;
       process.env.CUSTOM_MINIMAX_KEY = 'custom-minimax-key';

@@ -9,7 +9,9 @@ The database stores a key identifier, never key material.
 
 - Supply a 32-byte key from a secret manager or KMS; configure a stable key ID.
 - Keep old and new key IDs in the key ring during rotation.
-- Rotate in bounded batches and retry optimistic-version conflicts.
+- Rotate in bounded batches and inspect every returned `skipped` diagnostic.
+  A skipped row does not block other rows in the batch; `remaining` is true
+  until PostgreSQL confirms that no envelope still uses an older key.
 - Treat credential backups, database dumps, and logs as sensitive even though
   credentials are encrypted or redacted.
 - Do not put `FRED_PROVIDER_CREDENTIAL_KEY`, provider API keys, OAuth tokens,
@@ -33,5 +35,5 @@ mapping rather than rendering foreign provider errors directly.
    only from a verified backup when database integrity is in doubt.
 
 An interrupted save or rotation is safe to retry. A missing historic key is
-not safe to ignore: restore that key before attempting to read or rotate the
-affected envelopes.
+reported without exposing credential material and is not safe to ignore:
+restore that key, then retry until `skipped` is empty and `remaining` is false.

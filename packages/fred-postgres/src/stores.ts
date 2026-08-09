@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Effect } from 'effect';
 import { Pool } from 'pg';
 import type {
@@ -39,12 +40,12 @@ export interface PostgresStoreOptions {
   readonly schema?: string;
 }
 
-const resolvePool = (options: PostgresStoreOptions, name: string): PostgresStorePool => {
+const resolvePool = (options: PostgresStoreOptions, name: string): readonly [PostgresStorePool, boolean] => {
   if (options.pool !== undefined && options.connectionString !== undefined) {
     throw new Error(`${name} accepts either connectionString or pool, not both`);
   }
-  if (options.pool !== undefined) return options.pool;
-  if (options.connectionString !== undefined) return new Pool({ connectionString: options.connectionString });
+  if (options.pool !== undefined) return [options.pool, false];
+  if (options.connectionString !== undefined) return [new Pool({ connectionString: options.connectionString }), true];
   throw new Error(`${name} requires either connectionString or pool`);
 };
 
@@ -119,9 +120,9 @@ export const fredPostgresStoreMigrations = (
   const apiKeys = fredPostgresTable(schema, 'fred_api_keys');
   const rateLimits = fredPostgresTable(schema, 'fred_rate_limit_buckets');
   const legacyImports = fredPostgresTable(schema, 'legacy_imports');
-  return [
+  const migrations = [
     {
-      module: 'context', version: 1, checksum: 'fred-context-v1', sql: `
+      module: 'context', version: 1, sql: `
 CREATE TABLE ${conversations} (id TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), metadata JSONB NOT NULL DEFAULT '{}'::jsonb);
 CREATE INDEX idx_conversations_created_at ON ${conversations} (created_at);
 CREATE INDEX idx_conversations_updated_at ON ${conversations} (updated_at);
@@ -129,7 +130,7 @@ CREATE TABLE ${messages} (conversation_id TEXT NOT NULL REFERENCES ${conversatio
 CREATE INDEX idx_messages_conversation_id ON ${messages} (conversation_id);`,
     },
     {
-      module: 'checkpoints', version: 1, checksum: 'fred-checkpoints-v1', sql: `
+      module: 'checkpoints', version: 1, sql: `
 CREATE TABLE ${checkpoints} (run_id TEXT NOT NULL, pipeline_id TEXT NOT NULL, step INTEGER NOT NULL, status TEXT NOT NULL, context JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ, step_name TEXT, pause_metadata JSONB, PRIMARY KEY (run_id, step));
 CREATE INDEX idx_checkpoints_run_id ON ${checkpoints} (run_id);
 CREATE INDEX idx_checkpoints_pipeline_id ON ${checkpoints} (pipeline_id);
@@ -137,19 +138,26 @@ CREATE INDEX idx_checkpoints_status ON ${checkpoints} (status);
 CREATE INDEX idx_checkpoints_expires_at ON ${checkpoints} (expires_at) WHERE expires_at IS NOT NULL;`,
     },
     {
-      module: 'http-api-keys', version: 1, checksum: 'fred-http-api-keys-v1', sql: `
+      module: 'http-api-keys', version: 1, sql: `
 CREATE TABLE ${apiKeys} (id TEXT PRIMARY KEY, hash TEXT NOT NULL, scopes JSONB NOT NULL, rate_limit JSONB, revoked BOOLEAN NOT NULL DEFAULT FALSE, verifier_id TEXT, verifier_version INTEGER, verifier_metadata JSONB, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL);`,
     },
     {
-      module: 'http-rate-limits', version: 1, checksum: 'fred-http-rate-limits-v1', sql: `
+      module: 'http-rate-limits', version: 1, sql: `
 CREATE TABLE ${rateLimits} (bucket_key TEXT PRIMARY KEY, window_start BIGINT NOT NULL, request_count INTEGER NOT NULL, expires_at BIGINT NOT NULL, decision_id TEXT);
 CREATE INDEX idx_fred_rate_limit_buckets_expires_at ON ${rateLimits} (expires_at);`,
     },
     {
-      module: 'legacy-imports', version: 1, checksum: 'fred-legacy-imports-v1', sql: `
+      module: 'legacy-imports', version: 1, sql: `
 CREATE TABLE ${legacyImports} (source_table TEXT PRIMARY KEY, source_count BIGINT NOT NULL, source_checksum TEXT NOT NULL, destination_count BIGINT NOT NULL, destination_checksum TEXT NOT NULL, imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`,
     },
   ];
+  const schemaPrefix = `${quotePostgresIdentifier(schema)}.`;
+  return migrations.map((migration) => ({
+    ...migration,
+    checksum: createHash('sha256')
+      .update(`${migration.module}\0${migration.version}\0${migration.sql.replaceAll(schemaPrefix, '"$schema".')}`)
+      .digest('hex'),
+  }));
 };
 
 /** Apply the complete adapter schema before constructing a Postgres store. */
@@ -180,14 +188,15 @@ const legacyTables = (schema: string): ReadonlyArray<{
   readonly module: LegacyStoreModule;
   readonly name: string;
   readonly columns: readonly string[];
+  readonly primaryKey: readonly string[];
   readonly source: string;
   readonly destination: string;
 }> => [
-  { module: 'context', name: 'conversations', columns: ['id', 'created_at', 'updated_at', 'metadata'], source: fredPostgresTable('public', 'conversations'), destination: fredPostgresTable(schema, 'conversations') },
-  { module: 'context', name: 'messages', columns: ['conversation_id', 'sequence', 'payload', 'created_at'], source: fredPostgresTable('public', 'messages'), destination: fredPostgresTable(schema, 'messages') },
-  { module: 'checkpoints', name: 'checkpoints', columns: ['run_id', 'pipeline_id', 'step', 'status', 'context', 'created_at', 'updated_at', 'expires_at', 'step_name', 'pause_metadata'], source: fredPostgresTable('public', 'checkpoints'), destination: fredPostgresTable(schema, 'checkpoints') },
-  { module: 'http-api-keys', name: 'fred_api_keys', columns: ['id', 'hash', 'scopes', 'rate_limit', 'revoked', 'verifier_id', 'verifier_version', 'verifier_metadata', 'expires_at', 'created_at'], source: fredPostgresTable('public', 'fred_api_keys'), destination: fredPostgresTable(schema, 'fred_api_keys') },
-  { module: 'http-rate-limits', name: 'fred_rate_limit_buckets', columns: ['bucket_key', 'window_start', 'request_count', 'expires_at', 'decision_id'], source: fredPostgresTable('public', 'fred_rate_limit_buckets'), destination: fredPostgresTable(schema, 'fred_rate_limit_buckets') },
+  { module: 'context', name: 'conversations', columns: ['id', 'created_at', 'updated_at', 'metadata'], primaryKey: ['id'], source: fredPostgresTable('public', 'conversations'), destination: fredPostgresTable(schema, 'conversations') },
+  { module: 'context', name: 'messages', columns: ['conversation_id', 'sequence', 'payload', 'created_at'], primaryKey: ['conversation_id', 'sequence'], source: fredPostgresTable('public', 'messages'), destination: fredPostgresTable(schema, 'messages') },
+  { module: 'checkpoints', name: 'checkpoints', columns: ['run_id', 'pipeline_id', 'step', 'status', 'context', 'created_at', 'updated_at', 'expires_at', 'step_name', 'pause_metadata'], primaryKey: ['run_id', 'step'], source: fredPostgresTable('public', 'checkpoints'), destination: fredPostgresTable(schema, 'checkpoints') },
+  { module: 'http-api-keys', name: 'fred_api_keys', columns: ['id', 'hash', 'scopes', 'rate_limit', 'revoked', 'verifier_id', 'verifier_version', 'verifier_metadata', 'expires_at', 'created_at'], primaryKey: ['id'], source: fredPostgresTable('public', 'fred_api_keys'), destination: fredPostgresTable(schema, 'fred_api_keys') },
+  { module: 'http-rate-limits', name: 'fred_rate_limit_buckets', columns: ['bucket_key', 'window_start', 'request_count', 'expires_at', 'decision_id'], primaryKey: ['bucket_key'], source: fredPostgresTable('public', 'fred_rate_limit_buckets'), destination: fredPostgresTable(schema, 'fred_rate_limit_buckets') },
 ];
 
 const importFailure = (operation: string, table: string, cause: unknown) => new LegacyPostgresImportError({
@@ -196,8 +205,14 @@ const importFailure = (operation: string, table: string, cause: unknown) => new 
   message: cause instanceof Error ? cause.message : String(cause),
 });
 
-const summary = async (client: PostgresStoreClient, table: string) => {
-  const result = await client.query(`SELECT COUNT(*)::text AS row_count, md5(COALESCE(string_agg(md5(row_to_json(source_row)::text), '' ORDER BY source_row.ctid), '')) AS checksum FROM ${table} AS source_row`);
+const summary = async (
+  client: PostgresStoreClient,
+  table: ReturnType<typeof legacyTables>[number],
+  relation: string,
+) => {
+  const values = table.columns.map((column) => `source_row.${quotePostgresIdentifier(column)}`).join(', ');
+  const order = table.primaryKey.map((column) => `source_row.${quotePostgresIdentifier(column)}`).join(', ');
+  const result = await client.query(`SELECT COUNT(*)::text AS row_count, md5(COALESCE(string_agg(md5(json_build_array(${values})::text), '' ORDER BY ${order}), '')) AS checksum FROM ${relation} AS source_row`);
   const row = result.rows[0];
   const rowCount = Number(row?.row_count);
   const checksum = row?.checksum;
@@ -228,8 +243,8 @@ export const importLegacyFredPostgresStores = (
         const results: LegacyPostgresStoreImportResult[] = [];
         for (const table of selected) {
           const previous = imported.get(table.name);
-          const source = await summary(client, table.source);
-          const destination = await summary(client, table.destination);
+          const source = await summary(client, table, table.source);
+          const destination = await summary(client, table, table.destination);
           if (previous !== undefined) {
             if (Number(previous.source_count) !== source.rowCount || previous.source_checksum !== source.checksum || Number(previous.destination_count) !== destination.rowCount || previous.destination_checksum !== destination.checksum) {
               throw importFailure('verify', table.name, 'Legacy import ledger no longer matches source or destination');
@@ -263,8 +278,8 @@ export const importLegacyFredPostgresStores = (
         for (const { table } of pending) {
           const quotedColumns = table.columns.map(quotePostgresIdentifier).join(', ');
           await client.query(`INSERT INTO ${table.destination} (${quotedColumns}) SELECT ${quotedColumns} FROM ${table.source}`);
-          const source = await summary(client, table.source);
-          const destination = await summary(client, table.destination);
+          const source = await summary(client, table, table.source);
+          const destination = await summary(client, table, table.destination);
           if (source.rowCount !== destination.rowCount || source.checksum !== destination.checksum) throw importFailure('verify', table.name, 'Copied rows do not match the untouched source');
           await client.query(`INSERT INTO ${ledger} (source_table, source_count, source_checksum, destination_count, destination_checksum) VALUES ($1, $2, $3, $4, $5)`, [table.name, source.rowCount, source.checksum, destination.rowCount, destination.checksum]);
           results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: true, status: 'imported' });
@@ -285,11 +300,12 @@ export const importLegacyFredPostgresStores = (
 
 export class PostgresContextStorage implements ContextStorage {
   private readonly pool: PostgresStorePool;
+  private readonly ownsPool: boolean;
   private readonly conversations: string;
   private readonly messages: string;
 
   constructor(options: PostgresStoreOptions) {
-    this.pool = resolvePool(options, 'PostgresContextStorage');
+    [this.pool, this.ownsPool] = resolvePool(options, 'PostgresContextStorage');
     const schema = options.schema ?? DEFAULT_POSTGRES_SCHEMA;
     this.conversations = fredPostgresTable(schema, 'conversations');
     this.messages = fredPostgresTable(schema, 'messages');
@@ -331,12 +347,12 @@ export class PostgresContextStorage implements ContextStorage {
         [id, createdAt, updatedAt, stringifyJson(metadata)],
       );
       await client.query(`DELETE FROM ${this.messages} WHERE conversation_id = $1`, [id]);
-      for (const [sequence, message] of context.messages.entries()) {
-        await client.query(`INSERT INTO ${this.messages} (conversation_id, sequence, payload, created_at) VALUES ($1, $2, $3::jsonb, NOW())`, [id, sequence, stringifyJson(message)]);
+      if (context.messages.length > 0) {
+        await client.query(`INSERT INTO ${this.messages} (conversation_id, sequence, payload, created_at) SELECT $1, (ordinality - 1)::integer, payload, NOW() FROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS messages(payload, ordinality)`, [id, stringifyJson(context.messages)]);
       }
       await client.query('COMMIT');
     } catch (cause) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw cause;
     } finally {
       client.release();
@@ -370,7 +386,7 @@ export class PostgresContextStorage implements ContextStorage {
       await client.query(`DELETE FROM ${this.conversations} WHERE id = $1`, [id]);
       await client.query('COMMIT');
     } catch (cause) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw cause;
     } finally {
       client.release();
@@ -384,7 +400,7 @@ export class PostgresContextStorage implements ContextStorage {
       await client.query(`DELETE FROM ${this.conversations}`);
       await client.query('COMMIT');
     } catch (cause) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw cause;
     } finally {
       client.release();
@@ -392,7 +408,7 @@ export class PostgresContextStorage implements ContextStorage {
   }
 
   async close(): Promise<void> {
-    await this.pool.end?.();
+    if (this.ownsPool) await this.pool.end?.();
   }
 }
 
@@ -404,10 +420,11 @@ const checkpointStatus = (value: unknown): CheckpointStatus => {
 
 export class PostgresCheckpointStorage implements CheckpointStorage {
   private readonly pool: PostgresStorePool;
+  private readonly ownsPool: boolean;
   private readonly checkpoints: string;
 
   constructor(options: PostgresStoreOptions) {
-    this.pool = resolvePool(options, 'PostgresCheckpointStorage');
+    [this.pool, this.ownsPool] = resolvePool(options, 'PostgresCheckpointStorage');
     this.checkpoints = fredPostgresTable(options.schema ?? DEFAULT_POSTGRES_SCHEMA, 'checkpoints');
   }
 
@@ -458,7 +475,7 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
 
   async deleteRun(runId: string): Promise<void> {
     const client = await this.pool.connect();
-    try { await client.query('BEGIN'); await client.query(`DELETE FROM ${this.checkpoints} WHERE run_id = $1`, [runId]); await client.query('COMMIT'); } catch (cause) { await client.query('ROLLBACK'); throw cause; } finally { client.release(); }
+    try { await client.query('BEGIN'); await client.query(`DELETE FROM ${this.checkpoints} WHERE run_id = $1`, [runId]); await client.query('COMMIT'); } catch (cause) { await client.query('ROLLBACK').catch(() => undefined); throw cause; } finally { client.release(); }
   }
 
   async deleteExpired(): Promise<number> {
@@ -480,5 +497,5 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
     return this.one(`SELECT run_id, pipeline_id, step, status, context, created_at, updated_at, expires_at, step_name, pause_metadata FROM ${this.checkpoints} WHERE pipeline_id = $1 AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY step DESC, created_at DESC LIMIT 1`, [pipelineId], `checkpoint for pipeline ${pipelineId}`);
   }
 
-  async close(): Promise<void> { await this.pool.end?.(); }
+  async close(): Promise<void> { if (this.ownsPool) await this.pool.end?.(); }
 }

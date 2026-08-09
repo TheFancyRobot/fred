@@ -521,6 +521,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const persistence = loadedConfig?.persistence;
   let configuredStorage: SqliteContextStorage | undefined;
   let configuredCheckpointStorage: CheckpointStorage | undefined = options.checkpointStorage;
+  let ownsConfiguredCheckpointStorage = false;
   if (persistence) {
     if (persistence.adapter === 'postgres') {
       if (options.storage === undefined) {
@@ -540,6 +541,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       }
       if (persistence.checkpoint?.enabled !== false) {
         configuredCheckpointStorage = new SqliteCheckpointStorage({ path });
+        ownsConfiguredCheckpointStorage = true;
       }
     }
   }
@@ -562,7 +564,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   if (configuredStorage) {
     ownedClosers.push(async () => { await configuredStorage.close(); });
   }
-  if (configuredCheckpointStorage) {
+  if (ownsConfiguredCheckpointStorage && configuredCheckpointStorage) {
     ownedClosers.push(() => configuredCheckpointStorage.close());
   }
   const closeOwnedResources = async (): Promise<void> => {

@@ -1,6 +1,7 @@
-import { Effect, Redacted } from 'effect';
+import { Effect, Redacted, Schema } from 'effect';
 import {
   LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
+  ProviderConnectionEndpointSchema,
   ProviderConnectionTestError,
   providerConnectionRuntimeProviderId,
   validateProviderConnectionCapability,
@@ -38,7 +39,8 @@ export const providerConnectionProbeUrl = (
   defaultBaseUrl: string,
   path: string,
 ): URL => {
-  const url = new URL(draft.endpoint ?? defaultBaseUrl);
+  const endpoint = Schema.decodeUnknownSync(ProviderConnectionEndpointSchema)(draft.endpoint ?? defaultBaseUrl);
+  const url = new URL(endpoint);
   url.pathname = `${url.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
   return url;
 };

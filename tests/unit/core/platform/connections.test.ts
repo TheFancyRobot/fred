@@ -4,7 +4,9 @@ import {
   BUILTIN_PROVIDER_CONNECTION_CAPABILITIES,
   LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
   LegacyProviderConnectionResolver,
+  InvalidProviderConnectionEndpointError,
   ProviderConnectionCredentialsSchema,
+  ProviderConnectionSchema,
   ProviderConnectionId,
   ProviderConnectionIdentityChangeError,
   ProviderConnectionNotFoundError,
@@ -19,6 +21,7 @@ import {
   makeLegacyProviderConnectionResolver,
   validateProviderConnectionCapability,
 } from '../../../../packages/core/src/platform/connections';
+import { providerConnectionProbeUrl } from '../../../../packages/core/src/platform/connection-test';
 import { AgentConfigSchema } from '../../../../packages/core/src/config/schema';
 import { toAgentConfig, validateAgentFrontmatter } from '../../../../packages/core/src/agent/file-loader';
 import { createFred } from '../../../../packages/core/src';
@@ -68,6 +71,50 @@ describe('provider connection contracts', () => {
       body: 'Prompt',
       filePath: '/tmp/connected-agent.md',
     }).connectionId).toBe(connectionId);
+  });
+
+  test('rejects unpaired connection identity in config', () => {
+    expect(() => Schema.decodeUnknownSync(AgentConfigSchema)({ connectionId })).toThrow(
+      'connectionId and connectionNamespace must be configured together',
+    );
+    expect(() => Schema.decodeUnknownSync(AgentConfigSchema)({ connectionNamespace: namespace })).toThrow(
+      'connectionId and connectionNamespace must be configured together',
+    );
+  });
+
+  test('rejects unsafe provider endpoints before persistence, update, and probe', async () => {
+    const unsafe = { ...connection, endpoint: 'https://user:password@example.com/v1' };
+    expect(() => Schema.decodeUnknownSync(ProviderConnectionSchema)(unsafe)).toThrow(
+      'Provider connection endpoint must use http or https and cannot include userinfo.',
+    );
+    expect(() => providerConnectionProbeUrl(
+      { label: 'local', providerId: 'local-compatible', endpoint: 'file:///tmp/models', protocol: 'openai-compatible', auth: { kind: 'none' } },
+      'https://api.openai.com/v1',
+      '/models',
+    )).toThrow('Provider connection endpoint must use http or https and cannot include userinfo.');
+    expect(providerConnectionProbeUrl(
+      { label: 'local', providerId: 'local-compatible', endpoint: 'http://127.0.0.1:11434/v1', protocol: 'openai-compatible', auth: { kind: 'none' } },
+      'https://api.openai.com/v1',
+      '/models',
+    ).toString()).toBe('http://127.0.0.1:11434/v1/models');
+
+    const result = await Effect.runPromise(Effect.gen(function* () {
+      const service = yield* ProviderConnectionService;
+      const put = yield* Effect.exit(service.put(namespace, unsafe, credentials));
+      const update = yield* Effect.exit(service.updateMetadata(namespace, unsafe));
+      return { put, update, stored: yield* service.get(namespace, connectionId) };
+    }).pipe(Effect.provide(makeInMemoryProviderConnectionLayer([{ namespace, connection, credentials }]))));
+
+    for (const exit of [result.put, result.update]) {
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const error = Cause.failureOption(exit.cause);
+        expect(error._tag).toBe('Some');
+        if (error._tag === 'Some') expect(error.value).toBeInstanceOf(InvalidProviderConnectionEndpointError);
+      }
+    }
+    expect(result.stored._tag).toBe('Some');
+    if (result.stored._tag === 'Some') expect(result.stored.value.endpoint).toBeUndefined();
   });
 
   test('covers hosted and local authentication capabilities', async () => {

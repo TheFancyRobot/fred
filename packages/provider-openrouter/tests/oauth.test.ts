@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { Effect, Redacted } from 'effect';
 import {
   createOpenRouterOAuthAuthorization,
@@ -69,6 +69,39 @@ test('OpenRouter exchanges a state-bound loopback callback for an API key', asyn
     `http://localhost:43123/callback?state=${state}&code=another-code`,
   )));
   expect(replay).toMatchObject({ _tag: 'Left', left: { reason: 'reused' } });
+});
+
+test('OpenRouter default key exchanges are bounded and timeout failures stay sanitized', async () => {
+  const signal = new AbortController().signal;
+  const timeout = spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+    expect(milliseconds).toBe(30_000);
+    return signal;
+  });
+  const fetch = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    expect(init?.signal).toBe(signal);
+    throw new DOMException('openrouter-timeout-code-canary', 'TimeoutError');
+  });
+
+  try {
+    const authorization = await Effect.runPromise(createOpenRouterOAuthAuthorization({}, {
+      now: () => now,
+      randomBytes: (length) => new Uint8Array(length).fill(2),
+      sha256: async () => new Uint8Array(32).fill(3),
+    }));
+    if (authorization.mode !== 'headless') throw new Error('expected headless mode');
+    const failure = await Effect.runPromise(Effect.either(
+      authorization.completeCode('openrouter-timeout-code-canary'),
+    ));
+
+    expect(failure).toMatchObject({
+      _tag: 'Left',
+      left: { _tag: 'OpenRouterOAuthExchangeError' },
+    });
+    expect(JSON.stringify(failure)).not.toContain('openrouter-timeout-code-canary');
+  } finally {
+    fetch.mockRestore();
+    timeout.mockRestore();
+  }
 });
 
 test('OpenRouter rejects callback state tampering before exchange', async () => {

@@ -438,6 +438,12 @@ const executeProviderCommand = (
         try: () => login(draft, options, io),
         catch: (error) => commandError('connectivity', sanitizeErrorForCli(error)),
       });
+      if (result.credentials.kind !== draft.auth.kind) {
+        return yield* commandError(
+          'internal',
+          `Provider "${providerId}" login returned ${result.credentials.kind} credentials but the connection requires ${draft.auth.kind}.`,
+        );
+      }
       const id = yield* decodeProviderConnectionId(crypto.randomUUID()).pipe(
         Effect.mapError((error) => commandError('internal', error.message)),
       );
@@ -537,15 +543,19 @@ async function readSecretFromTerminal(prompt: string, requireStdinFlag: boolean)
   });
 }
 
-async function openBrowser(url: string): Promise<void> {
+export async function openBrowser(url: string): Promise<void> {
   const command = process.platform === 'darwin' ? ['open', url]
     : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url]
       : ['xdg-open', url];
-  const child = Bun.spawn(command, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' });
-  if (await child.exited !== 0) throw new Error('Unable to open a browser.');
+  try {
+    const child = Bun.spawn(command, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' });
+    await child.exited;
+  } catch {
+    // The authorization URL is already printed, so manual navigation remains available.
+  }
 }
 
-async function createLoopbackCallback(): Promise<{
+export async function createLoopbackCallback(): Promise<{
   readonly callbackUrl: string;
   readonly wait: (timeoutMs: number) => Promise<string>;
   readonly close: () => void;
@@ -556,6 +566,7 @@ async function createLoopbackCallback(): Promise<{
     hostname: '127.0.0.1',
     port: 0,
     fetch(request) {
+      if (new URL(request.url).pathname !== '/oauth/callback') return new Response('Not found.', { status: 404 });
       resume?.(request.url);
       return new Response('Provider login complete. You may return to Fred.', { status: 200 });
     },

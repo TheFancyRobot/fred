@@ -128,6 +128,7 @@ const defaultRuntime: GoogleOAuthRuntime = {
       method: request.method,
       headers: request.headers,
       body: request.body,
+      signal: AbortSignal.timeout(30_000),
     });
     return { status: response.status, json: () => response.json() };
   },
@@ -138,10 +139,16 @@ const GoogleOAuthClientRegistrationSchema = Schema.Struct({
   clientSecret: Schema.optional(Schema.Redacted(Schema.String)),
 });
 
-const registrationFrom = (config: ProviderConfig): GoogleOAuthClientRegistration => {
-  const decoded = Schema.decodeUnknownEither(GoogleOAuthClientRegistrationSchema)(config.googleOAuth);
-  return decoded._tag === 'Right' ? decoded.right : { clientId: '' };
-};
+const registrationFrom = (
+  config: ProviderConfig,
+): Effect.Effect<GoogleOAuthClientRegistration, GoogleOAuthConfigurationError> =>
+  config.googleOAuth === undefined
+    ? Effect.succeed({ clientId: '' })
+    : Schema.decodeUnknown(GoogleOAuthClientRegistrationSchema)(config.googleOAuth).pipe(
+      Effect.mapError(() => new GoogleOAuthConfigurationError({
+        message: 'Google OAuth client registration is invalid.',
+      })),
+    );
 
 const runtimeFor = (overrides: Partial<GoogleOAuthRuntime> | undefined): GoogleOAuthRuntime => ({
   ...defaultRuntime,
@@ -367,6 +374,7 @@ export const createGoogleOAuthAuthorization = (
     authorization.searchParams.set('scope', scopes.join(' '));
     authorization.searchParams.set('state', state);
     authorization.searchParams.set('access_type', 'offline');
+    authorization.searchParams.set('prompt', 'consent');
     authorization.searchParams.set('code_challenge', challenge);
     authorization.searchParams.set('code_challenge_method', 'S256');
     const expiresAt = new Date(runtime.now().getTime() + timeoutMs);
@@ -374,7 +382,7 @@ export const createGoogleOAuthAuthorization = (
     return {
       authorizationUrl: authorization.toString(),
       expiresAt,
-      complete: (callbackUrl) => {
+      complete: (callbackUrl) => Effect.suspend(() => {
         if (used) {
           return Effect.fail(new GoogleOAuthCallbackError({
             reason: 'reused',
@@ -403,7 +411,7 @@ export const createGoogleOAuthAuthorization = (
             return requestToken(runtime, 'exchange', body, undefined, scopes);
           }),
         );
-      },
+      }),
     };
   });
 
@@ -484,6 +492,7 @@ export const makeGoogleOAuthConnectionPrepare = (
         message: 'Google OAuth refresh requires a refresh token.',
       });
     }
+    const clientRegistration = yield* registration;
     let coordinator = coordinators.get(resolved.connection.id);
     if (coordinator === undefined) {
       const created = yield* makeGoogleOAuthRefreshCoordinator({
@@ -515,11 +524,15 @@ export const makeGoogleOAuthConnectionPrepare = (
           expectedVersion,
           token.expiresAt,
         ),
-      }, registration, overrides);
+      }, clientRegistration, overrides);
       coordinator = coordinators.get(resolved.connection.id) ?? created;
       coordinators.set(resolved.connection.id, coordinator);
     }
-    yield* coordinator.refresh();
+    yield* coordinator.refresh().pipe(Effect.ensuring(Effect.sync(() => {
+      if (coordinators.get(resolved.connection.id) === coordinator) {
+        coordinators.delete(resolved.connection.id);
+      }
+    })));
     return yield* context.reload();
   });
 };

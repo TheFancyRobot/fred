@@ -48,6 +48,13 @@ describe('AgentFactory streamMessage integration', () => {
     it('resolves a fresh provider runtime for every invocation', async () => {
       const resolved: string[] = [];
       let credentialVersion = 'initial';
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() =>
+        Stream.fromIterable([{
+          type: 'finish',
+          reason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        }] as ReadonlyArray<any>) as any
+      );
       const provider = {
         ...mockProvider,
         resolveRuntime: () => Effect.sync(() => {
@@ -59,19 +66,23 @@ describe('AgentFactory streamMessage integration', () => {
         }),
       };
 
-      await collectStreamEvents(factory, provider, [{
-        type: 'finish',
-        reason: 'stop',
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      }]);
-      credentialVersion = 'rotated';
-      await collectStreamEvents(factory, provider, [{
-        type: 'finish',
-        reason: 'stop',
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      }]);
+      try {
+        const agent = await Effect.runPromise(factory.createAgent({
+          id: 'rotating-credentials-agent',
+          platform: 'openai',
+          model: 'gpt-4',
+          systemMessage: 'You are a test assistant.',
+          maxSteps: 1,
+        }, provider));
 
-      expect(resolved).toEqual(['initial', 'rotated']);
+        await Effect.runPromise(Stream.runDrain(agent.streamMessage('Test', [])) as any);
+        credentialVersion = 'rotated';
+        await Effect.runPromise(Stream.runDrain(agent.streamMessage('Test', [])) as any);
+
+        expect(resolved).toEqual(['initial', 'rotated']);
+      } finally {
+        streamSpy.mockRestore();
+      }
     });
 
     it('emits step-start before each model call', async () => {

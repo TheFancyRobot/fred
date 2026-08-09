@@ -93,6 +93,7 @@ const defaultRuntime: OpenRouterOAuthRuntime = {
       method: request.method,
       headers: request.headers,
       body: request.body,
+      signal: AbortSignal.timeout(30_000),
     });
     return { status: response.status, json: () => response.json() };
   },

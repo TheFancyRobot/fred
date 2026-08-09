@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
 import { Cause, Effect, Exit, Option } from 'effect';
 import {
   fredPostgresStoreMigrations,
   importLegacyFredPostgresStores,
   makeFredPostgres,
+  type FredPostgresOptions,
   type PostgresClient,
   type PostgresPool,
 } from '../../src';
@@ -14,6 +16,9 @@ class FakePool implements PostgresPool {
   vectorInstalled = false;
   denyVectorInstall = false;
   lockAvailable = true;
+  failMigrationRows = false;
+  failUnlock = false;
+  readonly releases: (Error | boolean | undefined)[] = [];
   ended = false;
 
   async connect(): Promise<PostgresClient> {
@@ -29,7 +34,10 @@ class FakePool implements PostgresPool {
           return { rows: [], rowCount: null };
         }
         if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: this.lockAvailable }], rowCount: 1 };
-        if (text.includes('pg_advisory_unlock')) return { rows: [{ unlocked: true }], rowCount: 1 };
+        if (text.includes('pg_advisory_unlock')) {
+          if (this.failUnlock) throw new Error('connection lost while releasing lock');
+          return { rows: [{ unlocked: true }], rowCount: 1 };
+        }
         if (text.startsWith('SELECT checksum')) {
           const key = `${values[0]}:${values[1]}`;
           const checksum = this.ledger.get(key);
@@ -40,6 +48,7 @@ class FakePool implements PostgresPool {
           return { rows: [], rowCount: 1 };
         }
         if (text.startsWith('SELECT module')) {
+          if (this.failMigrationRows) throw new Error('migration diagnostics failed');
           return {
             rows: [...this.ledger.entries()].map(([key, checksum]) => {
               const [module, version] = key.split(':');
@@ -51,7 +60,7 @@ class FakePool implements PostgresPool {
         if (text.includes('pg_catalog.pg_tables')) return { rows: [{ exists: this.ledger.size > 0 }], rowCount: 1 };
         return { rows: [], rowCount: null };
       },
-      release: () => undefined,
+      release: (error) => { this.releases.push(error); },
     };
   }
 
@@ -64,6 +73,14 @@ class LegacyImportPool implements PostgresPool {
   readonly queries: string[] = [];
   private readonly copied = new Set<string>();
   private readonly ledger = new Map<string, { count: number; checksum: string }>();
+
+  private readonly columns: Readonly<Record<string, readonly string[]>> = {
+    conversations: ['id', 'created_at', 'updated_at', 'metadata'],
+    messages: ['conversation_id', 'sequence', 'payload', 'created_at'],
+    checkpoints: ['run_id', 'pipeline_id', 'step', 'status', 'context', 'created_at', 'updated_at', 'expires_at', 'step_name', 'pause_metadata'],
+    fred_api_keys: ['id', 'hash', 'scopes', 'rate_limit', 'revoked', 'verifier_id', 'verifier_version', 'verifier_metadata', 'expires_at', 'created_at'],
+    fred_rate_limit_buckets: ['bucket_key', 'window_start', 'request_count', 'expires_at', 'decision_id'],
+  };
 
   async connect(): Promise<PostgresClient> {
     return {
@@ -82,17 +99,14 @@ class LegacyImportPool implements PostgresPool {
           };
         }
         if (text.startsWith('SELECT COUNT')) {
-          const table = text.includes('conversations') ? 'conversations' : 'messages';
+          const table = Object.keys(this.columns).find((name) => text.includes(`"${name}"`)) ?? 'messages';
           const isSource = text.includes('"public".');
           const present = isSource || this.copied.has(table);
           return { rows: [{ row_count: present ? '1' : '0', checksum: present ? `${table}-checksum` : 'empty' }], rowCount: 1 };
         }
         if (text.includes('information_schema.columns')) {
-          const table = values[1];
-          const columns = table === 'conversations'
-            ? ['id', 'created_at', 'updated_at', 'metadata']
-            : ['conversation_id', 'sequence', 'payload', 'created_at'];
-          return { rows: columns.sort().map((column_name) => ({ column_name })), rowCount: columns.length };
+          const columns = this.columns[String(values[1])] ?? [];
+          return { rows: [...columns].sort().map((column_name) => ({ column_name })), rowCount: columns.length };
         }
         if (text.startsWith('INSERT INTO "fred"."legacy_imports"')) {
           const [source_table, count, checksum] = values;
@@ -100,7 +114,8 @@ class LegacyImportPool implements PostgresPool {
           return { rows: [], rowCount: 1 };
         }
         if (text.startsWith('INSERT INTO "fred".')) {
-          this.copied.add(text.includes('conversations') ? 'conversations' : 'messages');
+          const table = Object.keys(this.columns).find((name) => text.includes(`"${name}"`));
+          if (table !== undefined) this.copied.add(table);
           return { rows: [], rowCount: 1 };
         }
         return { rows: [], rowCount: null };
@@ -119,9 +134,29 @@ test('construction and invalid schema perform no queries', async () => {
   expect(pool.queries).toEqual([]);
 });
 
+test('rejects an invalid vector mode before constructing an owned pool', async () => {
+  let connectionStringReads = 0;
+  const options = new Proxy<FredPostgresOptions>(
+    { connectionString: 'postgres://localhost/fred', vector: 'auto' },
+    {
+      get: (target, property, receiver) => {
+        if (property === 'connectionString') connectionStringReads += 1;
+        if (property === 'vector') return 'invalid';
+        return Reflect.get(target, property, receiver);
+      },
+    },
+  );
+
+  const exit = await Effect.runPromiseExit(makeFredPostgres(options));
+
+  expect(Exit.isFailure(exit)).toBe(true);
+  expect(connectionStringReads).toBe(1);
+});
+
 describe('Fred Postgres migrations', () => {
   test('defines all store DDL under the requested schema', () => {
     const migrations = fredPostgresStoreMigrations('fred_test');
+    const otherSchemaMigrations = fredPostgresStoreMigrations('another_schema');
     expect(migrations.map((migration) => migration.module)).toEqual([
       'context',
       'checkpoints',
@@ -129,9 +164,15 @@ describe('Fred Postgres migrations', () => {
       'http-rate-limits',
       'legacy-imports',
     ]);
+    expect(otherSchemaMigrations.map((migration) => migration.checksum)).toEqual(
+      migrations.map((migration) => migration.checksum),
+    );
     for (const migration of migrations) {
       expect(migration.sql).toContain('"fred_test".');
       expect(migration.sql).not.toContain('"public".');
+      const identity = `${migration.module}\0${migration.version}\0${migration.sql.replaceAll('"fred_test".', '"$schema".')}`;
+      expect(migration.checksum).toBe(createHash('sha256').update(identity).digest('hex'));
+      expect(migration.checksum).not.toBe(createHash('sha256').update(`${identity}\nSELECT 1;`).digest('hex'));
     }
   });
 
@@ -153,6 +194,28 @@ describe('Fred Postgres migrations', () => {
     expect(pool.queries.findIndex((query) => query === 'BEGIN')).toBeGreaterThan(
       pool.queries.findIndex((query) => query.includes('information_schema.columns')),
     );
+  });
+
+  test('summarizes every legacy table by declared columns and primary key', async () => {
+    const pool = new LegacyImportPool();
+    await Effect.runPromise(importLegacyFredPostgresStores({ pool, dryRun: true }));
+
+    const expected = [
+      ['conversations', ['id', 'created_at', 'updated_at', 'metadata'], ['id']],
+      ['messages', ['conversation_id', 'sequence', 'payload', 'created_at'], ['conversation_id', 'sequence']],
+      ['checkpoints', ['run_id', 'pipeline_id', 'step', 'status', 'context', 'created_at', 'updated_at', 'expires_at', 'step_name', 'pause_metadata'], ['run_id', 'step']],
+      ['fred_api_keys', ['id', 'hash', 'scopes', 'rate_limit', 'revoked', 'verifier_id', 'verifier_version', 'verifier_metadata', 'expires_at', 'created_at'], ['id']],
+      ['fred_rate_limit_buckets', ['bucket_key', 'window_start', 'request_count', 'expires_at', 'decision_id'], ['bucket_key']],
+    ] as const;
+    const summaries = pool.queries.filter((query) => query.startsWith('SELECT COUNT'));
+
+    expect(summaries).toHaveLength(expected.length * 2);
+    expect(summaries.every((query) => !query.includes('row_to_json') && !query.includes('ctid'))).toBe(true);
+    for (const [table, columns, primaryKey] of expected) {
+      const query = summaries.find((candidate) => candidate.includes(`"public"."${table}"`)) ?? '';
+      expect(query).toContain(`json_build_array(${columns.map((column) => `source_row."${column}"`).join(', ')})`);
+      expect(query).toContain(`ORDER BY ${primaryKey.map((column) => `source_row."${column}"`).join(', ')}`);
+    }
   });
 
   test('runs explicit migrations once and leaves caller-owned pools open', async () => {
@@ -219,5 +282,30 @@ describe('Fred Postgres migrations', () => {
     const timeout = await Effect.runPromiseExit(locked.migrate());
     expect(Exit.isFailure(timeout)).toBe(true);
     expect(lockedPool.queries).not.toContain('BEGIN');
+  });
+
+  test('does not roll back committed migrations when diagnostics fail', async () => {
+    const pool = new FakePool();
+    pool.failMigrationRows = true;
+    const database = await Effect.runPromise(makeFredPostgres({ pool }));
+
+    const exit = await Effect.runPromiseExit(database.migrate([
+      { module: 'connections', version: 1, checksum: 'abc', sql: 'CREATE TABLE connections (id TEXT)' },
+    ]));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(pool.queries).toContain('COMMIT');
+    expect(pool.queries).not.toContain('ROLLBACK');
+  });
+
+  test('destroys a client when releasing its migration lock fails', async () => {
+    const pool = new FakePool();
+    pool.failUnlock = true;
+    const database = await Effect.runPromise(makeFredPostgres({ pool }));
+
+    const exit = await Effect.runPromiseExit(database.migrate());
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(pool.releases).toEqual([true]);
   });
 });

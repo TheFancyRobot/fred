@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Redacted, Schema } from 'effect';
+import { Context, Effect, Either, Layer, Option, Redacted, Schema } from 'effect';
 import {
   ProviderConnectionCredentialsSchema,
   ProviderConnectionNamespace,
@@ -206,6 +206,24 @@ export interface ProviderConnectionMetadata {
   readonly updatedAt: Date;
 }
 
+export type ProviderCredentialRotationError =
+  | ProviderCredentialKeyError
+  | ProviderCredentialEncryptionError
+  | ProviderCredentialVersionConflictError
+  | ProviderConnectionStorageError;
+
+export interface ProviderCredentialRotationSkip {
+  readonly connectionId: string;
+  readonly keyId: string;
+  readonly error: ProviderCredentialRotationError;
+}
+
+export interface ProviderCredentialRotationResult {
+  readonly rotated: number;
+  readonly skipped: readonly ProviderCredentialRotationSkip[];
+  readonly remaining: boolean;
+}
+
 export interface PostgresProviderConnectionStore extends ProviderConnectionStoreService {
   readonly close: Effect.Effect<void, ProviderConnectionStorageError>;
   readonly save: (
@@ -218,7 +236,7 @@ export interface PostgresProviderConnectionStore extends ProviderConnectionStore
   readonly rotateCredentials: (
     namespace: ProviderConnectionNamespace,
     batchSize?: number,
-  ) => Effect.Effect<{ readonly rotated: number; readonly remaining: boolean }, ProviderCredentialKeyError | ProviderCredentialEncryptionError | ProviderConnectionStorageError>;
+  ) => Effect.Effect<ProviderCredentialRotationResult, ProviderCredentialKeyError | ProviderConnectionStorageError>;
 }
 
 const storageError = (operation: string) =>
@@ -446,7 +464,7 @@ export const makePostgresProviderConnectionStore = (
       'updateConnection',
       `UPDATE ${connections}
        SET provider_id = $2, label = $3, label_normalized = $4, endpoint = $5, protocol = $6, auth_kind = $7, status = $8,
-           credential_version = $9, expires_at = COALESCE($10, expires_at), updated_at = NOW()
+           credential_version = $9, expires_at = $10, updated_at = NOW()
        WHERE id = $1 AND namespace = $11 AND credential_version = $12`,
       [connection.id, connection.providerId, connection.label, labelNormalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, nextVersion, expiresAt ?? null, namespace, expectedVersion],
     );
@@ -479,7 +497,7 @@ export const makePostgresProviderConnectionStore = (
     const key = yield* options.keyRing.current;
     const encrypted = yield* encryptProviderCredentials({ namespace, connection, credentials: runtimeCredentials, key });
     yield* transaction(pool, (client) => Effect.gen(function* () {
-      const existing = yield* query(client, 'lockConnection', `SELECT credential_version FROM ${connections} WHERE namespace = $1 AND id = $2 FOR UPDATE`, [namespace, connection.id]);
+      const existing = yield* query(client, 'lockConnection', `SELECT credential_version, expires_at FROM ${connections} WHERE namespace = $1 AND id = $2 FOR UPDATE`, [namespace, connection.id]);
       const row = existing.rows[0];
       if (row === undefined) {
         yield* query(
@@ -498,7 +516,8 @@ export const makePostgresProviderConnectionStore = (
         );
         return;
       }
-      yield* writeEnvelope(client, namespace, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt);
+      const savedExpiry = row.expires_at === null || row.expires_at === undefined ? undefined : readDate(row.expires_at, 'expires at');
+      yield* writeEnvelope(client, namespace, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt ?? savedExpiry);
     }));
   });
 
@@ -591,20 +610,45 @@ export const makePostgresProviderConnectionStore = (
       [namespace, currentKey.id, batchSize],
     ));
     let rotated = 0;
+    const skipped: ProviderCredentialRotationSkip[] = [];
     for (const row of rows.rows) {
-      const saved = yield* parseMetadata(row);
-      const oldEnvelope = yield* envelope(saved.connection.id, row);
-      const oldKey = yield* keyForEnvelope(options.keyRing, oldEnvelope.keyId);
-      const runtimeCredentials = yield* decryptProviderCredentials(namespace, saved.connection, oldEnvelope, oldKey);
-      const nextEnvelope = yield* encryptProviderCredentials({ namespace, connection: saved.connection, credentials: runtimeCredentials, key: currentKey });
-      const updated = yield* transaction(pool, (client) =>
-        writeEnvelope(client, namespace, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase()).pipe(
-          Effect.as(true),
-          Effect.catchTag('ProviderCredentialVersionConflictError', () => Effect.succeed(false)),
-        ));
-      if (updated) rotated += 1;
+      const connectionId = typeof row.id === 'string' ? row.id : '<invalid>';
+      const keyId = typeof row.key_id === 'string' ? row.key_id : '<invalid>';
+      const parsed = yield* Effect.either(parseMetadata(row));
+      if (Either.isLeft(parsed)) {
+        skipped.push({ connectionId, keyId, error: parsed.left });
+        continue;
+      }
+      const saved = parsed.right;
+      const failed = yield* Effect.gen(function* () {
+        const oldEnvelope = yield* envelope(saved.connection.id, row);
+        const oldKey = yield* keyForEnvelope(options.keyRing, oldEnvelope.keyId);
+        const runtimeCredentials = yield* decryptProviderCredentials(namespace, saved.connection, oldEnvelope, oldKey);
+        const nextEnvelope = yield* encryptProviderCredentials({ namespace, connection: saved.connection, credentials: runtimeCredentials, key: currentKey });
+        yield* transaction(pool, (client) =>
+          writeEnvelope(client, namespace, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase(), saved.expiresAt));
+      }).pipe(
+        Effect.as(Option.none<ProviderCredentialRotationError>()),
+        Effect.catchTags({
+          ProviderCredentialKeyError: (error) => Effect.succeed(Option.some(error)),
+          ProviderCredentialEncryptionError: (error) => Effect.succeed(Option.some(error)),
+          ProviderCredentialVersionConflictError: (error) => Effect.succeed(Option.some(error)),
+        }),
+      );
+      if (Option.isSome(failed)) {
+        skipped.push({ connectionId, keyId, error: failed.value });
+      } else {
+        rotated += 1;
+      }
     }
-    return { rotated, remaining: rows.rows.length === batchSize };
+    const remainingRows = yield* useClient(pool, (client) => query(
+      client,
+      'credentialRotationRemaining',
+      `SELECT 1 FROM ${connections} c JOIN ${credentials} k ON k.connection_id = c.id
+       WHERE c.namespace = $1 AND k.key_id <> $2 LIMIT 1`,
+      [namespace, currentKey.id],
+    ));
+    return { rotated, skipped, remaining: remainingRows.rows.length > 0 };
   });
 
   const close = ownsPool ? operation('close', () => pool.end!()) : Effect.void;

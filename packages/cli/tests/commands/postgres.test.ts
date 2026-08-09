@@ -100,6 +100,35 @@ describe('postgres import-legacy command', () => {
     expect(output.stderr).toEqual(['Use --yes to run a legacy import non-interactively.']);
   });
 
+  test('requires --yes when stdin does not expose isTTY', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: undefined });
+    try {
+      const output = capture();
+      const calls: LegacyImportRequest[] = [];
+      let prompted = false;
+      const exitCode = await handlePostgresCommand(['import-legacy'], { modules: 'context' }, {
+        io: output.io,
+        importLegacy: async (request) => {
+          calls.push(request);
+          return request.dryRun === true ? pending : imported;
+        },
+        confirm: async () => {
+          prompted = true;
+          return true;
+        },
+      });
+
+      expect(exitCode).toBe(2);
+      expect(calls).toEqual([{ modules: ['context'], dryRun: true }]);
+      expect(prompted).toBe(false);
+      expect(output.stderr).toEqual(['Use --yes to run a legacy import non-interactively.']);
+    } finally {
+      if (descriptor === undefined) Reflect.deleteProperty(process.stdin, 'isTTY');
+      else Object.defineProperty(process.stdin, 'isTTY', descriptor);
+    }
+  });
+
   test('returns an explicit unchanged result when every table is already verified', async () => {
     const output = capture();
     const calls: LegacyImportRequest[] = [];

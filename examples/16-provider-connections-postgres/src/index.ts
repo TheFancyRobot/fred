@@ -62,17 +62,20 @@ async function main(): Promise<void> {
   const sentinelSchema = `application_sentinel_${runId}`;
   const sentinel = `${quotePostgresIdentifier(sentinelSchema)}.${quotePostgresIdentifier('events')}`;
   const pool = new Pool({ connectionString });
-  const key = { id: 'example-ephemeral', key: Redacted.make(crypto.getRandomValues(new Uint8Array(32))) };
-  const keyRing = makeProviderCredentialKeyRing([key], key.id);
-  const store = makePostgresProviderConnectionStore({ pool, schema, keyRing });
-  const providerConnectionLayer = ProviderConnectionServiceLive.pipe(
-    Layer.provide(Layer.succeed(ProviderConnectionStore, store)),
-    Layer.provide(Layer.succeed(LegacyProviderConnectionResolver, makeLegacyProviderConnectionResolver({}))),
-  );
-  const fred = await createFred({ providerConnectionLayer });
+  let store: ReturnType<typeof makePostgresProviderConnectionStore> | undefined;
+  let fred: Awaited<ReturnType<typeof createFred>> | undefined;
   let server: ReturnType<typeof Bun.serve> | undefined;
 
   try {
+    const key = { id: 'example-ephemeral', key: Redacted.make(crypto.getRandomValues(new Uint8Array(32))) };
+    const keyRing = makeProviderCredentialKeyRing([key], key.id);
+    store = makePostgresProviderConnectionStore({ pool, schema, keyRing });
+    const providerConnectionLayer = ProviderConnectionServiceLive.pipe(
+      Layer.provide(Layer.succeed(ProviderConnectionStore, store)),
+      Layer.provide(Layer.succeed(LegacyProviderConnectionResolver, makeLegacyProviderConnectionResolver({}))),
+    );
+    fred = await createFred({ providerConnectionLayer });
+
     await pool.query(`CREATE SCHEMA ${quotePostgresIdentifier(sentinelSchema)}`);
     await pool.query(`CREATE TABLE ${sentinel} (name TEXT NOT NULL)`);
     await pool.query(`INSERT INTO ${sentinel} (name) VALUES ('unchanged application sentinel')`);
@@ -144,11 +147,20 @@ async function main(): Promise<void> {
     console.log(`Saved ${saved.length} non-secret connection records in schema ${schema}.`);
     console.log('Verified a private no-auth local endpoint, API-key storage, and Google OAuth fixture storage.');
   } finally {
-    server?.stop(true);
-    await fred.shutdown();
-    await pool.query(`DROP SCHEMA IF EXISTS ${quotePostgresIdentifier(sentinelSchema)} CASCADE`).catch(() => undefined);
-    await Effect.runPromise(store.close).catch(() => undefined);
-    await pool.end();
+    try {
+      server?.stop(true);
+    } finally {
+      try {
+        await fred?.shutdown();
+      } finally {
+        try {
+          await pool.query(`DROP SCHEMA IF EXISTS ${quotePostgresIdentifier(sentinelSchema)} CASCADE`).catch(() => undefined);
+          if (store !== undefined) await Effect.runPromise(store.close).catch(() => undefined);
+        } finally {
+          await pool.end();
+        }
+      }
+    }
   }
 }
 

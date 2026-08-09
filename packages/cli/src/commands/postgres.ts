@@ -197,7 +197,7 @@ export const handlePostgresCommand = async (
   return Effect.runPromise(executePostgresCommand(args, options, {
     ...dependencies,
     defaultSchema: dependencies.defaultSchema ?? process.env.FRED_POSTGRES_SCHEMA,
-    isTTY: dependencies.isTTY ?? process.stdin.isTTY,
+    isTTY: dependencies.isTTY ?? process.stdin.isTTY ?? false,
   }, importLegacy).pipe(
     Effect.catchTag('PostgresCommandError', (error) => Effect.sync(() => {
       if (options.json === true) io.stdout(encodeJson({ ok: false, command: 'postgres import-legacy', error: { code: error.code, message: error.message } }));

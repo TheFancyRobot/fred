@@ -37,12 +37,27 @@ export type ProviderLoginMethod = Schema.Schema.Type<typeof ProviderLoginMethodS
 export const ProviderConnectionStatusSchema = Schema.Literal('active', 'disabled', 'deleted');
 export type ProviderConnectionStatus = Schema.Schema.Type<typeof ProviderConnectionStatusSchema>;
 
+export const ProviderConnectionEndpointSchema = Schema.String.pipe(
+  Schema.filter((endpoint) => {
+    try {
+      const url = new URL(endpoint);
+      return (url.protocol === 'http:' || url.protocol === 'https:')
+        && url.username === ''
+        && url.password === '';
+    } catch {
+      return false;
+    }
+  }, {
+    message: () => 'Provider connection endpoint must use http or https and cannot include userinfo.',
+  }),
+);
+
 /** Public, non-secret connection metadata. */
 export const ProviderConnectionSchema = Schema.Struct({
   id: ProviderConnectionId,
   label: Schema.String,
   providerId: Schema.String,
-  endpoint: Schema.optional(Schema.String),
+  endpoint: Schema.optional(ProviderConnectionEndpointSchema),
   protocol: Schema.optional(ProviderConnectionProtocolSchema),
   auth: ProviderConnectionAuthSchema,
   status: ProviderConnectionStatusSchema,
@@ -53,7 +68,7 @@ export type ProviderConnection = Schema.Schema.Type<typeof ProviderConnectionSch
 export const ProviderConnectionDraftSchema = Schema.Struct({
   label: Schema.String,
   providerId: Schema.String,
-  endpoint: Schema.optional(Schema.String),
+  endpoint: Schema.optional(ProviderConnectionEndpointSchema),
   protocol: Schema.optional(ProviderConnectionProtocolSchema),
   auth: ProviderConnectionAuthSchema,
 });
@@ -150,6 +165,11 @@ export class InvalidProviderConnectionNamespaceError extends Schema.TaggedError<
   { value: Schema.String, message: Schema.String },
 ) {}
 
+export class InvalidProviderConnectionEndpointError extends Schema.TaggedError<InvalidProviderConnectionEndpointError>()(
+  'InvalidProviderConnectionEndpointError',
+  { message: Schema.String },
+) {}
+
 export class ProviderConnectionNamespaceRequiredError extends Schema.TaggedError<ProviderConnectionNamespaceRequiredError>()(
   'ProviderConnectionNamespaceRequiredError',
   { connectionId: ProviderConnectionId, message: Schema.String },
@@ -243,6 +263,7 @@ export type ProviderConnectionError =
   | LegacyProviderConnectionNotConfiguredError
   | ProviderConnectionPreparationRequiredError
   | ProviderConnectionIdentityChangeError
+  | InvalidProviderConnectionEndpointError
   | ProviderConnectionStoreError;
 
 /** Decode a raw ID at a trust boundary without leaking Effect parse details. */
@@ -268,6 +289,18 @@ export const decodeProviderConnectionNamespace = (
       message: 'Provider connection namespace must be a non-empty string.',
     }),
   });
+
+/** Validate an optional provider endpoint at persistence and runtime boundaries. */
+export const validateProviderConnectionEndpoint = (
+  endpoint: string | undefined,
+): Effect.Effect<void, InvalidProviderConnectionEndpointError> => endpoint === undefined
+  ? Effect.void
+  : Effect.try({
+    try: () => Schema.decodeUnknownSync(ProviderConnectionEndpointSchema)(endpoint),
+    catch: () => new InvalidProviderConnectionEndpointError({
+      message: 'Provider connection endpoint must use http or https and cannot include userinfo.',
+    }),
+  }).pipe(Effect.asVoid);
 
 /** Check an auth/login declaration before persisting or testing a connection. */
 export const validateProviderConnectionCapability = (
@@ -358,8 +391,8 @@ export interface ProviderConnectionService {
     connection: ProviderConnection,
     credentials: ProviderConnectionCredentials,
     expiresAt?: Date,
-  ) => Effect.Effect<void, ProviderConnectionStoreError>;
-  readonly updateMetadata: (namespace: ProviderConnectionNamespace, connection: ProviderConnection) => Effect.Effect<boolean, ProviderConnectionIdentityChangeError | ProviderConnectionStoreError>;
+  ) => Effect.Effect<void, InvalidProviderConnectionEndpointError | ProviderConnectionStoreError>;
+  readonly updateMetadata: (namespace: ProviderConnectionNamespace, connection: ProviderConnection) => Effect.Effect<boolean, InvalidProviderConnectionEndpointError | ProviderConnectionIdentityChangeError | ProviderConnectionStoreError>;
   readonly compareAndSetCredentials: ProviderConnectionStore['compareAndSetCredentials'];
   readonly remove: (namespace: ProviderConnectionNamespace, id: ProviderConnectionId) => Effect.Effect<boolean, ProviderConnectionStoreError>;
   readonly resolve: (request: {
@@ -384,8 +417,12 @@ export const ProviderConnectionServiceLive = Layer.effect(
     return {
       list: store.list,
       get: (namespace, id) => Effect.map(store.get(namespace, id), Option.map((record) => record.connection)),
-      put: (namespace, connection, credentials, expiresAt) => store.put(namespace, { connection, credentials, expiresAt }),
-      updateMetadata: store.updateMetadata,
+      put: (namespace, connection, credentials, expiresAt) => validateProviderConnectionEndpoint(connection.endpoint).pipe(
+        Effect.zipRight(store.put(namespace, { connection, credentials, expiresAt })),
+      ),
+      updateMetadata: (namespace, connection) => validateProviderConnectionEndpoint(connection.endpoint).pipe(
+        Effect.zipRight(store.updateMetadata(namespace, connection)),
+      ),
       compareAndSetCredentials: store.compareAndSetCredentials,
       remove: store.remove,
       resolve: ({ providerId, connectionId, namespace, apiKeyEnvVar }) => {
