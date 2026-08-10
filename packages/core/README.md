@@ -335,13 +335,25 @@ const fred = await createFred({
 
 ### Postgres (production)
 
-```typescript
-import { PostgresContextStorage } from '@fancyrobot/fred/context/postgres';
+The core PostgreSQL adapters remain available for v2 compatibility and emit a
+deprecation warning. New applications should use `@fancyrobot/fred-postgres`.
 
+```typescript
+import { Effect } from 'effect';
+import { Pool } from 'pg';
+import {
+  makeFredPostgres,
+  migrateFredPostgresStores,
+  PostgresCheckpointStorage,
+  PostgresContextStorage,
+} from '@fancyrobot/fred-postgres';
+
+const pool = new Pool({ connectionString: process.env.FRED_POSTGRES_URL! });
+const database = await Effect.runPromise(makeFredPostgres({ pool }));
+await Effect.runPromise(migrateFredPostgresStores(database));
 const fred = await createFred({
-  storage: new PostgresContextStorage({
-    connectionString: process.env.FRED_POSTGRES_URL!,
-  }),
+  storage: new PostgresContextStorage({ pool }),
+  checkpointStorage: new PostgresCheckpointStorage({ pool }),
 });
 ```
 

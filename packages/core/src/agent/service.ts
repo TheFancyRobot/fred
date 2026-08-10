@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Option, Ref } from 'effect';
 import type * as Schema from 'effect/Schema';
 import type { AgentConfig, AgentInstance, AnyAgentInstance } from './agent';
-import type { ProviderDefinition } from '../platform/provider';
+import type { ProviderConfig, ProviderDefinition } from '../platform/provider';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
@@ -15,6 +15,18 @@ import { AgentFactory, type ToolRegistryLike } from './factory';
 import type { Tool } from '../tool/tool';
 import { ToolRegistryService } from '../tool/service';
 import { ProviderRegistryService } from '../platform/service';
+import { createProviderDefinitionEffect } from '../platform/base';
+import {
+  BUILTIN_PROVIDER_CONNECTION_CAPABILITIES,
+  LOCAL_PROVIDER_CONNECTION_CAPABILITIES,
+  ProviderConnectionNamespaceRequiredError,
+  ProviderConnectionService,
+  UnsupportedProviderConnectionAuthError,
+  resolveProviderConnectionForUse,
+  validateProviderConnectionCapability,
+  validateProviderConnectionEndpoint,
+  type ResolvedProviderConnection,
+} from '../platform/connections';
 import { ToolGateService } from '../tool-gate/service';
 import type { Tracer } from '../tracing';
 import type { TemplateEngine } from '../template/engine';
@@ -120,6 +132,34 @@ export const AgentService = Context.GenericTag<AgentService>(
   'AgentService'
 );
 
+const providerConfigForConnection = (
+  provider: ProviderDefinition,
+  config: ProviderConfig,
+  resolved: ResolvedProviderConnection,
+): Effect.Effect<ProviderConfig, Error> => Effect.gen(function* () {
+  const capabilities = resolved.connection.providerId === LOCAL_PROVIDER_CONNECTION_CAPABILITIES.providerId
+    ? LOCAL_PROVIDER_CONNECTION_CAPABILITIES
+    : provider.connectionCapabilities
+      ?? BUILTIN_PROVIDER_CONNECTION_CAPABILITIES.find(({ providerId }) => providerId === provider.id);
+  if (capabilities !== undefined) {
+    yield* validateProviderConnectionCapability(resolved.connection, capabilities);
+  }
+  if (resolved.connection.auth.kind !== resolved.credentials.kind) {
+    return yield* new UnsupportedProviderConnectionAuthError({
+      providerId: resolved.connection.providerId,
+      authKind: resolved.credentials.kind,
+      message: `Provider connection credentials do not match the declared ${resolved.connection.auth.kind} authentication mode.`,
+    });
+  }
+  const endpoint = resolved.connection.endpoint;
+  yield* validateProviderConnectionEndpoint(endpoint);
+  return {
+    ...config,
+    ...(endpoint === undefined ? {} : { baseUrl: endpoint }),
+    credentials: resolved.credentials,
+  };
+});
+
 /**
  * Implementation of AgentService
  */
@@ -131,6 +171,7 @@ class AgentServiceImpl implements AgentService {
     private agents: Ref.Ref<Map<string, AnyAgentInstance>>,
     private toolRegistryService: typeof ToolRegistryService.Service,
     private providerRegistryService: typeof ProviderRegistryService.Service,
+    private providerConnectionService: typeof ProviderConnectionService.Service,
     private toolGateService: typeof ToolGateService.Service,
     private promptSourceService: PromptSourceServiceApi,
     private agentStatusService?: typeof AgentStatusService.Service,
@@ -145,6 +186,48 @@ class AgentServiceImpl implements AgentService {
     this.factory = new AgentFactory(emptyRegistry, tracer, promptSourceService);
     this.factory.setToolGateService(toolGateService);
     this.factory.setAgentStatusService(agentStatusService);
+  }
+
+  private makeConnectionBoundProvider<
+    InputSchema extends Schema.Schema.AnyNoContext,
+    OutputSchema extends Schema.Schema.AnyNoContext,
+  >(
+    provider: ProviderDefinition,
+    config: AgentConfig<InputSchema, OutputSchema>,
+  ): ProviderDefinition {
+    if (provider.factory === undefined) return provider;
+    const factory = provider.factory;
+    return {
+      ...provider,
+      resolveRuntime: () => {
+        const connectionId = config.connectionId;
+        const connectionNamespace = config.connectionNamespace;
+        const buildRuntime = (request: Parameters<ProviderConnectionService['resolve']>[0]) =>
+          resolveProviderConnectionForUse(this.providerConnectionService, provider, request).pipe(
+            Effect.flatMap((resolved) => providerConfigForConnection(provider, provider.config, resolved)),
+            Effect.flatMap((runtimeConfig) => createProviderDefinitionEffect(factory, runtimeConfig)),
+            Effect.map(({ getModel, layer }) => ({ getModel, layer })),
+          );
+        if (connectionId === undefined) {
+          return buildRuntime({
+            providerId: provider.id,
+            apiKeyEnvVar: provider.config.apiKeyEnvVar,
+          });
+        }
+        if (connectionNamespace === undefined) {
+          return Effect.fail(new ProviderConnectionNamespaceRequiredError({
+            connectionId,
+            message: `Provider connection "${connectionId}" requires a namespace.`,
+          }));
+        }
+        return buildRuntime({
+          providerId: provider.id,
+          connectionId,
+          namespace: connectionNamespace,
+          apiKeyEnvVar: provider.config.apiKeyEnvVar,
+        });
+      },
+    };
   }
 
   createAgent<
@@ -190,7 +273,10 @@ class AgentServiceImpl implements AgentService {
       const allTools = yield* self.toolRegistryService.getAllTools();
       yield* self.syncFactoryTools(allTools, config.id);
 
-      const agentProcessor = yield* self.createAgentFromFactory(resolvedConfig, providerDef);
+      const agentProcessor = yield* self.createAgentFromFactory(
+        resolvedConfig,
+        self.makeConnectionBoundProvider(providerDef, resolvedConfig),
+      );
 
       const instance: AgentInstance<InputSchema, OutputSchema> = {
         id: config.id,
@@ -524,6 +610,7 @@ export const AgentServiceLayer = Layer.effect(
     const agents = yield* Ref.make(new Map<string, AnyAgentInstance>());
     const toolRegistryService = yield* ToolRegistryService;
     const providerRegistryService = yield* ProviderRegistryService;
+    const providerConnectionService = yield* ProviderConnectionService;
     const toolGateService = yield* ToolGateService;
     const promptSourceService = yield* PromptSourceService;
     const agentStatusService = yield* Effect.serviceOption(AgentStatusService);
@@ -531,6 +618,7 @@ export const AgentServiceLayer = Layer.effect(
       agents,
       toolRegistryService,
       providerRegistryService,
+      providerConnectionService,
       toolGateService,
       promptSourceService,
       Option.isSome(agentStatusService) ? agentStatusService.value : undefined

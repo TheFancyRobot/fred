@@ -55,9 +55,12 @@ export type {
 // ─── Provider Types ─────────────────────────────────────────────────────────
 export type { EffectProviderFactory } from './platform/base';
 export type {
-  ProviderConfig, ProviderConfigInput, ProviderDefinition,
+  ProviderConfig, ProviderConfigInput, ProviderDefinition, ProviderRuntime,
   ProviderRegistration, ProviderModelDefaults, ProviderAlias,
 } from './platform/provider';
+export * from './platform/connections';
+export * from './platform/connection-test';
+export { providerApiKey, providerAuthTransform } from './platform/provider-auth';
 
 // Provider capability types
 export type { ProviderCapabilityKey } from './platform/provider-capabilities';

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Cause, Effect, Layer, Option } from 'effect';
+import { Effect, Layer } from 'effect';
 import * as LanguageModel from '@effect/ai/LanguageModel';
 import type {
   EffectProviderFactory,
@@ -52,7 +52,6 @@ export interface ProviderConformanceFixture {
   readonly factory: EffectProviderFactory;
   readonly module: ProviderModuleExports;
   readonly credentialEnvVar: string;
-  readonly credentialRequired: boolean;
   readonly modelId: string;
   readonly capabilities?: readonly ProviderCapabilityKey[];
   readonly config: ProviderConfig;
@@ -303,27 +302,18 @@ export function defineProviderConformanceSuite(
               [...fixture.capabilities].sort(),
             );
           }
+          expect(definition.connectionCapabilities).toEqual(
+            fixture.factory.connectionCapabilities,
+          );
         });
       });
 
-      test('handles a clean credential environment through a typed Effect result', async () => {
+      test('does not depend on a credential environment through a typed Effect result', async () => {
         await withoutCredential(fixture, async () => {
           const exit = await Effect.runPromiseExit(
             createProviderDefinitionEffect(fixture.factory, fixture.config),
           );
-
-          if (fixture.credentialRequired) {
-            expect(exit._tag).toBe('Failure');
-            if (exit._tag === 'Failure') {
-              const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
-              expect(isRecord(failure) ? failure._tag : undefined).toBe(
-                'ProviderRegistrationError',
-              );
-              expect(String(exit.cause)).not.toContain(TEST_CREDENTIAL);
-            }
-          } else {
-            expect(exit._tag).toBe('Success');
-          }
+          expect(exit._tag).toBe('Success');
         });
       });
 

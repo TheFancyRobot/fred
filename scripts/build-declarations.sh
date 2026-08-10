@@ -17,7 +17,9 @@ set -uo pipefail
 # `dev` depends on `cli`, so it comes last. Any package not listed here still
 # gets built, appended at the end, so a new package works without needing
 # this list updated unless it introduces a new inter-package dependency.
-ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
+# `fred-postgres` must precede `fred-http` and `cli`, which import its public
+# declarations in a clean checkout.
+ORDERED_PACKAGES="core fred-postgres provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
 
 status=0
 build_one() {

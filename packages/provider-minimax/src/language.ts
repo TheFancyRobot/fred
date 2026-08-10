@@ -14,7 +14,7 @@
  * - Uses `Effect.fn` for automatic tracing on core operations.
  */
 
-import { Data, Effect, Layer, Stream, Option, Schedule } from 'effect';
+import { Data, Effect, Layer, Redacted, Stream, Option, Schedule } from 'effect';
 import * as Duration from 'effect/Duration';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
@@ -149,7 +149,7 @@ interface ChatCompletionStreamChunk {
  * Chat Completions endpoint directly.
  */
 export function createMiniMaxLanguageModel(
-  apiKey: string,
+  apiKey: Redacted.Redacted<string>,
   apiUrl: string,
   modelId: string,
   overrides?: ProviderModelDefaults
@@ -668,17 +668,20 @@ function parseToolCallArguments(
 export const MiniMaxProviderFactory: import('@fancyrobot/fred').EffectProviderFactory = {
   id: 'minimax',
   aliases: ['minimax'],
+  connectionCapabilities: {
+    providerId: 'minimax',
+    auth: ['api-key'],
+    login: ['manual-secret'],
+  },
   load: async (config: ProviderConfig) => {
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'MINIMAX_API_KEY';
-    const apiKey = process.env[apiKeyEnvVar];
+    const apiKey = config.credentials?.kind === 'api-key'
+      ? config.credentials.apiKey
+      : (() => {
+          const envVar = config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR;
+          const value = process.env[envVar];
+          return value === undefined || value.trim().length === 0 ? undefined : Redacted.make(value);
+        })();
     const baseUrl = config.baseUrl ?? MINIMAX_DEFAULT_BASE_URL;
-
-    if (!apiKey) {
-      throw new MiniMaxMissingApiKeyError({
-        provider: 'minimax',
-        envVar: apiKeyEnvVar,
-      });
-    }
 
     // Create HTTP client layer
     const layer = FetchHttpClient.layer;
@@ -686,6 +689,12 @@ export const MiniMaxProviderFactory: import('@fancyrobot/fred').EffectProviderFa
     return {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
+        if (apiKey === undefined) {
+          return Effect.fail(new MiniMaxMissingApiKeyError({
+            provider: 'minimax',
+            envVar: config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR,
+          }));
+        }
         return Effect.succeed(
           createMiniMaxLanguageModel(apiKey, baseUrl, modelId, overrides)
         );

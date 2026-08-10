@@ -15,11 +15,15 @@ fi
 
 PUBLISHED_PKGS=()
 
+# Package manifests publish types from dist/, so direct release invocations
+# must not rely on declaration artifacts left by an earlier command.
+bash scripts/build-declarations.sh
+
 # Publish in dependency order so a newly released dependent never becomes
 # visible before the Fred package version required by its manifest. This
 # mirrors the declaration-build order. New independent packages fall through
 # to the glob below; packages with Fred dependencies must be added here.
-ORDERED_PACKAGES="core provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
+ORDERED_PACKAGES="core fred-postgres provider-anthropic provider-google provider-groq provider-minimax provider-openai provider-openrouter fred-baml fred-convex fred-http cli dev"
 
 publish_one() {
   local dir=$1

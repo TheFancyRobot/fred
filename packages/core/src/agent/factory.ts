@@ -608,10 +608,17 @@ export class AgentFactory {
       ));
     }
 
-    const modelEffect = provider.getModel(config.model, {
-      temperature: config.temperature,
-      maxTokens: config.maxTokens,
-    });
+    const resolveModel = () => {
+      const runtime = provider.resolveRuntime === undefined
+        ? Effect.succeed(provider)
+        : provider.resolveRuntime();
+      return runtime.pipe(Effect.flatMap((currentProvider) =>
+        currentProvider.getModel(config.model, {
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+        }).pipe(Effect.map((model) => ({ model, provider: currentProvider }))),
+      ));
+    };
 
     const missingTools = config.tools ? this.toolRegistry.getMissingToolIds(config.tools) : [];
     if (missingTools.length > 0) {
@@ -1267,8 +1274,8 @@ export class AgentFactory {
           const promptMessages = filterHistoryForAgent(normalizedMessages, runtimeAvailableToolNames);
 
           // Get the model (AiModel) and compose all layers with proper dependency resolution
-          const model = yield* modelEffect;
-          const providerWithHttp = provider.layer.pipe(Layer.provide(FetchHttpClient.layer));
+          const { model, provider: currentProvider } = yield* resolveModel();
+          const providerWithHttp = currentProvider.layer.pipe(Layer.provide(FetchHttpClient.layer));
           const modelWithClient = Layer.provide(model, providerWithHttp);
           const fullLayer = Layer.mergeAll(modelWithClient, runtimeToolLayer, BunContext.layer);
 
@@ -1648,8 +1655,6 @@ export class AgentFactory {
         const promptMessages = filterHistoryForAgent(normalizedMessages, availableToolNames);
 
       // Compose all layers together with proper dependency resolution
-      const providerWithHttp = provider.layer.pipe(Layer.provide(FetchHttpClient.layer));
-
       // Track state for run-end event during single pass through stream
       type StreamState = {
         sequence: number;
@@ -1678,9 +1683,10 @@ export class AgentFactory {
         toolCalls: [],
       };
 
-      const streamEffect = modelEffect.pipe(
-        Effect.map((model) => {
+      const streamEffect = resolveModel().pipe(
+        Effect.map(({ model, provider: currentProvider }) => {
           // Compose model with its OpenAiClient dependency, then merge with other layers
+          const providerWithHttp = currentProvider.layer.pipe(Layer.provide(FetchHttpClient.layer));
           const modelWithClient = Layer.provide(model, providerWithHttp);
           const fullLayer = Layer.mergeAll(modelWithClient, toolLayer, BunContext.layer);
 

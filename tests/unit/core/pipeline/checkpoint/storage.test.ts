@@ -95,8 +95,18 @@ describe('PostgresCheckpointStorage', () => {
       const { client } = createMockClient({});
       const pool = createMockPool(client);
 
-      const storage = new PostgresCheckpointStorage({ pool: pool as any });
+      const warnings: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
+      let storage: PostgresCheckpointStorage;
+      try {
+        storage = new PostgresCheckpointStorage({ pool: pool as any });
+      } finally {
+        console.warn = originalWarn;
+      }
       expect(storage).toBeInstanceOf(PostgresCheckpointStorage);
+      expect(warnings.join(' ')).toContain('deprecated');
+      expect(warnings.join(' ')).toContain('@fancyrobot/fred-postgres');
     });
   });
 

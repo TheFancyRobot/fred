@@ -7,6 +7,7 @@ import { CheckpointService, CheckpointServiceLive } from '../../../../packages/c
 import { PauseService, PauseServiceLive } from '../../../../packages/core/src/pipeline/pause/service';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
+import { makeInMemoryProviderConnectionLayer } from '../../../../packages/core/src/platform/connections';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
 import type { CheckpointStorage, Checkpoint, CheckpointStatus } from '../../../../packages/core/src/pipeline/checkpoint/types';
 import type { AgentInstance } from '../../../../packages/core/src/agent/agent';
@@ -111,7 +112,8 @@ const TestLayer = PipelineServiceLive.pipe(
   Layer.provide(CheckpointServiceLive({ storage: createMockStorage() })),
   Layer.provide(ToolGateServiceLive),
   Layer.provide(ToolRegistryServiceLive),
-  Layer.provide(ProviderRegistryServiceLive)
+  Layer.provide(ProviderRegistryServiceLive),
+  Layer.provide(makeInMemoryProviderConnectionLayer())
 );
 
 const runWithService = <A, E>(effect: Effect.Effect<A, E, PipelineService>) =>
@@ -405,7 +407,8 @@ describe('PipelineService', () => {
         Layer.provide(CheckpointServiceLive({ storage: createMockStorage() })),
         Layer.provide(ToolGateServiceLive),
         Layer.provide(ToolRegistryServiceLive),
-        Layer.provide(ProviderRegistryServiceLive)
+        Layer.provide(ProviderRegistryServiceLive),
+        Layer.provide(makeInMemoryProviderConnectionLayer())
       );
     }
 
@@ -612,7 +615,8 @@ describe('PipelineService', () => {
         Layer.provide(CheckpointServiceLive({ storage: mockStorage })),
         Layer.provide(ToolGateServiceLive),
         Layer.provide(ToolRegistryServiceLive),
-        Layer.provide(ProviderRegistryServiceLive)
+        Layer.provide(ProviderRegistryServiceLive),
+        Layer.provide(makeInMemoryProviderConnectionLayer())
       );
     }
 
@@ -861,7 +865,8 @@ describe('PipelineService', () => {
         Layer.provide(CheckpointServiceLive({ storage: mockStorage })),
         Layer.provide(ToolGateServiceLive),
         Layer.provide(ToolRegistryServiceLive),
-        Layer.provide(ProviderRegistryServiceLive)
+        Layer.provide(ProviderRegistryServiceLive),
+        Layer.provide(makeInMemoryProviderConnectionLayer())
       );
     }
 

@@ -1,5 +1,12 @@
-import { Data, Effect, Redacted } from 'effect';
-import { registerBuiltinPack } from '@fancyrobot/fred';
+import { Data, Effect } from 'effect';
+import {
+  makeProviderConnectionTestHook,
+  providerApiKey,
+  providerAuthTransform,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
+  registerBuiltinPack,
+} from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
 
 /**
@@ -21,6 +28,24 @@ export class AnthropicLanguageModelUnavailableError extends Data.TaggedError(
 export const AnthropicProviderFactory: EffectProviderFactory = {
   id: 'anthropic',
   aliases: ['anthropic'],
+  connectionCapabilities: {
+    providerId: 'anthropic',
+    auth: ['api-key'],
+    login: ['manual-secret'],
+    protocols: ['anthropic-compatible'],
+  },
+  connectionTest: makeProviderConnectionTestHook({
+    providerId: 'anthropic',
+    request: (draft, credentials) => ({
+      url: providerConnectionProbeUrl(draft, 'https://api.anthropic.com/v1', 'models').toString(),
+      init: {
+        headers: {
+          ...providerConnectionProbeAuthHeaders(credentials, 'x-api-key'),
+          'anthropic-version': '2023-06-01',
+        },
+      },
+    }),
+  }),
   load: async (config: ProviderConfig) => {
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-anthropic');
@@ -32,14 +57,13 @@ export const AnthropicProviderFactory: EffectProviderFactory = {
       );
     }
 
-    const apiKeyEnvVar = config.apiKeyEnvVar ?? 'ANTHROPIC_API_KEY';
-    const apiKeyString = process.env[apiKeyEnvVar];
-    const apiKey = apiKeyString ? Redacted.make(apiKeyString) : undefined;
+    const apiKey = providerApiKey(config.credentials);
 
     // Use AnthropicClient.layer for client initialization
     const layer = module.AnthropicClient?.layer?.({
       apiKey,
       apiUrl: config.baseUrl,
+      transformClient: providerAuthTransform(config.credentials),
     });
 
     if (!layer) {

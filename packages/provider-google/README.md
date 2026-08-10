@@ -42,8 +42,16 @@ import { createFred } from '@fancyrobot/fred';
 import '@fancyrobot/fred-google';
 
 const fred = await createFred();
-await fred.providers.use('google');
+await fred.providers.use('google', {
+  googleOAuth: { clientId: process.env.FRED_GOOGLE_OAUTH_CLIENT_ID },
+});
 ```
+
+`googleOAuth.clientId` is required only for saved OAuth connections. Fred uses
+the stored expiry and credential version to refresh immediately before agent
+invocation, `connections.resolve`, or `connections.test`; Google API-key
+connections are unchanged. Pass an optional client secret as a
+`Redacted<string>` only when the Google client registration requires one.
 
 ### Config File (YAML)
 

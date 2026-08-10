@@ -16,6 +16,7 @@
  *   `defaultSystemMessage` is set).
  */
 import { Schema } from 'effect';
+import { ProviderConnectionId, ProviderConnectionNamespace } from '../platform/connections';
 
 /** An index signature that accepts and preserves arbitrary extra keys. */
 const passthrough = Schema.Record({ key: Schema.String, value: Schema.Unknown });
@@ -365,11 +366,16 @@ export const AgentConfigSchema = Schema.Struct(
   {
     id: Schema.optional(Schema.String),
     platform: Schema.optional(Schema.String),
+    connectionId: Schema.optional(ProviderConnectionId),
+    connectionNamespace: Schema.optional(ProviderConnectionNamespace),
     model: Schema.optional(Schema.String),
     systemMessage: Schema.optional(AgentPromptSchema),
   },
   passthrough,
-);
+).pipe(Schema.filter(
+  (config) => (config.connectionId === undefined) === (config.connectionNamespace === undefined),
+  { message: () => 'connectionId and connectionNamespace must be configured together' },
+));
 
 export const RoutingConfigSchema = Schema.Struct(
   {

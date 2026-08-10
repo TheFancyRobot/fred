@@ -72,6 +72,11 @@ markdown_extensions:
 nav:
   - Current release: index.md
   - Phase 68 migration: migration/v0.4.0.md
+  - Provider connections: provider-connections.md
+  - PostgreSQL operations: postgres.md
+  - Credential security: credential-security.md
+  - Phase 70 migration: migration/v3.0.0-provider-connections.md
+  - Struct provider-connection handoff: struct-provider-connections-handoff.md
   - Package documentation: https://github.com/TheFancyRobot/fred#packages
   - Release runbook: https://github.com/TheFancyRobot/fred/blob/main/RELEASE.md
 

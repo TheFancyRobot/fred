@@ -9,6 +9,7 @@ import { Schema, ParseResult } from 'effect';
 import type { EffectProviderFactory } from './base';
 import { ProviderPackLoadError } from './errors';
 import { ProviderCapabilityKeys, type ProviderCapabilityKey } from './provider-capabilities';
+import type { ProviderConnectionCapabilities, ProviderConnectionTestHook } from './connections';
 
 /**
  * Custom schema for validating that a value is a function.
@@ -35,6 +36,35 @@ const ProviderCapabilitySetSchema = Schema.declare(
   }
 );
 
+const connectionAuthKinds = new Set(['none', 'api-key', 'basic', 'oauth2-bearer']);
+const connectionLoginMethods = new Set(['manual-secret', 'google-installed-app', 'openrouter-pkce-api-key']);
+const connectionProtocols = new Set(['openai-compatible', 'anthropic-compatible']);
+
+const ProviderConnectionCapabilitiesSchema = Schema.declare(
+  (input: unknown): input is ProviderConnectionCapabilities => {
+    if (typeof input !== 'object' || input === null) return false;
+    const value = input as Record<string, unknown>;
+    return typeof value.providerId === 'string'
+      && Array.isArray(value.auth)
+      && value.auth.every((kind) => typeof kind === 'string' && connectionAuthKinds.has(kind))
+      && Array.isArray(value.login)
+      && value.login.every((method) => typeof method === 'string' && connectionLoginMethods.has(method))
+      && (value.protocols === undefined || (
+        Array.isArray(value.protocols)
+        && value.protocols.every((protocol) => typeof protocol === 'string' && connectionProtocols.has(protocol))
+      ));
+  },
+  { identifier: 'ProviderConnectionCapabilities', description: 'Provider connection capability manifest' },
+);
+
+const ProviderConnectionTestSchema = Schema.declare(
+  (input: unknown): input is ProviderConnectionTestHook =>
+    typeof input === 'object' && input !== null && 'test' in input && typeof input.test === 'function',
+  { identifier: 'ProviderConnectionTest', description: 'Provider connection test hook' },
+);
+
+const ProviderConnectionPrepareFactorySchema = FunctionSchema;
+
 /**
  * Effect Schema for validating EffectProviderFactory structure.
  *
@@ -45,6 +75,9 @@ export const ProviderFactorySchema = Schema.Struct({
   id: Schema.String.pipe(Schema.minLength(1, { message: () => 'Provider id is required' })),
   aliases: Schema.optional(Schema.Array(Schema.String)),
   capabilities: Schema.optional(ProviderCapabilitySetSchema),
+  connectionCapabilities: Schema.optional(ProviderConnectionCapabilitiesSchema),
+  connectionTest: Schema.optional(ProviderConnectionTestSchema),
+  makeConnectionPrepare: Schema.optional(ProviderConnectionPrepareFactorySchema),
   load: FunctionSchema,
 });
 

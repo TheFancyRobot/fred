@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'bun:test';
-import { Effect, Layer } from 'effect';
+import { describe, it, expect, spyOn } from 'bun:test';
+import { Effect, Layer, Redacted, Schema, Stream } from 'effect';
+import { LanguageModel } from '@effect/ai';
 import { AgentService, AgentServiceLive } from '../../../../packages/core/src/agent/service';
 import { ToolRegistryService, ToolRegistryServiceLive } from '../../../../packages/core/src/tool/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from '../../../../packages/core/src/platform/service';
 import { ToolGateServiceLive } from '../../../../packages/core/src/tool-gate/service';
+import { makeInMemoryProviderConnectionLayer } from '../../../../packages/core/src/platform/connections';
 import {
   AgentNotFoundError,
   AgentAlreadyExistsError,
@@ -14,17 +16,28 @@ import {
 } from '../../../../packages/core/src/agent/errors';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
 import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
+import type { EffectProviderFactory } from '../../../../packages/core/src/platform/base';
+import {
+  ProviderConnectionId,
+  ProviderConnectionNamespace,
+  ProviderConnectionService,
+  type ProviderConnectionAuth,
+  type ProviderConnectionCredentials,
+  type ProviderConnectionProtocol,
+} from '../../../../packages/core/src/platform/connections';
 
 describe('AgentService', () => {
   const ToolLayer = ToolRegistryServiceLive;
   const ProviderLayer = ProviderRegistryServiceLive;
   const ToolGateLayer = ToolGateServiceLive.pipe(Layer.provide(ToolLayer));
+  const ProviderConnectionLayer = makeInMemoryProviderConnectionLayer();
   const AgentLayer = AgentServiceLive.pipe(
     Layer.provide(ToolLayer),
     Layer.provide(ProviderLayer),
+    Layer.provide(ProviderConnectionLayer),
     Layer.provide(ToolGateLayer)
   );
-  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ToolLayer);
+  const TestLayer = Layer.mergeAll(AgentLayer, ProviderLayer, ProviderConnectionLayer, ToolLayer);
 
   const runTest = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
     Effect.runPromise(effect.pipe(Effect.provide(TestLayer)) as Effect.Effect<A, E, never>);
@@ -81,6 +94,234 @@ describe('AgentService', () => {
   });
 
   describe('createAgent', () => {
+    it('resolves the selected connection again for each agent invocation', async () => {
+      const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+      const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-a');
+      const resolvedKeys: string[] = [];
+      const providerFactory: EffectProviderFactory = {
+        id: 'openai',
+        load: async (config) => {
+          if (config.credentials?.kind === 'api-key') {
+            resolvedKeys.push(Redacted.value(config.credentials.apiKey));
+          }
+          return {
+            layer: Layer.empty,
+            getModel: () => Effect.succeed(Layer.empty as any),
+          };
+        },
+      };
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.fromIterable([
+        { type: 'finish', reason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ] as any) as any);
+
+      try {
+        await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          yield* registry.registerFactory(providerFactory);
+          yield* connections.put(connectionNamespace, {
+            id: connectionId,
+            label: 'Primary',
+            providerId: 'openai',
+            auth: { kind: 'api-key' },
+            status: 'active',
+          }, { kind: 'api-key', apiKey: Redacted.make('first-secret') });
+
+          const service = yield* AgentService;
+          const agent = yield* service.createAgent(createAgentConfig('rotating-agent', { connectionId, connectionNamespace }));
+          if (agent.streamMessage === undefined) return yield* Effect.fail(new Error('Expected streaming agent.'));
+          yield* Stream.runCollect(agent.streamMessage('First', []));
+          yield* connections.put(connectionNamespace, {
+            id: connectionId,
+            label: 'Primary',
+            providerId: 'openai',
+            auth: { kind: 'api-key' },
+            status: 'active',
+          }, { kind: 'api-key', apiKey: Redacted.make('second-secret') });
+          yield* Stream.runCollect(agent.streamMessage('Second', []));
+        }));
+      } finally {
+        streamSpy.mockRestore();
+      }
+
+      expect(resolvedKeys).toEqual(['first-secret', 'second-secret']);
+    });
+
+    it('prepares saved credentials before every agent invocation', async () => {
+      const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12');
+      const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-oauth');
+      const resolvedTokens: string[] = [];
+      let preparations = 0;
+      const providerFactory: EffectProviderFactory = {
+        id: 'google',
+        makeConnectionPrepare: () => (resolved, context) => Effect.gen(function* () {
+          preparations += 1;
+          if (
+            resolved.source === 'saved'
+            && resolved.credentials.kind === 'oauth2-bearer'
+            && Redacted.value(resolved.credentials.accessToken) === 'expired-access'
+          ) {
+            yield* context.compareAndSetCredentials({
+              ...resolved.credentials,
+              accessToken: Redacted.make('rotated-access'),
+            }, resolved.credentialVersion, new Date('2099-01-01T00:00:00.000Z'));
+            return yield* context.reload();
+          }
+          return resolved;
+        }),
+        load: async (config) => {
+          if (config.credentials?.kind === 'oauth2-bearer') {
+            resolvedTokens.push(Redacted.value(config.credentials.accessToken));
+          }
+          return {
+            layer: Layer.empty,
+            getModel: () => Effect.succeed(Layer.empty as any),
+          };
+        },
+      };
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.fromIterable([
+        { type: 'finish', reason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ] as any) as any);
+
+      try {
+        await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          yield* registry.registerFactory(providerFactory);
+          yield* connections.put(connectionNamespace, {
+            id: connectionId,
+            label: 'Google OAuth',
+            providerId: 'google',
+            auth: { kind: 'oauth2-bearer' },
+            status: 'active',
+          }, {
+            kind: 'oauth2-bearer',
+            accessToken: Redacted.make('expired-access'),
+            refreshToken: Redacted.make('refresh-token'),
+          });
+          const service = yield* AgentService;
+          const agent = yield* service.createAgent(createAgentConfig('oauth-agent', {
+            platform: 'google',
+            connectionId,
+            connectionNamespace,
+          }));
+          if (agent.streamMessage === undefined) return yield* Effect.fail(new Error('Expected streaming agent.'));
+          yield* Stream.runCollect(agent.streamMessage('First', []));
+          yield* Stream.runCollect(agent.streamMessage('Second', []));
+        }));
+      } finally {
+        streamSpy.mockRestore();
+      }
+
+      expect(preparations).toBe(2);
+      expect(resolvedTokens).toEqual(['rotated-access', 'rotated-access']);
+    });
+
+    it('invokes both local-compatible protocols with none, API-key, and Basic auth', async () => {
+      const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-local');
+      const runtimeConfigs: Array<{ providerId: string; baseUrl: string | undefined; auth: string | undefined }> = [];
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.fromIterable([
+        { type: 'finish', reason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ] as any) as any);
+      const cases: ReadonlyArray<{
+        id: string;
+        providerId: 'openai' | 'anthropic';
+        protocol: ProviderConnectionProtocol;
+        auth: ProviderConnectionAuth;
+        credentials: ProviderConnectionCredentials;
+      }> = [
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', providerId: 'openai', protocol: 'openai-compatible', auth: { kind: 'none' }, credentials: { kind: 'none' } },
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', providerId: 'openai', protocol: 'openai-compatible', auth: { kind: 'api-key' }, credentials: { kind: 'api-key', apiKey: Redacted.make('local-openai-key') } },
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', providerId: 'openai', protocol: 'openai-compatible', auth: { kind: 'basic' }, credentials: { kind: 'basic', username: Redacted.make('openai-user'), password: Redacted.make('openai-password') } },
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', providerId: 'anthropic', protocol: 'anthropic-compatible', auth: { kind: 'none' }, credentials: { kind: 'none' } },
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', providerId: 'anthropic', protocol: 'anthropic-compatible', auth: { kind: 'api-key' }, credentials: { kind: 'api-key', apiKey: Redacted.make('local-anthropic-key') } },
+        { id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16', providerId: 'anthropic', protocol: 'anthropic-compatible', auth: { kind: 'basic' }, credentials: { kind: 'basic', username: Redacted.make('anthropic-user'), password: Redacted.make('anthropic-password') } },
+      ];
+
+      try {
+        await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          const service = yield* AgentService;
+          for (const providerId of ['openai', 'anthropic'] as const) {
+            yield* registry.registerFactory({
+              id: providerId,
+              connectionCapabilities: { providerId, auth: ['api-key'], login: ['manual-secret'] },
+              load: async (config) => {
+                if (config.baseUrl !== undefined) {
+                  runtimeConfigs.push({ providerId, baseUrl: config.baseUrl, auth: config.credentials?.kind });
+                }
+                return {
+                  layer: Layer.empty,
+                  getModel: () => Effect.succeed(Layer.empty as any),
+                };
+              },
+            });
+          }
+
+          for (const fixture of cases) {
+            const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)(fixture.id);
+            yield* connections.put(connectionNamespace, {
+              id: connectionId,
+              label: `Local ${fixture.providerId} ${fixture.auth.kind}`,
+              providerId: 'local-compatible',
+              endpoint: `http://127.0.0.1:${fixture.providerId === 'openai' ? '11434' : '11435'}/v1`,
+              protocol: fixture.protocol,
+              auth: fixture.auth,
+              status: 'active',
+            }, fixture.credentials);
+            const agent = yield* service.createAgent(createAgentConfig(`local-${fixture.providerId}-${fixture.auth.kind}`, {
+              platform: fixture.providerId,
+              connectionId,
+              connectionNamespace,
+            }));
+            if (agent.streamMessage === undefined) return yield* Effect.fail(new Error('Expected streaming agent.'));
+            yield* Stream.runCollect(agent.streamMessage('Hello', []));
+          }
+        }));
+      } finally {
+        streamSpy.mockRestore();
+      }
+
+      expect(runtimeConfigs).toEqual(cases.map((fixture) => ({
+        providerId: fixture.providerId,
+        baseUrl: `http://127.0.0.1:${fixture.providerId === 'openai' ? '11434' : '11435'}/v1`,
+        auth: fixture.auth.kind,
+      })));
+    });
+
+    it('rejects local auth modes on hosted provider connections', async () => {
+      const connectionId = Schema.decodeUnknownSync(ProviderConnectionId)('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+      const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-hosted');
+      const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.empty as any);
+
+      try {
+        const result = await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          yield* registry.registerFactory({
+            id: 'openai',
+            connectionCapabilities: { providerId: 'openai', auth: ['api-key'], login: ['manual-secret'] },
+            load: async () => ({ layer: Layer.empty, getModel: () => Effect.succeed(Layer.empty as any) }),
+          });
+          yield* connections.put(connectionNamespace, {
+            id: connectionId,
+            label: 'Invalid hosted no-auth',
+            providerId: 'openai',
+            auth: { kind: 'none' },
+            status: 'active',
+          }, { kind: 'none' });
+          const service = yield* AgentService;
+          const agent = yield* service.createAgent(createAgentConfig('hosted-no-auth', { connectionId, connectionNamespace }));
+          if (agent.streamMessage === undefined) return yield* Effect.fail(new Error('Expected streaming agent.'));
+          return yield* Stream.runCollect(agent.streamMessage('Hello', [])).pipe(Effect.either);
+        }));
+        expect(result._tag).toBe('Left');
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
     it('creates an agent when provider exists', async () => {
       const createdId = await runTest(
         Effect.gen(function* () {

@@ -13,6 +13,16 @@ import type { PauseMetadata } from '../pause/types';
 import { POSTGRES_CHECKPOINTS_DDL } from './schema';
 import { withFredSpan } from '../../observability/otel';
 
+let legacyPostgresWarningShown = false;
+
+const warnLegacyPostgres = (): void => {
+  if (legacyPostgresWarningShown) return;
+  legacyPostgresWarningShown = true;
+  console.warn(
+    '[Fred] PostgresCheckpointStorage from @fancyrobot/fred is deprecated and will be removed in the next major release. New applications should use @fancyrobot/fred-postgres.',
+  );
+};
+
 /**
  * Tracing combinator.
  * Casts Effect to remove requirements and ignores tracing failures.
@@ -101,6 +111,7 @@ export class PostgresCheckpointStorage implements CheckpointStorage {
         'PostgresCheckpointStorage requires either connectionString or pool'
       );
     }
+    warnLegacyPostgres();
   }
 
   /**

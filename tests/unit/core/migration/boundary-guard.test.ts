@@ -102,6 +102,8 @@ describe('Effect runtime boundary guards', () => {
     'commands/list.ts',
     'commands/route.ts',
     'commands/mcp.ts',
+    'commands/provider.ts',
+    'commands/postgres.ts',
     'eval.ts',
   ]);
 

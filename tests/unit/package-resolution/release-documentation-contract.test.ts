@@ -17,6 +17,10 @@ type BunLock = {
 const REPO_ROOT = resolve(import.meta.dir, "../../..");
 const MIGRATION_PATH = join(REPO_ROOT, "MIGRATION.md");
 const ROOT_README_PATH = join(REPO_ROOT, "README.md");
+const STRUCT_HANDOFF_PATH = join(
+  REPO_ROOT,
+  "docs/struct-provider-connections-handoff.md",
+);
 const LOCK_PATH = join(REPO_ROOT, "bun.lock");
 const PACKAGES_ROOT = join(REPO_ROOT, "packages");
 const PACKAGE_DIRS = readdirSync(PACKAGES_ROOT, { withFileTypes: true })
@@ -27,6 +31,7 @@ const PACKAGE_DIRS = readdirSync(PACKAGES_ROOT, { withFileTypes: true })
   )
   .map((entry) => entry.name)
   .sort();
+const CHANGESETS_ROOT = join(REPO_ROOT, ".changeset");
 
 function readManifest(packageDir: string): PackageManifest {
   return JSON.parse(
@@ -116,17 +121,30 @@ describe("release documentation contract", () => {
   test("canonical matrices track every independent package version and peer range", () => {
     for (const packageDir of PACKAGE_DIRS) {
       const manifest = readManifest(packageDir);
+      const releaseVersion = manifest.version === "0.0.0" ? "1.0.0" : manifest.version;
       const row = matrixRow(migration, manifest.name);
       const rootRow = matrixRow(rootReadme, manifest.name);
 
-      expect(row).toContain(`| \`${manifest.version}\` |`);
-      expect(rootRow).toContain(`| \`${manifest.version}\` |`);
+      expect(row).toContain(`| \`${releaseVersion}\` |`);
+      expect(rootRow).toContain(`| \`${releaseVersion}\` |`);
 
       for (const [peerName, range] of Object.entries(
         manifest.peerDependencies ?? {},
       )) {
         expect(row).toContain(documentedPeer(peerName, range));
       }
+    }
+  });
+
+  test("unpublished packages enter the registry at 1.0.0", () => {
+    const changesets = readdirSync(CHANGESETS_ROOT)
+      .filter((name) => name.endsWith(".md") && name !== "README.md")
+      .map((name) => readFileSync(join(CHANGESETS_ROOT, name), "utf8"));
+
+    for (const packageDir of PACKAGE_DIRS) {
+      const manifest = readManifest(packageDir);
+      if (manifest.version !== "0.0.0") continue;
+      expect(changesets.some((changeset) => changeset.includes(`"${manifest.name}": major`))).toBe(true);
     }
   });
 
@@ -230,5 +248,24 @@ describe("release documentation contract", () => {
     );
 
     expectInstallBlockMatches(block, selectedPackages);
+  });
+
+  test("Struct handoff uses canonical provider IDs instead of package names", async () => {
+    const handoff = readFileSync(STRUCT_HANDOFF_PATH, "utf8");
+    const providers = {
+      openai: "@fancyrobot/fred-openai",
+      anthropic: "@fancyrobot/fred-anthropic",
+      google: "@fancyrobot/fred-google",
+      groq: "@fancyrobot/fred-groq",
+      minimax: "@fancyrobot/fred-minimax",
+      openrouter: "@fancyrobot/fred-openrouter",
+    };
+
+    for (const [providerId, packageName] of Object.entries(providers)) {
+      const factory = (await import(packageName)).default;
+      expect(factory.id).toBe(providerId);
+      expect(handoff).toContain(`| \`${providerId}\` | \`${packageName}\` |`);
+    }
+    expect(handoff).toContain("never persist it as a provider ID");
   });
 });

@@ -1,6 +1,11 @@
 import { Effect, Layer } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
 import type { ProviderConfig, ProviderDefinition, ProviderModelDefaults } from './provider';
+import type {
+  ProviderConnectionCapabilities,
+  ProviderConnectionPrepareFactory,
+  ProviderConnectionTestHook,
+} from './connections';
 import type { ProviderCapabilityKey } from './provider-capabilities';
 import { validatePackExports, isProviderFactory } from './pack-schema';
 import { ProviderPackLoadError, ProviderRegistrationError } from './errors';
@@ -13,6 +18,9 @@ export interface EffectProviderFactory {
   id: string;
   aliases?: string[];
   capabilities?: ReadonlySet<ProviderCapabilityKey>;
+  connectionCapabilities?: ProviderConnectionCapabilities;
+  connectionTest?: ProviderConnectionTestHook;
+  makeConnectionPrepare?: ProviderConnectionPrepareFactory;
   load: (config: ProviderConfig) => Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     layer: Layer.Layer<any, any, any>;
@@ -99,9 +107,13 @@ export async function createProviderDefinition(
     config,
     getModel: loadResult.getModel,
     layer: loadResult.layer,
+    factory: validatedFactory,
     capabilities: validatedFactory.capabilities
       ? new Set(validatedFactory.capabilities)
       : undefined,
+    connectionCapabilities: validatedFactory.connectionCapabilities,
+    connectionTest: validatedFactory.connectionTest,
+    connectionPrepare: validatedFactory.makeConnectionPrepare?.(config),
   };
 }
 
@@ -155,9 +167,13 @@ export const createProviderDefinitionEffect = (
       config,
       getModel: loadResult.getModel,
       layer: loadResult.layer,
+      factory: validatedFactory,
       capabilities: validatedFactory.capabilities
         ? new Set(validatedFactory.capabilities)
         : undefined,
+      connectionCapabilities: validatedFactory.connectionCapabilities,
+      connectionTest: validatedFactory.connectionTest,
+      connectionPrepare: validatedFactory.makeConnectionPrepare?.(config),
     };
   });
 };

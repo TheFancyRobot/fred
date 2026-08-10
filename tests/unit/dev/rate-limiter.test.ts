@@ -29,7 +29,7 @@ class AtomicPostgresPool implements PostgresRateLimitPool {
 
   async query(text: string, values: unknown[] = []) {
     this.queries.push(text);
-    if (text.includes(`INSERT INTO ${RATE_LIMIT_TABLE}`)) {
+    if (text.includes('INSERT INTO') && text.includes(RATE_LIMIT_TABLE)) {
       const [key, now, resetAt, maxRequests] = values as [string, number, number, number, string];
       const current = this.buckets.get(key);
       if (current === undefined || current.expiresAt <= now) {
@@ -212,7 +212,7 @@ describe('rate-limit storage safety', () => {
     const store = makePostgresRateLimitStore(pool);
     await Effect.runPromise(store.initialize);
     await consume(store, 'key', 0);
-    const consumeSql = pool.queries.find((sql) => sql.includes(`INSERT INTO ${RATE_LIMIT_TABLE}`)) ?? '';
+    const consumeSql = pool.queries.find((sql) => sql.includes('INSERT INTO') && sql.includes(RATE_LIMIT_TABLE)) ?? '';
     const ddl = pool.queries[0] ?? '';
     expect(consumeSql).toContain('ON CONFLICT(bucket_key) DO UPDATE');
     expect(ddl).toContain('expires_at');

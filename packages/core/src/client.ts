@@ -21,7 +21,7 @@
  * tests/unit/core/migration/boundary-guard.test.ts).
  */
 
-import { Cause, Data, Effect, Exit, Layer, Runtime, Scope } from 'effect';
+import { Cause, Data, Effect, Exit, Layer, Option, Runtime, Scope } from 'effect';
 import { dirname } from 'path';
 import type * as Schema from 'effect/Schema';
 import type {
@@ -54,6 +54,21 @@ import {
 import type { Tool, ToolSchemaMetadata } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
 import type { ProviderConfig, ProviderDefinition } from './platform/provider';
+import type {
+  ProviderConnection,
+  ProviderConnectionCredentials,
+  ProviderConnectionDraft,
+  ProviderConnectionId,
+  ProviderConnectionNamespace,
+  ResolvedProviderConnection,
+} from './platform/connections';
+import {
+  ProviderConnectionNotFoundError,
+  ProviderConnectionTestError,
+  providerConnectionRuntimeProviderId,
+  resolveProviderConnectionForUse,
+} from './platform/connections';
+import { testProviderConnectionDraft } from './platform/connection-test';
 import type { Tracer } from './tracing';
 import type { RoutingConfig } from './routing/types';
 import { buildObservabilityLayers } from './observability/otel';
@@ -70,7 +85,6 @@ import {
 import { loadValidatedConfig } from './config/load';
 import { configToLayerOptions } from './config/compile';
 import type { ContextStorage, SessionDetails, SessionSummary } from './context/context';
-import { PostgresContextStorage } from './context/storage/postgres';
 import { SqliteContextStorage } from './context/storage/sqlite';
 import { buildSessionDetails } from './context/session';
 import {
@@ -84,6 +98,7 @@ import {
   PipelineService,
   ContextStorageService,
   ProviderRegistryService,
+  ProviderConnectionService,
   HookManagerService,
   MessageProcessorService,
   MessageRouterService,
@@ -115,7 +130,6 @@ import { BUILTIN_PACKS } from './platform/packs';
 import type { AgentFileWatcher } from './agent/file-watcher';
 import {
   CheckpointCleanupTask,
-  PostgresCheckpointStorage,
   SqliteCheckpointStorage,
   type CheckpointStorage,
 } from './pipeline/checkpoint';
@@ -269,6 +283,10 @@ export interface CreateFredOptions {
   template?: TemplateConfig;
   /** Persistent conversation storage adapter (e.g. SQLite/Postgres). */
   storage?: ContextStorage;
+  /** Persistent workflow-checkpoint storage adapter. */
+  checkpointStorage?: CheckpointStorage;
+  /** Provider-connection service used for explicit persisted credentials. */
+  providerConnectionLayer?: FredLayerOptions['providerConnectionLayer'];
   /** Prompt adapter layer used while constructing AgentService. */
   promptSourceLayer?: FredLayerOptions['promptSourceLayer'];
 }
@@ -327,6 +345,32 @@ export interface FredClient {
     remove(id: string): Promise<boolean>;
     get(id: string): Promise<AnyAgentInstance | null>;
     list(): Promise<AnyAgentInstance[]>;
+  };
+  /** Transport-neutral provider-connection management for clients and the CLI. */
+  readonly connections: {
+    list(namespace: ProviderConnectionNamespace): Promise<readonly ProviderConnection[]>;
+    get(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<ProviderConnection | null>;
+    put(
+      namespace: ProviderConnectionNamespace,
+      connection: ProviderConnection,
+      credentials: ProviderConnectionCredentials,
+      expiresAt?: Date,
+    ): Promise<void>;
+    updateMetadata(namespace: ProviderConnectionNamespace, connection: ProviderConnection): Promise<boolean>;
+    remove(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<boolean>;
+    testDraft(draft: ProviderConnectionDraft, credentials: ProviderConnectionCredentials): Promise<void>;
+    test(namespace: ProviderConnectionNamespace, id: ProviderConnectionId): Promise<void>;
+    resolve(request: {
+      readonly providerId: string;
+      readonly connectionId: ProviderConnectionId;
+      readonly namespace: ProviderConnectionNamespace;
+      readonly apiKeyEnvVar?: string;
+    } | {
+      readonly providerId: string;
+      readonly connectionId?: undefined;
+      readonly namespace?: undefined;
+      readonly apiKeyEnvVar?: string;
+    }): Promise<ResolvedProviderConnection>;
   };
   readonly messages: {
     process(message: string, options?: ProcessingOptions): Promise<AgentResponse>;
@@ -475,21 +519,20 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   const template = options.template ?? loadedConfig?.template;
   const templateBasePath = options.configPath ? dirname(options.configPath) : process.cwd();
   const persistence = loadedConfig?.persistence;
-  let configuredStorage: PostgresContextStorage | SqliteContextStorage | undefined;
-  let configuredCheckpointStorage: CheckpointStorage | undefined;
+  let configuredStorage: SqliteContextStorage | undefined;
+  let configuredCheckpointStorage: CheckpointStorage | undefined = options.checkpointStorage;
+  let ownsConfiguredCheckpointStorage = false;
   if (persistence) {
     if (persistence.adapter === 'postgres') {
-      const connectionString = process.env.FRED_POSTGRES_URL;
-      if (!connectionString) {
+      if (options.storage === undefined) {
         throw new Error(
-          'FRED_POSTGRES_URL environment variable is required for Postgres persistence adapter',
+          'Postgres persistence requires an explicit PostgresContextStorage from @fancyrobot/fred-postgres',
         );
       }
-      if (!options.storage) {
-        configuredStorage = new PostgresContextStorage({ connectionString });
-      }
-      if (persistence.checkpoint?.enabled !== false) {
-        configuredCheckpointStorage = new PostgresCheckpointStorage({ connectionString });
+      if (persistence.checkpoint?.enabled !== false && options.checkpointStorage === undefined) {
+        throw new Error(
+          'Postgres checkpoints require an explicit PostgresCheckpointStorage from @fancyrobot/fred-postgres',
+        );
       }
     } else {
       const path = process.env.FRED_SQLITE_PATH ?? './fred.db';
@@ -498,6 +541,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       }
       if (persistence.checkpoint?.enabled !== false) {
         configuredCheckpointStorage = new SqliteCheckpointStorage({ path });
+        ownsConfiguredCheckpointStorage = true;
       }
     }
   }
@@ -511,6 +555,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
       storage: options.storage ?? configuredStorage,
       checkpointStorage: configuredCheckpointStorage,
       checkpointTtlMs: persistence?.checkpoint?.ttlMs,
+      providerConnectionLayer: options.providerConnectionLayer,
     }),
     TemplateEngineLive({ ...template, basePath: templateBasePath })
   ) as Layer.Layer<FredServices | TemplateEngine>;
@@ -519,7 +564,7 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
   if (configuredStorage) {
     ownedClosers.push(async () => { await configuredStorage.close(); });
   }
-  if (configuredCheckpointStorage) {
+  if (ownsConfiguredCheckpointStorage && configuredCheckpointStorage) {
     ownedClosers.push(() => configuredCheckpointStorage.close());
   }
   const closeOwnedResources = async (): Promise<void> => {
@@ -659,6 +704,68 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
           (agent) => agent ?? null,
         )),
       list: () => run(Effect.flatMap(AgentService, (s) => s.getAllAgents())),
+    },
+
+    connections: {
+      list: (namespace) => run(Effect.flatMap(ProviderConnectionService, (service) => service.list(namespace))),
+      get: (namespace, id) => run(Effect.map(
+        Effect.flatMap(ProviderConnectionService, (service) => service.get(namespace, id)),
+        Option.getOrNull,
+      )),
+      put: (namespace, connection, credentials, expiresAt) => run(Effect.flatMap(
+        ProviderConnectionService,
+        (service) => service.put(namespace, connection, credentials, expiresAt),
+      )),
+      updateMetadata: (namespace, connection) => run(Effect.flatMap(
+        ProviderConnectionService,
+        (service) => service.updateMetadata(namespace, connection),
+      )),
+      remove: (namespace, id) => run(Effect.flatMap(ProviderConnectionService, (service) => service.remove(namespace, id))),
+      testDraft: (draft, credentials) => run(testProviderConnectionDraft(draft, credentials)),
+      test: (namespace, id) => run(Effect.gen(function* () {
+        const service = yield* ProviderConnectionService;
+        const connection = yield* service.get(namespace, id).pipe(Effect.flatMap(Option.match({
+          onNone: () => Effect.fail(new ProviderConnectionNotFoundError({
+            connectionId: id,
+            message: `Provider connection "${id}" was not found.`,
+          })),
+          onSome: Effect.succeed,
+        })));
+        const providerId = providerConnectionRuntimeProviderId(connection);
+        if (providerId === undefined) {
+          return yield* new ProviderConnectionTestError({
+            providerId: connection.providerId,
+            reason: 'configuration',
+            message: 'Local-compatible provider connection requires a supported protocol.',
+          });
+        }
+        const providers = yield* ProviderRegistryService;
+        const request = { providerId, namespace, connectionId: id } as const;
+        const resolved = yield* providers.hasProvider(providerId).pipe(
+          Effect.flatMap((registered) => registered
+            ? providers.getDefinition(providerId).pipe(
+              Effect.flatMap((provider) => resolveProviderConnectionForUse(service, provider, request)),
+            )
+            : resolveProviderConnectionForUse(service, undefined, request)),
+        );
+        const draft: ProviderConnectionDraft = {
+          label: connection.label,
+          providerId: connection.providerId,
+          auth: connection.auth,
+          ...(connection.endpoint === undefined ? {} : { endpoint: connection.endpoint }),
+          ...(connection.protocol === undefined ? {} : { protocol: connection.protocol }),
+        };
+        return yield* testProviderConnectionDraft(draft, resolved.credentials);
+      })),
+      resolve: (request) => run(Effect.gen(function* () {
+        const service = yield* ProviderConnectionService;
+        const providers = yield* ProviderRegistryService;
+        if (!(yield* providers.hasProvider(request.providerId))) {
+          return yield* resolveProviderConnectionForUse(service, undefined, request);
+        }
+        const provider = yield* providers.getDefinition(request.providerId);
+        return yield* resolveProviderConnectionForUse(service, provider, request);
+      })),
     },
 
     messages: {

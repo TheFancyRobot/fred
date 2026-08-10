@@ -22,6 +22,16 @@ import {
 } from './serialization';
 import { extractAgentMetadata, extractMessagePreviewText } from './text-utils';
 
+let legacyPostgresWarningShown = false;
+
+const warnLegacyPostgres = (): void => {
+  if (legacyPostgresWarningShown) return;
+  legacyPostgresWarningShown = true;
+  console.warn(
+    '[Fred] PostgresContextStorage from @fancyrobot/fred is deprecated and will be removed in the next major release. New applications should use @fancyrobot/fred-postgres.',
+  );
+};
+
 interface SessionRow {
   id: string;
   created_at: string | Date;
@@ -75,6 +85,7 @@ export class PostgresContextStorage implements ContextStorage {
         'PostgresContextStorage requires either connectionString or pool'
       );
     }
+    warnLegacyPostgres();
   }
 
   /**

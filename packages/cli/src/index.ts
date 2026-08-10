@@ -20,6 +20,8 @@ import { handleMcpCommand } from './commands/mcp';
 import { handleValidateCommand } from './commands/validate';
 import { handleStatusCommand } from './commands/status';
 import { handleKeysCommand } from './commands/keys';
+import { handleProviderCommand } from './commands/provider';
+import { handlePostgresCommand } from './commands/postgres';
 import { resolveProjectConfig } from './project/resolve-config.js';
 import {
   AggregatedPluginValidationError,
@@ -64,6 +66,12 @@ const OPTIONS_REQUIRING_VALUE = new Set([
   'id',
   'rate-limit-max',
   'rate-limit-window-ms',
+  'endpoint',
+  'protocol',
+  'auth',
+  'username',
+  'schema',
+  'modules',
 ]);
 
 const BUILTIN_COMMANDS = new Set([
@@ -88,6 +96,8 @@ const BUILTIN_COMMANDS = new Set([
   'mcp',
   'validate',
   'keys',
+  'provider',
+  'postgres',
 ]);
 
 const PLUGIN_VALIDATION_EXIT_CODE = 12;
@@ -180,6 +190,19 @@ Commands:
   keys create             Create a scoped API key in durable storage
                           --sqlite <path> | --postgres <url>
                           --scopes <a,b>   Optional comma-separated scopes
+  provider add <provider> <label>
+                          Add an encrypted provider connection
+  provider list           List provider connection metadata
+  provider test <id>      Test a saved provider connection
+  provider login <provider> <label>
+                          Login with Google or OpenRouter OAuth
+  provider status|logout|remove <id>
+  postgres import-legacy  Preflight and copy supported legacy public tables
+                          --modules <a,b>  context, checkpoints, http-api-keys, http-rate-limits
+                          --schema <name>  Destination schema (default: FRED_POSTGRES_SCHEMA or fred)
+                          --dry-run        Preflight only; never copies rows
+                          --yes            Required for non-interactive execution
+                          --json           Output structured metadata only
   session                 Manage saved chat sessions
   session list             List sessions (table or --json)
   session show <id>        Show a session transcript
@@ -219,6 +242,9 @@ Examples:
   fred validate
   fred validate --preview
   fred keys create --sqlite ./fred.db --scopes workflows:run
+  fred provider add openai work --secret-stdin < ./openai-key.txt
+  fred provider login google work-google
+  FRED_POSTGRES_URL=... fred postgres import-legacy --dry-run
   fred session list
   fred session list --json
   fred session show conv_123
@@ -346,6 +372,14 @@ async function main(): Promise<void> {
 
       case 'keys':
         exitCode = await handleKeysCommand(commandArgs, options);
+        break;
+
+      case 'provider':
+        exitCode = await handleProviderCommand(commandArgs, options);
+        break;
+
+      case 'postgres':
+        exitCode = await handlePostgresCommand(commandArgs, options);
         break;
 
 

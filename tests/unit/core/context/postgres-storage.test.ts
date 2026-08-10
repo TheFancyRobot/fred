@@ -63,8 +63,18 @@ describe('PostgresContextStorage', () => {
       const { client } = createMockClient({});
       const pool = createMockPool(client);
 
-      const storage = new PostgresContextStorage({ pool: pool as any });
+      const warnings: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
+      let storage: PostgresContextStorage;
+      try {
+        storage = new PostgresContextStorage({ pool: pool as any });
+      } finally {
+        console.warn = originalWarn;
+      }
       expect(storage).toBeInstanceOf(PostgresContextStorage);
+      expect(warnings.join(' ')).toContain('deprecated');
+      expect(warnings.join(' ')).toContain('@fancyrobot/fred-postgres');
     });
   });
 

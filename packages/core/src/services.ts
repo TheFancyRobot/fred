@@ -14,6 +14,11 @@ import type { ToolGateServiceApi } from './tool-gate/types';
 import { HookManagerService, HookManagerServiceLive } from './hooks/service';
 import { ProviderRegistryService, ProviderRegistryServiceLive } from './platform/service';
 import {
+  ProviderConnectionService,
+  makeLegacyProviderConnectionResolver,
+  makeInMemoryProviderConnectionLayer,
+} from './platform/connections';
+import {
   ContextStorageService,
   ContextStorageServiceLive,
   ContextStorageServiceLiveWithAdapter,
@@ -59,6 +64,7 @@ export type FredServices =
   | ToolGateServiceApi
   | HookManagerService
   | ProviderRegistryService
+  | ProviderConnectionService
   | ContextStorageService
   | PromptSourceServiceApi
   | AgentService
@@ -325,9 +331,11 @@ export const makeFredLayers = (
   contextStorageLayer: Layer.Layer<ContextStorageService> = ContextStorageServiceLive,
   checkpointServiceLayer: Layer.Layer<CheckpointService> = CheckpointServiceLive,
   messageRouterLayer?: Layer.Layer<MessageRouterService>,
+  providerConnectionLayer?: Layer.Layer<ProviderConnectionService>,
 ) => {
   const selectedCoreLayer = Layer.mergeAll(
     ProviderRegistryServiceLive,
+    providerConnectionLayer ?? makeInMemoryProviderConnectionLayer([], makeLegacyProviderConnectionResolver(process.env)),
     contextStorageLayer,
     checkpointServiceLayer,
   );
@@ -337,7 +345,7 @@ export const makeFredLayers = (
   const selectedAgentLayer = makeAgentServiceLive(promptSourceLayer).pipe(
     Layer.provide(baseLayer),
     Layer.provide(toolGateLayer),
-    Layer.provide(ProviderRegistryServiceLive)
+    Layer.provide(selectedCoreLayer)
   );
 
   const selectedWorkflowLayer = WorkflowServiceLive.pipe(
@@ -414,6 +422,8 @@ export interface FredLayerOptions {
   storage?: ContextStorage;
   checkpointStorage?: CheckpointStorage;
   checkpointTtlMs?: number;
+  /** Explicit provider-connection service, such as an encrypted Postgres store. */
+  providerConnectionLayer?: Layer.Layer<ProviderConnectionService>;
 }
 
 /**
@@ -438,6 +448,7 @@ export const makeFredRuntimeLayer = (options: FredLayerOptions = {}): Layer.Laye
     contextStorageLayer,
     checkpointServiceLayer,
     messageRouterLayer,
+    options.providerConnectionLayer,
   );
 
   if (!options.observabilityLayers) {
@@ -506,6 +517,7 @@ export {
   HookManagerServiceLive,
   ProviderRegistryService,
   ProviderRegistryServiceLive,
+  ProviderConnectionService,
   ContextStorageService,
   ContextStorageServiceLive,
   ContextStorageServiceLiveWithAdapter,

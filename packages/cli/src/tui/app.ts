@@ -150,6 +150,7 @@ export interface PluginSlashCommandRuntime {
   commandId: string;
   summary: string;
   usage?: string;
+  aliases?: ReadonlyArray<string>;
   available: boolean;
   execute: (args: string, context: PluginSlashCommandExecutionContext) => Promise<string | void> | string | void;
 }
@@ -262,6 +263,9 @@ export class FredTuiApp {
     this.streamingSyntaxStyle = this.syntaxStyle;
     for (const command of config.pluginSlashCommands ?? []) {
       this.pluginSlashRegistry.set(`/${command.pluginId}:${command.commandId}`, command);
+      for (const alias of command.aliases ?? []) {
+        this.pluginSlashRegistry.set(alias, command);
+      }
     }
   }
 
@@ -1391,7 +1395,7 @@ export class FredTuiApp {
     }
 
     const [commandToken] = trimmed.split(/\s+/, 1);
-    if (!commandToken.includes(':')) {
+    if (!commandToken.includes(':') && !this.pluginSlashRegistry.has(commandToken)) {
       return null;
     }
 

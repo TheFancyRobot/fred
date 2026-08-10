@@ -425,6 +425,14 @@ describe('API key durable stores', () => {
 });
 
 describe('fred keys create', () => {
+  test('binds API-key migrations and storage to the canonical Postgres schema', async () => {
+    const source = await Bun.file('packages/cli/src/commands/keys.ts').text();
+    expect(source).toContain('process.env.FRED_POSTGRES_SCHEMA ?? postgres.DEFAULT_POSTGRES_SCHEMA');
+    expect(source).toContain('makeFredPostgres({ pool, schema })');
+    expect(source).toContain('fredPostgresStoreMigrations(schema)');
+    expect(source).toContain('makePostgresApiKeyStore(pool, { schema })');
+  });
+
   test('rejects memory and emits a raw key only once after durable success', async () => {
     const stdout = spyOn(console, 'log').mockImplementation(() => undefined);
     const stderr = spyOn(console, 'error').mockImplementation(() => undefined);

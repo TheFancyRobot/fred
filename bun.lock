@@ -17,6 +17,7 @@
         "@fancyrobot/fred-minimax": "workspace:*",
         "@fancyrobot/fred-openai": "workspace:*",
         "@fancyrobot/fred-openrouter": "workspace:*",
+        "@fancyrobot/fred-postgres": "workspace:*",
       },
       "devDependencies": {
         "@changesets/changelog-github": "^0.6.0",
@@ -163,6 +164,15 @@
         "effect": "^3.21.5",
       },
     },
+    "examples/16-provider-connections-postgres": {
+      "name": "@fancyrobot/fred-example-16-provider-connections-postgres",
+      "dependencies": {
+        "@fancyrobot/fred": "workspace:*",
+        "@fancyrobot/fred-postgres": "workspace:*",
+        "effect": "^3.21.5",
+        "pg": "^8.22.0",
+      },
+    },
     "packages/cli": {
       "name": "@fancyrobot/fred-cli",
       "version": "0.6.0",
@@ -174,8 +184,10 @@
         "@fancyrobot/fred-anthropic": "^4.0.0",
         "@fancyrobot/fred-google": "^4.0.0",
         "@fancyrobot/fred-groq": "^4.0.0",
+        "@fancyrobot/fred-minimax": "^2.0.0",
         "@fancyrobot/fred-openai": "^4.0.0",
         "@fancyrobot/fred-openrouter": "^5.0.0",
+        "@fancyrobot/fred-postgres": "^0.0.0",
         "@opentui/core": "^0.1.92",
         "semver": "^7.7.4",
       },
@@ -226,7 +238,7 @@
         "@types/bun": "latest",
       },
       "peerDependencies": {
-        "@fancyrobot/fred-cli": "^0.6.0-alpha.0",
+        "@fancyrobot/fred-cli": ">=0.6.0-alpha.0 <1.0.0",
       },
     },
     "packages/fred-baml": {
@@ -256,6 +268,9 @@
     "packages/fred-http": {
       "name": "@fancyrobot/fred-http",
       "version": "1.0.0",
+      "dependencies": {
+        "@fancyrobot/fred-postgres": "^0.0.0",
+      },
       "devDependencies": {
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",
@@ -267,6 +282,17 @@
         "@effect/platform-bun": "^0.89.0",
         "@fancyrobot/fred": "^2.0.0-alpha.0",
         "effect": "^3.21.5",
+      },
+    },
+    "packages/fred-postgres": {
+      "name": "@fancyrobot/fred-postgres",
+      "version": "0.0.0",
+      "dependencies": {
+        "pg": "^8.22.0",
+      },
+      "peerDependencies": {
+        "@fancyrobot/fred": "^2.0.0-alpha.0",
+        "effect": "^3.21.0",
       },
     },
     "packages/provider-anthropic": {
@@ -536,6 +562,8 @@
 
     "@fancyrobot/fred-example-15-http-workflows": ["@fancyrobot/fred-example-15-http-workflows@workspace:examples/15-http-workflows"],
 
+    "@fancyrobot/fred-example-16-provider-connections-postgres": ["@fancyrobot/fred-example-16-provider-connections-postgres@workspace:examples/16-provider-connections-postgres"],
+
     "@fancyrobot/fred-google": ["@fancyrobot/fred-google@workspace:packages/provider-google"],
 
     "@fancyrobot/fred-groq": ["@fancyrobot/fred-groq@workspace:packages/provider-groq"],
@@ -547,6 +575,8 @@
     "@fancyrobot/fred-openai": ["@fancyrobot/fred-openai@workspace:packages/provider-openai"],
 
     "@fancyrobot/fred-openrouter": ["@fancyrobot/fred-openrouter@workspace:packages/provider-openrouter"],
+
+    "@fancyrobot/fred-postgres": ["@fancyrobot/fred-postgres@workspace:packages/fred-postgres"],
 
     "@inquirer/external-editor": ["@inquirer/external-editor@1.0.3", "", { "dependencies": { "chardet": "^2.1.1", "iconv-lite": "^0.7.0" }, "peerDependencies": { "@types/node": ">=18" }, "optionalPeers": ["@types/node"] }, "sha512-RWbSrDiYmO4LbejWY7ttpxczuwQyZLBUyygsA9Nsv95hpzUWwnNTVQmAq3xuh7vNwCp07UTmE5i11XAEExx4RA=="],
 

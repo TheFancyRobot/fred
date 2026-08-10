@@ -89,7 +89,13 @@ export async function handleKeysCommand(
       const { Pool } = await import('pg');
       const pool = new Pool({ connectionString: options.postgres });
       close = () => pool.end();
-      store = http.makePostgresApiKeyStore(pool);
+      const postgres = await import('@fancyrobot/fred-postgres');
+      const schema = process.env.FRED_POSTGRES_SCHEMA ?? postgres.DEFAULT_POSTGRES_SCHEMA;
+      const database = await Effect.runPromise(postgres.makeFredPostgres({ pool, schema }));
+      await Effect.runPromise(database.migrate(
+        postgres.fredPostgresStoreMigrations(schema).filter((migration) => migration.module === 'http-api-keys'),
+      ));
+      store = http.makePostgresApiKeyStore(pool, { schema });
     }
 
     const expiresAt = parseIsoTimestamp(options['expires-at']);
