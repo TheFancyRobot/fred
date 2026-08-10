@@ -1,5 +1,16 @@
 # @fred/provider-openai
 
+## 4.1.0
+
+### Minor Changes
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`4e77d1b`](https://github.com/TheFancyRobot/fred/commit/4e77d1b41b730cadb5e8f6c0a3f6077c23f7ba01) Thanks [@sincspecv](https://github.com/sincspecv)! - Bind provider clients to explicit connections at invocation time, with redacted credential inputs and provider capability manifests.
+
+### Patch Changes
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`784cc24`](https://github.com/TheFancyRobot/fred/commit/784cc24848cfdd617075ecb93935c32103878e74) Thanks [@sincspecv](https://github.com/sincspecv)! - Test provider-connection drafts and saved IDs with provider-owned authenticated,
+  bounded probes that reject unsuccessful HTTP status without exposing secrets.
+
 ## 4.0.0
 
 ### Patch Changes
