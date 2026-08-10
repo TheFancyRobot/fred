@@ -57,8 +57,10 @@ const rotationRow = async (candidate: ProviderConnection, encryptionKey: typeof 
 
 interface QueryStep {
   readonly contains: string;
+  readonly excludes?: string;
   readonly rows?: readonly Record<string, unknown>[];
   readonly rowCount?: number;
+  readonly error?: Error;
   readonly assertValues?: (values: unknown[] | undefined) => void;
 }
 
@@ -68,7 +70,9 @@ const scriptedPool = (steps: QueryStep[]): PostgresPool => ({
       const step = steps.shift();
       if (step === undefined) throw new Error(`Unexpected query: ${sql}`);
       expect(sql).toContain(step.contains);
+      if (step.excludes !== undefined) expect(sql).not.toContain(step.excludes);
       step.assertValues?.(values);
+      if (step.error !== undefined) throw step.error;
       return { rows: step.rows ?? [], rowCount: step.rowCount ?? step.rows?.length ?? 0 };
     },
     release: () => undefined,
@@ -137,7 +141,8 @@ test('credential rotation reports malformed and unavailable rows while continuin
   const [missingRow, laterRow] = await Promise.all([rotationRow(connection, missingKey), rotationRow(laterConnection, oldKey)]);
   const rows = [{ ...missingRow, id: 'not-a-uuid' }, missingRow, laterRow];
   const steps: QueryStep[] = [
-    { contains: 'ORDER BY c.updated_at', rows },
+    { contains: 'ORDER BY k.updated_at', rows },
+    { contains: 'WHERE connection_id = $1 AND key_id = $2', rowCount: 1 },
     { contains: 'BEGIN' },
     { contains: 'UPDATE "fred"."provider_connections"', rowCount: 1 },
     { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
@@ -160,6 +165,69 @@ test('credential rotation reports malformed and unavailable rows while continuin
   expect(steps).toHaveLength(0);
 });
 
+test('credential rotation advances past a skipped oldest row on the next bounded call', async () => {
+  const missingKey = { id: 'missing', key: Redacted.make(new Uint8Array(32).fill(3)) };
+  const oldKey = { id: 'old', key: Redacted.make(new Uint8Array(32).fill(4)) };
+  const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
+  const laterConnection = { ...connection, id: Schema.decodeUnknownSync(ProviderConnectionId)('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12'), label: 'Later' };
+  const [blockedRow, laterRow] = await Promise.all([rotationRow(connection, missingKey), rotationRow(laterConnection, oldKey)]);
+  const steps: QueryStep[] = [
+    { contains: 'ORDER BY k.updated_at', rows: [blockedRow] },
+    {
+      contains: 'WHERE connection_id = $1 AND key_id = $2',
+      rowCount: 1,
+      assertValues: (values) => expect(values).toEqual([connection.id, missingKey.id]),
+    },
+    { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [{ one: 1 }] },
+    { contains: 'ORDER BY k.updated_at', rows: [laterRow] },
+    { contains: 'BEGIN' },
+    { contains: 'UPDATE "fred"."provider_connections"', rowCount: 1 },
+    { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
+    { contains: 'COMMIT' },
+    { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [{ one: 1 }] },
+  ];
+  const store = makePostgresProviderConnectionStore({
+    pool: scriptedPool(steps),
+    keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
+  });
+
+  expect(await Effect.runPromise(store.rotateCredentials(namespace, 1))).toMatchObject({
+    rotated: 0,
+    remaining: true,
+    skipped: [{ connectionId: connection.id, keyId: missingKey.id }],
+  });
+  expect(await Effect.runPromise(store.rotateCredentials(namespace, 1))).toMatchObject({
+    rotated: 1,
+    remaining: true,
+    skipped: [],
+  });
+  expect(steps).toHaveLength(0);
+});
+
+test('credential rotation fails when skipped-row queue progress cannot be persisted', async () => {
+  const missingKey = { id: 'missing', key: Redacted.make(new Uint8Array(32).fill(3)) };
+  const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
+  const blockedRow = await rotationRow(connection, missingKey);
+  const steps: QueryStep[] = [
+    { contains: 'ORDER BY k.updated_at', rows: [blockedRow] },
+    { contains: 'WHERE connection_id = $1 AND key_id = $2', error: new Error('database unavailable') },
+  ];
+  const store = makePostgresProviderConnectionStore({
+    pool: scriptedPool(steps),
+    keyRing: makeProviderCredentialKeyRing([currentKey], currentKey.id),
+  });
+
+  const exit = await Effect.runPromiseExit(store.rotateCredentials(namespace, 1));
+
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) {
+    const failure = Cause.failureOption(exit.cause);
+    expect(failure._tag).toBe('Some');
+    if (failure._tag === 'Some') expect(failure.value).toMatchObject({ _tag: 'ProviderConnectionStorageError' });
+  }
+  expect(steps).toHaveLength(0);
+});
+
 test('credential save and rotation preserve expiry while compare-and-set can clear it', async () => {
   const expiry = new Date('2030-01-01T00:00:00.000Z');
   const oldKey = { id: 'old', key: Redacted.make(new Uint8Array(32).fill(4)) };
@@ -170,7 +238,7 @@ test('credential save and rotation preserve expiry while compare-and-set can cle
     { contains: 'BEGIN' },
     { contains: 'SELECT credential_version, expires_at', rows: [{ credential_version: 1, expires_at: expiry }] },
     {
-      contains: 'expires_at = $10',
+      contains: 'SET provider_id = $2',
       rowCount: 1,
       assertValues: (values) => expect(values?.[9]).toEqual(expiry),
     },
@@ -179,18 +247,20 @@ test('credential save and rotation preserve expiry while compare-and-set can cle
     { contains: 'WHERE namespace = $1 AND id = $2', rows: [metadataRow] },
     { contains: 'BEGIN' },
     {
-      contains: 'expires_at = $10',
+      contains: 'SET credential_version = $2',
+      excludes: 'provider_id',
       rowCount: 1,
-      assertValues: (values) => expect(values?.[9]).toBeNull(),
+      assertValues: (values) => expect(values).toEqual([connection.id, 3, null, namespace, 2]),
     },
     { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
     { contains: 'COMMIT' },
-    { contains: 'ORDER BY c.updated_at', rows: [row] },
+    { contains: 'ORDER BY k.updated_at', rows: [row] },
     { contains: 'BEGIN' },
     {
-      contains: 'expires_at = $10',
+      contains: 'SET credential_version = $2',
+      excludes: 'provider_id',
       rowCount: 1,
-      assertValues: (values) => expect(values?.[9]).toEqual(expiry),
+      assertValues: (values) => expect(values).toEqual([connection.id, 2, expiry, namespace, 1]),
     },
     { contains: 'UPDATE "fred"."provider_credentials"', rowCount: 1 },
     { contains: 'COMMIT' },
@@ -212,10 +282,11 @@ test('credential rotation checks remaining rows after an optimistic-version race
   const currentKey = { id: 'current', key: Redacted.make(new Uint8Array(32).fill(5)) };
   const row = await rotationRow(connection, oldKey);
   const steps: QueryStep[] = [
-    { contains: 'ORDER BY c.updated_at', rows: [row] },
+    { contains: 'ORDER BY k.updated_at', rows: [row] },
     { contains: 'BEGIN' },
     { contains: 'UPDATE "fred"."provider_connections"', rowCount: 0 },
     { contains: 'ROLLBACK' },
+    { contains: 'WHERE connection_id = $1 AND key_id = $2', rowCount: 1 },
     { contains: 'SELECT 1 FROM "fred"."provider_connections"', rows: [{ one: 1 }] },
   ];
   const store = makePostgresProviderConnectionStore({

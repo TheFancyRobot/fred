@@ -405,16 +405,15 @@ const executeProviderCommand = (
       const id = yield* decodeProviderConnectionId(args[1]).pipe(Effect.mapError((error) => commandError('usage', error.message)));
       const record = yield* getRecord(id, store);
       const revoke = deps.revoke ?? defaultRevoke;
-      const revokeFailed = yield* Effect.tryPromise({
+      yield* Effect.tryPromise({
         try: () => revoke(record),
         catch: () => commandError('connectivity', 'Remote credential revocation failed.'),
-      }).pipe(Effect.either);
+      });
       const removed = yield* Effect.tryPromise({
         try: () => store.remove(id),
         catch: () => commandError('internal', 'Unable to remove local provider credentials.'),
       });
       if (!removed) return yield* commandError('not-found', `Provider connection "${id}" was not found.`);
-      if (revokeFailed._tag === 'Left') return yield* revokeFailed.left;
       emit(io, options, { ok: true, command: 'provider logout', data: { id } }, 'Local provider credentials removed.');
       return 0;
     });

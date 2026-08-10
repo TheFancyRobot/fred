@@ -405,30 +405,22 @@ test('Google invocation preparation releases completed per-connection coordinato
       json: async () => ({ access_token: `refreshed-access-token-${requests}`, expires_in: 3_600 }),
     };
   }));
-  let first = savedGoogleConnection('first-access-token', now);
-  let second = savedGoogleConnection('second-access-token', now);
-  const firstContext = {
-    reload: () => Effect.succeed(first),
-    compareAndSetCredentials: (credentials: typeof first.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
-      first = { ...first, credentials, credentialVersion: expectedVersion + 1, expiresAt };
-      return true;
-    }),
-  };
-  const secondContext = {
-    reload: () => Effect.succeed(second),
-    compareAndSetCredentials: (credentials: typeof second.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
-      second = { ...second, credentials, credentialVersion: expectedVersion + 1, expiresAt };
+  let connection = savedGoogleConnection('first-access-token', now);
+  const context = {
+    reload: () => Effect.succeed(connection),
+    compareAndSetCredentials: (credentials: typeof connection.credentials, expectedVersion: number, expiresAt?: Date) => Effect.sync(() => {
+      connection = { ...connection, credentials, credentialVersion: expectedVersion + 1, expiresAt };
       return true;
     }),
   };
 
-  await Effect.runPromise(prepare(first, firstContext));
-  await Effect.runPromise(prepare(second, secondContext));
+  await Effect.runPromise(prepare(connection, context));
+  connection = { ...connection, expiresAt: now };
+  await Effect.runPromise(prepare(connection, context));
 
   expect(requests).toBe(2);
-  expect(first.credentialVersion).toBe(2);
-  expect(second.credentialVersion).toBe(2);
-  if (second.credentials.kind === 'oauth2-bearer') {
-    expect(Redacted.value(second.credentials.accessToken)).toBe('refreshed-access-token-2');
+  expect(connection.credentialVersion).toBe(3);
+  if (connection.credentials.kind === 'oauth2-bearer') {
+    expect(Redacted.value(connection.credentials.accessToken)).toBe('refreshed-access-token-2');
   }
 });

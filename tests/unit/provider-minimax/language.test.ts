@@ -60,17 +60,14 @@ describe('MiniMax Language Capability', () => {
       }
     });
 
-    test('throws MiniMaxMissingApiKeyError when API key is missing', async () => {
+    test('loads without an API key so saved connection credentials can bind later', async () => {
       const originalEnv = process.env.MINIMAX_API_KEY;
       delete process.env.MINIMAX_API_KEY;
 
       try {
-        await MiniMaxProviderFactory.load({});
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error).toBeInstanceOf(MiniMaxMissingApiKeyError);
-        expect((error as MiniMaxMissingApiKeyError).message).toContain('MINIMAX_API_KEY');
+        const result = await MiniMaxProviderFactory.load({});
+        expect(result.layer).toBeDefined();
+        expect(typeof result.getModel).toBe('function');
       } finally {
         if (originalEnv !== undefined) {
           process.env.MINIMAX_API_KEY = originalEnv;
@@ -78,14 +75,15 @@ describe('MiniMax Language Capability', () => {
       }
     });
 
-    test('throws MiniMaxMissingApiKeyError when API key is blank', async () => {
+    test('fails model resolution when no API key was resolved', async () => {
       const originalEnv = process.env.MINIMAX_API_KEY;
       process.env.MINIMAX_API_KEY = '   ';
 
       try {
-        await expect(MiniMaxProviderFactory.load({})).rejects.toBeInstanceOf(
-          MiniMaxMissingApiKeyError
-        );
+        const result = await MiniMaxProviderFactory.load({});
+        const error = await Effect.runPromise(Effect.flip(result.getModel('MiniMax-Text-01')));
+        expect(error).toBeInstanceOf(MiniMaxMissingApiKeyError);
+        expect(error.envVar).toBe('MINIMAX_API_KEY');
       } finally {
         if (originalEnv === undefined) {
           delete process.env.MINIMAX_API_KEY;

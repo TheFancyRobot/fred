@@ -44,6 +44,7 @@ const createStore = (records: ProviderConnectionRecord[] = []) => {
     },
   };
   return {
+    store,
     saved,
     deps: (io: ReturnType<typeof capture>['io']): ProviderCommandDependencies => ({
       io,
@@ -157,7 +158,7 @@ describe('provider command', () => {
     }
   });
 
-  test('removes local OAuth credentials even when remote revoke fails', async () => {
+  test('keeps local OAuth credentials when remote revoke fails so logout can be retried', async () => {
     const output = capture();
     const id = await connectionId();
     const connection: ProviderConnection = {
@@ -182,10 +183,84 @@ describe('provider command', () => {
     });
 
     expect(exitCode).toBe(4);
-    expect(fixture.saved).toHaveLength(0);
+    expect(fixture.saved).toHaveLength(1);
     expect(output.stderr).toEqual(['Remote credential revocation failed.']);
     expect(JSON.stringify(output)).not.toContain('access-token-canary');
     expect(JSON.stringify(output)).not.toContain('refresh-token-canary');
+  });
+
+  test('removes local OAuth credentials only after remote revoke succeeds', async () => {
+    const output = capture();
+    const id = await connectionId();
+    const events: string[] = [];
+    const connection: ProviderConnection = {
+      id,
+      label: 'google-work',
+      providerId: 'google',
+      auth: { kind: 'oauth2-bearer' },
+      status: 'active',
+    };
+    const fixture = createStore([{
+      connection,
+      credentials: {
+        kind: 'oauth2-bearer',
+        accessToken: Redacted.make('access-token-canary'),
+        refreshToken: Redacted.make('refresh-token-canary'),
+      },
+    }]);
+
+    const exitCode = await handleProviderCommand(['logout', id], {}, {
+      ...fixture.deps(output.io),
+      openStore: async () => {
+        return {
+          store: {
+            ...fixture.store,
+            remove: async (connectionId) => {
+              events.push('remove');
+              return fixture.store.remove(connectionId);
+            },
+          },
+          close: async () => undefined,
+        };
+      },
+      revoke: async () => { events.push('revoke'); },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(events).toEqual(['revoke', 'remove']);
+    expect(fixture.saved).toHaveLength(0);
+    expect(JSON.stringify(output)).not.toContain('access-token-canary');
+    expect(JSON.stringify(output)).not.toContain('refresh-token-canary');
+  });
+
+  test('remove deletes only the local provider connection without remote revocation', async () => {
+    const output = capture();
+    const id = await connectionId();
+    const connection: ProviderConnection = {
+      id,
+      label: 'google-work',
+      providerId: 'google',
+      auth: { kind: 'oauth2-bearer' },
+      status: 'active',
+    };
+    const fixture = createStore([{
+      connection,
+      credentials: {
+        kind: 'oauth2-bearer',
+        accessToken: Redacted.make('access-token-canary'),
+      },
+    }]);
+    let revoked = false;
+
+    const exitCode = await handleProviderCommand(['remove', id], {}, {
+      ...fixture.deps(output.io),
+      revoke: async () => { revoked = true; },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(revoked).toBe(false);
+    expect(fixture.saved).toHaveLength(0);
+    expect(JSON.stringify(output)).not.toContain('access-token-canary');
   });
 
   test('saves OAuth login results as their declared runtime authentication kind', async () => {

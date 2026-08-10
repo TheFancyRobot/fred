@@ -681,12 +681,6 @@ export const MiniMaxProviderFactory: import('@fancyrobot/fred').EffectProviderFa
           const value = process.env[envVar];
           return value === undefined || value.trim().length === 0 ? undefined : Redacted.make(value);
         })();
-    if (apiKey === undefined) {
-      throw new MiniMaxMissingApiKeyError({
-        provider: 'minimax',
-        envVar: config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR,
-      });
-    }
     const baseUrl = config.baseUrl ?? MINIMAX_DEFAULT_BASE_URL;
 
     // Create HTTP client layer
@@ -695,6 +689,12 @@ export const MiniMaxProviderFactory: import('@fancyrobot/fred').EffectProviderFa
     return {
       layer,
       getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
+        if (apiKey === undefined) {
+          return Effect.fail(new MiniMaxMissingApiKeyError({
+            provider: 'minimax',
+            envVar: config.apiKeyEnvVar ?? MINIMAX_API_KEY_ENV_VAR,
+          }));
+        }
         return Effect.succeed(
           createMiniMaxLanguageModel(apiKey, baseUrl, modelId, overrides)
         );

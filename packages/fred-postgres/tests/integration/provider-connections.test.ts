@@ -74,6 +74,8 @@ integration('persists encrypted provider credentials with optimistic rotation an
     [first.id],
   );
   const beforeMetadataUpdate = (await credentialState()).rows[0];
+  const staleMetadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
+  expect(Option.isSome(staleMetadata)).toBe(true);
   const renamed = {
     ...first,
     label: 'Renamed',
@@ -89,6 +91,20 @@ integration('persists encrypted provider credentials with optimistic rotation an
     expect(renamedMetadata.value.connection.label).toBe('Renamed');
     expect(renamedMetadata.value.connection.endpoint).toBe('https://example.test/v1');
     expect(renamedMetadata.value.connection.status).toBe('disabled');
+  }
+  if (Option.isSome(staleMetadata)) {
+    expect(await Effect.runPromise(store.compareAndSetCredentials(
+      namespace, first.id,
+      { kind: 'api-key', apiKey: Redacted.make('concurrent-secret') },
+      staleMetadata.value.credentialVersion,
+    ))).toBe(true);
+    const concurrentMetadata = await Effect.runPromise(store.getMetadata(namespace, first.id));
+    expect(Option.isSome(concurrentMetadata)).toBe(true);
+    if (Option.isSome(concurrentMetadata)) {
+      expect(concurrentMetadata.value.connection.label).toBe('Renamed');
+      expect(concurrentMetadata.value.connection.endpoint).toBe('https://example.test/v1');
+      expect(concurrentMetadata.value.connection.status).toBe('disabled');
+    }
   }
   for (const changed of [
     { ...renamed, providerId: 'anthropic' },
@@ -174,20 +190,31 @@ integration('isolates skipped credential rows and completes after the historic k
       schema: databaseSchema,
       keyRing: makeProviderCredentialKeyRing([oldKey], oldKey.id),
     }).put(namespace, { connection: candidate, credentials: { kind: 'api-key', apiKey: Redacted.make('candidate-secret') } }));
+    await pool.query(
+      `UPDATE "${databaseSchema}"."provider_credentials"
+       SET updated_at = CASE connection_id WHEN $1 THEN $3::timestamptz ELSE $4::timestamptz END
+       WHERE connection_id IN ($1, $2)`,
+      [blocked.id, candidate.id, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z'],
+    );
 
     const rotating = makePostgresProviderConnectionStore({
       pool,
       schema: databaseSchema,
       keyRing: makeProviderCredentialKeyRing([oldKey, currentKey], currentKey.id),
     });
-    const partial = await Effect.runPromise(rotating.rotateCredentials(namespace));
-    expect(partial.rotated).toBe(1);
+    const partial = await Effect.runPromise(rotating.rotateCredentials(namespace, 1));
+    expect(partial.rotated).toBe(0);
     expect(partial.remaining).toBe(true);
     expect(partial.skipped).toHaveLength(1);
     expect(partial.skipped[0]).toMatchObject({
       connectionId: blocked.id,
       keyId: missingKey.id,
       error: { _tag: 'ProviderCredentialKeyError' },
+    });
+    expect(await Effect.runPromise(rotating.rotateCredentials(namespace, 1))).toMatchObject({
+      rotated: 1,
+      skipped: [],
+      remaining: true,
     });
 
     const recovered = makePostgresProviderConnectionStore({

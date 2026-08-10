@@ -74,7 +74,7 @@ class LegacyImportPool implements PostgresPool {
   private readonly copied = new Set<string>();
   private readonly ledger = new Map<string, { count: number; checksum: string }>();
 
-  private readonly columns: Readonly<Record<string, readonly string[]>> = {
+  readonly columns: Record<string, readonly string[]> = {
     conversations: ['id', 'created_at', 'updated_at', 'metadata'],
     messages: ['conversation_id', 'sequence', 'payload', 'created_at'],
     checkpoints: ['run_id', 'pipeline_id', 'step', 'status', 'context', 'created_at', 'updated_at', 'expires_at', 'step_name', 'pause_metadata'],
@@ -183,6 +183,7 @@ describe('Fred Postgres migrations', () => {
     expect(preview.map((result) => result.rowCount)).toEqual([1, 1]);
     expect(pool.queries).not.toContain('BEGIN');
 
+    const actualStart = pool.queries.length;
     const first = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
     const second = await Effect.runPromise(importLegacyFredPostgresStores({ pool, modules: ['context'] }));
 
@@ -191,9 +192,29 @@ describe('Fred Postgres migrations', () => {
     expect(second.map((result) => result.imported)).toEqual([false, false]);
     expect(second.map((result) => result.status)).toEqual(['verified', 'verified']);
     expect(pool.queries.some((query) => /(?:DELETE|UPDATE|ALTER|DROP)\s+.*"public"/i.test(query))).toBe(false);
-    expect(pool.queries.findIndex((query) => query === 'BEGIN')).toBeGreaterThan(
-      pool.queries.findIndex((query) => query.includes('information_schema.columns')),
-    );
+    expect(pool.queries.slice(actualStart, actualStart + 4)).toEqual([
+      'BEGIN',
+      "SET LOCAL lock_timeout = '30s'",
+      'LOCK TABLE "fred"."legacy_imports" IN EXCLUSIVE MODE',
+      'SELECT source_table, source_count, source_checksum, destination_count, destination_checksum FROM "fred"."legacy_imports"',
+    ]);
+  });
+
+  test('rejects an unsupported legacy source shape before summarizing it', async () => {
+    const pool = new LegacyImportPool();
+    pool.columns.conversations = ['id'];
+
+    const exit = await Effect.runPromiseExit(importLegacyFredPostgresStores({ pool, modules: ['context'], dryRun: true }));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Option.getOrNull(Cause.failureOption(exit.cause))).toMatchObject({
+        _tag: 'LegacyPostgresImportError',
+        operation: 'preflight',
+        table: 'conversations',
+      });
+    }
+    expect(pool.queries.some((query) => query.startsWith('SELECT COUNT') && query.includes('"public"."conversations"'))).toBe(false);
   });
 
   test('summarizes every legacy table by declared columns and primary key', async () => {

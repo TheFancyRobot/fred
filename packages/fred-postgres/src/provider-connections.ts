@@ -4,11 +4,11 @@ import {
   ProviderConnectionNamespace,
   ProviderConnectionSchema,
   ProviderConnectionIdentityChangeError,
+  ProviderConnectionId,
   ProviderConnectionStore,
   ProviderConnectionStoreError,
   type ProviderConnection,
   type ProviderConnectionCredentials,
-  type ProviderConnectionId,
   type ProviderConnectionStore as ProviderConnectionStoreService,
 } from '@fancyrobot/fred';
 import { Pool } from 'pg';
@@ -456,18 +456,28 @@ export const makePostgresProviderConnectionStore = (
     encrypted: ProviderCredentialEnvelope,
     expectedVersion: number,
     labelNormalized: string,
-    expiresAt?: Date,
+    expiresAt: Date | undefined,
+    preserveMetadata: boolean,
   ) => Effect.gen(function* () {
     const nextVersion = expectedVersion + 1;
-    const updated = yield* query(
-      client,
-      'updateConnection',
-      `UPDATE ${connections}
-       SET provider_id = $2, label = $3, label_normalized = $4, endpoint = $5, protocol = $6, auth_kind = $7, status = $8,
-           credential_version = $9, expires_at = $10, updated_at = NOW()
-       WHERE id = $1 AND namespace = $11 AND credential_version = $12`,
-      [connection.id, connection.providerId, connection.label, labelNormalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, nextVersion, expiresAt ?? null, namespace, expectedVersion],
-    );
+    const updated = yield* (preserveMetadata
+      ? query(
+        client,
+        'updateConnectionCredentials',
+        `UPDATE ${connections}
+         SET credential_version = $2, expires_at = $3, updated_at = NOW()
+         WHERE id = $1 AND namespace = $4 AND credential_version = $5`,
+        [connection.id, nextVersion, expiresAt ?? null, namespace, expectedVersion],
+      )
+      : query(
+        client,
+        'updateConnection',
+        `UPDATE ${connections}
+         SET provider_id = $2, label = $3, label_normalized = $4, endpoint = $5, protocol = $6, auth_kind = $7, status = $8,
+             credential_version = $9, expires_at = $10, updated_at = NOW()
+         WHERE id = $1 AND namespace = $11 AND credential_version = $12`,
+        [connection.id, connection.providerId, connection.label, labelNormalized, connection.endpoint ?? null, connection.protocol ?? null, connection.auth.kind, connection.status, nextVersion, expiresAt ?? null, namespace, expectedVersion],
+      ));
     if (updated.rowCount !== 1) {
       return yield* new ProviderCredentialVersionConflictError({
         connectionId: connection.id,
@@ -517,7 +527,7 @@ export const makePostgresProviderConnectionStore = (
         return;
       }
       const savedExpiry = row.expires_at === null || row.expires_at === undefined ? undefined : readDate(row.expires_at, 'expires at');
-      yield* writeEnvelope(client, namespace, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt ?? savedExpiry);
+      yield* writeEnvelope(client, namespace, connection, encrypted, readVersion(row.credential_version), normalized, expiresAt ?? savedExpiry, false);
     }));
   });
 
@@ -589,12 +599,27 @@ export const makePostgresProviderConnectionStore = (
     const key = yield* options.keyRing.current;
     const encrypted = yield* encryptProviderCredentials({ namespace, connection: current.value.connection, credentials: runtimeCredentials, key });
     const updated = yield* transaction(pool, (client) =>
-      writeEnvelope(client, namespace, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase(), expiresAt).pipe(
+      writeEnvelope(client, namespace, current.value.connection, encrypted, expectedVersion, current.value.connection.label.trim().toLocaleLowerCase(), expiresAt, true).pipe(
         Effect.as(true),
         Effect.catchTag('ProviderCredentialVersionConflictError', () => Effect.succeed(false)),
       ));
     return updated;
   });
+
+  const deferSkippedRotation = (row: Record<string, unknown>) => {
+    const connectionId = Schema.decodeUnknownEither(ProviderConnectionId)(row.id);
+    const keyId = typeof row.key_id === 'string' ? row.key_id : undefined;
+    if (Either.isLeft(connectionId) || keyId === undefined) return Effect.void;
+    // Queue progress is durable; an infrastructure failure must fail the batch rather than claim progress.
+    return useClient(pool, (client) => query(
+      client,
+      'deferSkippedCredentialRotation',
+      `UPDATE ${credentials}
+       SET updated_at = GREATEST(updated_at + INTERVAL '1 microsecond', clock_timestamp())
+       WHERE connection_id = $1 AND key_id = $2`,
+      [connectionId.right, keyId],
+    )).pipe(Effect.asVoid);
+  };
 
   const rotateCredentials = (namespace: ProviderConnectionNamespace, batchSize = 100) => Effect.gen(function* () {
     if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 1_000) {
@@ -606,7 +631,7 @@ export const makePostgresProviderConnectionStore = (
       'listCredentialRotationBatch',
       `SELECT c.${metadataColumns.replaceAll(', ', ', c.')}, k.envelope_version, k.algorithm, k.key_id, k.nonce, k.ciphertext
        FROM ${connections} c JOIN ${credentials} k ON k.connection_id = c.id
-       WHERE c.namespace = $1 AND k.key_id <> $2 ORDER BY c.updated_at, c.id LIMIT $3`,
+       WHERE c.namespace = $1 AND k.key_id <> $2 ORDER BY k.updated_at, c.id LIMIT $3`,
       [namespace, currentKey.id, batchSize],
     ));
     let rotated = 0;
@@ -617,6 +642,7 @@ export const makePostgresProviderConnectionStore = (
       const parsed = yield* Effect.either(parseMetadata(row));
       if (Either.isLeft(parsed)) {
         skipped.push({ connectionId, keyId, error: parsed.left });
+        yield* deferSkippedRotation(row);
         continue;
       }
       const saved = parsed.right;
@@ -626,7 +652,7 @@ export const makePostgresProviderConnectionStore = (
         const runtimeCredentials = yield* decryptProviderCredentials(namespace, saved.connection, oldEnvelope, oldKey);
         const nextEnvelope = yield* encryptProviderCredentials({ namespace, connection: saved.connection, credentials: runtimeCredentials, key: currentKey });
         yield* transaction(pool, (client) =>
-          writeEnvelope(client, namespace, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase(), saved.expiresAt));
+          writeEnvelope(client, namespace, saved.connection, nextEnvelope, saved.credentialVersion, saved.connection.label.trim().toLocaleLowerCase(), saved.expiresAt, true));
       }).pipe(
         Effect.as(Option.none<ProviderCredentialRotationError>()),
         Effect.catchTags({
@@ -637,6 +663,7 @@ export const makePostgresProviderConnectionStore = (
       );
       if (Option.isSome(failed)) {
         skipped.push({ connectionId, keyId, error: failed.value });
+        yield* deferSkippedRotation(row);
       } else {
         rotated += 1;
       }

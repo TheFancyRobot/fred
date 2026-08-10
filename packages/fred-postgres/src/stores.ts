@@ -238,12 +238,25 @@ export const importLegacyFredPostgresStores = (
       const client = await options.pool.connect();
       try {
         const ledger = fredPostgresTable(schema, 'legacy_imports');
+        if (options.dryRun !== true) {
+          await client.query('BEGIN');
+          await client.query("SET LOCAL lock_timeout = '30s'");
+          await client.query(`LOCK TABLE ${ledger} IN EXCLUSIVE MODE`);
+        }
         const completed = await client.query(`SELECT source_table, source_count, source_checksum, destination_count, destination_checksum FROM ${ledger}`);
         const imported = new Map(completed.rows.map((row) => [row.source_table, row]));
         const pending: Array<{ readonly table: (typeof selected)[number]; readonly source: { readonly rowCount: number; readonly checksum: string } }> = [];
         const results: LegacyPostgresStoreImportResult[] = [];
         for (const table of selected) {
           const previous = imported.get(table.name);
+          if (previous === undefined) {
+            const columns = await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY column_name', ['public', table.name]);
+            const found = columns.rows.map((row) => row.column_name).filter((column): column is string => typeof column === 'string').sort();
+            const expected = [...table.columns].sort();
+            if (found.length !== expected.length || found.some((column, index) => column !== expected[index])) {
+              throw importFailure('preflight', table.name, 'Legacy source columns do not exactly match the supported shape');
+            }
+          }
           const source = await summary(client, table, table.source);
           const destination = await summary(client, table, table.destination);
           if (previous !== undefined) {
@@ -252,12 +265,6 @@ export const importLegacyFredPostgresStores = (
             }
             results.push({ sourceTable: table.source, destinationTable: table.destination, ...source, imported: false, status: 'verified' });
             continue;
-          }
-          const columns = await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY column_name', ['public', table.name]);
-          const found = columns.rows.map((row) => row.column_name).filter((column): column is string => typeof column === 'string').sort();
-          const expected = [...table.columns].sort();
-          if (found.length !== expected.length || found.some((column, index) => column !== expected[index])) {
-            throw importFailure('preflight', table.name, 'Legacy source columns do not exactly match the supported shape');
           }
           if (destination.rowCount !== 0) throw importFailure('preflight', table.name, 'Destination is non-empty without an import ledger entry');
           pending.push({ table, source });
@@ -274,8 +281,10 @@ export const importLegacyFredPostgresStores = (
             })),
           ];
         }
-        if (pending.length === 0) return results;
-        await client.query('BEGIN');
+        if (pending.length === 0) {
+          await client.query('COMMIT');
+          return results;
+        }
         for (const { table } of pending) {
           const quotedColumns = table.columns.map(quotePostgresIdentifier).join(', ');
           await client.query(`INSERT INTO ${table.destination} (${quotedColumns}) SELECT ${quotedColumns} FROM ${table.source}`);

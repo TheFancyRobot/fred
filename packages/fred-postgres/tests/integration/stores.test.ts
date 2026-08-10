@@ -89,3 +89,52 @@ integration('imports legacy context with different physical column order', async
     await pool.end();
   }
 });
+
+integration('serializes concurrent legacy imports into the same schema', async () => {
+  const pool = new Pool({ connectionString });
+  const schema = testSchema();
+  let sourceCreated = false;
+  let releaseBegins = () => undefined;
+  const bothBegun = new Promise<void>((resolve) => { releaseBegins = resolve; });
+  let beginCount = 0;
+  const synchronizedPool = {
+    connect: async () => {
+      const client = await pool.connect();
+      return {
+        query: async (text: string, values?: unknown[]) => {
+          const result = await client.query(text, values);
+          if (text === 'BEGIN') {
+            beginCount += 1;
+            if (beginCount === 2) releaseBegins();
+            await bothBegun;
+          }
+          return result;
+        },
+        release: () => client.release(),
+      };
+    },
+  };
+  try {
+    const existing = await pool.query(`SELECT to_regclass('public.checkpoints') AS checkpoints`);
+    expect(existing.rows[0]).toEqual({ checkpoints: null });
+
+    const database = await Effect.runPromise(makeFredPostgres({ pool, schema, vector: 'off' }));
+    await Effect.runPromise(migrateFredPostgresStores(database));
+    await pool.query(`CREATE TABLE "public"."checkpoints" (run_id TEXT NOT NULL, pipeline_id TEXT NOT NULL, step INTEGER NOT NULL, status TEXT NOT NULL, context JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ, step_name TEXT, pause_metadata JSONB, PRIMARY KEY (run_id, step))`);
+    sourceCreated = true;
+    await pool.query(`INSERT INTO "public"."checkpoints" (run_id, pipeline_id, step, status, context, created_at, updated_at) VALUES ('run-1', 'pipeline-1', 0, 'pending', '{}', NOW(), NOW())`);
+
+    const imports = await Promise.all([
+      Effect.runPromise(importLegacyFredPostgresStores({ pool: synchronizedPool, schema, modules: ['checkpoints'] })),
+      Effect.runPromise(importLegacyFredPostgresStores({ pool: synchronizedPool, schema, modules: ['checkpoints'] })),
+    ]);
+
+    expect(imports.map(([result]) => result?.status).sort()).toEqual(['imported', 'verified']);
+    expect((await pool.query(`SELECT COUNT(*)::integer AS count FROM "${schema}"."checkpoints"`)).rows).toEqual([{ count: 1 }]);
+    expect((await pool.query(`SELECT COUNT(*)::integer AS count FROM "${schema}"."legacy_imports" WHERE source_table = 'checkpoints'`)).rows).toEqual([{ count: 1 }]);
+  } finally {
+    if (sourceCreated) await pool.query(`DROP TABLE "public"."checkpoints"`);
+    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await pool.end();
+  }
+});
