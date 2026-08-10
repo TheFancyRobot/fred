@@ -34,7 +34,7 @@
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^2.0.0-alpha.0",
+    "@fancyrobot/fred": "^2.0.0",
     "convex": "^1.42.1",
     "effect": "^3.21.0"
   },

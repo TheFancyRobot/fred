@@ -28,7 +28,7 @@
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
-    "@fancyrobot/fred": "^2.0.0-alpha.0",
+    "@fancyrobot/fred": "^2.0.0",
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
     "@effect/ai-openrouter": "^0.10.0"
