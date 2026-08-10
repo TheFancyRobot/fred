@@ -1,5 +1,32 @@
 # @fred/core
 
+## 2.1.0
+
+### Minor Changes
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`4e77d1b`](https://github.com/TheFancyRobot/fred/commit/4e77d1b41b730cadb5e8f6c0a3f6077c23f7ba01) Thanks [@sincspecv](https://github.com/sincspecv)! - Bind provider clients to explicit connections at invocation time, with redacted credential inputs and provider capability manifests.
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`5b0185c`](https://github.com/TheFancyRobot/fred/commit/5b0185c5c0cc276c54ac442ebc8624083c9a663c) Thanks [@sincspecv](https://github.com/sincspecv)! - Add `@fancyrobot/fred-postgres` as the canonical PostgreSQL adapter and migration
+  package. Existing core adapters and `fred-http` PostgreSQL stores remain
+  functional for this v2 release, but emit a deprecation warning (or use the
+  explicit `schema` option for the new schema-qualified path). Migrate after a
+  backup and rehearsal; removal is deferred to the next major release.
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`ea43204`](https://github.com/TheFancyRobot/fred/commit/ea4320442214534a8a9768fb65096a1010b096ef) Thanks [@sincspecv](https://github.com/sincspecv)! - Add encrypted PostgreSQL provider-connection storage, typed persistence failures,
+  and credential-preserving metadata updates.
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`784cc24`](https://github.com/TheFancyRobot/fred/commit/784cc24848cfdd617075ecb93935c32103878e74) Thanks [@sincspecv](https://github.com/sincspecv)! - Refresh expired Google OAuth credentials immediately before provider use, persist rotated tokens with optimistic credential-version CAS, and expose expiry-aware saved connection writes to Promise consumers.
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`b84a584`](https://github.com/TheFancyRobot/fred/commit/b84a58484fb19237a5d72d36e736f490cd2fea38) Thanks [@sincspecv](https://github.com/sincspecv)! - Add public provider-connection contracts, capability metadata, and connection management APIs.
+
+### Patch Changes
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`784cc24`](https://github.com/TheFancyRobot/fred/commit/784cc24848cfdd617075ecb93935c32103878e74) Thanks [@sincspecv](https://github.com/sincspecv)! - Require a consumer-owned namespace for persisted provider-connection operations
+  so shared PostgreSQL schemas isolate applications and workspaces.
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`784cc24`](https://github.com/TheFancyRobot/fred/commit/784cc24848cfdd617075ecb93935c32103878e74) Thanks [@sincspecv](https://github.com/sincspecv)! - Test provider-connection drafts and saved IDs with provider-owned authenticated,
+  bounded probes that reject unsuccessful HTTP status without exposing secrets.
+
 ## 2.0.0
 
 ### Major Changes

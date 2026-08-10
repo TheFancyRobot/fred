@@ -1,5 +1,12 @@
 # @fred/dev
 
+## 1.0.1
+
+### Patch Changes
+
+- [#94](https://github.com/TheFancyRobot/fred/pull/94) [`a752430`](https://github.com/TheFancyRobot/fred/commit/a752430adac6681c5e3423bd3e959f03344954f8) Thanks [@sincspecv](https://github.com/sincspecv)! - Keep the deprecated `fred-dev` compatibility shim installable with additive
+  `fred-cli` releases.
+
 ## 1.0.0
 
 ### Major Changes
