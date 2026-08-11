@@ -1,7 +1,7 @@
 [
   {
     "packageDir": "cli",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "subpath": ".",
     "declarations": [
       "DEV_CHAT_PROVIDER_PACKAGES",
@@ -25,7 +25,7 @@
   },
   {
     "packageDir": "cli",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "subpath": "./plugin",
     "declarations": [
       "FredCliPlugin",
@@ -43,7 +43,7 @@
   },
   {
     "packageDir": "cli",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "subpath": "./chat-defaults",
     "declarations": [
       "DEV_CHAT_PROVIDER_PACKAGES",
@@ -62,7 +62,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": ".",
     "declarations": [
       "AIPlatform",
@@ -811,7 +811,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./eval",
     "declarations": [
       "AssertionResult",
@@ -975,7 +975,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./context/postgres",
     "declarations": [
       "PostgresContextStorage",
@@ -987,7 +987,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./context/sqlite",
     "declarations": [
       "SqliteContextStorage",
@@ -999,7 +999,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./tools",
     "declarations": [
       "createCalculatorTool"
@@ -1010,7 +1010,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./effect",
     "declarations": [
       "ActionHandlerNotFoundError",
@@ -1339,7 +1339,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./mcp/types",
     "declarations": [
       "MCPClient",
@@ -1359,7 +1359,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./mcp/registry",
     "declarations": [
       "MCPServerRegistry",
@@ -1371,7 +1371,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./tool/tool",
     "declarations": [
       "BUILTIN_TOOL_CAPABILITIES",
@@ -1389,7 +1389,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./stream",
     "declarations": [
       "ChunkingStrategy",
@@ -1406,7 +1406,7 @@
   },
   {
     "packageDir": "core",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./messages",
     "declarations": [
       "PromptMessage",
@@ -1422,7 +1422,7 @@
   },
   {
     "packageDir": "dev",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "subpath": ".",
     "declarations": [
       "DEV_CHAT_PROVIDER_PACKAGES",
@@ -1441,7 +1441,7 @@
   },
   {
     "packageDir": "dev",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "subpath": "./chat-defaults",
     "declarations": [
       "DEV_CHAT_PROVIDER_PACKAGES",
@@ -1564,7 +1564,7 @@
   },
   {
     "packageDir": "fred-http",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "subpath": ".",
     "declarations": [
       "API_KEY_TABLE",
@@ -1940,7 +1940,7 @@
   },
   {
     "packageDir": "provider-anthropic",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "subpath": ".",
     "declarations": [
       "AnthropicLanguageModelUnavailableError",
@@ -1957,7 +1957,7 @@
   },
   {
     "packageDir": "provider-google",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "subpath": ".",
     "declarations": [
       "GoogleLanguageModelUnavailableError",
@@ -2007,7 +2007,7 @@
   },
   {
     "packageDir": "provider-groq",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "subpath": ".",
     "declarations": [
       "GROQ_RETRY_CONFIG",
@@ -2029,7 +2029,7 @@
   },
   {
     "packageDir": "provider-minimax",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": ".",
     "declarations": [
       "AsyncSpeechSynthesisInput",
@@ -2132,7 +2132,7 @@
   },
   {
     "packageDir": "provider-minimax",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "subpath": "./lyrics",
     "declarations": [
       "LyricsErrorFields",
@@ -2153,7 +2153,7 @@
   },
   {
     "packageDir": "provider-openai",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "subpath": ".",
     "declarations": [
       "OpenAiLanguageModelUnavailableError",
@@ -2170,7 +2170,7 @@
   },
   {
     "packageDir": "provider-openrouter",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "subpath": ".",
     "declarations": [
       "OpenRouterLanguageModelUnavailableError",

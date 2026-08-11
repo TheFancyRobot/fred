@@ -248,7 +248,7 @@
         "effect": "^3.21.0",
       },
       "peerDependencies": {
-        "@fancyrobot/fred": "^2.0.0-alpha.0",
+        "@fancyrobot/fred": "^2.0.0",
         "effect": "^3.21.0",
       },
     },
@@ -260,7 +260,7 @@
         "effect": "^3.21.0",
       },
       "peerDependencies": {
-        "@fancyrobot/fred": "^2.0.0-alpha.0",
+        "@fancyrobot/fred": "^2.0.0",
         "convex": "^1.42.1",
         "effect": "^3.21.0",
       },
@@ -280,7 +280,7 @@
       "peerDependencies": {
         "@effect/platform": "^0.96.2",
         "@effect/platform-bun": "^0.89.0",
-        "@fancyrobot/fred": "^2.0.0-alpha.0",
+        "@fancyrobot/fred": "^2.0.0",
         "effect": "^3.21.5",
       },
     },

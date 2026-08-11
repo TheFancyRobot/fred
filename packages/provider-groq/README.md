@@ -10,8 +10,8 @@ and Effect AI lines.
 ## Installation
 
 ```bash
-bun add @fancyrobot/fred-groq@4.0.0 \
-  @fancyrobot/fred@2.0.0 effect@^3.21.5 \
+bun add @fancyrobot/fred-groq@4.1.0 \
+  @fancyrobot/fred@2.1.0 effect@^3.21.5 \
   @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 

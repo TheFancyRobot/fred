@@ -16,31 +16,22 @@ the compatible package lines and intentionally remain semver ranges.
 
 | Package | Version | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
-| `@fancyrobot/fred` | `2.0.0` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
-| `@fancyrobot/fred-cli` | `0.6.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
-| `@fancyrobot/fred-dev` | `1.0.0` | CLI `>=0.6.0-alpha.0 <1.0.0` | Final deprecated compatibility shim |
-| `@fancyrobot/fred-http` | `1.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
-| `@fancyrobot/fred-postgres` | `1.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Explicit PostgreSQL migrations and pgvector lifecycle |
-| `@fancyrobot/fred-baml` | `1.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
-| `@fancyrobot/fred-convex` | `1.0.0` | Fred `^2.0.0-alpha.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
-| `@fancyrobot/fred-anthropic` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
-| `@fancyrobot/fred-google` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
-| `@fancyrobot/fred-groq` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
-| `@fancyrobot/fred-minimax` | `2.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
-| `@fancyrobot/fred-openai` | `4.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
-| `@fancyrobot/fred-openrouter` | `5.0.0` | Fred `^2.0.0-alpha.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
+| `@fancyrobot/fred` | `2.1.0` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
+| `@fancyrobot/fred-cli` | `0.7.0` | `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
+| `@fancyrobot/fred-dev` | `1.0.1` | CLI `^0.7.0` | Final deprecated compatibility shim |
+| `@fancyrobot/fred-http` | `1.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
+| `@fancyrobot/fred-postgres` | `1.0.0` | Fred `^2.0.0`; `effect ^3.21.0` | Explicit PostgreSQL migrations and pgvector lifecycle |
+| `@fancyrobot/fred-baml` | `1.0.0` | Fred `^2.0.0`; `effect ^3.21.0` | Consumer-owned BAML tools and prompt adapter |
+| `@fancyrobot/fred-convex` | `1.0.0` | Fred `^2.0.0`; `convex ^1.42.1`; `effect ^3.21.0` | Convex runtime and tool adapters |
+| `@fancyrobot/fred-anthropic` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-anthropic ^0.25.0` | Anthropic provider |
+| `@fancyrobot/fred-google` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
+| `@fancyrobot/fred-groq` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
+| `@fancyrobot/fred-minimax` | `2.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
+| `@fancyrobot/fred-openai` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
+| `@fancyrobot/fred-openrouter` | `5.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
-In particular, the final `@fancyrobot/fred-dev` shim accepts additive CLI 0.x
-releases (`>=0.6.0-alpha.0 <1.0.0`).
-The forwarded `startDevChat` and `./chat-defaults` exports were added after the
-earlier CLI 0.5.1 prerelease and first stable publish on the CLI 0.6 line. The
-release above pins that CLI to `0.6.0`; do not combine the shim with a
-published CLI 0.5.1 artifact. Prefer removing the shim.
-
-The Fred-to-Fred and dev-to-CLI peer floors retain their tested `alpha.0`
-minimums. Stable versions satisfy those ranges, so the floors preserve
-compatibility with the validated release candidates without weakening the
-stable package set shown above.
+The final `@fancyrobot/fred-dev` shim requires CLI `^0.7.0`. Prefer removing
+the shim rather than extending that compatibility window.
 
 The stable release contains the Fred package subset below. The
 Fred package specs are exact; Effect dependencies use the supported peer
@@ -49,9 +40,9 @@ Do not mix this release set with older Fred majors:
 
 ```bash
 bun add \
-  @fancyrobot/fred@2.0.0 \
-  @fancyrobot/fred-http@1.0.0 \
-  @fancyrobot/fred-minimax@2.0.0 \
+  @fancyrobot/fred@2.1.0 \
+  @fancyrobot/fred-http@1.1.0 \
+  @fancyrobot/fred-minimax@2.1.0 \
   effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
 ```
 
@@ -136,12 +127,12 @@ messages; use an explicit intent/routing rule or call `workflows.run()`.
 ## Development chat moves to the CLI
 
 `@fancyrobot/fred-cli` owns development chat, provider detection, default-agent
-setup, hot reload, and terminal cleanup. Use the exact CLI `0.6.0` version from
+setup, hot reload, and terminal cleanup. Use the exact CLI `0.7.0` version from
 the stable matrix. Remove the compatibility package:
 
 ```bash
 bun remove @fancyrobot/fred-dev
-bun add -d --exact @fancyrobot/fred-cli@0.6.0
+bun add -d --exact @fancyrobot/fred-cli@0.7.0
 fred chat
 ```
 
