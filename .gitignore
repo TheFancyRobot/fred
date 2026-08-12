@@ -108,6 +108,8 @@ Desktop.ini
 /.codex/
 /.entire/
 /.memsearch/
+/.opentraces.json
+/.opentraces/
 
 # Fred local runtime/eval artifacts
 /.fred/
