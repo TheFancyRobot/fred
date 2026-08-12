@@ -20,6 +20,7 @@ jobs:
       - name: Install Gitleaks
         run: |
           curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 \
             --output gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
           echo 'ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d  gitleaks.tar.gz' | sha256sum --check --status
@@ -27,7 +28,7 @@ jobs:
       - name: Scan pull request commits
         run: |
           if [ -n "$GITHUB_BASE_REF" ]; then
-            git fetch --no-tags origin "$GITHUB_BASE_REF" --depth=1
+            timeout 120s git fetch --no-tags origin "$GITHUB_BASE_REF" --depth=1
             ./gitleaks detect --source . --log-opts="origin/$GITHUB_BASE_REF..HEAD" --redact --no-banner
           else
             ./gitleaks detect --source . --no-git --redact --no-banner
