@@ -88,7 +88,7 @@ describe('remaining package entrypoints: fred-dev', () => {
     expect(manifest.deprecated).toContain('@fancyrobot/fred-cli');
     expect(manifest.dependencies ?? {}).toEqual({});
     expect(manifest.peerDependencies).toEqual({
-      '@fancyrobot/fred-cli': '>=0.6.0-alpha.0 <1.0.0',
+      '@fancyrobot/fred-cli': '^0.7.0',
     });
     expect(manifest.devDependencies).toEqual({
       '@fancyrobot/fred-cli': 'workspace:^',

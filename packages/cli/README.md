@@ -7,17 +7,17 @@ CLI alongside core or replacing `@fancyrobot/fred-dev`.
 
 ## Installation
 
-The Phase 68 stable release is CLI `0.6.0`. Confirm the compatible core and
+The Phase 68 stable release is CLI `0.7.0`. Confirm the compatible core and
 provider lines in the published migration matrix.
 
 ```bash
-bun add -g @fancyrobot/fred-cli@0.6.0
+bun add -g @fancyrobot/fred-cli@0.7.0
 ```
 
 Or use within a Fred project (installed as a workspace dependency):
 
 ```bash
-bun add @fancyrobot/fred-cli@0.6.0 effect@^3.21.0
+bun add @fancyrobot/fred-cli@0.7.0 effect@^3.21.0
 ```
 
 ### Requirements
