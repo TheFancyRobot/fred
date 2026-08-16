@@ -27,7 +27,7 @@ the compatible package lines and intentionally remain semver ranges.
 | `@fancyrobot/fred-google` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
 | `@fancyrobot/fred-groq` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
 | `@fancyrobot/fred-minimax` | `2.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
-| `@fancyrobot/fred-openai` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0` | OpenAI provider |
+| `@fancyrobot/fred-openai` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0`; `@effect/ai-openrouter ^0.10.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
 The final `@fancyrobot/fred-dev` shim requires CLI `^0.7.0`. Prefer removing

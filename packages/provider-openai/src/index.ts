@@ -42,6 +42,42 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
     }),
   }),
   load: async (config: ProviderConfig) => {
+    if (config.connectionProtocol === 'openai-compatible') {
+      let module: typeof import('@effect/ai-openrouter');
+      try {
+        module = await import('@effect/ai-openrouter');
+      } catch {
+        throw new Error(
+          'Failed to load @effect/ai-openrouter. Install it with: bun add @effect/ai-openrouter'
+        );
+      }
+
+      const layer = module.OpenRouterClient?.layer?.({
+        apiKey: providerApiKey(config.credentials),
+        apiUrl: config.baseUrl,
+        transformClient: providerAuthTransform(config.credentials),
+      });
+
+      if (!layer) {
+        throw new Error('OpenAI-compatible provider runtime did not expose a client layer');
+      }
+
+      return {
+        layer,
+        getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
+          if (!module.OpenRouterLanguageModel?.model) {
+            return Effect.fail(new OpenAiLanguageModelUnavailableError());
+          }
+          return Effect.succeed(
+            module.OpenRouterLanguageModel.model(modelId, {
+              temperature: overrides?.temperature,
+              max_tokens: overrides?.maxTokens,
+            })
+          );
+        },
+      };
+    }
+
     // Dynamic import to avoid hard dependency
     let module: typeof import('@effect/ai-openai');
     try {

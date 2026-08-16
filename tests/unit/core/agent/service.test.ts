@@ -219,7 +219,12 @@ describe('AgentService', () => {
 
     it('invokes both local-compatible protocols with none, API-key, and Basic auth', async () => {
       const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-local');
-      const runtimeConfigs: Array<{ providerId: string; baseUrl: string | undefined; auth: string | undefined }> = [];
+      const runtimeConfigs: Array<{
+        providerId: string;
+        baseUrl: string | undefined;
+        protocol: ProviderConnectionProtocol | undefined;
+        auth: string | undefined;
+      }> = [];
       const streamSpy = spyOn(LanguageModel, 'streamText').mockImplementation(() => Stream.fromIterable([
         { type: 'finish', reason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
       ] as any) as any);
@@ -249,7 +254,12 @@ describe('AgentService', () => {
               connectionCapabilities: { providerId, auth: ['api-key'], login: ['manual-secret'] },
               load: async (config) => {
                 if (config.baseUrl !== undefined) {
-                  runtimeConfigs.push({ providerId, baseUrl: config.baseUrl, auth: config.credentials?.kind });
+                  runtimeConfigs.push({
+                    providerId,
+                    baseUrl: config.baseUrl,
+                    protocol: config.connectionProtocol,
+                    auth: config.credentials?.kind,
+                  });
                 }
                 return {
                   layer: Layer.empty,
@@ -286,6 +296,7 @@ describe('AgentService', () => {
       expect(runtimeConfigs).toEqual(cases.map((fixture) => ({
         providerId: fixture.providerId,
         baseUrl: `http://127.0.0.1:${fixture.providerId === 'openai' ? '11434' : '11435'}/v1`,
+        protocol: fixture.protocol,
         auth: fixture.auth.kind,
       })));
     });

@@ -4,6 +4,7 @@ import type { ProviderCapabilityKey } from './provider-capabilities';
 import type {
   ProviderConnectionCapabilities,
   ProviderConnectionPrepare,
+  ProviderConnectionProtocol,
   ProviderConnectionCredentials,
   ProviderConnectionTestHook,
 } from './connections';
@@ -23,6 +24,8 @@ export interface ProviderConfig {
   /** Runtime-only credentials, resolved by core rather than provider packages. */
   credentials?: ProviderConnectionCredentials;
   baseUrl?: string;
+  /** Protocol selected by an explicitly local-compatible saved connection. */
+  connectionProtocol?: ProviderConnectionProtocol;
   headers?: Record<string, string>;
   modelDefaults?: ProviderModelDefaults;
   aliases?: ProviderAlias[];

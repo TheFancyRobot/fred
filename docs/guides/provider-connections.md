@@ -27,6 +27,9 @@ At invocation time, configure the agent's platform as `openai` for an
 `openai-compatible` connection or `anthropic` for an `anthropic-compatible`
 connection. Fred routes the saved connection through those existing provider
 packages; there is no separate local provider package.
+Local `openai-compatible` execution uses the OpenAI Chat Completions protocol,
+including JSON-schema structured output; hosted OpenAI execution retains its
+Responses transport.
 
 ## CLI workflow
 

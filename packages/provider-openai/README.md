@@ -12,7 +12,8 @@ and Effect AI lines.
 ```bash
 bun add @fancyrobot/fred-openai@4.1.0 \
   @fancyrobot/fred@2.1.0 effect@^3.21.5 \
-  @effect/ai@^0.35.0 @effect/ai-openai@^0.39.0
+  @effect/ai@^0.35.0 @effect/ai-openai@^0.39.0 \
+  @effect/ai-openrouter@^0.10.0
 ```
 
 ## Setup
@@ -68,6 +69,10 @@ You are a helpful assistant.
 ## Supported Models
 
 See [OpenAI documentation](https://platform.openai.com/docs/models) for available models.
+
+Saved `local-compatible` connections that declare `openai-compatible` use the
+Chat Completions protocol, including JSON-schema structured output. Hosted
+OpenAI keeps the Responses transport.
 
 ## Related
 
