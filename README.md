@@ -80,7 +80,7 @@ See the [core package documentation](packages/core/README.md) for the full getti
 | [@fancyrobot/fred-postgres](packages/fred-postgres/README.md) | `1.0.0` | Explicit PostgreSQL migrations and pgvector lifecycle |
 | [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0` | Consumer-owned BAML integration |
 | [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0` | Convex integration helpers |
-| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.1.0` | OpenAI provider |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.1.1` | OpenAI provider |
 | [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.1.0` | Anthropic provider |
 | [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.1.0` | Google (Gemini) provider |
 | [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.1.0` | Groq provider |
