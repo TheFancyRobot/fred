@@ -24,19 +24,21 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/ai-openai --external @fancyrobot/fred",
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external effect --external @effect/ai --external @effect/ai-openai --external @effect/ai-openrouter --external @fancyrobot/fred",
     "build:declarations": "tsc --emitDeclarationOnly --outDir dist"
   },
   "peerDependencies": {
     "@fancyrobot/fred": "^2.0.0",
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
-    "@effect/ai-openai": "^0.39.0"
+    "@effect/ai-openai": "^0.39.0",
+    "@effect/ai-openrouter": "^0.10.0"
   },
   "devDependencies": {
     "effect": "^3.21.0",
     "@effect/ai": "^0.35.0",
-    "@effect/ai-openai": "^0.39.0"
+    "@effect/ai-openai": "^0.39.0",
+    "@effect/ai-openrouter": "^0.10.0"
   },
   "publishConfig": {
     "access": "public"

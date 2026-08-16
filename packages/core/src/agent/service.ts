@@ -156,6 +156,9 @@ const providerConfigForConnection = (
   return {
     ...config,
     ...(endpoint === undefined ? {} : { baseUrl: endpoint }),
+    ...(resolved.connection.providerId === LOCAL_PROVIDER_CONNECTION_CAPABILITIES.providerId
+      ? { connectionProtocol: resolved.connection.protocol }
+      : {}),
     credentials: resolved.credentials,
   };
 });
