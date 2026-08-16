@@ -9,8 +9,9 @@ test('local OpenAI-compatible connections stream through Chat Completions', asyn
   const requests: Array<{ readonly url: string; readonly body: Record<string, unknown> }> = [];
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
-    requests.push({ url: request.url, body: await request.json() as Record<string, unknown> });
-    const stream = request.body.stream === true;
+    const body = await request.json() as Record<string, unknown>;
+    requests.push({ url: request.url, body });
+    const stream = body.stream === true;
     if (!stream) {
       return Response.json({
         id: 'completion-structured',
