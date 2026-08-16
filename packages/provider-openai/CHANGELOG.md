@@ -1,5 +1,11 @@
 # @fred/provider-openai
 
+## 4.1.1
+
+### Patch Changes
+
+- [#97](https://github.com/TheFancyRobot/fred/pull/97) [`cd0a378`](https://github.com/TheFancyRobot/fred/commit/cd0a378cfb6e2ee7894e4558769400a8590ab6d4) Thanks [@sincspecv](https://github.com/sincspecv)! - Use Chat Completions for saved local OpenAI-compatible connections while preserving the Responses transport for hosted OpenAI. JSON-schema structured output and streaming remain supported for local connections.
+
 ## 4.1.0
 
 ### Minor Changes
