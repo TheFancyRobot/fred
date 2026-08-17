@@ -1,5 +1,11 @@
 # @fred/core
 
+## 2.1.1
+
+### Patch Changes
+
+- [#101](https://github.com/TheFancyRobot/fred/pull/101) [`7b337ca`](https://github.com/TheFancyRobot/fred/commit/7b337cac1254367313d273bc01193ac3d55ae1d4) Thanks [@sincspecv](https://github.com/sincspecv)! - Preserve the selected protocol for saved local-compatible provider connections so OpenAI-compatible endpoints use Chat Completions while hosted OpenAI continues using Responses.
+
 ## 2.1.0
 
 ### Minor Changes
