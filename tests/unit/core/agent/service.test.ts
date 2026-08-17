@@ -15,8 +15,9 @@ import {
   getAgentNotFoundMessage,
 } from '../../../../packages/core/src/agent/errors';
 import type { AgentConfig } from '../../../../packages/core/src/agent/agent';
-import type { ProviderDefinition } from '../../../../packages/core/src/platform/provider';
+import type { ProviderConfig, ProviderDefinition } from '../../../../packages/core/src/platform/provider';
 import type { EffectProviderFactory } from '../../../../packages/core/src/platform/base';
+import { OpenAiProviderFactory } from '../../../../packages/provider-openai/src/index';
 import {
   ProviderConnectionId,
   ProviderConnectionNamespace,
@@ -299,6 +300,73 @@ describe('AgentService', () => {
         protocol: fixture.protocol,
         auth: fixture.auth.kind,
       })));
+    });
+
+    it('uses Chat Completions for saved local OpenAI-compatible connections and Responses for hosted OpenAI', async () => {
+      const connectionNamespace = Schema.decodeUnknownSync(ProviderConnectionNamespace)('workspace-transport');
+      const localConnectionId = Schema.decodeUnknownSync(ProviderConnectionId)('f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+      const hostedConnectionId = Schema.decodeUnknownSync(ProviderConnectionId)('f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12');
+      const originalFetch = globalThis.fetch;
+      const urls: string[] = [];
+      const runtimeConfigs: ProviderConfig[] = [];
+      const providerFactory: EffectProviderFactory = {
+        ...OpenAiProviderFactory,
+        load: async (config) => {
+          runtimeConfigs.push(config);
+          return OpenAiProviderFactory.load(config);
+        },
+      };
+      globalThis.fetch = async (input, init) => {
+        urls.push(new Request(input, init).url);
+        return Response.json({ error: { message: 'test transport recorder' } }, { status: 400 });
+      };
+
+      try {
+        await runTest(Effect.gen(function* () {
+          const registry = yield* ProviderRegistryService;
+          const connections = yield* ProviderConnectionService;
+          const service = yield* AgentService;
+          yield* registry.registerFactory(providerFactory);
+          yield* connections.put(connectionNamespace, {
+            id: localConnectionId,
+            label: 'Local OpenAI-compatible',
+            providerId: 'local-compatible',
+            endpoint: 'http://127.0.0.1:11434/v1',
+            protocol: 'openai-compatible',
+            auth: { kind: 'none' },
+            status: 'active',
+          }, { kind: 'none' });
+          yield* connections.put(connectionNamespace, {
+            id: hostedConnectionId,
+            label: 'Hosted OpenAI',
+            providerId: 'openai',
+            auth: { kind: 'api-key' },
+            status: 'active',
+          }, { kind: 'api-key', apiKey: Redacted.make('hosted-test-key') });
+
+          const localAgent = yield* service.createAgent(createAgentConfig('local-transport', {
+            connectionId: localConnectionId,
+            connectionNamespace,
+          }));
+          const hostedAgent = yield* service.createAgent(createAgentConfig('hosted-transport', {
+            connectionId: hostedConnectionId,
+            connectionNamespace,
+          }));
+          yield* localAgent.processMessage('Hello').pipe(Effect.either);
+          yield* hostedAgent.processMessage('Hello').pipe(Effect.either);
+        }));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      expect(runtimeConfigs.slice(-2)).toMatchObject([
+        { baseUrl: 'http://127.0.0.1:11434/v1', connectionProtocol: 'openai-compatible' },
+        { credentials: { kind: 'api-key' } },
+      ]);
+      expect(urls).toEqual([
+        'http://127.0.0.1:11434/v1/chat/completions',
+        'https://api.openai.com/v1/responses',
+      ]);
     });
 
     it('rejects local auth modes on hosted provider connections', async () => {
