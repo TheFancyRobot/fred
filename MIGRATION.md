@@ -16,7 +16,7 @@ the compatible package lines and intentionally remain semver ranges.
 
 | Package | Version | Required Fred/peer line | Purpose |
 | --- | --- | --- | --- |
-| `@fancyrobot/fred` | `2.1.0` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
+| `@fancyrobot/fred` | `2.1.1` | `effect ^3.21.5`, `@effect/ai ^0.35.0`, `@effect/platform ^0.96.0` | Core `createFred()` client and Effect services |
 | `@fancyrobot/fred-cli` | `0.7.0` | `effect ^3.21.0` | CLI, TUI, development chat, and API-key commands |
 | `@fancyrobot/fred-dev` | `1.0.1` | CLI `^0.7.0` | Final deprecated compatibility shim |
 | `@fancyrobot/fred-http` | `1.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/platform ^0.96.2`; `@effect/platform-bun ^0.89.0` | Optional Bun HTTP server and workflow endpoints |
@@ -40,7 +40,7 @@ Do not mix this release set with older Fred majors:
 
 ```bash
 bun add \
-  @fancyrobot/fred@2.1.0 \
+  @fancyrobot/fred@2.1.1 \
   @fancyrobot/fred-http@1.1.0 \
   @fancyrobot/fred-minimax@2.1.0 \
   effect@^3.21.5 @effect/ai@^0.35.0 @effect/platform@^0.96.2 @effect/platform-bun@^0.89.0
