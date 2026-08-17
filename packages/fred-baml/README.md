@@ -9,7 +9,7 @@ line and the Stanza BAML import recipe.
 
 ```bash
 bun add @fancyrobot/fred-baml@1.0.0 \
-  @fancyrobot/fred@2.1.0 effect@^3.21.5
+  @fancyrobot/fred@2.1.1 effect@^3.21.5
 ```
 
 ## Current package contract
