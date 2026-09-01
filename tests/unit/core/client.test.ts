@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Cause, Effect, Exit, Layer, Runtime, Schema } from 'effect';
+import type { LanguageModel } from '@effect/ai';
 import {
   createFred,
   FredClientClosedError,
@@ -29,6 +30,9 @@ import { SqliteContextStorage } from '../../../packages/core/src/context/storage
 import { PromptSourceService } from '../../../packages/core/src/agent/prompt-source';
 import { MCPSecurityError } from '../../../packages/core/src/mcp/security';
 import { PromptResolutionError } from '../../../packages/core/src/agent/errors';
+import { ProviderRegistrationError } from '../../../packages/core/src/platform/errors';
+import type { EffectProviderFactory } from '../../../packages/core/src/platform/base';
+import type { ProviderConfig } from '../../../packages/core/src/platform/provider';
 import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
@@ -62,6 +66,24 @@ async function registerMockProvider(client: FredClient): Promise<void> {
     )
   );
 }
+
+interface MockFactoryOptions {
+  id: string;
+  aliases?: string[];
+  onLoad?: (config: ProviderConfig) => void;
+}
+
+const createMockFactory = ({ id, aliases = [], onLoad }: MockFactoryOptions): EffectProviderFactory => ({
+  id,
+  aliases,
+  load: async (config) => {
+    onLoad?.(config);
+    return {
+      layer: Layer.empty,
+      getModel: (modelId: string) => Effect.succeed({ provider: id, modelId } as LanguageModel),
+    };
+  },
+});
 
 const waitFor = async (predicate: () => boolean, timeoutMs = 2_000): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
@@ -827,6 +849,91 @@ describe('createFred client', () => {
 
   it('providers.use resolves a definition registered on the shared runtime', async () => {
     const client = track(await createFred());
+    await registerMockProvider(client);
+
+    const definition = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('mock'))
+    );
+    expect(definition.id).toBe('mock');
+  });
+
+  it('providers.registerFactory returns the definition stored in the shared registry', async () => {
+    const client = track(await createFred());
+
+    const definition = await client.providers.registerFactory(
+      createMockFactory({ id: 'factory-prov', aliases: ['factory-alias'] })
+    );
+
+    expect(definition.id).toBe('factory-prov');
+    expect(definition.aliases).toEqual(['factory-alias']);
+
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('factory-prov'))
+    );
+    expect(resolved).toBe(definition);
+  });
+
+  it('providers.registerFactory passes config to factory.load exactly once', async () => {
+    const client = track(await createFred());
+    const loadedConfigs: ProviderConfig[] = [];
+    const config = {
+      baseUrl: 'http://fred.test:4040',
+      modelDefaults: { model: 'test-model' },
+    };
+
+    const definition = await client.providers.registerFactory(
+      createMockFactory({ id: 'config-prov', onLoad: (loaded) => loadedConfigs.push(loaded) }),
+      config
+    );
+
+    expect(loadedConfigs).toHaveLength(1);
+    expect(loadedConfigs[0]).toEqual(config);
+    expect(definition.config).toEqual(config);
+  });
+
+  it('providers.registerFactory registers aliases that resolve through the registry', async () => {
+    const client = track(await createFred());
+
+    await client.providers.registerFactory(
+      createMockFactory({ id: 'alias-prov', aliases: ['alias-prov-short'] })
+    );
+
+    const byAlias = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('alias-prov-short'))
+    );
+    expect(byAlias.id).toBe('alias-prov');
+  });
+
+  it('providers.registerFactory rejects a duplicate id with ProviderRegistrationError without replacing', async () => {
+    const client = track(await createFred());
+
+    const first = await client.providers.registerFactory(
+      createMockFactory({ id: 'dup-prov', aliases: ['dup-key'] })
+    );
+
+    await expect(
+      client.providers.registerFactory(createMockFactory({ id: 'dup-key' }))
+    ).rejects.toBeInstanceOf(ProviderRegistrationError);
+
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('dup-prov'))
+    );
+    expect(resolved).toBe(first);
+  });
+
+  it('providers.registerFactory rejects with FredClientClosedError after shutdown', async () => {
+    const client = await createFred();
+    await client.shutdown();
+
+    await expect(
+      client.providers.registerFactory(createMockFactory({ id: 'closed-prov' }))
+    ).rejects.toBeInstanceOf(FredClientClosedError);
+  });
+
+  it('providers.use still works after registerFactory on the same client', async () => {
+    const client = track(await createFred());
+
+    await client.providers.registerFactory(createMockFactory({ id: 'coexist-prov' }));
     await registerMockProvider(client);
 
     const definition = await client.effects.run(

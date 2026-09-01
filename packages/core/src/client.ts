@@ -54,6 +54,7 @@ import {
 import type { Tool, ToolSchemaMetadata } from './tool/tool';
 import { createCalculatorTool } from './tool/calculator';
 import type { ProviderConfig, ProviderDefinition } from './platform/provider';
+import type { EffectProviderFactory } from './platform/base';
 import type {
   ProviderConnection,
   ProviderConnectionCredentials,
@@ -425,6 +426,11 @@ export interface FredClient {
   };
   readonly providers: {
     use(idOrPackage: string, config?: ProviderConfig): Promise<ProviderDefinition>;
+    /**
+     * Register a caller-supplied factory programmatically and return the stored
+     * definition, resolved by `factory.id`.
+     */
+    registerFactory(factory: EffectProviderFactory, config?: ProviderConfig): Promise<ProviderDefinition>;
   };
   readonly mcp: {
     configure(configs: Array<MCPGlobalServerConfig & { id: string }>): Promise<void>;
@@ -909,6 +915,16 @@ export async function createFred(options: CreateFredOptions = {}): Promise<FredC
     providers: {
       use: (idOrPackage, config = {}) =>
         run(Effect.flatMap(ProviderRegistryService, (s) => s.register(idOrPackage, config))),
+      registerFactory: async (factory, config) => {
+        ensureOpen();
+        return run(
+          Effect.gen(function* () {
+            const registry = yield* ProviderRegistryService;
+            yield* registry.registerFactory(factory, config ?? {});
+            return yield* registry.getDefinition(factory.id);
+          })
+        );
+      },
     },
 
     mcp: {

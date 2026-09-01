@@ -31,6 +31,13 @@ Local `openai-compatible` execution uses the OpenAI Chat Completions protocol,
 including JSON-schema structured output; hosted OpenAI execution retains its
 Responses transport.
 
+Saved `openai-compatible` connections share the same runtime and typed
+configuration validation as the generic
+`createOpenAiCompatibleProviderFactory` factories registered with
+`fred.providers.registerFactory`; both reject `baseUrl` values with userinfo,
+query strings, or fragments and `oauth2-bearer` credentials before any
+network I/O.
+
 ## CLI workflow
 
 The CLI uses PostgreSQL only when both the database URL and a 32-byte base64url
