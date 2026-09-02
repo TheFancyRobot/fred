@@ -1,5 +1,11 @@
 # @fred/provider-openai
 
+## 4.2.0
+
+### Minor Changes
+
+- [#104](https://github.com/TheFancyRobot/fred/pull/104) [`7254c3f`](https://github.com/TheFancyRobot/fred/commit/7254c3f547bcb7737f45dd5bd78c556a6a952c94) Thanks [@sincspecv](https://github.com/sincspecv)! - Add createOpenAiCompatibleProviderFactory, loadOpenAiCompatibleRuntime, and InvalidOpenAiCompatibleProviderConfigError for generic OpenAI Chat Completions providers. Saved local-compatible connections now share this runtime.
+
 ## 4.1.1
 
 ### Patch Changes

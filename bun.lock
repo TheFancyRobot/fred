@@ -205,7 +205,7 @@
     },
     "packages/core": {
       "name": "@fancyrobot/fred",
-      "version": "2.1.1",
+      "version": "2.2.0",
       "dependencies": {
         "@effect/opentelemetry": "^0.63.0",
         "@effect/platform-bun": "^0.89.0",
@@ -359,7 +359,7 @@
     },
     "packages/provider-openai": {
       "name": "@fancyrobot/fred-openai",
-      "version": "4.1.1",
+      "version": "4.2.0",
       "devDependencies": {
         "@effect/ai": "^0.35.0",
         "@effect/ai-openai": "^0.39.0",
