@@ -1,10 +1,12 @@
 # CodeRabbit configuration.
 # https://docs.coderabbit.ai/reference/configuration
 #
-# Security scanners run as part of every pull request review. The dedicated
-# Security Agent (continuous PR security review, architecture review, blast
-# radius, AI Deep Scan) additionally requires the Advanced or Enterprise plan
-# and is managed in the CodeRabbit dashboard under Security.
+# Security scanners run as part of every pull request review. Continuous pull
+# request security review (including Security Architecture Review and Security
+# Blast Radius) requires the Advanced or Enterprise plan and is managed in the
+# CodeRabbit dashboard under Security. AI Deep Scan is separate: it is
+# usage-based, metered independently of the review plan, and started from the
+# dashboard's Security area.
 reviews:
   auto_review:
     enabled: true
