@@ -977,6 +977,38 @@ describe('createFred client', () => {
     expect(resolved.id).toBe('conc-same-prov');
   });
 
+  it('concurrent registerFactory callers share the build failure and the id stays retryable', async () => {
+    const client = track(await createFred());
+    let loadCalls = 0;
+    let failing = true;
+    const factory = createMockFactory({
+      id: 'conc-fail-prov',
+      onLoad: () => {
+        loadCalls += 1;
+        if (failing) throw new Error('load exploded');
+      },
+    });
+
+    // All concurrent callers observe the single shared build failure.
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () => client.providers.registerFactory(factory))
+    );
+    expect(results.every((result) => result.status === 'rejected')).toBe(true);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        expect(result.reason).toBeInstanceOf(ProviderRegistrationError);
+        expect(String((result.reason as Error).cause)).toContain('load exploded');
+      }
+    }
+    expect(loadCalls).toBe(1);
+
+    // The in-flight slot cleared on failure, so the id is retryable.
+    failing = false;
+    const definition = await client.providers.registerFactory(factory);
+    expect(definition.id).toBe('conc-fail-prov');
+    expect(loadCalls).toBe(2);
+  });
+
   it('providers.registerFactory merges config aliases with factory aliases without duplicates', async () => {
     const client = track(await createFred());
 
