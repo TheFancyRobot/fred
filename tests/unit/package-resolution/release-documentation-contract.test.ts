@@ -268,4 +268,17 @@ describe("release documentation contract", () => {
     }
     expect(handoff).toContain("never persist it as a provider ID");
   });
+
+  test("migration documents the openai-compatible authorization-header behavior change", () => {
+    expect(migration).toContain("Behavior change");
+    expect(migration).toContain("InvalidOpenAiCompatibleProviderConfigError");
+    expect(migration).toContain("reason: 'authorization-header'");
+    expect(migration).toContain("credential field instead");
+  });
+
+  test("migration documents the fred-openai effect peer floor rationale", () => {
+    expect(migration).toContain("raises its `effect` peer floor");
+    expect(migration).toContain("^3.21.5");
+    expect(migration).toContain("no known breaking changes or security fixes");
+  });
 });
