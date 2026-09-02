@@ -95,8 +95,21 @@ than adding new `Effect.runPromise` boundaries.
 
 ## Generic OpenAI-compatible providers (additive)
 
-Additive in `@fancyrobot/fred` and `@fancyrobot/fred-openai`; no migration is
-required for existing applications.
+Additive in `@fancyrobot/fred` and `@fancyrobot/fred-openai`; existing
+applications need no migration apart from the behavior change below.
+
+- **Behavior change:** the shared openai-compatible runtime now rejects an
+  `Authorization` entry (any casing) in `config.headers` with
+  `InvalidOpenAiCompatibleProviderConfigError`
+  (`reason: 'authorization-header'`) before any network I/O. Earlier releases
+  silently ignored such headers, so a YAML `providers:` pack config or
+  programmatic config that set `headers.Authorization` for an
+  `openai-compatible` endpoint now fails at load. Move the token into the
+  credential field instead
+  (`credentials: { kind: 'api-key', apiKey: '...' }`, or the standard
+  API-key environment variable / `apiKeyEnvVar` in YAML) or remove the
+  header when the endpoint needs no authentication
+  (`credentials: { kind: 'none' }`).
 
 `FredClient.providers` gains `registerFactory(factory, config?)`, which stores
 a caller-supplied `EffectProviderFactory` under `factory.id`, calls
