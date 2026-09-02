@@ -92,7 +92,7 @@ describe('remaining package entrypoints: fred-dev', () => {
     });
     expect(manifest.devDependencies).toEqual({
       '@fancyrobot/fred-cli': 'workspace:^',
-      '@types/bun': 'latest',
+      '@types/bun': '1.3.14',
     });
 
     const sourceFiles = Array.from(

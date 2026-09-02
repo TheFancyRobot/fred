@@ -174,8 +174,29 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
         }
       );
 
+      // Shared build: create the definition and run the atomic
+      // check-and-set registration.
+      const buildAndRegister = Effect.gen(function* () {
+        // Create definition with proper Effect error channel
+        const definition = yield* createProviderDefinitionEffect(factory, config);
+
+        yield* self.registerDefinition(definition);
+        return definition;
+      });
+
       if (slot._tag === 'Wait') {
-        yield* Deferred.await(slot.deferred);
+        const waited = yield* Deferred.await(slot.deferred);
+        if (isSameRegistration(waited.factory, factory)) {
+          // The in-flight builder is the same factory: it registered the
+          // definition for us.
+          return;
+        }
+        // A different factory with the same id won the in-flight slot. Its
+        // success does not count as ours: run a plain build and let the
+        // atomic registerDefinition check raise the typed conflict error.
+        // The builder already released the slot, so no new claim or deferred
+        // bookkeeping is needed here.
+        yield* buildAndRegister;
         return;
       }
 
@@ -185,13 +206,7 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
       // still ours) and the deferred is settled so waiters receive the
       // builder's definition or failure; failures, defects, and interrupts
       // propagate unchanged to the builder's caller.
-      yield* Effect.gen(function* () {
-        // Create definition with proper Effect error channel
-        const definition = yield* createProviderDefinitionEffect(factory, config);
-
-        yield* self.registerDefinition(definition);
-        return definition;
-      }).pipe(
+      yield* buildAndRegister.pipe(
         Effect.onExit((buildExit) =>
           Effect.gen(function* () {
             yield* Ref.update(self.inFlight, (inFlight) => {

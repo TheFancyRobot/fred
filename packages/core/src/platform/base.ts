@@ -137,17 +137,33 @@ export async function createProviderDefinition(
 }
 
 /**
- * Deep snapshot of a caller config (BUG-0009): copies the top level plus each
- * nested mutable field so later caller mutation cannot reach the stored
- * definition. Absent fields stay absent (no explicit undefined keys).
+ * True only for object literals (plain data containers, deep-copied).
+ * Branded values (Effect `Redacted`/`Secret`), class instances, and
+ * null-prototype objects all carry a non-`Object.prototype` prototype, so
+ * they are copied by reference and their identity and hidden fields survive.
  */
-function snapshotConfig(config: ProviderConfig): ProviderConfig {
-  const snapshot: ProviderConfig = { ...config };
-  if (config.aliases !== undefined) snapshot.aliases = [...config.aliases];
-  if (config.headers !== undefined) snapshot.headers = { ...config.headers };
-  if (config.credentials !== undefined) snapshot.credentials = { ...config.credentials };
-  if (config.modelDefaults !== undefined) snapshot.modelDefaults = { ...config.modelDefaults };
-  return snapshot;
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+/**
+ * Recursively clone plain objects and arrays at any depth. Non-plain values
+ * (functions, class instances, branded `Redacted`/`Secret` values, `Date`,
+ * `RegExp`, primitives, …) are returned by reference as-is.
+ */
+function cloneDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneDeep(item)) as T;
+  }
+  if (isPlainObject(value)) {
+    const clone: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      clone[key] = cloneDeep(value[key]);
+    }
+    return clone as T;
+  }
+  return value;
 }
 
 /**
@@ -162,7 +178,7 @@ export const createProviderDefinitionEffect = (
   // Deep snapshot (BUG-0009): created before factory.load runs so the caller
   // cannot mutate the stored definition by mutating their config object after
   // registration.
-  const storedConfig = snapshotConfig(config);
+  const storedConfig = cloneDeep(config);
 
   // Validate factory structure
   const validateFactory = Effect.try({

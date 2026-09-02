@@ -31,8 +31,8 @@ import { PromptSourceService } from '../../../packages/core/src/agent/prompt-sou
 import { MCPSecurityError } from '../../../packages/core/src/mcp/security';
 import { PromptResolutionError } from '../../../packages/core/src/agent/errors';
 import { ProviderRegistrationError } from '../../../packages/core/src/platform/errors';
-import type { EffectProviderFactory } from '../../../packages/core/src/platform/base';
-import type { ProviderConfig } from '../../../packages/core/src/platform/provider';
+import { resolveFactoryIdentity, type EffectProviderFactory } from '../../../packages/core/src/platform/base';
+import type { ProviderConfig, ProviderDefinition } from '../../../packages/core/src/platform/provider';
 import type { PipelineConfigV2 } from '../../../packages/core/src/pipeline/pipeline';
 import type { GraphWorkflowConfig } from '../../../packages/core/src/pipeline/graph';
 import type { PipelineResult } from '../../../packages/core/src/pipeline/executor';
@@ -1009,6 +1009,73 @@ describe('createFred client', () => {
     expect(loadCalls).toBe(2);
   });
 
+  it('concurrent registerFactory with different factories on the same id raises the conflict', async () => {
+    const client = track(await createFred());
+    // Real-timer delays are intentional (fake timers cannot drive them): the
+    // race under test is real concurrent scheduling of the in-flight
+    // claim/wait, and the whole registration flow runs autonomously between
+    // assertions, so there is no control point to advance a fake clock.
+    const delay = (ms: number) => {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, ms);
+      return promise;
+    };
+    const delayedFactory = (tag: string): EffectProviderFactory => ({
+      id: 'conc-conflict-prov',
+      aliases: [],
+      load: async () => {
+        // Keep the build in flight long enough for the skewed second caller
+        // to claim the wait slot instead of the build slot.
+        await delay(50);
+        return {
+          layer: Layer.empty,
+          getModel: (modelId: string) => Effect.succeed({ provider: tag, modelId } as LanguageModel),
+        };
+      },
+    });
+
+    const factoryA = delayedFactory('A');
+    const factoryB = delayedFactory('B');
+
+    // Skew the start so A claims the in-flight build and B observes it as a
+    // waiter: B must not adopt A's definition as its own registration.
+    const deferredB = Promise.withResolvers<ProviderDefinition>();
+    setTimeout(() => {
+      client.providers.registerFactory(factoryB).then(deferredB.resolve, deferredB.reject);
+    }, 10);
+
+    const results = await Promise.allSettled([
+      client.providers.registerFactory(factoryA),
+      deferredB.promise,
+    ]);
+
+    let fulfilledCount = 0;
+    let rejectedCount = 0;
+    let winner: ProviderDefinition | undefined;
+    let winnerIndex = -1;
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        fulfilledCount += 1;
+        winner = result.value;
+        winnerIndex = index;
+      } else {
+        rejectedCount += 1;
+        expect(result.reason).toBeInstanceOf(ProviderRegistrationError);
+      }
+    });
+    expect(fulfilledCount).toBe(1);
+    expect(rejectedCount).toBe(1);
+
+    // The stored definition is the winner's, not the conflicted loser's.
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('conc-conflict-prov'))
+    );
+    expect(resolved).toBe(winner!);
+    expect(resolveFactoryIdentity(resolved.factory)).toBe(
+      resolveFactoryIdentity(winnerIndex === 0 ? factoryA : factoryB)
+    );
+  });
+
   it('providers.registerFactory merges config aliases with factory aliases without duplicates', async () => {
     const client = track(await createFred());
 
@@ -1047,6 +1114,26 @@ describe('createFred client', () => {
     expect(definition.config.headers).not.toBe(config.headers);
     expect(definition.config.modelDefaults).toEqual({ model: 'test-model' });
     expect(definition.config.modelDefaults).not.toBe(config.modelDefaults);
+  });
+
+  it('providers.registerFactory deep-snapshots extension fields against later mutation', async () => {
+    const client = track(await createFred());
+    const vendorOptions = { nested: { secret: 'x' }, list: ['a'] as string[] };
+    const callerConfig: ProviderConfig = { vendorOptions };
+
+    await client.providers.registerFactory(createMockFactory({ id: 'vendor-snapshot-prov' }), callerConfig);
+
+    const storedVendorOptions = callerConfig.vendorOptions as typeof vendorOptions;
+    storedVendorOptions.nested.secret = 'mutated';
+    storedVendorOptions.list.push('b');
+
+    const definition = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('vendor-snapshot-prov'))
+    );
+    const stored = definition.config.vendorOptions as typeof vendorOptions;
+    expect(stored.nested.secret).toBe('x');
+    expect(stored.list).toEqual(['a']);
+    expect(stored).not.toBe(callerConfig.vendorOptions);
   });
 
   it('providers.registerFactory re-registering the same factory object is idempotent and skips load', async () => {
