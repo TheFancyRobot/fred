@@ -555,6 +555,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#generic-openai-compatible-providers-additive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generic OpenAI-compatible providers (additive)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unified-workflows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -877,6 +888,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#generic-openai-compatible-providers-additive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generic OpenAI-compatible providers (additive)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unified-workflows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -998,7 +1020,7 @@ the compatible package lines and intentionally remain semver ranges.</p>
 <tbody>
 <tr>
 <td><code>@fancyrobot/fred</code></td>
-<td><code>2.1.0</code></td>
+<td><code>2.1.1</code></td>
 <td><code>effect ^3.21.5</code>, <code>@effect/ai ^0.35.0</code>, <code>@effect/platform ^0.96.0</code></td>
 <td>Core <code>createFred()</code> client and Effect services</td>
 </tr>
@@ -1064,8 +1086,8 @@ the compatible package lines and intentionally remain semver ranges.</p>
 </tr>
 <tr>
 <td><code>@fancyrobot/fred-openai</code></td>
-<td><code>4.1.0</code></td>
-<td>Fred <code>^2.0.0</code>; <code>effect ^3.21.0</code>; <code>@effect/ai ^0.35.0</code>; <code>@effect/ai-openai ^0.39.0</code>; <code>@effect/ai-openrouter ^0.10.0</code></td>
+<td><code>4.1.1</code></td>
+<td>Fred <code>^2.0.0</code>; <code>effect ^3.21.5</code>; <code>@effect/ai ^0.35.0</code>; <code>@effect/ai-openai ^0.39.0</code>; <code>@effect/ai-openrouter ^0.10.0</code>; <code>@effect/platform ^0.96.0</code></td>
 <td>OpenAI provider</td>
 </tr>
 <tr>
@@ -1076,6 +1098,14 @@ the compatible package lines and intentionally remain semver ranges.</p>
 </tr>
 </tbody>
 </table>
+<p><code>@fancyrobot/fred-openai</code> 4.2.0 raises its <code>effect</code> peer floor from <code>^3.21.0</code>
+to <code>^3.21.5</code> to match the version the monorepo core and provider packages are
+validated against (core, google, groq, and minimax already require <code>^3.21.5</code>).
+There are no known breaking changes or security fixes between 3.21.0 and
+3.21.5; consumers pinned to 3.21.0-3.21.4 will see peer-resolution warnings
+and should upgrade (recommended) or override the peer at their own risk.
+Packages that remain on <code>^3.21.0</code> (cli, postgres, baml, convex, openrouter)
+are unaffected.</p>
 <p>The final <code>@fancyrobot/fred-dev</code> shim requires CLI <code>^0.7.0</code>. Prefer removing
 the shim rather than extending that compatibility window.</p>
 <p>The stable release contains the Fred package subset below. The
@@ -1083,7 +1113,7 @@ Fred package specs are exact; Effect dependencies use the supported peer
 ranges. Confirm these values against the published registry before installing.
 Do not mix this release set with older Fred majors:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bun<span class="w"> </span>add<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>@fancyrobot/fred@2.1.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>@fancyrobot/fred@2.1.1<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>@fancyrobot/fred-http@1.1.0<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>@fancyrobot/fred-minimax@2.1.0<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>effect@^3.21.5<span class="w"> </span>@effect/ai@^0.35.0<span class="w"> </span>@effect/platform@^0.96.2<span class="w"> </span>@effect/platform-bun@^0.89.0
@@ -1097,24 +1127,24 @@ for dist-tag and promotion rules.</p>
 removed. Promise consumers now own a scoped <code>FredClient</code> returned by
 <code>createFred()</code>. Always call <code>shutdown()</code>.</p>
 <p>Before:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Fred</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">FredInstance</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@fancyrobot/fred&#39;</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Fred</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">FredInstance</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred'</span><span class="p">;</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="o">:</span><span class="w"> </span><span class="kt">FredInstance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Fred</span><span class="p">.</span><span class="nx">create</span><span class="p">();</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nx">fred</span><span class="p">.</span><span class="nx">registerTools</span><span class="p">(</span><span class="nx">tools</span><span class="p">);</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">createAgent</span><span class="p">(</span><span class="nx">agentConfig</span><span class="p">);</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nx">fred</span><span class="p">.</span><span class="nx">setDefaultAgent</span><span class="p">(</span><span class="s1">&#39;assistant&#39;</span><span class="p">);</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">processMessage</span><span class="p">(</span><span class="s1">&#39;Hello&#39;</span><span class="p">);</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nx">fred</span><span class="p">.</span><span class="nx">setDefaultAgent</span><span class="p">(</span><span class="s1">'assistant'</span><span class="p">);</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">processMessage</span><span class="p">(</span><span class="s1">'Hello'</span><span class="p">);</span>
 </code></pre></div>
 <p>After:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFred</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">FredClient</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@fancyrobot/fred&#39;</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFred</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">FredClient</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred'</span><span class="p">;</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="o">:</span><span class="w"> </span><span class="kt">FredClient</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">createFred</span><span class="p">({</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nx">routing</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defaultAgent</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;assistant&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">rules</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nx">routing</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defaultAgent</span><span class="o">:</span><span class="w"> </span><span class="s1">'assistant'</span><span class="p">,</span><span class="w"> </span><span class="nx">rules</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">},</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">});</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="k">await</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">all</span><span class="p">(</span><span class="nx">tools</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">tool</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">tools</span><span class="p">.</span><span class="nx">register</span><span class="p">(</span><span class="nx">tool</span><span class="p">)));</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">agents</span><span class="p">.</span><span class="nx">register</span><span class="p">(</span><span class="nx">agentConfig</span><span class="p">);</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">process</span><span class="p">(</span><span class="s1">&#39;Hello&#39;</span><span class="p">);</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">process</span><span class="p">(</span><span class="s1">'Hello'</span><span class="p">);</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">shutdown</span><span class="p">();</span>
 </code></pre></div>
 <p>The supported grouped capabilities are <code>agents</code>, <code>messages</code>, <code>tools</code>, <code>hooks</code>,
@@ -1124,28 +1154,67 @@ hatches for programs that need the same scoped Effect services.</p>
 <p>Effect-native applications import service tags, layers, and tagged errors from
 <code>@fancyrobot/fred/effect</code>; core business logic must remain inside Effect rather
 than adding new <code>Effect.runPromise</code> boundaries.</p>
+<h2 id="generic-openai-compatible-providers-additive">Generic OpenAI-compatible providers (additive)</h2>
+<p>Additive in <code>@fancyrobot/fred</code> and <code>@fancyrobot/fred-openai</code>; existing
+applications need no migration apart from the behavior change below.</p>
+<ul>
+<li><strong>Behavior change:</strong> the shared openai-compatible runtime now rejects an
+  <code>Authorization</code> entry (any casing) in <code>config.headers</code> with
+  <code>InvalidOpenAiCompatibleProviderConfigError</code>
+  (<code>reason: 'authorization-header'</code>) before any network I/O. Earlier releases
+  silently ignored such headers, so a YAML <code>providers:</code> pack config or
+  programmatic config that set <code>headers.Authorization</code> for an
+  <code>openai-compatible</code> endpoint now fails at load. Move the token into the
+  credential field instead
+  (<code>credentials: { kind: 'api-key', apiKey: '...' }</code>, or the standard
+  API-key environment variable / <code>apiKeyEnvVar</code> in YAML) or remove the
+  header when the endpoint needs no authentication
+  (<code>credentials: { kind: 'none' }</code>).</li>
+</ul>
+<p><code>FredClient.providers</code> gains <code>registerFactory(factory, config?)</code>, which stores
+a caller-supplied <code>EffectProviderFactory</code> under <code>factory.id</code>, calls
+<code>factory.load(config)</code> once, and returns the stored <code>ProviderDefinition</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createOpenAiCompatibleProviderFactory</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred-openai'</span><span class="p">;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">definition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">providers</span><span class="p">.</span><span class="nx">registerFactory</span><span class="p">(</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nx">createOpenAiCompatibleProviderFactory</span><span class="p">({</span><span class="w"> </span><span class="nx">id</span><span class="o">:</span><span class="w"> </span><span class="s1">'my-local-llm'</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">baseUrl</span><span class="o">:</span><span class="w"> </span><span class="s1">'http://127.0.0.1:11434/v1'</span><span class="p">,</span><span class="w"> </span><span class="nx">credentials</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">kind</span><span class="o">:</span><span class="w"> </span><span class="s1">'none'</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">);</span>
+</code></pre></div>
+<p><code>@fancyrobot/fred-openai</code> additionally exports <code>createOpenAiCompatibleProviderFactory</code>,
+<code>loadOpenAiCompatibleRuntime</code>, <code>InvalidOpenAiCompatibleProviderConfigError</code>,
+and the <code>OpenAiCompatibleProviderFactoryOptions</code> type. Generic compatible
+providers speak the Chat Completions protocol with a floor of text generation,
+SSE streaming, tool calls, and JSON-schema structured output; they have no
+embeddings, image generation, model discovery, retries, or transport fallback.
+Configuration is validated before any network I/O, and the typed failure
+carries a stable <code>reason</code> discriminator.</p>
+<p>Hosted <code>openai</code> keeps its Responses transport, and saved <code>local-compatible</code>
+connections declaring the <code>openai-compatible</code> protocol remain the recommended
+persisted path; both the saved-connection route and <code>registerFactory</code> now
+share the same runtime and validation.</p>
 <h2 id="unified-workflows">Unified workflows</h2>
 <p>The V1 <code>PipelineConfig</code>, <code>compilePipelineV1</code>, Promise executor wrappers, and
 PipelineService create/get/execute/utterance-routing methods were removed.
 Define V2, graph, or native <code>WorkflowIR</code> definitions through one client API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">define</span><span class="p">({</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nx">id</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;draft-review&#39;</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nx">steps</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;agent&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;draft&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">agentId</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;writer&#39;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;agent&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;review&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">agentId</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;editor&#39;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="p">],</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">});</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">run</span><span class="p">(</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span><span class="s1">&#39;draft-review&#39;</span><span class="p">,</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="s1">&#39;Draft the launch note&#39;</span><span class="p">,</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">sessionId</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;release-session&#39;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="p">);</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="kd">const</span><span class="w"> </span><span class="nx">resumed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">resume</span><span class="p">(</span><span class="s1">&#39;run-id-from-paused-result&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">  </span><span class="nx">humanInput</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;approve&#39;</span><span class="p">,</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">  </span><span class="nx">resumeBehavior</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;continue&#39;</span><span class="p">,</span>
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="p">});</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">define</span><span class="p">({</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nx">id</span><span class="o">:</span><span class="w"> </span><span class="s1">'draft-review'</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nx">steps</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'agent'</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'draft'</span><span class="p">,</span><span class="w"> </span><span class="nx">agentId</span><span class="o">:</span><span class="w"> </span><span class="s1">'writer'</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">'agent'</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'review'</span><span class="p">,</span><span class="w"> </span><span class="nx">agentId</span><span class="o">:</span><span class="w"> </span><span class="s1">'editor'</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="p">],</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">});</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">run</span><span class="p">(</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="s1">'draft-review'</span><span class="p">,</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span><span class="s1">'Draft the launch note'</span><span class="p">,</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">sessionId</span><span class="o">:</span><span class="w"> </span><span class="s1">'release-session'</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="p">);</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="kd">const</span><span class="w"> </span><span class="nx">resumed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">resume</span><span class="p">(</span><span class="s1">'run-id-from-paused-result'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">  </span><span class="nx">humanInput</span><span class="o">:</span><span class="w"> </span><span class="s1">'approve'</span><span class="p">,</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">  </span><span class="nx">resumeBehavior</span><span class="o">:</span><span class="w"> </span><span class="s1">'continue'</span><span class="p">,</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="p">});</span>
 </code></pre></div>
 <p>In YAML/JSON, replace the old top-level <code>pipelines</code> array with the
 <code>pipelinesV2</code> record and typed steps. Pipeline utterances no longer route
@@ -1154,9 +1223,9 @@ messages; use an explicit intent/routing rule or call <code>workflows.run()</cod
 <p><code>@fancyrobot/fred-cli</code> owns development chat, provider detection, default-agent
 setup, hot reload, and terminal cleanup. Use the exact CLI <code>0.7.0</code> version from
 the stable matrix. Remove the compatibility package:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>bun<span class="w"> </span>remove<span class="w"> </span>@fancyrobot/fred-dev
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>bun<span class="w"> </span>add<span class="w"> </span>-d<span class="w"> </span>--exact<span class="w"> </span>@fancyrobot/fred-cli@0.7.0
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>fred<span class="w"> </span>chat
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>bun<span class="w"> </span>remove<span class="w"> </span>@fancyrobot/fred-dev
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>bun<span class="w"> </span>add<span class="w"> </span>-d<span class="w"> </span>--exact<span class="w"> </span>@fancyrobot/fred-cli@0.7.0
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>fred<span class="w"> </span>chat
 </code></pre></div>
 <p>If a temporary programmatic integration is unavoidable, change imports from
 <code>@fancyrobot/fred-dev</code> to <code>@fancyrobot/fred-cli</code>. The <code>fred dev</code> command and
@@ -1166,45 +1235,45 @@ next major release.</p>
 <p>Core stays transport-neutral. <code>ServerApp</code>, <code>startServer()</code>,
 <code>createFredHttpApp()</code>, and the standalone fetch adapters were removed.</p>
 <p>Before:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFredHttpApp</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@fancyrobot/fred-http&#39;</span><span class="p">;</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">app</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">createFredHttpApp</span><span class="p">({</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="p">});</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">Bun</span><span class="p">.</span><span class="nx">serve</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="o">:</span><span class="w"> </span><span class="kt">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">fetch</span><span class="o">:</span><span class="w"> </span><span class="kt">app.fetch</span><span class="w"> </span><span class="p">});</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFredHttpApp</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred-http'</span><span class="p">;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">app</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">createFredHttpApp</span><span class="p">({</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">Bun</span><span class="p">.</span><span class="nx">serve</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="o">:</span><span class="w"> </span><span class="kt">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">fetch</span><span class="o">:</span><span class="w"> </span><span class="kt">app.fetch</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 <p>After:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFred</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@fancyrobot/fred&#39;</span><span class="p">;</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">withHttp</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@fancyrobot/fred-http&#39;</span><span class="p">;</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">withHttp</span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">createFred</span><span class="p">(),</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nx">security</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">    </span><span class="nx">requireAuth</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="nx">corsAllowedOrigins</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;https://app.example.com&#39;</span><span class="p">],</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">  </span><span class="p">},</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">});</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="o">:</span><span class="w"> </span><span class="kt">3000</span><span class="w"> </span><span class="p">});</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="c1">// On SIGINT/SIGTERM:</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">shutdown</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFred</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred'</span><span class="p">;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">withHttp</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@fancyrobot/fred-http'</span><span class="p">;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">withHttp</span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">createFred</span><span class="p">(),</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nx">security</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">    </span><span class="nx">requireAuth</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="nx">corsAllowedOrigins</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'https://app.example.com'</span><span class="p">],</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">});</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="kd">const</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">({</span><span class="w"> </span><span class="nx">port</span><span class="o">:</span><span class="w"> </span><span class="kt">3000</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1">// On SIGINT/SIGTERM:</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="k">await</span><span class="w"> </span><span class="nx">fred</span><span class="p">.</span><span class="nx">shutdown</span><span class="p">();</span>
 </code></pre></div>
 <p>Move custom handlers to the <code>routes</code> option. <code>conversation_id</code> request-body
 aliases were removed; send a printable <code>X-Session-Id</code> header to <code>/chat</code> and
 <code>/v1/chat/completions</code>.</p>
 <p>Workflow endpoints are also opt-in. Register workflows before <code>listen()</code> and
 use an explicit production allowlist:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">withHttp</span><span class="p">(</span><span class="nx">core</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nx">workflowEndpoints</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nx">report</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">auth</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scopes</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;workflows:run&#39;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nx">progress</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">stream</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w"> </span><span class="nx">auth</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scopes</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;workflows:stream&#39;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="p">},</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">});</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fred</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">withHttp</span><span class="p">(</span><span class="nx">core</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nx">workflowEndpoints</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nx">report</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">auth</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scopes</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'workflows:run'</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="nx">progress</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">stream</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w"> </span><span class="nx">auth</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scopes</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'workflows:stream'</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="p">});</span>
 </code></pre></div>
 <p>Definitions and OpenAPI are snapshotted at <code>listen()</code>; restart the listener
 after changing the workflow registry.</p>
 <h2 id="api-key-verifier-migration-and-rotation">API-key verifier migration and rotation</h2>
 <p>The development bearer token is for trusted local use. Production workflow
 routes should use durable, scoped API-key storage shared by the server and CLI:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>fred<span class="w"> </span>keys<span class="w"> </span>create<span class="w"> </span>--sqlite<span class="w"> </span>./fred.db<span class="w"> </span>--scopes<span class="w"> </span>workflows:run,workflows:stream
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>fred<span class="w"> </span>keys<span class="w"> </span>create<span class="w"> </span>--postgres<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DATABASE_URL</span><span class="s2">&quot;</span><span class="w"> </span>--scopes<span class="w"> </span>workflows:run
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>fred<span class="w"> </span>keys<span class="w"> </span>create<span class="w"> </span>--sqlite<span class="w"> </span>./fred.db<span class="w"> </span>--scopes<span class="w"> </span>workflows:run,workflows:stream
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>fred<span class="w"> </span>keys<span class="w"> </span>create<span class="w"> </span>--postgres<span class="w"> </span><span class="s2">"</span><span class="nv">$DATABASE_URL</span><span class="s2">"</span><span class="w"> </span>--scopes<span class="w"> </span>workflows:run
 </code></pre></div>
 <p>New records use <code>argon2id-v1</code> by default. The default registry also provides
 <code>scrypt-v1</code>, <code>pbkdf2-sha256-v1</code>, and read-only <code>sha256-v1</code>. Applications can
@@ -1301,10 +1370,10 @@ candidate checkout rather than applying it blindly.</p>
 <h2 id="verification">Verification</h2>
 <p>After migration, run the consumer with a frozen install and no workspace
 resolution:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>bun<span class="w"> </span>install<span class="w"> </span>--frozen-lockfile
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>bunx<span class="w"> </span>tsc<span class="w"> </span>--noEmit
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>bun<span class="w"> </span><span class="nb">test</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>bun<span class="w"> </span>run<span class="w"> </span>build
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>bun<span class="w"> </span>install<span class="w"> </span>--frozen-lockfile
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>bunx<span class="w"> </span>tsc<span class="w"> </span>--noEmit
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>bun<span class="w"> </span><span class="nb">test</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>bun<span class="w"> </span>run<span class="w"> </span>build
 </code></pre></div>
 <p>For Fred itself, the release gates also include declarations, documentation,
 all 15 examples, tarball contents, and an isolated offline consumer. Stable
@@ -1331,7 +1400,7 @@ promotion waits for those gates and the external Stanza candidate build.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 16, 2026 20:39:28 UTC">August 16, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="September 2, 2026 18:47:41 UTC">September 2, 2026</span>
   </span>
 
     
@@ -1341,7 +1410,7 @@ promotion waits for those gates and the external Stanza candidate build.</p>
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 16, 2026 20:39:28 UTC">August 16, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="September 2, 2026 18:47:41 UTC">September 2, 2026</span>
   </span>
 
     
