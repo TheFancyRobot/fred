@@ -126,6 +126,18 @@ export const createProviderDefinitionEffect = (
   factory: EffectProviderFactory,
   config: ProviderConfig
 ): Effect.Effect<ProviderDefinition, ProviderRegistrationError> => {
+  // Defensive shallow copy (BUG-0009): the caller must not be able to mutate the
+  // stored definition by mutating their config object after registration.
+  const storedConfig = { ...config };
+
+  // Merge factory aliases with config aliases (BUG-0003): config-level aliases
+  // are a documented ProviderConfig field and must land in the stored definition.
+  const aliases = [...(factory.aliases ?? [])];
+  for (const alias of config.aliases ?? []) {
+    if (!aliases.some((existing) => existing.toLowerCase() === alias.toLowerCase())) {
+      aliases.push(alias);
+    }
+  }
   // Validate factory structure
   const validateFactory = Effect.try({
     try: () => {
@@ -145,7 +157,7 @@ export const createProviderDefinitionEffect = (
 
     // Load the provider
     const loadResult = yield* Effect.tryPromise({
-      try: () => validatedFactory.load(config),
+      try: () => validatedFactory.load(storedConfig),
       catch: (error) => {
         if (error instanceof ProviderPackLoadError) {
           return new ProviderRegistrationError({
@@ -163,8 +175,8 @@ export const createProviderDefinitionEffect = (
 
     return {
       id: validatedFactory.id,
-      aliases: validatedFactory.aliases ?? [],
-      config,
+      aliases,
+      config: storedConfig,
       getModel: loadResult.getModel,
       layer: loadResult.layer,
       factory: validatedFactory,
@@ -173,7 +185,7 @@ export const createProviderDefinitionEffect = (
         : undefined,
       connectionCapabilities: validatedFactory.connectionCapabilities,
       connectionTest: validatedFactory.connectionTest,
-      connectionPrepare: validatedFactory.makeConnectionPrepare?.(config),
+      connectionPrepare: validatedFactory.makeConnectionPrepare?.(storedConfig),
     };
   });
 };

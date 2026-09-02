@@ -82,6 +82,25 @@ export interface ProviderRegistryService {
 export const ProviderRegistryService = Context.GenericTag<ProviderRegistryService>(
   'ProviderRegistryService'
 );
+/**
+ * Result of an atomic registration transition (see registerDefinition).
+ */
+type RegisterOutcome =
+  | { _tag: 'registered' }
+  | { _tag: 'noop' }
+  | { _tag: 'conflict'; error: ProviderRegistrationError };
+
+/**
+ * Two definitions are the same registration when the provider id matches and
+ * the factory instance matches. A definition registered without a factory
+ * (hand-built, via registerDefinition) never conflicts.
+ */
+function isSameRegistration(
+  existingFactory: EffectProviderFactory | undefined,
+  incomingFactory: EffectProviderFactory | undefined
+): boolean {
+  return existingFactory === undefined || incomingFactory === undefined || existingFactory === incomingFactory;
+}
 
 /**
  * Implementation of ProviderRegistryService
@@ -123,39 +142,55 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
 
   registerDefinition(definition: ProviderDefinition): Effect.Effect<void, ProviderRegistrationError> {
     const self = this;
+    const normalizedId = definition.id.toLowerCase();
+    const normalizedAliases = definition.aliases.map((alias) => alias.toLowerCase());
+    // Deduplicate: aliases matching the id are harmless
+    const keysToRegister = [...new Set([normalizedId, ...normalizedAliases])];
+
+    // Atomic check-and-set (BUG-0002): conflict validation and insertion must
+    // happen in a single Ref.modify transition so concurrent registrations can
+    // never build from the same stale snapshot and overwrite each other.
     return Effect.gen(function* () {
-      const providers = yield* Ref.get(self.providers);
-
-      const normalizedId = definition.id.toLowerCase();
-      const normalizedAliases = definition.aliases.map((alias) => alias.toLowerCase());
-      // Deduplicate: aliases matching the id are harmless
-      const keysToRegister = [...new Set([normalizedId, ...normalizedAliases])];
-
-      for (const key of keysToRegister) {
-
-        const existing = providers.get(key);
-        if (existing) {
-          // Idempotent: re-registering the same provider is a no-op
-          if (existing.id.toLowerCase() === normalizedId) {
-            return;
+      const outcome = yield* Ref.modify(
+        self.providers,
+        (providers): readonly [RegisterOutcome, Map<string, ProviderDefinition>] => {
+          for (const key of keysToRegister) {
+            const existing = providers.get(key);
+            if (existing) {
+              const sameId = existing.id.toLowerCase() === normalizedId;
+              if (sameId && isSameRegistration(existing.factory, definition.factory)) {
+                // Idempotent: re-registering the same provider is a no-op
+                return [{ _tag: 'noop' }, providers];
+              }
+              const error = sameId
+                ? new ProviderRegistrationError({
+                    providerId: definition.id,
+                    cause: new Error(
+                      `Cannot register provider "${definition.id}": id "${normalizedId}" is already registered to a different factory`
+                    )
+                  })
+                : new ProviderRegistrationError({
+                    providerId: definition.id,
+                    cause: new Error(
+                      `Cannot register provider "${definition.id}": ${key === normalizedId ? 'id' : 'alias'} "${key}" is already registered to provider "${existing.id}"`
+                    )
+                  });
+              return [{ _tag: 'conflict', error }, providers];
+            }
           }
-          const conflictType = key === normalizedId ? 'id' : 'alias';
-          return yield* Effect.fail(new ProviderRegistrationError({
-            providerId: definition.id,
-            cause: new Error(
-              `Cannot register provider "${definition.id}": ${conflictType} "${key}" is already registered to provider "${existing.id}"`
-            )
-          }));
+          const newProviders = new Map(providers);
+          // Store with lowercase keys for case-insensitive lookup
+          newProviders.set(normalizedId, definition);
+          for (const alias of definition.aliases) {
+            newProviders.set(alias.toLowerCase(), definition);
+          }
+          return [{ _tag: 'registered' }, newProviders];
         }
-      }
+      );
 
-      const newProviders = new Map(providers);
-      // Store with lowercase keys for case-insensitive lookup
-      newProviders.set(normalizedId, definition);
-      for (const alias of definition.aliases) {
-        newProviders.set(alias.toLowerCase(), definition);
+      if (outcome._tag === 'conflict') {
+        return yield* Effect.fail(outcome.error);
       }
-      yield* Ref.set(self.providers, newProviders);
     });
   }
 

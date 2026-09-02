@@ -921,6 +921,70 @@ describe('createFred client', () => {
     expect(resolved).toBe(first);
   });
 
+  it('providers.registerFactory rejects same-id re-registration from a different factory', async () => {
+    const client = track(await createFred());
+
+    const first = await client.providers.registerFactory(
+      createMockFactory({ id: 'stale-prov' })
+    );
+
+    await expect(
+      client.providers.registerFactory(createMockFactory({ id: 'stale-prov' }))
+    ).rejects.toBeInstanceOf(ProviderRegistrationError);
+
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('stale-prov'))
+    );
+    expect(resolved).toBe(first);
+  });
+
+  it('concurrent registerFactory calls all register without dropping providers', async () => {
+    const client = track(await createFred());
+
+    const ids = ['conc-0', 'conc-1', 'conc-2', 'conc-3', 'conc-4', 'conc-5', 'conc-6', 'conc-7'];
+    await Promise.all(
+      ids.map((id) => client.providers.registerFactory(createMockFactory({ id })))
+    );
+
+    const providers = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.listProviders())
+    );
+    expect(providers.slice().sort()).toEqual(ids.slice().sort());
+  });
+
+  it('providers.registerFactory merges config aliases with factory aliases without duplicates', async () => {
+    const client = track(await createFred());
+
+    const definition = await client.providers.registerFactory(
+      createMockFactory({ id: 'merge-prov', aliases: ['merge-factory'] }),
+      { aliases: ['merge-config', 'merge-factory'] }
+    );
+
+    expect(definition.aliases).toEqual(['merge-factory', 'merge-config']);
+
+    const byConfigAlias = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('merge-config'))
+    );
+    expect(byConfigAlias.id).toBe('merge-prov');
+  });
+
+  it('providers.registerFactory snapshots the caller config against later mutation', async () => {
+    const client = track(await createFred());
+    const config: ProviderConfig = {
+      baseUrl: 'http://fred.test:4040',
+      modelDefaults: { model: 'test-model' },
+    };
+
+    await client.providers.registerFactory(createMockFactory({ id: 'snapshot-prov' }), config);
+
+    config.baseUrl = 'http://evil.example';
+
+    const definition = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('snapshot-prov'))
+    );
+    expect(definition.config.baseUrl).toBe('http://fred.test:4040');
+  });
+
   it('providers.registerFactory rejects with FredClientClosedError after shutdown', async () => {
     const client = await createFred();
     await client.shutdown();
