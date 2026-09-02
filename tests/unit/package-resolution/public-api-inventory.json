@@ -2156,15 +2156,23 @@
     "version": "4.1.1",
     "subpath": ".",
     "declarations": [
+      "InvalidOpenAiCompatibleProviderConfigError",
+      "OpenAiCompatibleConfigErrorReason",
+      "OpenAiCompatibleProviderFactoryOptions",
       "OpenAiLanguageModelUnavailableError",
       "OpenAiProviderFactory",
+      "createOpenAiCompatibleProviderFactory",
       "default",
+      "loadOpenAiCompatibleRuntime",
       "openaiPack"
     ],
     "runtime": [
+      "InvalidOpenAiCompatibleProviderConfigError",
       "OpenAiLanguageModelUnavailableError",
       "OpenAiProviderFactory",
+      "createOpenAiCompatibleProviderFactory",
       "default",
+      "loadOpenAiCompatibleRuntime",
       "openaiPack"
     ]
   },

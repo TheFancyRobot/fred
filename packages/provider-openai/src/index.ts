@@ -1,4 +1,4 @@
-import { Data, Effect } from 'effect';
+import { Data, Effect, Either } from 'effect';
 import {
   makeProviderConnectionTestHook,
   providerApiKey,
@@ -8,6 +8,7 @@ import {
   registerBuiltinPack,
 } from '@fancyrobot/fred';
 import type { EffectProviderFactory, ProviderConfig, ProviderModelDefaults } from '@fancyrobot/fred';
+import { loadOpenAiCompatibleRuntime } from './compatible';
 
 /**
  * OpenAI provider pack factory.
@@ -43,39 +44,12 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
   }),
   load: async (config: ProviderConfig) => {
     if (config.connectionProtocol === 'openai-compatible') {
-      let module: typeof import('@effect/ai-openrouter');
-      try {
-        module = await import('@effect/ai-openrouter');
-      } catch {
-        throw new Error(
-          'Failed to load @effect/ai-openrouter. Install it with: bun add @effect/ai-openrouter'
-        );
-      }
-
-      const layer = module.OpenRouterClient?.layer?.({
-        apiKey: providerApiKey(config.credentials),
-        apiUrl: config.baseUrl,
-        transformClient: providerAuthTransform(config.credentials),
+      return Effect.runPromise(loadOpenAiCompatibleRuntime(config).pipe(Effect.either)).then((either) => {
+        if (Either.isLeft(either)) {
+          throw either.left;
+        }
+        return either.right;
       });
-
-      if (!layer) {
-        throw new Error('OpenAI-compatible provider runtime did not expose a client layer');
-      }
-
-      return {
-        layer,
-        getModel: (modelId: string, overrides?: ProviderModelDefaults) => {
-          if (!module.OpenRouterLanguageModel?.model) {
-            return Effect.fail(new OpenAiLanguageModelUnavailableError());
-          }
-          return Effect.succeed(
-            module.OpenRouterLanguageModel.model(modelId, {
-              temperature: overrides?.temperature,
-              max_tokens: overrides?.maxTokens,
-            })
-          );
-        },
-      };
     }
 
     // Dynamic import to avoid hard dependency
@@ -123,3 +97,10 @@ registerBuiltinPack(OpenAiProviderFactory);
 
 export { OpenAiProviderFactory as openaiPack };
 export default OpenAiProviderFactory;
+export {
+  createOpenAiCompatibleProviderFactory,
+  loadOpenAiCompatibleRuntime,
+  type OpenAiCompatibleProviderFactoryOptions,
+  type OpenAiCompatibleConfigErrorReason,
+  InvalidOpenAiCompatibleProviderConfigError,
+} from './compatible';

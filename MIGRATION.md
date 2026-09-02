@@ -27,8 +27,17 @@ the compatible package lines and intentionally remain semver ranges.
 | `@fancyrobot/fred-google` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-google ^0.14.0`; `@effect/platform ^0.96.0` | Google provider |
 | `@fancyrobot/fred-groq` | `4.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | Groq provider |
 | `@fancyrobot/fred-minimax` | `2.1.0` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/platform ^0.96.0` | MiniMax language and native multimodal adapters |
-| `@fancyrobot/fred-openai` | `4.1.1` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0`; `@effect/ai-openrouter ^0.10.0` | OpenAI provider |
+| `@fancyrobot/fred-openai` | `4.1.1` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0`; `@effect/ai-openrouter ^0.10.0`; `@effect/platform ^0.96.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
+
+`@fancyrobot/fred-openai` 4.2.0 raises its `effect` peer floor from `^3.21.0`
+to `^3.21.5` to match the version the monorepo core and provider packages are
+validated against (core, google, groq, and minimax already require `^3.21.5`).
+There are no known breaking changes or security fixes between 3.21.0 and
+3.21.5; consumers pinned to 3.21.0-3.21.4 will see peer-resolution warnings
+and should upgrade (recommended) or override the peer at their own risk.
+Packages that remain on `^3.21.0` (cli, postgres, baml, convex, openrouter)
+are unaffected.
 
 The final `@fancyrobot/fred-dev` shim requires CLI `^0.7.0`. Prefer removing
 the shim rather than extending that compatibility window.
@@ -92,6 +101,51 @@ hatches for programs that need the same scoped Effect services.
 Effect-native applications import service tags, layers, and tagged errors from
 `@fancyrobot/fred/effect`; core business logic must remain inside Effect rather
 than adding new `Effect.runPromise` boundaries.
+
+## Generic OpenAI-compatible providers (additive)
+
+Additive in `@fancyrobot/fred` and `@fancyrobot/fred-openai`; existing
+applications need no migration apart from the behavior change below.
+
+- **Behavior change:** the shared openai-compatible runtime now rejects an
+  `Authorization` entry (any casing) in `config.headers` with
+  `InvalidOpenAiCompatibleProviderConfigError`
+  (`reason: 'authorization-header'`) before any network I/O. Earlier releases
+  silently ignored such headers, so a YAML `providers:` pack config or
+  programmatic config that set `headers.Authorization` for an
+  `openai-compatible` endpoint now fails at load. Move the token into the
+  credential field instead
+  (`credentials: { kind: 'api-key', apiKey: '...' }`, or the standard
+  API-key environment variable / `apiKeyEnvVar` in YAML) or remove the
+  header when the endpoint needs no authentication
+  (`credentials: { kind: 'none' }`).
+
+`FredClient.providers` gains `registerFactory(factory, config?)`, which stores
+a caller-supplied `EffectProviderFactory` under `factory.id`, calls
+`factory.load(config)` once, and returns the stored `ProviderDefinition`:
+
+```ts
+import { createOpenAiCompatibleProviderFactory } from '@fancyrobot/fred-openai';
+
+const definition = await fred.providers.registerFactory(
+  createOpenAiCompatibleProviderFactory({ id: 'my-local-llm' }),
+  { baseUrl: 'http://127.0.0.1:11434/v1', credentials: { kind: 'none' } },
+);
+```
+
+`@fancyrobot/fred-openai` additionally exports `createOpenAiCompatibleProviderFactory`,
+`loadOpenAiCompatibleRuntime`, `InvalidOpenAiCompatibleProviderConfigError`,
+and the `OpenAiCompatibleProviderFactoryOptions` type. Generic compatible
+providers speak the Chat Completions protocol with a floor of text generation,
+SSE streaming, tool calls, and JSON-schema structured output; they have no
+embeddings, image generation, model discovery, retries, or transport fallback.
+Configuration is validated before any network I/O, and the typed failure
+carries a stable `reason` discriminator.
+
+Hosted `openai` keeps its Responses transport, and saved `local-compatible`
+connections declaring the `openai-compatible` protocol remain the recommended
+persisted path; both the saved-connection route and `registerFactory` now
+share the same runtime and validation.
 
 ## Unified workflows
 

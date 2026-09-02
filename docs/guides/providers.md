@@ -260,6 +260,78 @@ await fred.createAgent({
 });
 ```
 
+## Generic OpenAI-Compatible Endpoints
+
+Any endpoint that implements the OpenAI Chat Completions protocol can be
+used as a first-class Fred provider without a dedicated package. The
+`@fancyrobot/fred-openai` package ships a factory creator for these
+endpoints. Give each endpoint a unique provider ID, register the factory on
+the client with an explicit `baseUrl` and credentials, and select that ID on
+your agents.
+
+```typescript
+import { createFred } from '@fancyrobot/fred';
+import { createOpenAiCompatibleProviderFactory } from '@fancyrobot/fred-openai';
+
+const fred = await createFred();
+
+// A unique ID per endpoint. Aliases are optional.
+const definition = await fred.providers.registerFactory(
+  createOpenAiCompatibleProviderFactory({ id: 'my-local-llm' }),
+  {
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    credentials: { kind: 'none' },
+  },
+);
+
+// Select the registered ID as the agent platform.
+await fred.agents.register({
+  id: 'local-agent',
+  platform: 'my-local-llm',
+  model: 'llama3.1',
+});
+```
+
+### Capability floor
+
+Generic compatible providers speak the Chat Completions protocol and support:
+
+- Text generation
+- SSE streaming
+- Tool calls
+- JSON-schema structured output
+
+They explicitly do **not** support embeddings, image generation, model
+discovery, retries, or transport fallback.
+
+### Endpoint and authentication rules
+
+- `baseUrl` must be an absolute `http:` or `https:` URL with **no**
+  userinfo, query string, or fragment. Path prefixes such as `/v1` are
+  preserved; exactly one `/chat/completions` suffix is appended.
+- Use `https:` for production. Plain `http:` is for loopback and trusted
+  local networks only.
+- `credentials` accepts `none`, `api-key` (sent as `Authorization: Bearer`),
+  or `basic`. `oauth2-bearer` is rejected.
+- A custom `Authorization` header is **rejected**, not overridden:
+  authentication always comes from credentials.
+
+Invalid configuration fails with
+`InvalidOpenAiCompatibleProviderConfigError` **before any network I/O**. The
+error carries a stable `reason` (`missing-base-url`, `invalid-url`,
+`unsupported-scheme`, `userinfo`, `query-string`, `fragment`,
+`authorization-header`, or `unsupported-credential-kind`) and a message that
+never includes credentials or the full URL.
+
+### Relationship to hosted OpenAI and saved connections
+
+- Hosted `openai` keeps the **Responses** transport. This factory never
+  changes hosted OpenAI behavior.
+- For persisted endpoints, a saved `local-compatible` connection declaring
+  the `openai-compatible` protocol remains the recommended path and shares
+  this same runtime and validation (see
+  [Provider Connections](provider-connections.md)).
+
 ## Model Selection
 
 Different providers offer different models. Choose based on your needs:
