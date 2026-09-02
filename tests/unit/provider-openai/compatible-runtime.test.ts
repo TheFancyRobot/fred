@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import * as LanguageModel from '@effect/ai/LanguageModel';
 import { FetchHttpClient } from '@effect/platform';
 import { Effect, Either, Layer, Redacted, Stream } from 'effect';
-import type { ProviderConfig, ProviderDefinition } from '@fancyrobot/fred';
+import type {
+  ProviderConfig,
+  ProviderConnectionCredentials,
+  ProviderConnectionDraft,
+  ProviderDefinition,
+} from '@fancyrobot/fred';
 import {
   InvalidOpenAiCompatibleProviderConfigError,
   OpenAiProviderFactory,
@@ -12,6 +17,19 @@ import {
 
 const BASE_URL = 'http://127.0.0.1:11434/v1';
 const MODEL_ID = 'local/test';
+
+// Compile-time guard for BUG-0005: `reason` must remain the stable literal
+// union of the eight documented values; a bare `string` (or a missing
+// member) fails typechecking.
+type AssertTrue<T extends true> = T;
+type IsEqual<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+type _ReasonIsStableLiteralUnion = AssertTrue<
+  IsEqual<
+    InvalidOpenAiCompatibleProviderConfigError['reason'],
+    'missing-base-url' | 'invalid-url' | 'unsupported-scheme' | 'userinfo' | 'query-string' | 'fragment' | 'authorization-header' | 'unsupported-credential-kind'
+  >
+>;
 
 interface CapturedRequest {
   readonly url: string;
@@ -408,5 +426,120 @@ test('factory load rejects invalid config with the typed error before fetch', as
     );
     expect(error).toBeInstanceOf(InvalidOpenAiCompatibleProviderConfigError);
     expect((error as InvalidOpenAiCompatibleProviderConfigError).reason).toBe('missing-base-url');
+  });
+});
+
+test('getModel fails through the error channel when the adapter lacks OpenRouterLanguageModel', async () => {
+  const either = await Effect.runPromise(
+    loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {
+      importAdapter: () => Promise.resolve({}) as never,
+    })
+      .pipe(Effect.flatMap((definition) => definition.getModel(MODEL_ID).pipe(Effect.either)))
+      .pipe(Effect.either),
+  );
+  expect(Either.isLeft(either)).toBe(true);
+  if (Either.isLeft(either)) {
+    expect(either.left).toBeInstanceOf(Error);
+    expect(either.left.message).toContain('OpenRouterLanguageModel');
+  }
+});
+
+test('adapter import failure carries the install hint remediation', async () => {
+  const either = await Effect.runPromise(
+    loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {
+      importAdapter: () => Promise.reject(new Error("Cannot find module '@effect/ai-openrouter'")),
+    }).pipe(Effect.either),
+  );
+  expect(Either.isLeft(either)).toBe(true);
+  if (Either.isLeft(either)) {
+    expect(either.left).toBeInstanceOf(Error);
+    expect(either.left).not.toBeInstanceOf(InvalidOpenAiCompatibleProviderConfigError);
+    expect(either.left.message).toContain('Failed to load @effect/ai-openrouter');
+    expect(either.left.message).toContain('bun add @effect/ai-openrouter');
+  }
+});
+
+test('generic factory connection test probes the endpoint with credential-derived auth', async () => {
+  const factory = createOpenAiCompatibleProviderFactory({ id: 'probe' });
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = [];
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    requests.push({ url: request.url, headers });
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    const cases: Array<{
+      readonly draft: ProviderConnectionDraft;
+      readonly credentials: ProviderConnectionCredentials;
+      readonly authorization: string | undefined;
+    }> = [
+      {
+        draft: {
+          label: 'probe',
+          providerId: 'probe',
+          protocol: 'openai-compatible',
+          endpoint: BASE_URL,
+          auth: { kind: 'none' },
+        },
+        credentials: { kind: 'none' },
+        authorization: undefined,
+      },
+      {
+        draft: {
+          label: 'probe',
+          providerId: 'probe',
+          protocol: 'openai-compatible',
+          endpoint: BASE_URL,
+          auth: { kind: 'api-key' },
+        },
+        credentials: { kind: 'api-key', apiKey: Redacted.make('probe-key') },
+        authorization: 'Bearer probe-key',
+      },
+      {
+        draft: {
+          label: 'probe',
+          providerId: 'probe',
+          protocol: 'openai-compatible',
+          endpoint: BASE_URL,
+          auth: { kind: 'basic' },
+        },
+        credentials: {
+          kind: 'basic',
+          username: Redacted.make('probe-user'),
+          password: Redacted.make('probe-password'),
+        },
+        authorization: `Basic ${btoa('probe-user:probe-password')}`,
+      },
+    ];
+    for (const [index, { draft, credentials, authorization }] of cases.entries()) {
+      await Effect.runPromise(factory.connectionTest!.test(draft, credentials));
+      const request = requests[index];
+      expect(request.url).toBe(`${BASE_URL}/models`);
+      expect(request.headers['authorization']).toBe(authorization);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generic factory connection test fails typed when the draft has no endpoint', async () => {
+  const factory = createOpenAiCompatibleProviderFactory({ id: 'probe' });
+  const rejected = await Effect.runPromise(
+    Effect.flip(
+      factory.connectionTest!.test(
+        { label: 'probe', providerId: 'probe', protocol: 'openai-compatible', auth: { kind: 'none' } },
+        { kind: 'none' },
+      ),
+    ),
+  );
+  expect(rejected).toMatchObject({
+    _tag: 'ProviderConnectionTestError',
+    providerId: 'probe',
+    reason: 'configuration',
   });
 });

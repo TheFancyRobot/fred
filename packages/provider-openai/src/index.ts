@@ -96,5 +96,6 @@ export {
   createOpenAiCompatibleProviderFactory,
   loadOpenAiCompatibleRuntime,
   type OpenAiCompatibleProviderFactoryOptions,
+  type OpenAiCompatibleConfigErrorReason,
   InvalidOpenAiCompatibleProviderConfigError,
 } from './compatible';

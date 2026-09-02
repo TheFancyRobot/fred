@@ -1,14 +1,32 @@
+import type * as OpenRouterAdapter from '@effect/ai-openrouter';
 import * as HttpClient from '@effect/platform/HttpClient';
 import * as HttpClientRequest from '@effect/platform/HttpClientRequest';
 import { Data, Effect, Either } from 'effect';
 import {
+  makeProviderConnectionTestHook,
   providerApiKey,
   providerAuthTransform,
+  providerConnectionProbeAuthHeaders,
+  providerConnectionProbeUrl,
   type EffectProviderFactory,
   type ProviderConfig,
   type ProviderDefinition,
   type ProviderModelDefaults,
 } from '@fancyrobot/fred';
+
+/**
+ * The stable machine-readable reasons a generic OpenAI-compatible provider
+ * configuration can be rejected.
+ */
+export type OpenAiCompatibleConfigErrorReason =
+  | 'missing-base-url'
+  | 'invalid-url'
+  | 'unsupported-scheme'
+  | 'userinfo'
+  | 'query-string'
+  | 'fragment'
+  | 'authorization-header'
+  | 'unsupported-credential-kind';
 
 /**
  * Typed failure for invalid generic OpenAI-compatible provider configuration.
@@ -20,7 +38,7 @@ import {
 export class InvalidOpenAiCompatibleProviderConfigError extends Data.TaggedError(
   'InvalidOpenAiCompatibleProviderConfigError'
 )<{
-  readonly reason: string;
+  readonly reason: OpenAiCompatibleConfigErrorReason;
   readonly message: string;
 }> {}
 
@@ -32,7 +50,7 @@ export interface OpenAiCompatibleProviderFactoryOptions {
 
 type CompatibleConfigError = InvalidOpenAiCompatibleProviderConfigError;
 
-const failConfig = (reason: string, message: string): Effect.Effect<never, CompatibleConfigError> =>
+const failConfig = (reason: OpenAiCompatibleConfigErrorReason, message: string): Effect.Effect<never, CompatibleConfigError> =>
   Effect.fail(new InvalidOpenAiCompatibleProviderConfigError({ reason, message }));
 
 /**
@@ -123,6 +141,19 @@ const makeTransformClient = (
 };
 
 /**
+ * Options for loading the generic OpenAI-compatible runtime.
+ *
+ * `importAdapter` is a dependency seam that lets a caller (primarily tests)
+ * supply the adapter module without the dynamic import, so the loader's
+ * install-hint failure path and the missing-model guard are testable without
+ * process-global module mocking. When omitted, `@effect/ai-openrouter` is
+ * imported dynamically as before.
+ */
+export interface OpenAiCompatibleRuntimeOptions {
+  readonly importAdapter?: () => Promise<typeof OpenRouterAdapter>;
+}
+
+/**
  * Loads the generic OpenAI-compatible (Chat Completions) runtime.
  *
  * Shared by generated factories and saved local-compatible connections:
@@ -134,6 +165,7 @@ const makeTransformClient = (
  */
 export function loadOpenAiCompatibleRuntime(
   config: ProviderConfig,
+  options: OpenAiCompatibleRuntimeOptions = {},
 ): Effect.Effect<ProviderDefinition, InvalidOpenAiCompatibleProviderConfigError | Error> {
   return Effect.gen(function* () {
     const baseUrl = yield* validateBaseUrl(config.baseUrl);
@@ -141,9 +173,18 @@ export function loadOpenAiCompatibleRuntime(
     yield* validateCredentials(config.credentials);
 
     const adapter = yield* Effect.tryPromise({
-      try: () => import('@effect/ai-openrouter'),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      try: () => (options.importAdapter ? options.importAdapter() : import('@effect/ai-openrouter')),
+      catch: () => new Error('Failed to load @effect/ai-openrouter. Install it with: bun add @effect/ai-openrouter'),
     });
+
+    // Adapter shape guard: a missing optional dependency, a stub module, or a
+    // partial install must fail with a stable message instead of a TypeError
+    // inside client-layer construction.
+    if (!adapter.OpenRouterClient || !adapter.OpenRouterLanguageModel?.model) {
+      return yield* Effect.fail(
+        new Error('OpenAI-compatible adapter did not expose OpenRouterClient or OpenRouterLanguageModel.model.'),
+      );
+    }
 
     const layer = adapter.OpenRouterClient.layer({
       apiKey: providerApiKey(config.credentials),
@@ -172,8 +213,9 @@ export function loadOpenAiCompatibleRuntime(
  *
  * Pure and side-effect-free: copies the alias array, declares the
  * openai-compatible protocol with none/api-key/basic authentication under the
- * consumer-chosen id, and never auto-registers with the built-in registry.
- * Registration is explicit via `FredClient.providers.registerFactory(...)`.
+ * consumer-chosen id, wires a bounded `/models` connection-test probe that
+ * authenticates only from credentials, and never auto-registers with the
+ * built-in registry.
  */
 export function createOpenAiCompatibleProviderFactory(
   options: OpenAiCompatibleProviderFactoryOptions,
@@ -190,6 +232,18 @@ export function createOpenAiCompatibleProviderFactory(
       login: ['manual-secret'],
       protocols: ['openai-compatible'],
     },
+    connectionTest: makeProviderConnectionTestHook({
+      providerId: options.id,
+      request: (draft, credentials) => {
+        if (draft.endpoint === undefined) {
+          throw new Error(`Provider "${options.id}" connection tests require an endpoint.`);
+        }
+        return {
+          url: providerConnectionProbeUrl(draft, draft.endpoint, 'models').toString(),
+          init: { headers: providerConnectionProbeAuthHeaders(credentials) },
+        };
+      },
+    }),
     load: (config) =>
       Effect.runPromise(loadOpenAiCompatibleRuntime(config).pipe(Effect.either)).then((either) => {
         if (Either.isLeft(either)) {

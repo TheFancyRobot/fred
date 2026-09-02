@@ -2,16 +2,25 @@ import { expect, test } from 'bun:test';
 import * as LanguageModel from '@effect/ai/LanguageModel';
 import { Prompt, Tool, Toolkit } from '@effect/ai';
 import { FetchHttpClient } from '@effect/platform';
-import { Effect, Layer, Schema, Stream } from 'effect';
+import { Effect, Layer, Redacted, Schema, Stream } from 'effect';
+import type { ProviderConfig } from '@fancyrobot/fred';
 import { OpenAiProviderFactory } from '../../../packages/provider-openai/src/index';
 
-test('local OpenAI-compatible connections stream through Chat Completions', async () => {
+test('local OpenAI-compatible connections stream through Chat Completions for every auth mode', async () => {
   const originalFetch = globalThis.fetch;
-  const requests: Array<{ readonly url: string; readonly body: Record<string, unknown> }> = [];
+  const requests: Array<{
+    readonly url: string;
+    readonly headers: Record<string, string>;
+    readonly body: Record<string, unknown>;
+  }> = [];
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
     const body = await request.json() as Record<string, unknown>;
-    requests.push({ url: request.url, body });
+    requests.push({ url: request.url, headers, body });
     const stream = body.stream === true;
     if (!stream) {
       return Response.json({
@@ -35,46 +44,71 @@ test('local OpenAI-compatible connections stream through Chat Completions', asyn
     ].join('\n\n'), { headers: { 'content-type': 'text/event-stream' } });
   };
 
+  // BUG-0010: prove the credential-derived Authorization header on the wire
+  // for every auth mode the saved-local protocol supports.
+  const cases: Array<{
+    readonly credentials: ProviderConfig['credentials'];
+    readonly authorization: string | undefined;
+  }> = [
+    { credentials: { kind: 'none' }, authorization: undefined },
+    {
+      credentials: { kind: 'api-key', apiKey: Redacted.make('local-api-key') },
+      authorization: 'Bearer local-api-key',
+    },
+    {
+      credentials: {
+        kind: 'basic',
+        username: Redacted.make('local-user'),
+        password: Redacted.make('local-password'),
+      },
+      authorization: `Basic ${btoa('local-user:local-password')}`,
+    },
+  ];
+
   try {
-    const runtime = await OpenAiProviderFactory.load({
-      connectionProtocol: 'openai-compatible',
-      baseUrl: 'http://127.0.0.1:11434/v1',
-      credentials: { kind: 'none' },
-    });
-    const model = await Effect.runPromise(runtime.getModel('local/test'));
-    const modelWithClient = Layer.provide(
-      model,
-      runtime.layer.pipe(Layer.provide(FetchHttpClient.layer)),
-    );
-    const structured = await Effect.runPromise(
-      LanguageModel.generateObject({
-        prompt: 'Return {"ok":true}.',
-        schema: Schema.Struct({ ok: Schema.Boolean }),
-        objectName: 'probe',
-      }).pipe(Effect.provide(modelWithClient)),
-    );
-    expect(structured.value).toEqual({ ok: true });
-    await Effect.runPromise(Stream.runDrain(
-      LanguageModel.streamText({ prompt: 'Reply with exactly OK.' }).pipe(
-        Stream.provideLayer(modelWithClient),
-      ),
-    ));
+    for (const [index, { credentials, authorization }] of cases.entries()) {
+      const runtime = await OpenAiProviderFactory.load({
+        connectionProtocol: 'openai-compatible',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        credentials,
+      });
+      const model = await Effect.runPromise(runtime.getModel('local/test'));
+      const modelWithClient = Layer.provide(
+        model,
+        runtime.layer.pipe(Layer.provide(FetchHttpClient.layer)),
+      );
+      const structured = await Effect.runPromise(
+        LanguageModel.generateObject({
+          prompt: 'Return {"ok":true}.',
+          schema: Schema.Struct({ ok: Schema.Boolean }),
+          objectName: 'probe',
+        }).pipe(Effect.provide(modelWithClient)),
+      );
+      expect(structured.value).toEqual({ ok: true });
+      await Effect.runPromise(Stream.runDrain(
+        LanguageModel.streamText({ prompt: 'Reply with exactly OK.' }).pipe(
+          Stream.provideLayer(modelWithClient),
+        ),
+      ));
+      const [first, second] = requests.slice(-2);
+      expect(requests).toHaveLength((index + 1) * 2);
+      expect(first).toMatchObject({
+        url: 'http://127.0.0.1:11434/v1/chat/completions',
+        body: {
+          model: 'local/test',
+          response_format: { type: 'json_schema' },
+        },
+      });
+      expect(first.headers['authorization']).toBe(authorization);
+      expect(second).toMatchObject({
+        url: 'http://127.0.0.1:11434/v1/chat/completions',
+        body: { model: 'local/test', stream: true },
+      });
+      expect(second.headers['authorization']).toBe(authorization);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
-
-  expect(requests).toHaveLength(2);
-  expect(requests[0]).toMatchObject({
-    url: 'http://127.0.0.1:11434/v1/chat/completions',
-    body: {
-      model: 'local/test',
-      response_format: { type: 'json_schema' },
-    },
-  });
-  expect(requests[1]).toMatchObject({
-    url: 'http://127.0.0.1:11434/v1/chat/completions',
-    body: { model: 'local/test', stream: true },
-  });
 });
 
 test('local OpenAI-compatible connections round-trip tool calls through Chat Completions', async () => {

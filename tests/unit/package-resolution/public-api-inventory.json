@@ -2157,6 +2157,7 @@
     "subpath": ".",
     "declarations": [
       "InvalidOpenAiCompatibleProviderConfigError",
+      "OpenAiCompatibleConfigErrorReason",
       "OpenAiCompatibleProviderFactoryOptions",
       "OpenAiLanguageModelUnavailableError",
       "OpenAiProviderFactory",
