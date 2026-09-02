@@ -1,4 +1,4 @@
-import { Data, Effect } from 'effect';
+import { Data, Effect, Either } from 'effect';
 import {
   makeProviderConnectionTestHook,
   providerApiKey,
@@ -44,7 +44,12 @@ export const OpenAiProviderFactory: EffectProviderFactory = {
   }),
   load: async (config: ProviderConfig) => {
     if (config.connectionProtocol === 'openai-compatible') {
-      return Effect.runPromise(loadOpenAiCompatibleRuntime(config));
+      return Effect.runPromise(loadOpenAiCompatibleRuntime(config).pipe(Effect.either)).then((either) => {
+        if (Either.isLeft(either)) {
+          throw either.left;
+        }
+        return either.right;
+      });
     }
 
     // Dynamic import to avoid hard dependency

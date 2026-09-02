@@ -429,17 +429,30 @@ test('factory load rejects invalid config with the typed error before fetch', as
   });
 });
 
-test('getModel fails through the error channel when the adapter lacks OpenRouterLanguageModel', async () => {
+test('load fails when the adapter lacks OpenRouterClient.layer or OpenRouterLanguageModel.model', async () => {
   const either = await Effect.runPromise(
     loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {
       importAdapter: () => Promise.resolve({}) as never,
-    })
-      .pipe(Effect.flatMap((definition) => definition.getModel(MODEL_ID).pipe(Effect.either)))
-      .pipe(Effect.either),
+    }).pipe(Effect.either),
   );
   expect(Either.isLeft(either)).toBe(true);
   if (Either.isLeft(either)) {
     expect(either.left).toBeInstanceOf(Error);
+    expect(either.left.message).toContain('OpenRouterClient');
+    expect(either.left.message).toContain('OpenRouterLanguageModel');
+  }
+});
+
+test('load fails with a stable message when the adapter exposes OpenRouterClient without a layer function', async () => {
+  const either = await Effect.runPromise(
+    loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {
+      importAdapter: () => Promise.resolve({ OpenRouterClient: {} } as never),
+    }).pipe(Effect.either),
+  );
+  expect(Either.isLeft(either)).toBe(true);
+  if (Either.isLeft(either)) {
+    expect(either.left).toBeInstanceOf(Error);
+    expect(either.left.message).toContain('OpenRouterClient.layer');
     expect(either.left.message).toContain('OpenRouterLanguageModel');
   }
 });

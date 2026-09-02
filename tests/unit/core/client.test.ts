@@ -973,16 +973,58 @@ describe('createFred client', () => {
     const config: ProviderConfig = {
       baseUrl: 'http://fred.test:4040',
       modelDefaults: { model: 'test-model' },
+      headers: { 'X-Test': 'original' },
     };
 
     await client.providers.registerFactory(createMockFactory({ id: 'snapshot-prov' }), config);
 
     config.baseUrl = 'http://evil.example';
+    config.headers!['X-Test'] = 'mutated';
+    config.modelDefaults!.temperature = 0.9;
 
     const definition = await client.effects.run(
       Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('snapshot-prov'))
     );
     expect(definition.config.baseUrl).toBe('http://fred.test:4040');
+    expect(definition.config.headers).toEqual({ 'X-Test': 'original' });
+    expect(definition.config.headers).not.toBe(config.headers);
+    expect(definition.config.modelDefaults).toEqual({ model: 'test-model' });
+    expect(definition.config.modelDefaults).not.toBe(config.modelDefaults);
+  });
+
+  it('providers.registerFactory re-registering the same factory object is idempotent and skips load', async () => {
+    const client = track(await createFred());
+    let loadCalls = 0;
+    const factory = createMockFactory({
+      id: 'idem-prov',
+      onLoad: () => {
+        loadCalls += 1;
+      },
+    });
+
+    const first = await client.providers.registerFactory(factory);
+    const second = await client.providers.registerFactory(factory);
+
+    expect(loadCalls).toBe(1);
+    expect(second.id).toBe(first.id);
+    expect(second).toBe(first);
+  });
+
+  it('providers.registerFactory rejects malformed aliases with ProviderRegistrationError', async () => {
+    const client = track(await createFred());
+
+    // Deliberately malformed (non-array) factory aliases: must fail through the
+    // typed error channel, not as a raw defect.
+    const badFactory = { ...createMockFactory({ id: 'bad-alias-factory' }), aliases: 'oops' } as unknown as EffectProviderFactory;
+    await expect(
+      client.providers.registerFactory(badFactory)
+    ).rejects.toBeInstanceOf(ProviderRegistrationError);
+
+    // Deliberately malformed (non-array) config aliases.
+    const badConfig = { aliases: 'oops' } as unknown as ProviderConfig;
+    await expect(
+      client.providers.registerFactory(createMockFactory({ id: 'bad-alias-config' }), badConfig)
+    ).rejects.toBeInstanceOf(ProviderRegistrationError);
   });
 
   it('providers.registerFactory rejects with FredClientClosedError after shutdown', async () => {

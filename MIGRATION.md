@@ -30,6 +30,15 @@ the compatible package lines and intentionally remain semver ranges.
 | `@fancyrobot/fred-openai` | `4.1.1` | Fred `^2.0.0`; `effect ^3.21.5`; `@effect/ai ^0.35.0`; `@effect/ai-openai ^0.39.0`; `@effect/ai-openrouter ^0.10.0`; `@effect/platform ^0.96.0` | OpenAI provider |
 | `@fancyrobot/fred-openrouter` | `5.1.0` | Fred `^2.0.0`; `effect ^3.21.0`; `@effect/ai ^0.35.0`; `@effect/ai-openrouter ^0.10.0` | OpenRouter provider |
 
+`@fancyrobot/fred-openai` 4.2.0 raises its `effect` peer floor from `^3.21.0`
+to `^3.21.5` to match the version the monorepo core and provider packages are
+validated against (core, google, groq, and minimax already require `^3.21.5`).
+There are no known breaking changes or security fixes between 3.21.0 and
+3.21.5; consumers pinned to 3.21.0-3.21.4 will see peer-resolution warnings
+and should upgrade (recommended) or override the peer at their own risk.
+Packages that remain on `^3.21.0` (cli, postgres, baml, convex, openrouter)
+are unaffected.
+
 The final `@fancyrobot/fred-dev` shim requires CLI `^0.7.0`. Prefer removing
 the shim rather than extending that compatibility window.
 

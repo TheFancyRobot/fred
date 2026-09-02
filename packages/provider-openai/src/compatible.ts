@@ -180,9 +180,13 @@ export function loadOpenAiCompatibleRuntime(
     // Adapter shape guard: a missing optional dependency, a stub module, or a
     // partial install must fail with a stable message instead of a TypeError
     // inside client-layer construction.
-    if (!adapter.OpenRouterClient || !adapter.OpenRouterLanguageModel?.model) {
+    if (
+      !adapter.OpenRouterClient ||
+      typeof adapter.OpenRouterClient.layer !== 'function' ||
+      !adapter.OpenRouterLanguageModel?.model
+    ) {
       return yield* Effect.fail(
-        new Error('OpenAI-compatible adapter did not expose OpenRouterClient or OpenRouterLanguageModel.model.'),
+        new Error('OpenAI-compatible adapter did not expose OpenRouterClient.layer or OpenRouterLanguageModel.model.'),
       );
     }
 

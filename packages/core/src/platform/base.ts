@@ -55,6 +55,25 @@ function markValidated(factory: EffectProviderFactory): ValidatedFactory {
 }
 
 /**
+ * Maps a caller's original factory object to the validated clone produced by
+ * Schema decoding. The decode returns a clone, so without this map a
+ * re-registration of the same caller object would look like a different
+ * factory and be rejected as a conflict.
+ */
+const validatedOriginals = new WeakMap<object, EffectProviderFactory>();
+
+/**
+ * Resolve the identity used for registration comparison: an original caller
+ * object maps back to its validated clone, so re-registering the same object
+ * compares equal even when the stored definition holds the clone.
+ */
+export function resolveFactoryIdentity(
+  factory: EffectProviderFactory | undefined
+): EffectProviderFactory | undefined {
+  return factory === undefined ? undefined : validatedOriginals.get(factory) ?? factory;
+}
+
+/**
  * Create a ProviderDefinition from an EffectProviderFactory.
  *
  * Validates the factory structure before use and wraps load() failures
@@ -118,6 +137,20 @@ export async function createProviderDefinition(
 }
 
 /**
+ * Deep snapshot of a caller config (BUG-0009): copies the top level plus each
+ * nested mutable field so later caller mutation cannot reach the stored
+ * definition. Absent fields stay absent (no explicit undefined keys).
+ */
+function snapshotConfig(config: ProviderConfig): ProviderConfig {
+  const snapshot: ProviderConfig = { ...config };
+  if (config.aliases !== undefined) snapshot.aliases = [...config.aliases];
+  if (config.headers !== undefined) snapshot.headers = { ...config.headers };
+  if (config.credentials !== undefined) snapshot.credentials = { ...config.credentials };
+  if (config.modelDefaults !== undefined) snapshot.modelDefaults = { ...config.modelDefaults };
+  return snapshot;
+}
+
+/**
  * Effect-based version of createProviderDefinition.
  *
  * Returns an Effect with proper error channel instead of throwing.
@@ -126,25 +159,22 @@ export const createProviderDefinitionEffect = (
   factory: EffectProviderFactory,
   config: ProviderConfig
 ): Effect.Effect<ProviderDefinition, ProviderRegistrationError> => {
-  // Defensive shallow copy (BUG-0009): the caller must not be able to mutate the
-  // stored definition by mutating their config object after registration.
-  const storedConfig = { ...config };
+  // Deep snapshot (BUG-0009): created before factory.load runs so the caller
+  // cannot mutate the stored definition by mutating their config object after
+  // registration.
+  const storedConfig = snapshotConfig(config);
 
-  // Merge factory aliases with config aliases (BUG-0003): config-level aliases
-  // are a documented ProviderConfig field and must land in the stored definition.
-  const aliases = [...(factory.aliases ?? [])];
-  for (const alias of config.aliases ?? []) {
-    if (!aliases.some((existing) => existing.toLowerCase() === alias.toLowerCase())) {
-      aliases.push(alias);
-    }
-  }
   // Validate factory structure
   const validateFactory = Effect.try({
     try: () => {
       if (isAlreadyValidated(factory)) {
         return factory;
       }
-      return markValidated(validatePackExports(factory, factory.id ?? 'unknown'));
+      const validated = markValidated(validatePackExports(factory, factory.id ?? 'unknown'));
+      if (!validatedOriginals.has(factory)) {
+        validatedOriginals.set(factory, validated);
+      }
+      return validated;
     },
     catch: (error) => new ProviderRegistrationError({
       providerId: factory.id ?? 'unknown',
@@ -154,6 +184,36 @@ export const createProviderDefinitionEffect = (
 
   return Effect.gen(function* () {
     const validatedFactory = yield* validateFactory;
+
+    // Merge factory aliases with config aliases (BUG-0003) only after schema
+    // validation: validatedFactory.aliases is schema-decoded (or already
+    // accepted as validated) and config aliases are checked here, so no
+    // unvalidated input is ever spread or iterated.
+    const factoryAliases = validatedFactory.aliases;
+    if (!Array.isArray(factoryAliases) || factoryAliases.some((alias) => typeof alias !== 'string')) {
+      return yield* Effect.fail(new ProviderRegistrationError({
+        providerId: validatedFactory.id,
+        cause: new Error(
+          `Provider "${validatedFactory.id}" declares malformed aliases: expected an array of strings`
+        )
+      }));
+    }
+    const configAliases = config.aliases;
+    if (configAliases !== undefined && (!Array.isArray(configAliases) || configAliases.some((alias) => typeof alias !== 'string'))) {
+      return yield* Effect.fail(new ProviderRegistrationError({
+        providerId: validatedFactory.id,
+        cause: new Error(
+          `Provider "${validatedFactory.id}" has malformed config aliases: expected an array of strings`
+        )
+      }));
+    }
+
+    const aliases = [...factoryAliases];
+    for (const alias of configAliases ?? []) {
+      if (!aliases.some((existing) => existing.toLowerCase() === alias.toLowerCase())) {
+        aliases.push(alias);
+      }
+    }
 
     // Load the provider
     const loadResult = yield* Effect.tryPromise({

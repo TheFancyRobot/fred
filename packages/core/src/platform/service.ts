@@ -4,7 +4,7 @@ import type { ProviderDefinition, ProviderConfig, ProviderModelDefaults } from '
 import type { EffectProviderFactory } from './base';
 import { ProviderNotFoundError, ProviderRegistrationError, ProviderModelError } from './errors';
 import { loadProviderPackEffect } from './loader';
-import { createProviderDefinitionEffect } from './base';
+import { createProviderDefinitionEffect, resolveFactoryIdentity } from './base';
 
 /**
  * ProviderRegistryService interface for Effect-based provider management
@@ -99,7 +99,11 @@ function isSameRegistration(
   existingFactory: EffectProviderFactory | undefined,
   incomingFactory: EffectProviderFactory | undefined
 ): boolean {
-  return existingFactory === undefined || incomingFactory === undefined || existingFactory === incomingFactory;
+  return (
+    existingFactory === undefined
+    || incomingFactory === undefined
+    || resolveFactoryIdentity(existingFactory) === resolveFactoryIdentity(incomingFactory)
+  );
 }
 
 /**
@@ -133,6 +137,13 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
   registerFactory(factory: EffectProviderFactory, config: ProviderConfig = {}): Effect.Effect<void, ProviderRegistrationError> {
     const self = this;
     return Effect.gen(function* () {
+      // Idempotent fast path: re-registering the same caller factory is a
+      // no-op and must not re-run factory.load (which may have side effects).
+      const existing = yield* self.getDefinition(factory.id).pipe(Effect.orElseSucceed(() => null));
+      if (existing !== null && isSameRegistration(existing.factory, factory)) {
+        return;
+      }
+
       // Create definition with proper Effect error channel
       const definition = yield* createProviderDefinitionEffect(factory, config);
 
