@@ -1,0 +1,21 @@
+# CodeRabbit configuration.
+# https://docs.coderabbit.ai/reference/configuration
+#
+# Security scanners run as part of every pull request review. The dedicated
+# Security Agent (continuous PR security review, architecture review, blast
+# radius, AI Deep Scan) additionally requires the Advanced or Enterprise plan
+# and is managed in the CodeRabbit dashboard under Security.
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+  tools:
+    # Secret / credential scanning (documented key `gitleaks` = Betterleaks).
+    gitleaks:
+      enabled: true
+    # Known vulnerabilities in dependency manifests and lockfiles.
+    osvScanner:
+      enabled: true
+    # Semgrep additionally requires a repository config file, e.g.
+    # `semgrep.yml` at the repo root (or set reviews.tools.semgrep.config_file).
+    # Enable it once a ruleset is committed.
