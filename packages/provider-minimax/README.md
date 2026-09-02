@@ -11,7 +11,7 @@ line and the Stanza provider migration recipe.
 
 ```bash
 bun add @fancyrobot/fred-minimax@2.1.0 \
-  @fancyrobot/fred@2.1.1 effect@^3.21.5 \
+  @fancyrobot/fred@2.2.0 effect@^3.21.5 \
   @effect/ai@^0.35.0 @effect/platform@^0.96.0
 ```
 

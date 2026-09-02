@@ -24,7 +24,7 @@ Install core + one provider package:
 
 ```bash
 bun add \
-  @fancyrobot/fred@2.1.1 \
+  @fancyrobot/fred@2.2.0 \
   @fancyrobot/fred-openrouter@5.1.0 \
   effect@^3.21.5 @effect/ai@^0.35.0 \
   @effect/platform@^0.96.0 @effect/ai-openrouter@^0.10.0
@@ -73,14 +73,14 @@ See the [core package documentation](packages/core/README.md) for the full getti
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [@fancyrobot/fred](packages/core/README.md) | `2.1.1` | Core framework |
+| [@fancyrobot/fred](packages/core/README.md) | `2.2.0` | Core framework |
 | [@fancyrobot/fred-cli](packages/cli/README.md) | `0.7.0` | CLI, development chat, and interactive TUI |
 | [@fancyrobot/fred-dev](packages/dev/README.md) | `1.0.1` | Deprecated one-release CLI compatibility shim |
 | [@fancyrobot/fred-http](packages/fred-http/README.md) | `1.1.0` | Bun HTTP server and composable API layer |
 | [@fancyrobot/fred-postgres](packages/fred-postgres/README.md) | `1.0.0` | Explicit PostgreSQL migrations and pgvector lifecycle |
 | [@fancyrobot/fred-baml](packages/fred-baml/README.md) | `1.0.0` | Consumer-owned BAML integration |
 | [@fancyrobot/fred-convex](packages/fred-convex/README.md) | `1.0.0` | Convex integration helpers |
-| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.1.1` | OpenAI provider |
+| [@fancyrobot/fred-openai](packages/provider-openai/README.md) | `4.2.0` | OpenAI provider |
 | [@fancyrobot/fred-anthropic](packages/provider-anthropic/README.md) | `4.1.0` | Anthropic provider |
 | [@fancyrobot/fred-google](packages/provider-google/README.md) | `4.1.0` | Google (Gemini) provider |
 | [@fancyrobot/fred-groq](packages/provider-groq/README.md) | `4.1.0` | Groq provider |

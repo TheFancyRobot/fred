@@ -11,7 +11,7 @@ and Effect AI lines.
 
 ```bash
 bun add @fancyrobot/fred-openrouter@5.1.0 \
-  @fancyrobot/fred@2.1.1 effect@^3.21.5 \
+  @fancyrobot/fred@2.2.0 effect@^3.21.5 \
   @effect/ai@^0.35.0 @effect/ai-openrouter@^0.10.0
 ```
 
