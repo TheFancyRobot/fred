@@ -457,6 +457,24 @@ test('load fails with a stable message when the adapter exposes OpenRouterClient
   }
 });
 
+test('load fails with the stable message when the adapter exposes a non-callable OpenRouterLanguageModel.model', async () => {
+  const either = await Effect.runPromise(
+    loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {
+      importAdapter: () =>
+        Promise.resolve({
+          OpenRouterClient: { layer: () => Layer.empty },
+          OpenRouterLanguageModel: { model: {} },
+        }) as never,
+    }).pipe(Effect.either),
+  );
+  expect(Either.isLeft(either)).toBe(true);
+  if (Either.isLeft(either)) {
+    expect(either.left).toBeInstanceOf(Error);
+    expect(either.left.message).toContain('OpenRouterClient.layer');
+    expect(either.left.message).toContain('OpenRouterLanguageModel.model');
+  }
+});
+
 test('adapter import failure carries the install hint remediation', async () => {
   const either = await Effect.runPromise(
     loadOpenAiCompatibleRuntime({ baseUrl: BASE_URL, credentials: { kind: 'none' } }, {

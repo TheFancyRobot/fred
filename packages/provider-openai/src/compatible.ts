@@ -183,7 +183,7 @@ export function loadOpenAiCompatibleRuntime(
     if (
       !adapter.OpenRouterClient ||
       typeof adapter.OpenRouterClient.layer !== 'function' ||
-      !adapter.OpenRouterLanguageModel?.model
+      typeof adapter.OpenRouterLanguageModel?.model !== 'function'
     ) {
       return yield* Effect.fail(
         new Error('OpenAI-compatible adapter did not expose OpenRouterClient.layer or OpenRouterLanguageModel.model.'),

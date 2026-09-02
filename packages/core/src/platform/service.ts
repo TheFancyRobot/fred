@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Deferred, Effect, Layer, Ref } from 'effect';
 import type * as AiModel from '@effect/ai/Model';
 import type { ProviderDefinition, ProviderConfig, ProviderModelDefaults } from './provider';
 import type { EffectProviderFactory } from './base';
@@ -91,6 +91,15 @@ type RegisterOutcome =
   | { _tag: 'conflict'; error: ProviderRegistrationError };
 
 /**
+ * Outcome of the in-flight registration claim in registerFactory: 'Wait'
+ * means another caller is already building this provider id, 'Build' means
+ * we won the race and must run the build and settle the deferred.
+ */
+type InFlightSlot =
+  | { _tag: 'Wait'; deferred: Deferred.Deferred<ProviderDefinition, ProviderRegistrationError> }
+  | { _tag: 'Build'; deferred: Deferred.Deferred<ProviderDefinition, ProviderRegistrationError> };
+
+/**
  * Two definitions are the same registration when the provider id matches and
  * the factory instance matches. A definition registered without a factory
  * (hand-built, via registerDefinition) never conflicts.
@@ -112,7 +121,8 @@ function isSameRegistration(
 class ProviderRegistryServiceImpl implements ProviderRegistryService {
   constructor(
     private providers: Ref.Ref<Map<string, ProviderDefinition>>,
-    private initialized: Ref.Ref<boolean>
+    private initialized: Ref.Ref<boolean>,
+    private inFlight: Ref.Ref<Map<string, Deferred.Deferred<ProviderDefinition, ProviderRegistrationError>>>
   ) {}
 
   register(idOrPackage: string, config: ProviderConfig = {}): Effect.Effect<ProviderDefinition, ProviderRegistrationError> {
@@ -144,10 +154,57 @@ class ProviderRegistryServiceImpl implements ProviderRegistryService {
         return;
       }
 
-      // Create definition with proper Effect error channel
-      const definition = yield* createProviderDefinitionEffect(factory, config);
+      // Concurrent dedup: two callers registering the same not-yet-registered
+      // factory must share one build instead of both peeking an empty registry
+      // and both running factory.load (duplicate side effects). The first
+      // caller claims a slot atomically; the rest await the builder's
+      // deferred and observe its outcome.
+      const key = factory.id.toLowerCase();
+      const myDeferred = yield* Deferred.make<ProviderDefinition, ProviderRegistrationError>();
+      const slot = yield* Ref.modify(
+        self.inFlight,
+        (inFlight): readonly [InFlightSlot, Map<string, Deferred.Deferred<ProviderDefinition, ProviderRegistrationError>>] => {
+          const pending = inFlight.get(key);
+          if (pending) {
+            return [{ _tag: 'Wait', deferred: pending }, inFlight] as const;
+          }
+          const next = new Map(inFlight);
+          next.set(key, myDeferred);
+          return [{ _tag: 'Build', deferred: myDeferred }, next] as const;
+        }
+      );
 
-      yield* self.registerDefinition(definition);
+      if (slot._tag === 'Wait') {
+        yield* Deferred.await(slot.deferred);
+        return;
+      }
+
+      // Build path: the inFlight slot stays claimed across the whole build so
+      // concurrent callers wait instead of re-running factory.load. On any
+      // exit (success, failure, defect, interrupt) the slot is released (if
+      // still ours) and the deferred is settled so waiters receive the
+      // builder's definition or failure; failures, defects, and interrupts
+      // propagate unchanged to the builder's caller.
+      yield* Effect.gen(function* () {
+        // Create definition with proper Effect error channel
+        const definition = yield* createProviderDefinitionEffect(factory, config);
+
+        yield* self.registerDefinition(definition);
+        return definition;
+      }).pipe(
+        Effect.onExit((buildExit) =>
+          Effect.gen(function* () {
+            yield* Ref.update(self.inFlight, (inFlight) => {
+              const next = new Map(inFlight);
+              if (next.get(key) === slot.deferred) {
+                next.delete(key);
+              }
+              return next;
+            });
+            yield* Deferred.done(slot.deferred, buildExit);
+          })
+        )
+      );
     });
   }
 
@@ -327,6 +384,7 @@ export const ProviderRegistryServiceLive = Layer.effect(
   Effect.gen(function* () {
     const providers = yield* Ref.make(new Map<string, ProviderDefinition>());
     const initialized = yield* Ref.make(false);
-    return new ProviderRegistryServiceImpl(providers, initialized);
+    const inFlight = yield* Ref.make(new Map<string, Deferred.Deferred<ProviderDefinition, ProviderRegistrationError>>());
+    return new ProviderRegistryServiceImpl(providers, initialized, inFlight);
   })
 );

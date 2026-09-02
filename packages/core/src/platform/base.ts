@@ -189,7 +189,9 @@ export const createProviderDefinitionEffect = (
     // validation: validatedFactory.aliases is schema-decoded (or already
     // accepted as validated) and config aliases are checked here, so no
     // unvalidated input is ever spread or iterated.
-    const factoryAliases = validatedFactory.aliases;
+    // Omitted aliases (schema-optional) normalize to an empty array;
+    // present-but-malformed values are still rejected below.
+    const factoryAliases = validatedFactory.aliases ?? [];
     if (!Array.isArray(factoryAliases) || factoryAliases.some((alias) => typeof alias !== 'string')) {
       return yield* Effect.fail(new ProviderRegistrationError({
         providerId: validatedFactory.id,

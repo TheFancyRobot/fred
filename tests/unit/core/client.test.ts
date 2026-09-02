@@ -952,6 +952,31 @@ describe('createFred client', () => {
     expect(providers.slice().sort()).toEqual(ids.slice().sort());
   });
 
+  it('concurrent registerFactory calls for the same factory share a single build', async () => {
+    const client = track(await createFred());
+    let loadCalls = 0;
+    const factory = createMockFactory({
+      id: 'conc-same-prov',
+      onLoad: () => {
+        loadCalls += 1;
+      },
+    });
+
+    const definitions = await Promise.all(
+      Array.from({ length: 4 }, () => client.providers.registerFactory(factory))
+    );
+
+    // Exactly one factory.load across all four concurrent callers: the first
+    // claims the in-flight build, the rest await its result.
+    expect(loadCalls).toBe(1);
+    expect(definitions.every((definition) => definition.id === 'conc-same-prov')).toBe(true);
+
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('conc-same-prov'))
+    );
+    expect(resolved.id).toBe('conc-same-prov');
+  });
+
   it('providers.registerFactory merges config aliases with factory aliases without duplicates', async () => {
     const client = track(await createFred());
 
@@ -1025,6 +1050,26 @@ describe('createFred client', () => {
     await expect(
       client.providers.registerFactory(createMockFactory({ id: 'bad-alias-config' }), badConfig)
     ).rejects.toBeInstanceOf(ProviderRegistrationError);
+  });
+
+  it('providers.registerFactory accepts a factory without an aliases field', async () => {
+    const client = track(await createFred());
+
+    // Regression: aliases is schema-optional; a valid factory omitting the
+    // field must register successfully instead of failing the malformed
+    // aliases check.
+    const factory: EffectProviderFactory = { ...createMockFactory({ id: 'no-alias-prov' }) };
+    delete factory.aliases;
+
+    const definition = await client.providers.registerFactory(factory);
+
+    expect(definition.id).toBe('no-alias-prov');
+    expect(definition.aliases).toEqual([]);
+
+    const resolved = await client.effects.run(
+      Effect.flatMap(ProviderRegistryService, (s) => s.getDefinition('no-alias-prov'))
+    );
+    expect(resolved.aliases).toEqual([]);
   });
 
   it('providers.registerFactory rejects with FredClientClosedError after shutdown', async () => {
