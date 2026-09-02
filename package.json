@@ -61,11 +61,16 @@
     "docs:build": "bun run scripts/docs.ts build",
     "docs:deploy": "bun run scripts/docs.ts gh-deploy",
     "prepare": "effect-language-service patch",
-    "ci:version": "changeset version && bun install --lockfile-only",
-    "ci:publish": "bash scripts/publish-packages.sh"
+    "ci:version": "changeset version && bun run ci:sync-release-stamps && bun install --lockfile-only",
+    "ci:publish": "bash scripts/publish-packages.sh",
+    "ci:sync-release-stamps": "bun scripts/release-stamps.ts --fix",
+    "ci:check-release-stamps": "bun scripts/release-stamps.ts --check"
   },
   "type": "module",
-  "workspaces": ["packages/*", "examples/*"],
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "dependencies": {
     "@fancyrobot/fred": "workspace:*",
     "@fancyrobot/fred-anthropic": "workspace:*",

@@ -41,6 +41,12 @@ jobs:
       - name: Build package declarations
         run: bash scripts/build-declarations.sh
 
+      # Fail fast, with a pointed message, when documentation version stamps
+      # drifted from the manifests (ci:version syncs them automatically; this
+      # guards manual version commits).
+      - name: Check release version stamps
+        run: bun run ci:check-release-stamps
+
       - name: Run tests
         run: bun run test
 
